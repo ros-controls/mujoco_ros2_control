@@ -55,6 +55,10 @@ namespace mujoco_ros2_simulation
     hardware_interface::return_type write(const rclcpp::Time &time, const rclcpp::Duration &period) override;
 
   private:
+    // System information
+    hardware_interface::HardwareInfo system_info_;
+    std::string model_path_;
+
     // MuJoCo data pointers
     mjModel *model_{nullptr};
     mjData *data_{nullptr};

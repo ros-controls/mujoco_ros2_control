@@ -62,6 +62,9 @@ set(SIMULATE_DIR $ENV{MUJOCO_DIR}/simulate)
 
 # Simulate library
 add_library(platform_ui_adapter OBJECT)
+set_target_properties(platform_ui_adapter PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+)
 target_sources(
   platform_ui_adapter
   PUBLIC ${SIMULATE_DIR}/glfw_adapter.h ${SIMULATE_DIR}/glfw_dispatch.h ${SIMULATE_DIR}/platform_ui_adapter.h
@@ -75,9 +78,11 @@ target_link_libraries(platform_ui_adapter PUBLIC ${MUJOCO_LIB})
 add_library(mujoco::platform_ui_adapter ALIAS platform_ui_adapter)
 
 add_library(libsimulate STATIC $<TARGET_OBJECTS:platform_ui_adapter>)
-set_target_properties(libsimulate PROPERTIES OUTPUT_NAME simulate)
 add_library(mujoco::libsimulate ALIAS libsimulate)
-
+set_target_properties(libsimulate PROPERTIES
+  OUTPUT_NAME simulate
+  POSITION_INDEPENDENT_CODE ON
+)
 target_sources(
   libsimulate
   PUBLIC ${SIMULATE_DIR}/simulate.h
@@ -112,7 +117,8 @@ target_include_directories(mujoco_ros2_simulation PUBLIC
   ${MUJOCO_INCLUDE_DIR}
 )
 install(TARGETS mujoco_ros2_simulation
-  DESTINATION lib/${PROJECT_NAME}
+  ARCHIVE DESTINATION lib/${PROJECT_NAME}
+  LIBRARY DESTINATION lib/${PROJECT_NAME}
 )
 
 pluginlib_export_plugin_description_file(hardware_interface mujoco_system_interface_plugin.xml)

@@ -22,8 +22,6 @@
 namespace mujoco_ros2_simulation
 {
 void PhysicsLoop(mujoco::Simulate& sim);
-void PhysicsThread(mujoco::Simulate* sim, std::string filename);
-
 mjModel* LoadModel(const char* file, mujoco::Simulate& sim);
 void scanPluginLibraries();
 } // End namespace

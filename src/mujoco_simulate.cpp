@@ -40,7 +40,7 @@ extern "C" {
 #include <unistd.h>
 }
 
-namespace
+namespace mujoco_ros2_simulation
 {
 namespace mj = ::mujoco;
 namespace mju = ::mujoco::sample_util;
@@ -375,88 +375,4 @@ void PhysicsLoop(mj::Simulate& sim) {
   }
 }
 
-//-------------------------------------- physics_thread --------------------------------------------
-
-void PhysicsThread(mj::Simulate* sim, std::string filename) {
-  // request loadmodel if file given (otherwise drag-and-drop)
-  if (!filename.empty()) {
-    auto filename_c_str = filename.c_str();
-    sim->LoadMessage(filename_c_str);
-    m = LoadModel(filename_c_str, *sim);
-    if (m) {
-      // lock the sim mutex
-      const std::unique_lock<std::recursive_mutex> lock(sim->mtx);
-
-      d = mj_makeData(m);
-    }
-    if (d) {
-      sim->Load(m, d, filename_c_str);
-
-      // lock the sim mutex
-      const std::unique_lock<std::recursive_mutex> lock(sim->mtx);
-
-      mj_forward(m, d);
-
-    } else {
-      sim->LoadMessageClear();
-    }
-  }
-
-  PhysicsLoop(*sim);
-
-  // delete everything we allocated
-  mj_deleteData(d);
-  mj_deleteModel(m);
-}
 }  // namespace
-
-//------------------------------------------ main --------------------------------------------------
-
-// // run event loop
-// int main(int argc, char** argv) {
-
-//   rclcpp::init(argc, argv);
-//   auto simulation_node = std::make_shared<rclcpp::Node>("mujoco_simulate");
-//   simulation_node->declare_parameter("model_path", "");
-//   std::string filename = simulation_node->get_parameter("model_path").as_string();
-
-//   // print version, check compatibility
-//   std::printf("MuJoCo version %s\n", mj_versionString());
-//   if (mjVERSION_HEADER!=mj_version()) {
-//     mju_error("Headers and library have different versions");
-//   }
-
-//   // scan for libraries in the plugin directory to load additional plugins
-//   scanPluginLibraries();
-
-//   mjvCamera cam;
-//   mjv_defaultCamera(&cam);
-
-//   mjvOption opt;
-//   mjv_defaultOption(&opt);
-
-//   mjvPerturb pert;
-//   mjv_defaultPerturb(&pert);
-
-//   // simulate object encapsulates the UI
-//   auto sim = std::make_unique<mj::Simulate>(
-//       std::make_unique<mj::GlfwAdapter>(),
-//       &cam, &opt, &pert, /* is_passive = */ false
-//   );
-
-//   // const char* filename = nullptr;
-//   // if (argc >  1) {
-//   //   filename = argv[1];
-//   // }
-
-//   // start physics thread
-//   std::thread physicsthreadhandle(&PhysicsThread, sim.get(), filename);
-
-//   // start simulation UI loop (blocking call)
-//   sim->RenderLoop();
-//   physicsthreadhandle.join();
-
-//   rclcpp::shutdown();
-
-//   return 0;
-// }
