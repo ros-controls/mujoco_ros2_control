@@ -254,7 +254,6 @@ MujocoSystemInterface::~MujocoSystemInterface()
   cameras_->close();
 
   // Stop ROS
-  spin_executor_ = false;
   executor_->cancel();
   executor_thread_.join();
 
@@ -368,18 +367,10 @@ hardware_interface::CallbackReturn MujocoSystemInterface::on_init(const hardware
   set_initial_pose();
 
   // Construct and start the ROS node spinning
-  executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
+  executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>();
   mujoco_node_ = std::make_shared<rclcpp::Node>("mujoco_node");
   executor_->add_node(mujoco_node_);
-  spin_executor_ = true;
-  auto spin = [this]() {
-    RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Starting the mujoco node...");
-    while (rclcpp::ok() && spin_executor_)
-    {
-      executor_->spin();
-    }
-  };
-  executor_thread_ = std::thread(spin);
+  executor_thread_ = std::thread([this]() { executor_->spin(); });
 
   // Time publisher will be pushed from the physics_thread_
   clock_publisher_ = mujoco_node_->create_publisher<rosgraph_msgs::msg::Clock>("/clock", 1);

@@ -169,9 +169,8 @@ private:
 
   // Provides access to ROS interfaces for elements that require it
   std::shared_ptr<rclcpp::Node> mujoco_node_;
-  std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> executor_;
+  std::unique_ptr<rclcpp::executors::MultiThreadedExecutor> executor_;
   std::thread executor_thread_;
-  std::atomic_bool spin_executor_;
 
   // Primary clock publisher for the world
   std::shared_ptr<rclcpp::Publisher<rosgraph_msgs::msg::Clock>> clock_publisher_;
