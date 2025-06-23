@@ -1,0 +1,145 @@
+<robot name="two_dof_robot">
+
+  <link name="world"/>
+
+  <link name="base"/>
+  <joint name="base_link" type="fixed">
+      <axis rpy="0 0 0" xyz="0 0 0"/>
+      <parent link="world"/>
+      <child link="base"/>
+  </joint>
+
+  <link name="upperarm">
+      <inertial>
+          <origin xyz="0.5 0 0" rpy="0 0 0"/>
+          <mass value="27.0"/>
+          <inertia
+              ixx="0.0225" ixy="0.0"  ixz="0.0"
+              iyy="0.225"  iyz="0.0"  izz="0.225"/>
+      </inertial>
+      <visual>
+          <geometry>
+              <box size="1.0 0.1 0.1"/>
+          </geometry>
+          <origin rpy="0 0 0" xyz="0.5 0 0"/>
+          <material name="red">
+              <color rgba="1.0 0 0 1.0"/>
+          </material>
+      </visual>
+      <collision>
+          <geometry>
+              <box size="1.0 0.1 0.1"/>
+          </geometry>
+          <origin rpy="0 0 0" xyz="0.5 0 0"/>
+      </collision>
+  </link>
+  <joint name="joint1" type="revolute">
+      <axis rpy="0 0 0" xyz="0 0 1"/>
+      <parent link="base"/>
+      <child link="upperarm"/>
+      <limit lower="-3.14" upper="3.14" velocity="3.14" effort="1000" />
+  </joint>
+
+  <link name="forearm">
+      <inertial>
+          <origin xyz="0.5 0 0" rpy="0 0 0"/>
+          <mass value="27.0"/>
+          <inertia
+              ixx="0.0225" ixy="0.0"  ixz="0.0"
+              iyy="0.225"  iyz="0.0"  izz="0.225"/>
+      </inertial>
+      <visual>
+          <geometry>
+              <box size="1.0 0.1 0.1"/>
+          </geometry>
+          <origin rpy="0 0 0" xyz="0.5 0 0"/>
+          <material name="blue">
+              <color rgba="0 0 1.0 1.0"/>
+          </material>
+      </visual>
+      <collision>
+          <geometry>
+              <box size="1.0 0.1 0.1"/>
+          </geometry>
+          <origin rpy="0 0 0" xyz="0.5 0 0"/>
+      </collision>
+  </link>
+  <joint name="joint2" type="revolute">
+      <axis rpy="0 0 0" xyz="0 0 1"/>
+      <parent link="upperarm"/>
+      <child link="forearm"/>
+      <origin rpy="0 0 0" xyz="1 0 0"/>
+      <limit lower="-3.14" upper="3.14" velocity="3.14" effort="1000" />
+  </joint>
+
+  <link name="ee_link" />
+  <joint name="ee_joint" type="fixed">
+      <parent link="forearm"/>
+      <child link="ee_link"/>
+      <origin rpy="0 0 0" xyz="1 0 0"/>
+  </joint>
+
+  <link name="camera_link">
+    <visual>
+      <geometry>
+        <box size="0.1 0.1 0.1" />
+      </geometry>
+      <material name="dark_grey">
+        <color rgba="0.2 0.2 0.2 1.0"/>
+      </material>
+    </visual>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="ee_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0.05 0 0.1" rpy="0 0 0"/>
+  </joint>
+
+  <link name="camera_color_frame"/>
+  <joint name="camera_color_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_color_frame"/>
+    <origin xyz="-0.05 0 0" rpy="0 0 0"/>
+  </joint>
+\
+  <!-- The camera looks backwards along the axis of the forearm, following the standard ROS image conventions -->
+  <!-- https://github.com/ros2/common_interfaces/blob/rolling/sensor_msgs/msg/Image.msg#L7 -->
+  <link name="camera_color_optical_frame"/>
+  <joint name="camera_color_optical_joint" type="fixed">
+    <parent link="camera_color_frame"/>
+    <child link="camera_color_optical_frame"/>
+    <origin xyz="0 0 0" rpy="-1.5708 0 1.5708"/>
+  </joint>
+
+  <!-- For the sake of visibility, this is where the mujoco camera should end up -->
+  <link name="camera_color_mujoco_frame"/>
+  <joint name="camera_color_mujoco_joint" type="fixed">
+    <parent link="camera_color_optical_frame"/>
+    <child link="camera_color_mujoco_frame"/>
+    <origin xyz="0 0 0" rpy="3.14159 0 0"/>
+  </joint>
+
+  <ros2_control name="MujocoSystem" type="system">
+    <hardware>
+      <plugin>mujoco_ros2_simulation/MujocoSystemInterface</plugin>
+      <param name="mujoco_model">$(find mujoco_ros2_simulation)/test/resources/test_robot.xml</param>
+    </hardware>
+    <joint name="joint1">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+    <joint name="joint2">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+  </ros2_control>
+
+</robot>
