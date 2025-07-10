@@ -1,0 +1,17 @@
+<mujoco_inputs>
+  <option integrator="implicitfast"/>
+
+  <default>
+    <default class="visual">
+      <geom group="2" type="mesh" contype="0" conaffinity="0"/>
+    </default>
+    <default class="collision">
+      <geom group="3" type="mesh"/>
+    </default>
+  </default>
+
+  <actuator>
+    <position name="joint1" joint="joint1" kp="1000" dampratio="1.0"/>
+    <position name="joint2" joint="joint2" kp="1000" dampratio="1.0"/>
+  </actuator>
+</mujoco_inputs>

@@ -29,9 +29,9 @@ From there the library can be compiled with `colcon build ...`, as normal.
 Mujoco does not support the full feature set of xacro/URDFs in the ROS 2 ecosystem.
 As such, users are required to convert any existing robot description files to an MJCF format.
 This includes adding actuators, sensors, and cameras as needed to the MJCF XML.
-A full description of how to accomplish this is not included here, but is a work in progress.
 
-TODO: Include the rudimentary model conversion script.
+We have built a *highly experimental tool to automate URDF conversion.
+For more information refer to the [documentation](./docs/TOOLS.md).
 
 ## Hardware Interface Setup
 
