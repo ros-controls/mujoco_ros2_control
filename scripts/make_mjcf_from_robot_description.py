@@ -36,18 +36,19 @@ from xml.dom import minidom
 
 # These tags will be parsed from inputs and added to the converted MJCF
 XML_INPUT_TAGS = [
-    'sensor',
-    'actuator',
-    'default',
-    'option',
-    'tendon',
-    'equality',
-    'contact',
+    "sensor",
+    "actuator",
+    "default",
+    "option",
+    "tendon",
+    "equality",
+    "contact",
 ]
 
 decomposed_path_name = "decomposed"
 composed_path_name = "full"
 converter_inputs_name = "converter_inputs"
+
 
 def add_mujoco_info(raw_xml):
     dom = minidom.parseString(raw_xml)
@@ -61,7 +62,7 @@ def add_mujoco_info(raw_xml):
 
     mujoco_element.appendChild(compiler_element)
 
-    robot_element = dom.getElementsByTagName('robot')
+    robot_element = dom.getElementsByTagName("robot")
 
     robot_element[0].appendChild(mujoco_element)
 
@@ -73,6 +74,7 @@ def add_mujoco_info(raw_xml):
 
     return formatted_xml
 
+
 def remove_tag(xml_string, tag_to_remove):
     xmldoc = minidom.parseString(xml_string)
     nodes = xmldoc.getElementsByTagName(tag_to_remove)
@@ -82,6 +84,7 @@ def remove_tag(xml_string, tag_to_remove):
         parent.removeChild(node)
 
     return xmldoc.toprettyxml()
+
 
 def extract_mesh_info(raw_xml):
     robot = URDF.from_xml_string(raw_xml)
@@ -110,10 +113,10 @@ def extract_mesh_info(raw_xml):
             if not (geom and hasattr(geom, "filename")):
                 continue
 
-            uri = geom.filename # full URI
-            stem = pathlib.Path(uri).stem # filename without extension
+            uri = geom.filename  # full URI
+            stem = pathlib.Path(uri).stem  # filename without extension
             scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
-            rgba  = resolve_color(vis)
+            rgba = resolve_color(vis)
 
             # If the same stem appears more than once, keep the first, or change as you prefer
             mesh_info_dict.setdefault(
@@ -127,56 +130,58 @@ def extract_mesh_info(raw_xml):
 
     return mesh_info_dict
 
+
 def replace_package_names(xml_data):
     # Regular expression to find all package names in "package://{package_name}/"
-    pattern = r'package://([^/]+)/'
+    pattern = r"package://([^/]+)/"
 
     # Find all matches for the package name (but no duplicates)
     package_names = set(re.findall(pattern, xml_data))
 
     # Replace all of the package looks up with absolute paths
     for package_name in package_names:
-        old_string = f'package://{package_name}/'
-        replace_string = f'{get_package_prefix(package_name)}/share/{package_name}/'
-        print(f'replacing {old_string} with {replace_string}')
+        old_string = f"package://{package_name}/"
+        replace_string = f"{get_package_prefix(package_name)}/share/{package_name}/"
+        print(f"replacing {old_string} with {replace_string}")
         xml_data = xml_data.replace(old_string, replace_string)
 
     # get rid of absolute filepaths
-    xml_data = xml_data.replace("file://", '')
+    xml_data = xml_data.replace("file://", "")
 
     return xml_data
+
 
 def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, decompose_dict):
     # keep track of files we have already processed so we don't do it again
     converted_filenames = []
 
     # clean assets directory and remake required paths
-    if os.path.exists(f'{directory}assets/'):
-        shutil.rmtree(f'{directory}assets/')
-    os.makedirs(f'{directory}assets/{composed_path_name}', exist_ok=True)
-    os.makedirs(f'{directory}assets/{decomposed_path_name}', exist_ok=True)
+    if os.path.exists(f"{directory}assets/"):
+        shutil.rmtree(f"{directory}assets/")
+    os.makedirs(f"{directory}assets/{composed_path_name}", exist_ok=True)
+    os.makedirs(f"{directory}assets/{decomposed_path_name}", exist_ok=True)
 
     for mesh_name in mesh_info_dict:
         mesh_item = mesh_info_dict[mesh_name]
-        filename = os.path.basename(mesh_item['filename'])
+        filename = os.path.basename(mesh_item["filename"])
         filename_no_ext = os.path.splitext(filename)[0]
         filename_ext = os.path.splitext(filename)[1]
-        full_filepath = mesh_item['filename']
+        full_filepath = mesh_item["filename"]
         if full_filepath in converted_filenames:
             pass
 
         print(f"processing {full_filepath}")
 
         # Clear any existing objects in the scene
-        bpy.ops.object.select_all(action='SELECT')
+        bpy.ops.object.select_all(action="SELECT")
         bpy.ops.object.delete(use_global=False)
 
         # if we want to decompose the mesh, put it in decomposed filepath, otherwise put it in full
         if filename_no_ext in decompose_dict:
-            assets_relative_filepath = f'{decomposed_path_name}/{filename_no_ext}/'
-            os.makedirs(f'{directory}assets/{assets_relative_filepath}', exist_ok=True)
+            assets_relative_filepath = f"{decomposed_path_name}/{filename_no_ext}/"
+            os.makedirs(f"{directory}assets/{assets_relative_filepath}", exist_ok=True)
         else:
-            assets_relative_filepath = f'{composed_path_name}/'
+            assets_relative_filepath = f"{composed_path_name}/"
         assets_relative_filepath += filename_no_ext
 
         # Import the .stl or .dae file
@@ -186,20 +191,22 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
 
                 # bring in file color from urdf
                 new_mat = bpy.data.materials.new(name="new_mat_color")
-                new_mat.diffuse_color = mesh_item['color']
+                new_mat.diffuse_color = mesh_item["color"]
                 o = bpy.context.selected_objects[0]
                 o.active_material = new_mat
 
-                bpy.ops.wm.obj_export(filepath= f'{directory}assets/{assets_relative_filepath}.obj', forward_axis='Y', up_axis='Z')
-                xml_data = xml_data.replace(full_filepath, f'{assets_relative_filepath}.obj')
+                bpy.ops.wm.obj_export(
+                    filepath=f"{directory}assets/{assets_relative_filepath}.obj", forward_axis="Y", up_axis="Z"
+                )
+                xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
 
             else:
-                shutil.copy2(full_filepath, f'{directory}assets/')
-                xml_data = xml_data.replace(full_filepath, f'{assets_relative_filepath}.stl')
+                shutil.copy2(full_filepath, f"{directory}assets/")
+                xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.stl")
                 pass
         elif filename_ext.lower() == ".obj":
-            shutil.copy2(full_filepath, f'{directory}assets/')
-            xml_data = xml_data.replace(full_filepath, f'{assets_relative_filepath}.obj')
+            shutil.copy2(full_filepath, f"{directory}assets/")
+            xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
             pass
             # objs are ok as is
         elif filename_ext.lower() == ".dae":
@@ -218,8 +225,10 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                 temp_file.close()
                 os.remove(temp_filepath)
 
-            bpy.ops.wm.obj_export(filepath= f'{directory}assets/{assets_relative_filepath}.obj', forward_axis='Y', up_axis='Z')
-            xml_data = xml_data.replace(full_filepath, f'{assets_relative_filepath}.obj')
+            bpy.ops.wm.obj_export(
+                filepath=f"{directory}assets/{assets_relative_filepath}.obj", forward_axis="Y", up_axis="Z"
+            )
+            xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
         else:
             print(f"Can't convert {full_filepath} \n\tOnly stl and dae file extensions are supported at the moment")
             print(f"extension: {filename_ext}")
@@ -230,36 +239,37 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
 
     return xml_data
 
+
 def set_up_axis_to_z_up(dae_file_path):
     # Parse the DAE file from the in-memory file-like object using minidom
     dom = minidom.parse(dae_file_path)
 
     # Find the <asset> element
-    asset = dom.getElementsByTagName('asset')
+    asset = dom.getElementsByTagName("asset")
 
     if not asset:
         # Create the <asset> element if it doesn't exist
-        asset_element = dom.createElement('asset')
+        asset_element = dom.createElement("asset")
         dom.documentElement.appendChild(asset_element)
     else:
         asset_element = asset[0]
 
     # Find the 'up_axis' tag in the asset element
-    up_axis = asset_element.getElementsByTagName('up_axis')
+    up_axis = asset_element.getElementsByTagName("up_axis")
 
     # If the 'up_axis' tag is found, update or add it
     if up_axis:
         up_axis_element = up_axis[0]
         # If it's not already set to Z_UP, update it
-        if up_axis_element.firstChild.nodeValue != 'Z_UP':
-            up_axis_element.firstChild.nodeValue = 'Z_UP'
+        if up_axis_element.firstChild.nodeValue != "Z_UP":
+            up_axis_element.firstChild.nodeValue = "Z_UP"
             print(f"Updated 'up_axis' to 'Z_UP' for {dae_file_path}")
         else:
             print(f"'up_axis' is already 'Z_UP' for {dae_file_path}")
     else:
         # If the 'up_axis' tag doesn't exist, create it and set it to Z_UP
-        new_up_axis = dom.createElement('up_axis')
-        new_up_axis.appendChild(dom.createTextNode('Z_UP'))
+        new_up_axis = dom.createElement("up_axis")
+        new_up_axis.appendChild(dom.createTextNode("Z_UP"))
         asset_element.appendChild(new_up_axis)
         print(f"Added 'up_axis' with value 'Z_UP' for {dae_file_path}")
 
@@ -269,15 +279,16 @@ def set_up_axis_to_z_up(dae_file_path):
     # You can return the modified data if you need to further process it
     return modified_data
 
+
 def run_obj2mjcf(output_filepath, decompose_dict):
     # remove the folders in the asset directory so that we are clean to run obj2mjcf
-    with os.scandir(f'{output_filepath}assets/{composed_path_name}') as entries:
+    with os.scandir(f"{output_filepath}assets/{composed_path_name}") as entries:
         for entry in entries:
             if entry.is_dir():
                 shutil.rmtree(entry.path)
 
     # remove the folders in the asset directory so that we are clean to run obj2mjcf
-    top_level_path = f'{output_filepath}assets/{decomposed_path_name}'
+    top_level_path = f"{output_filepath}assets/{decomposed_path_name}"
     for item in os.listdir(top_level_path):
         first_level_path = os.path.join(top_level_path, item)
         if os.path.isdir(first_level_path):
@@ -288,17 +299,26 @@ def run_obj2mjcf(output_filepath, decompose_dict):
                     shutil.rmtree(second_level_path)
 
     # run obj2mjcf to generate folders of processed objs
-    cmd = ["obj2mjcf", "--obj-dir", f'{output_filepath}assets/{composed_path_name}', "--save-mjcf"]
+    cmd = ["obj2mjcf", "--obj-dir", f"{output_filepath}assets/{composed_path_name}", "--save-mjcf"]
     subprocess.run(cmd)
 
     # run obj2mjcf to generate folders of processed objs with decompose option for decomposed components
     for mesh_name, threshold in decompose_dict.items():
-        cmd = ["obj2mjcf", "--obj-dir", f'{output_filepath}assets/{decomposed_path_name}/{mesh_name}', "--save-mjcf", "--decompose", "--coacd-args.threshold", threshold]
+        cmd = [
+            "obj2mjcf",
+            "--obj-dir",
+            f"{output_filepath}assets/{decomposed_path_name}/{mesh_name}",
+            "--save-mjcf",
+            "--decompose",
+            "--coacd-args.threshold",
+            threshold,
+        ]
         subprocess.run(cmd)
+
 
 def update_obj_assets(dom, output_filepath, mesh_info_dict):
     # Find the <asset> element
-    asset = dom.getElementsByTagName('asset')
+    asset = dom.getElementsByTagName("asset")
 
     # If there are no assets then we don't need to worry about obj conversions, but we still
     # support mesh-less URDFs
@@ -307,81 +327,86 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
         return dom
 
     # Find the <worldbody> element
-    worldbody = dom.getElementsByTagName('worldbody')
+    worldbody = dom.getElementsByTagName("worldbody")
     worldbody_element = worldbody[0]
-    worldbody_geoms = worldbody_element.getElementsByTagName('geom')
+    worldbody_geoms = worldbody_element.getElementsByTagName("geom")
 
     # get all of the mesh tags in the asset element
     asset_element = asset[0]
-    meshes = asset_element.getElementsByTagName('mesh')
+    meshes = asset_element.getElementsByTagName("mesh")
 
     # obj
-    full_decomposed_path = f'{output_filepath}assets/{decomposed_path_name}'
-    full_composed_path = f'{output_filepath}assets/{composed_path_name}'
-    decomposed_dirs = [name for name in os.listdir(full_decomposed_path) if os.path.isdir(os.path.join(full_decomposed_path, name))]
-    composed_dirs = [name for name in os.listdir(full_composed_path) if os.path.isdir(os.path.join(full_composed_path, name))]
+    full_decomposed_path = f"{output_filepath}assets/{decomposed_path_name}"
+    full_composed_path = f"{output_filepath}assets/{composed_path_name}"
+    decomposed_dirs = [
+        name for name in os.listdir(full_decomposed_path) if os.path.isdir(os.path.join(full_decomposed_path, name))
+    ]
+    composed_dirs = [
+        name for name in os.listdir(full_composed_path) if os.path.isdir(os.path.join(full_composed_path, name))
+    ]
 
     for mesh in meshes:
         mesh_name = mesh.getAttribute("name")
 
         # This should definitely be there, otherwise something is horribly wrong
-        scale = mesh_info_dict[mesh_name]['scale']
+        scale = mesh_info_dict[mesh_name]["scale"]
 
         mesh_path = ""
         if mesh_name in decomposed_dirs:
             composed_type = decomposed_path_name
-            mesh_path = f'{output_filepath}assets/{decomposed_path_name}/{mesh_name}/{mesh_name}/{mesh_name}.xml'
+            mesh_path = f"{output_filepath}assets/{decomposed_path_name}/{mesh_name}/{mesh_name}/{mesh_name}.xml"
         elif mesh_name in composed_dirs:
             composed_type = composed_path_name
-            mesh_path = f'{output_filepath}assets/{composed_path_name}/{mesh_name}/{mesh_name}.xml'
+            mesh_path = f"{output_filepath}assets/{composed_path_name}/{mesh_name}/{mesh_name}.xml"
 
         if mesh_path:
             sub_dom = minidom.parse(mesh_path)
             # Find the <asset> element
-            sub_asset = sub_dom.getElementsByTagName('asset')
+            sub_asset = sub_dom.getElementsByTagName("asset")
             sub_asset_element = sub_asset[0]
 
             # remove the old mesh element that is not separated
             asset_element.removeChild(mesh)
 
             # bring in the new elements
-            sub_meshes = sub_asset_element.getElementsByTagName('mesh')
+            sub_meshes = sub_asset_element.getElementsByTagName("mesh")
             for sub_mesh in sub_meshes:
-                sub_mesh_file = sub_mesh.getAttribute('file')
+                sub_mesh_file = sub_mesh.getAttribute("file")
                 if composed_type == decomposed_path_name:
-                    sub_mesh.setAttribute('file',f'{composed_type}/{mesh_name}/{mesh_name}/{sub_mesh_file}')
+                    sub_mesh.setAttribute("file", f"{composed_type}/{mesh_name}/{mesh_name}/{sub_mesh_file}")
                 else:
-                    sub_mesh.setAttribute('file',f'{composed_type}/{mesh_name}/{sub_mesh_file}')
+                    sub_mesh.setAttribute("file", f"{composed_type}/{mesh_name}/{sub_mesh_file}")
                 if scale:
-                    sub_mesh.setAttribute('scale', scale)
+                    sub_mesh.setAttribute("scale", scale)
                 asset_element.appendChild(sub_mesh)
 
             # bring in the materials
-            sub_materials = sub_asset_element.getElementsByTagName('material')
+            sub_materials = sub_asset_element.getElementsByTagName("material")
             for sub_material in sub_materials:
                 asset_element.appendChild(sub_material)
 
-            sub_body = sub_dom.getElementsByTagName('body')
+            sub_body = sub_dom.getElementsByTagName("body")
             sub_body = sub_body[0]
 
             # change the geoms
-            body = sub_dom.getElementsByTagName('body')
+            body = sub_dom.getElementsByTagName("body")
             body_element = body[0]
-            sub_geoms = body_element.getElementsByTagName('geom')
+            sub_geoms = body_element.getElementsByTagName("geom")
             for geom_element in worldbody_geoms:
-                if geom_element.getAttribute('mesh') == mesh_name:
-                    pos = geom_element.getAttribute('pos')
-                    quat = geom_element.getAttribute('quat')
+                if geom_element.getAttribute("mesh") == mesh_name:
+                    pos = geom_element.getAttribute("pos")
+                    quat = geom_element.getAttribute("quat")
 
                     parent = geom_element.parentNode
                     parent.removeChild(geom_element)
                     for sub_geom in sub_geoms:
                         sub_geom_local = sub_geom.cloneNode(False)
-                        sub_geom_local.setAttribute('pos',pos)
-                        sub_geom_local.setAttribute('quat',quat)
+                        sub_geom_local.setAttribute("pos", pos)
+                        sub_geom_local.setAttribute("quat", quat)
                         parent.appendChild(sub_geom_local)
 
     return dom
+
 
 def update_non_obj_assets(dom, output_filepath):
     # We want to take the group 1 objects that get created, and turn them into the equivalent
@@ -398,11 +423,11 @@ def update_non_obj_assets(dom, output_filepath):
     # but I guess it works for now)
 
     # Find the <worldbody> element
-    worldbody = dom.getElementsByTagName('worldbody')
+    worldbody = dom.getElementsByTagName("worldbody")
     worldbody_element = worldbody[0]
 
     # get all of the geom elements in the worldbody element
-    worldbody_geoms = worldbody_element.getElementsByTagName('geom')
+    worldbody_geoms = worldbody_element.getElementsByTagName("geom")
 
     # elements to remove
     remove_attributes = ["contype", "conaffinity", "group", "density"]
@@ -414,14 +439,16 @@ def update_non_obj_assets(dom, output_filepath):
             collision_geom = geom.cloneNode(False)
 
             # if there is no type associated, make the type sphere explicitly
-            if not collision_geom.hasAttribute("type"): collision_geom.setAttribute("type", "sphere")
+            if not collision_geom.hasAttribute("type"):
+                collision_geom.setAttribute("type", "sphere")
 
             # set to collision class
             collision_geom.setAttribute("class", "collision")
             for attribute in remove_attributes:
-                if collision_geom.hasAttribute(attribute): collision_geom.removeAttribute(attribute)
+                if collision_geom.hasAttribute(attribute):
+                    collision_geom.removeAttribute(attribute)
 
-            # most of the componenets are the same between collision and visual, so just copy it
+            # most of the components are the same between collision and visual, so just copy it
             visual_geom = collision_geom.cloneNode(False)
             visual_geom.setAttribute("class", "visual")
 
@@ -437,6 +464,7 @@ def update_non_obj_assets(dom, output_filepath):
             parent.appendChild(visual_geom)
 
     return dom
+
 
 def add_mujoco_inputs(dom, mujoco_inputs):
 
@@ -454,6 +482,7 @@ def add_mujoco_inputs(dom, mujoco_inputs):
 
     return dom
 
+
 def add_free_joint(dom, urdf, joint_name="floating_base_joint"):
     robot = URDF.from_xml_string(urdf)
     root_link = robot.get_root()
@@ -465,11 +494,11 @@ def add_free_joint(dom, urdf, joint_name="floating_base_joint"):
     world_body = dom.getElementsByTagName("worldbody")[0]
 
     # make a new body with our base
-    root_body = dom.createElement('body')
+    root_body = dom.createElement("body")
     root_body.setAttribute("name", root_link)
 
     # make a free joint under that body
-    free_joint = dom.createElement('freejoint')
+    free_joint = dom.createElement("freejoint")
     free_joint.setAttribute("name", "floating_base_joint")
     root_body.appendChild(free_joint)
 
@@ -483,13 +512,14 @@ def add_free_joint(dom, urdf, joint_name="floating_base_joint"):
 
     return dom
 
+
 def add_links_as_sites(urdf, dom, add_free_joint):
 
-    def remove_epsilons(vector, epsilon = 1e-8):
+    def remove_epsilons(vector, epsilon=1e-8):
         return [value if abs(value) > epsilon else 0 for value in vector]
 
     # get the static tfs from the urdf
-    tfs  = get_urdf_transforms(urdf)
+    tfs = get_urdf_transforms(urdf)
 
     # check to see if we would have added the free joint
     robot = URDF.from_xml_string(urdf)
@@ -520,7 +550,7 @@ def add_links_as_sites(urdf, dom, add_free_joint):
         for node in dom.getElementsByTagName("body"):
             if node.getAttribute("name") == parent:
                 for site in site_map[parent]:
-                    new_site = dom.createElement('site')
+                    new_site = dom.createElement("site")
                     new_site.setAttribute("name", site[0])
                     new_site.setAttribute("pos", " ".join(map(str, site[1])))
                     new_site.setAttribute("quat", " ".join(map(str, site[2])))
@@ -530,7 +560,7 @@ def add_links_as_sites(urdf, dom, add_free_joint):
     node = dom.getElementsByTagName("worldbody")
     for site in site_map["root_item"]:
         print(link, site)
-        new_site = dom.createElement('site')
+        new_site = dom.createElement("site")
         new_site.setAttribute("name", site[0])
         new_site.setAttribute("pos", " ".join(map(str, site[1])))
         new_site.setAttribute("quat", " ".join(map(str, site[2])))
@@ -547,6 +577,7 @@ def add_links_as_sites(urdf, dom, add_free_joint):
 
     return dom
 
+
 def rotate_quaternion(q1, q2):
     """
     Returns q1*q2
@@ -561,10 +592,11 @@ def rotate_quaternion(q1, q2):
         x1 * y0 - y1 * x0 + z1 * w0 + w1 * z0,
     ]
 
+
 def add_cameras_from_sites(dom):
     """
     Adds cameras for any sites that end with "_color_optical_frame". We make the assumption that any
-    link/site with that name is the color frame for a phyiscal camera matching the REP 103 standard for
+    link/site with that name is the color frame for a physical camera matching the REP 103 standard for
     optical frames. As noted in the ROS image message,
     https://github.com/ros2/common_interfaces/blob/rolling/sensor_msgs/msg/Image.msg#L7
 
@@ -593,7 +625,7 @@ def add_cameras_from_sites(dom):
     # We only attach to the color frame, this is flimsy as noted in the comment above. It also
     # causes name changes in the camera.
     camera_suffix = "_color_optical_frame"
-    x_rotation = [0., 1., 0., 0.] # Rotation by pi around x axis
+    x_rotation = [0.0, 1.0, 0.0, 0.0]  # Rotation by pi around x axis
 
     # Construct all cameras for relevant sites in xml and add them as children to the same parent
     for node in dom.getElementsByTagName("site"):
@@ -605,7 +637,7 @@ def add_cameras_from_sites(dom):
             camera_quat = rotate_quaternion(x_rotation, quat)
 
             # We could adjust these at some point down the road, maybe pass them as inputs that we parse?
-            camera_node = dom.createElement('camera')
+            camera_node = dom.createElement("camera")
             camera_node.setAttribute("name", camera_name)
             camera_node.setAttribute("fovy", "58")
             camera_node.setAttribute("mode", "fixed")
@@ -620,9 +652,12 @@ def add_cameras_from_sites(dom):
 
     return dom
 
-def fix_mujoco_description(output_filepath, mesh_info_dict, mujoco_inputs, urdf, decompose_dict, request_add_free_joint):
-    full_filepath = f'{output_filepath}mujoco_description.xml'
-    filename, extension = os.path.splitext(f'{output_filepath}mujoco_description.xml')
+
+def fix_mujoco_description(
+    output_filepath, mesh_info_dict, mujoco_inputs, urdf, decompose_dict, request_add_free_joint
+):
+    full_filepath = f"{output_filepath}mujoco_description.xml"
+    filename, extension = os.path.splitext(f"{output_filepath}mujoco_description.xml")
     destination_file = filename + "_formatted" + extension
     # shutil.copy2(full_filepath, destination_file)
 
@@ -649,7 +684,7 @@ def fix_mujoco_description(output_filepath, mesh_info_dict, mujoco_inputs, urdf,
     dom = add_cameras_from_sites(dom)
 
     # Write the updated file
-    with open(destination_file, 'w') as file:
+    with open(destination_file, "w") as file:
         # Convert the DOM back to a string
         modified_data = dom.toprettyxml(indent="  ")
         modified_data = "\n".join([line for line in modified_data.splitlines() if line.strip()])
@@ -659,6 +694,7 @@ def fix_mujoco_description(output_filepath, mesh_info_dict, mujoco_inputs, urdf,
         modified_lines.pop(0)
         modified_data = "".join(modified_lines)
         file.write(modified_data)
+
 
 def parse_inputs_xml(filename=None):
     """
@@ -694,17 +730,19 @@ def parse_inputs_xml(filename=None):
 
     # We only parse the direct children of the root node, which should be called
     # "mujoco_defaults".
-    if root.tagName != 'mujoco_inputs':
+    if root.tagName != "mujoco_inputs":
         raise ValueError(f"Root tag in defaults xml must be 'mujoco_inputs', not {root.tagName}")
 
     for child in root.childNodes:
         if not child.nodeType == child.ELEMENT_NODE:
             continue
 
-        if not child.tagName in mujoco_inputs: mujoco_inputs[child.tagName] = []
+        if child.tagName not in mujoco_inputs:
+            mujoco_inputs[child.tagName] = []
         mujoco_inputs[child.tagName].append(child)
 
     return mujoco_inputs
+
 
 def get_urdf_from_rsp(args=None):
     # Isolate ROS in a function
@@ -714,15 +752,15 @@ def get_urdf_from_rsp(args=None):
     from rcl_interfaces.srv import GetParameters
 
     class ParameterClient(Node):
-        def __init__(self, node_name='/robot_state_publisher/get_parameters'):
-            super().__init__('parameter_client')
+        def __init__(self, node_name="/robot_state_publisher/get_parameters"):
+            super().__init__("parameter_client")
             self.node_name = node_name
             self.client = self.create_client(GetParameters, node_name)
 
         def get_params(self, params):
-            print(f"")
+            print()
             while not self.client.wait_for_service(timeout_sec=1.0):
-                self.get_logger().info('service not available, waiting again...')
+                self.get_logger().info("service not available, waiting again...")
 
             self.req = GetParameters.Request()
             self.req.names = params
@@ -733,23 +771,26 @@ def get_urdf_from_rsp(args=None):
     rclpy.init(args=args)
 
     param_client = ParameterClient()
-    response = param_client.get_params(['robot_description'])
+    response = param_client.get_params(["robot_description"])
     if response is not None:
         urdf = response.values[0].string_value
     else:
-        param_client.get_logger().error('Failed to call service')
+        param_client.get_logger().error("Failed to call service")
     param_client.destroy_node()
     rclpy.try_shutdown()
 
     return urdf
 
+
 def get_xml_from_file(urdf_file=None):
     """
     Optionally parse a URDF from file. Can create a URDF from /robot_description with:
 
-    ros2 topic echo  --full-length --once /robot_description  | sed -e 's/^data: "//' -e 's/"$//' -e 's/\\n/\n/g' -e 's/\\\"/\"/g' -e 's/---//g' > /tmp/robot_description.urdf
+    ros2 topic echo  --full-length --once /robot_description  | \
+        sed -e 's/^data: "//' -e 's/"$//' -e 's/\\n/\n/g' -e 's/\\\"/\"/g' -e 's/---//g' > \
+        /tmp/robot_description.urdf
     """
-    with open(urdf_file, 'r') as file:
+    with open(urdf_file) as file:
         urdf = file.read()
     return urdf
 
@@ -767,12 +808,12 @@ def get_urdf_transforms(urdf_string):
         trans = PyKDL.Vector(*xyz)
         return PyKDL.Frame(rot, trans)
 
-    def get_parent_chain(link, transform = PyKDL.Frame.Identity()):
+    def get_parent_chain(link, transform=PyKDL.Frame.Identity()):
         # if the link is the root of the urdf, there is no parent!
         # we return true for third item to show it is root
         if link == robot.get_root():
             return (link, transform, True)
-        parent_joint, _  = robot.parent_map[link]
+        parent_joint, _ = robot.parent_map[link]
 
         # get the transform from the next parent in line to the target link
         joint_obj = robot.joint_map[parent_joint]
@@ -784,7 +825,7 @@ def get_urdf_transforms(urdf_string):
         # get the transform for the link and the next joint in line
         if joint_obj.type == "fixed":
             joint_tf = make_transform_from_origin(joint_obj.origin)
-            transform = joint_tf*link_tf*transform
+            transform = joint_tf * link_tf * transform
             return get_parent_chain(joint_obj.parent, transform)
         else:
             # if it isn't fixed, we are done here!
@@ -798,6 +839,7 @@ def get_urdf_transforms(urdf_string):
         results[link.name] = get_parent_chain(link.name)
 
     return results
+
 
 def get_decompose_items(mujoco_inputs):
     decompose_dict = dict()
@@ -814,20 +856,28 @@ def get_decompose_items(mujoco_inputs):
                     decompose_dict[name] = threshold
     return decompose_dict
 
+
 def main(args=None):
 
-    parser = argparse.ArgumentParser(description='Convert a full URDF to MJCF for use in Mujoco')
-    parser.add_argument('-u', '--urdf', required=False, help='Optionally pass an existing URDF file')
-    parser.add_argument('-r', '--robot_description', required=False, help='Optionally pass the robot description string')
-    parser.add_argument('-m', '--mujoco_inputs', required=False,
-                        help='Optionally specify a defaults xml for default settings, actuators, options, and additional sensors')
-    parser.add_argument('-o', '--output', default='mjcf_data', help='Generated output path')
-    parser.add_argument('-c', '--convert_stl_to_obj', action="store_true")
-    parser.add_argument('-f', '--add_free_joint', action="store_true")
+    parser = argparse.ArgumentParser(description="Convert a full URDF to MJCF for use in Mujoco")
+    parser.add_argument("-u", "--urdf", required=False, help="Optionally pass an existing URDF file")
+    parser.add_argument(
+        "-r", "--robot_description", required=False, help="Optionally pass the robot description string"
+    )
+    parser.add_argument(
+        "-m",
+        "--mujoco_inputs",
+        required=False,
+        help="Optionally specify a defaults xml for default settings, actuators, options, and additional sensors",
+    )
+    parser.add_argument("-o", "--output", default="mjcf_data", help="Generated output path")
+    parser.add_argument("-c", "--convert_stl_to_obj", action="store_true")
+    parser.add_argument("-f", "--add_free_joint", action="store_true")
 
     # remove ros args to make argparser heppy
     args_without_filename = sys.argv[1:]
-    while "--ros-args" in args_without_filename: args_without_filename.remove("--ros-args")
+    while "--ros-args" in args_without_filename:
+        args_without_filename.remove("--ros-args")
 
     parsed_args = parser.parse_args(args_without_filename)
 
@@ -845,14 +895,14 @@ def main(args=None):
     mujoco_inputs = parse_inputs_xml(parsed_args.mujoco_inputs)
 
     # Grab the output directory and ensure it ends with '/'
-    output_filepath = os.path.join(parsed_args.output, '')
+    output_filepath = os.path.join(parsed_args.output, "")
 
     # Add required mujoco tags to the starting URDF
     xml_data = add_mujoco_info(urdf)
 
     # get rid of collision data, assuming the visual data is much better resolution.
     # not sure if this is the best move...
-    xml_data = remove_tag(xml_data,'collision')
+    xml_data = remove_tag(xml_data, "collision")
 
     xml_data = replace_package_names(xml_data)
     mesh_info_dict = extract_mesh_info(xml_data)
@@ -861,18 +911,19 @@ def main(args=None):
 
     print("writing data to robot_description_formatted.urdf")
     robot_description_filename = "robot_description_formatted.urdf"
-    with open(output_filepath + "robot_description_formatted.urdf", 'w') as file:
+    with open(output_filepath + "robot_description_formatted.urdf", "w") as file:
         # Remove extra newlines that minidom adds after each tag
         xml_data = "\n".join([line for line in xml_data.splitlines() if line.strip()])
         file.write(xml_data)
 
-    model = mujoco.MjModel.from_xml_path(f'{output_filepath}{robot_description_filename}')
-    mujoco.mj_saveLastXML(f'{output_filepath}mujoco_description.xml', model)
+    model = mujoco.MjModel.from_xml_path(f"{output_filepath}{robot_description_filename}")
+    mujoco.mj_saveLastXML(f"{output_filepath}mujoco_description.xml", model)
 
     # Converts objs for use in mujoco, adds tags, inputs, sites, and sensors to the final xml
     fix_mujoco_description(output_filepath, mesh_info_dict, mujoco_inputs, urdf, decompose_dict, request_add_free_joint)
 
     shutil.copy2(f'{get_package_prefix("mujoco_ros2_tools")}/share/mujoco_ros2_tools/scene.xml', output_filepath)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
