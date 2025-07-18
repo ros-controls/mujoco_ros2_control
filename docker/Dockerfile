@@ -14,8 +14,10 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
-    apt-get install -y python3-pip wget libglfw3-dev
-RUN pip3 install xacro
+    apt-get install -y \
+      libglfw3-dev \
+      ros-${ROS_DISTRO}-xacro\
+      wget
 
 # Configure and install MuJoCo
 ENV MUJOCO_VERSION=${MUJOCO_VERSION}
@@ -43,4 +45,5 @@ RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
     && colcon build --cmake-args -DBUILD_TESTING=ON
 
 COPY docker/entrypoint.sh /entrypoint.sh
+RUN echo "source /entrypoint.sh" >> ~/.bashrc
 ENTRYPOINT ["/entrypoint.sh"]

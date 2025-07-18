@@ -15,8 +15,6 @@ if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
     CPU_ARCH="aarch64"
 fi
 
-ls -al "${SCRIPT_DIR}/../.docker/entrypoint.sh"
-
 # Build the Docker image, context from the root directory
 docker build --build-arg ROS_DISTRO="${ROS_DISTRO}" \
              --build-arg MUJOCO_VERSION="${MUJOCO_VERSION}" \

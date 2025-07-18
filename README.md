@@ -188,5 +188,9 @@ From there the source can be modified, built, tested, or otherwise used as norma
 For example, launch the included test scene with,
 
 ```bash
+# Evaluate using the included mujoco simulate application
 ${MUJOCO_DIR}/bin/simulate ${ROS_WS}/src/mujoco_ros2_simulation/test/resources/scene.xml
+
+# Or launch the test ROS control interface
+ros2 launch mujoco_ros2_simulation test_robot.launch.py
 ```
