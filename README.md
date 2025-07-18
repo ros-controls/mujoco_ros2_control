@@ -1,11 +1,12 @@
 # MuJoCo ROS 2 Simulation
 
 This package contains a ROS 2 control system interface for the [MuJoCo Simulator](https://mujoco.readthedocs.io/en/3.3.2/overview.html).
+It was originally written for simulating robot hardware in NASA Johnson's [iMETRO facility](https://ntrs.nasa.gov/citations/20230015485).
 
 The system interface wraps MuJoCo's [Simulate App](https://github.com/google-deepmind/mujoco/tree/3.3.2/simulate) to provide included functionality.
 Because the app is not bundled as a library, we compile it directly from a local install of MuJoCo.
 
-This library is based on the MoveIt [mujoco_ros2_control](https://github.com/moveit/mujoco_ros2_control) package.
+Parts of this library are also based on the MoveIt [mujoco_ros2_control](https://github.com/moveit/mujoco_ros2_control) package.
 
 ## Installation
 
@@ -143,28 +144,43 @@ These sensor state interfaces can then be used out of the box with the standard 
 
 ### Cameras
 
-While currently not configurable through the ros2 control xacro, cameras added to the MJCF will have wrappers publish RGB-D images at a fixed 5hz rate.
-Cameras must be given a `<name>` and be attached to a joint called `<name>_optical_frame`.
-The camera_info, color, and depth images will be published to topics called `<name>/camera_info`, `<name>/color`, and `<name>/depth`, respectively.
+Any `camera` included in the MJCF will automatically have its RGB-D images and info published to ROS topics.
+Currently all images are published at a fixed 5hz rate.
+
+Cameras must include a string `<name>`, which sets defaults for the frame and topic names.
+By default, the ROS 2 wrapper assumes the camera is attached to a frame named `<name>_frame`.
+Additionally camera_info, color, and depth images will be published to topics called `<name>/camera_info`, `<name>/color`, and `<name>/depth`, respectively.
 Also note that MuJuCo's conventions for cameras are different than ROS's, and which must be accounted for.
 Refer to the documentation for more information.
 
 For example,
 
 ```xml
-<site name="wrist_mounted_camera_color_optical_frame" pos="0 0 0" quat="0 0 0 1"/>
-<camera name="wrist_mounted_camera_color" fovy="58" mode="fixed" resolution="640 480" pos="0 0 0" quat="0 0 0 1"/>
+<camera name="wrist_mounted_camera" fovy="58" mode="fixed" resolution="640 480" pos="0 0 0" quat="0 0 0 1"/>
 ```
 
 Will publish the following topics:
 
 ```bash
-$ ros2 topic info /wrist_mounted_camera_color/camera_info
+$ ros2 topic info /wrist_mounted_camera/camera_info
 Type: sensor_msgs/msg/CameraInfo
-$ ros2 topic info /wrist_mounted_camera_color/color
+$ ros2 topic info /wrist_mounted_camera/color
 Type: sensor_msgs/msg/Image
-$ ros2 topic info /wrist_mounted_camera_color/depth
+$ ros2 topic info /wrist_mounted_camera/depth
 Type: sensor_msgs/msg/Image
+```
+
+The frame and topic names are also configurable from the ros2_control xacro.
+Default parameters can be overridden with:
+
+```xml
+  <!-- For cameras, the sensor name _must_ match the camera name in the MJCF -->
+  <sensor name="wrist_mounted_camera">
+    <param name="frame_name">wrist_mounted_camera_mujoco_frame</param>
+    <param name="info_topic">/wrist_mounted_camera/color/camera_info</param>
+    <param name="image_topic">/wrist_mounted_camera/color/image_raw</param>
+    <param name="depth_topic">/wrist_mounted_camera/aligned_depth_to_color/image_raw</param>
+  </sensor>
 ```
 
 ## Docker Development Workflow
