@@ -617,7 +617,7 @@ def add_cameras_from_sites(dom):
           "wrist_mounted_camera_color_optical_frame" and "wrist_mounted_camera_depth_optical_frame".
           We just want a single camera streaming both images, but there isn't a
           "wrist_mounted_camera_optical_frame" in the URDF. So for now we're just attaching both to the
-          color frame and naming the camera "wrist_mounted_camera_color". We could alternatively have
+          color frame and naming the camera "wrist_mounted_camera". We could alternatively have
           the frame name passed as an argument to the mujoco system, but that is additional work in the
           drivers.
     """
@@ -631,7 +631,7 @@ def add_cameras_from_sites(dom):
     for node in dom.getElementsByTagName("site"):
         name = node.getAttribute("name")
         if name.endswith(camera_suffix):
-            camera_name = name[: -len(camera_suffix)] + "_color"
+            camera_name = name[: -len(camera_suffix)]
             camera_pos = node.getAttribute("pos")
             quat = [float(x) for x in node.getAttribute("quat").split()]
             camera_quat = rotate_quaternion(x_rotation, quat)

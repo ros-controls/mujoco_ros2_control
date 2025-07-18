@@ -14,4 +14,8 @@
     <position name="joint1" joint="joint1" kp="1000" dampratio="1.0"/>
     <position name="joint2" joint="joint2" kp="1000" dampratio="1.0"/>
   </actuator>
+
+  <camera>
+
+  </camera>
 </mujoco_inputs>

@@ -17,7 +17,7 @@
         <site name="camera_color_frame" pos="1.0 0 0.1" quat="1.0 0 0 0"/>
         <site name="camera_color_optical_frame" pos="1.0 0 0.1" quat="-0.49999816339744824 0.4999999999966268 0.5000018366025517 -0.4999999999966268"/>
         <site name="camera_color_mujoco_frame" pos="1.0 0 0.1" quat="0.5000006633911983 0.4999974999995599 0.49999933659630164 0.5000024999995599"/>
-        <camera name="camera_color" fovy="58" mode="fixed" resolution="640 480" pos="1.0 0 0.1" quat="-0.4999999999966268 -0.49999816339744824 -0.4999999999966268 -0.5000018366025517"/>
+        <camera name="camera" fovy="58" mode="fixed" resolution="640 480" pos="1.0 0 0.1" quat="-0.4999999999966268 -0.49999816339744824 -0.4999999999966268 -0.5000018366025517"/>
       </body>
       <geom size="0.5 0.05 0.05" pos="0.5 0 0" type="box" class="collision"/>
       <geom size="0.5 0.05 0.05" pos="0.5 0 0" type="box" rgba="1 0 0 1" class="visual"/>

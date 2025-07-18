@@ -140,6 +140,15 @@
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
     </joint>
+
+    <!-- For cameras, the sensor name _must_ match the camera name in the MJCF -->
+    <sensor name="camera">
+      <!-- Parameters will be used as is -->
+      <param name="frame_name">camera_color_mujoco_frame</param>
+      <param name="info_topic">/camera/color/camera_info</param>
+      <param name="image_topic">/camera/color/image_raw</param>
+      <param name="depth_topic">/camera/aligned_depth_to_color/image_raw</param>
+    </sensor>
   </ros2_control>
 
 </robot>
