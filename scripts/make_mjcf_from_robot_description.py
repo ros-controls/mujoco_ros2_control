@@ -500,7 +500,7 @@ def parse_camera_information(mujoco_inputs):
 
 def get_processed_mujoco_inputs(mujoco_inputs):
     """
-    Returns the processed inputs as dictionaries from the speficied mujoco_inputs.
+    Returns the processed inputs as dictionaries from the specified mujoco_inputs.
 
     Right now this supports tags for decomposing meshes and adding cameras to sites.
     """
@@ -959,7 +959,9 @@ def main(args=None):
     mujoco.mj_saveLastXML(f"{output_filepath}mujoco_description.xml", model)
 
     # Converts objs for use in mujoco, adds tags, inputs, sites, and sensors to the final xml
-    fix_mujoco_description(output_filepath, mesh_info_dict, mujoco_inputs, urdf, decompose_dict, cameras_dict, request_add_free_joint)
+    fix_mujoco_description(
+        output_filepath, mesh_info_dict, mujoco_inputs, urdf, decompose_dict, cameras_dict, request_add_free_joint
+    )
 
     shutil.copy2(f'{get_package_share_directory("mujoco_ros2_simulation")}/resources/scene.xml', output_filepath)
 

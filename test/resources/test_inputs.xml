@@ -1,17 +1,34 @@
 <mujoco_inputs>
-  <option integrator="implicitfast"/>
 
-  <default>
-    <default class="visual">
-      <geom group="2" type="mesh" contype="0" conaffinity="0"/>
-    </default>
-    <default class="collision">
-      <geom group="3" type="mesh"/>
-    </default>
-  </default>
+  <!-- The contents of `raw_inputs` will be copied and pasted directly into the MJCF -->
+  <raw_inputs>
+    <option integrator="implicitfast"/>
 
-  <actuator>
-    <position name="joint1" joint="joint1" kp="1000" dampratio="1.0"/>
-    <position name="joint2" joint="joint2" kp="1000" dampratio="1.0"/>
-  </actuator>
+    <default>
+      <default class="visual">
+        <geom group="2" type="mesh" contype="0" conaffinity="0"/>
+      </default>
+      <default class="collision">
+        <geom group="3" type="mesh"/>
+      </default>
+    </default>
+
+    <actuator>
+      <position name="joint1" joint="joint1" kp="1000" dampratio="1.0"/>
+      <position name="joint2" joint="joint2" kp="1000" dampratio="1.0"/>
+    </actuator>
+  </raw_inputs>
+
+  <!-- Specific inputs that require processing from the conversion script-->
+  <processed_inputs>
+    <!-- Specifying decompose_mesh will set the `decompose` flag when using obj2mjcf -->
+    <decompose_mesh mesh_name="shoulder_link" threshold="0.05"/>
+
+    <!-- The camera with the specified values will be added at the specified site name. -->
+    <!-- The position and quaterinion will be filled in by the converter -->
+    <camera site="camera_color_optical_frame" >
+      <camera name="camera" fovy="58" mode="fixed" resolution="640 480"/>
+    </camera>
+
+  </processed_inputs>
 </mujoco_inputs>
