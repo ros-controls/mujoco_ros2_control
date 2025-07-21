@@ -43,11 +43,11 @@ build:
   script:
     - DOCKER_BUILDKIT=1 docker build
         -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}"
+        --pull
         --load
         --target mujoco_ros
         --file docker/Dockerfile
         .
-    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}
   tags:
     - dind
 
@@ -55,6 +55,8 @@ test:
   stage: test
   image:
     name: js-er-code.jsc.nasa.gov:5005/ci_build/docker_with_nasa_certs:latest
+  dependencies:
+    - build
   script:
     - |
       docker run --rm \
