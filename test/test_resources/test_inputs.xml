@@ -26,9 +26,7 @@
 
     <!-- The camera with the specified values will be added at the specified site name. -->
     <!-- The position and quaterinion will be filled in by the converter -->
-    <camera site="camera_color_optical_frame" >
-      <camera name="camera" fovy="58" mode="fixed" resolution="640 480"/>
-    </camera>
+    <camera site="camera_color_optical_frame" name="camera" fovy="58" mode="fixed" resolution="640 480"/>
 
   </processed_inputs>
 </mujoco_inputs>

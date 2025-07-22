@@ -504,17 +504,15 @@ def get_processed_mujoco_inputs(processed_inputs_element):
 
         # Grab cameras
         if child.nodeType == child.ELEMENT_NODE and child.tagName == "camera":
-            site_name = child.getAttribute("site")
-            camera_element = None
-            for camera_child in child.childNodes:
-                if camera_child.nodeType == camera_child.ELEMENT_NODE and camera_child.tagName == "camera":
-                    camera_element = camera_child
+            camera_element = child
+            site_name = camera_element.getAttribute("site")
+            camera_name = camera_element.getAttribute("name")
 
-            if camera_element:
-                print(f"Will add camera for site: {site_name}")
-                cameras_dict[site_name] = camera_element
-            else:
-                print(f"Skipping possibly invalid camera from inputs - site: {site_name}")
+            # We don't need this in the MJCF
+            camera_element.removeAttribute("site")
+            cameras_dict[site_name] = camera_element
+
+            print(f"Will add camera ({camera_name}) for site ({site_name})")
 
     return decompose_dict, cameras_dict
 
@@ -548,9 +546,7 @@ def parse_inputs_xml(filename=None):
 
             <!-- The camera with the specified values will be added at the specified site name. -->
             <!-- The position and quaterinion will be filled in by the converter -->
-            <camera site="camera_color_optical_frame" >
-                <camera name="camera" fovy="58" mode="fixed" resolution="640 480"/>
-            </camera>
+            <camera site="camera_color_optical_frame" name="camera" fovy="58" mode="fixed" resolution="640 480"/>
 
         </processed_inputs>
     </mujoco_inputs>
