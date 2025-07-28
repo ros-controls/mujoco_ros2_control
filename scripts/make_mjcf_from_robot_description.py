@@ -483,6 +483,7 @@ def get_processed_mujoco_inputs(processed_inputs_element):
 
     decompose_dict = dict()
     cameras_dict = dict()
+    modify_element_dict = dict()
 
     if not processed_inputs_element:
         return decompose_dict, cameras_dict
@@ -514,7 +515,28 @@ def get_processed_mujoco_inputs(processed_inputs_element):
 
             print(f"Will add camera ({camera_name}) for site ({site_name})")
 
-    return decompose_dict, cameras_dict
+        # Grab modify element information
+        if child.nodeType == child.ELEMENT_NODE and child.tagName == "modify_element":
+            modify_element_element = child
+
+            # get the attributes from the modify_element_tag
+            attr_dict = {attr.name: attr.value for attr in modify_element_element.attributes.values()}
+            # we must have a name element
+            if "name" not in attr_dict or "type" not in attr_dict:
+                raise ValueError("'name' and 'type' must be in the attributes of a 'modify_element' tag!")
+
+            # remove the name and type entries because those will be used as the key in the returned dict
+            element_name = attr_dict["name"]
+            element_type = attr_dict["type"]
+            del attr_dict["name"]
+            del attr_dict["type"]
+            modify_element_dict[(element_type, element_name)] = attr_dict
+
+            print(f"Will add the following attributes to {element_type} '{element_name}':")
+            for key, value in attr_dict.items():
+                print(f"  {key}: {value}")
+
+    return decompose_dict, cameras_dict, modify_element_dict
 
 
 def parse_inputs_xml(filename=None):
@@ -744,8 +766,59 @@ def add_cameras_from_sites(dom, cameras_dict):
     return dom
 
 
+def add_modifiers(dom, modify_element_dict):
+    """
+    Modify elements that are a part of the worldbody tag by adding attributes.
+    These attributes are defined as a part of the modify_element_dict and are stored with the key as the name of the
+    element to be modified, and the value being another dictionary mapping attribute names to attribute values.
+
+    This method will leave the attributes that were already a part of the element in the mjcf file, and append the
+    new values, but will overwrite the old values with newly provided ones if there are conflicts.
+
+    The modify_element_dict looks like
+    key (tuple): (element_type (str), element_name (str))
+    value (dict):
+        key[0]: attribute_name (str)
+        value[0]: attribute_value (str)
+        key[1]: attribute_name (str)
+        value[1]: attribute_value (str)
+        ...
+    """
+
+    # Get the joint elements underneath the <worldbody> element
+    worldbody = dom.getElementsByTagName("worldbody")
+    worldbody_element = worldbody[0]
+
+    # Figure out what element types we need to look at
+    types = []
+    for key in modify_element_dict:
+        if key[0] not in types:
+            types.append(key[0])
+
+    # work on each set of element types at a time
+    for element_type in types:
+        element_set = worldbody_element.getElementsByTagName(element_type)
+        # check if the each element needs modification
+        for element in element_set:
+            potential_key = (element.tagName, element.getAttribute("name"))
+            if potential_key in modify_element_dict:
+                # apply attributes to the elements
+                attr_dict = modify_element_dict[potential_key]
+                for attr_name, attr_value in attr_dict.items():
+                    element.setAttribute(attr_name, attr_value)
+
+    return dom
+
+
 def fix_mujoco_description(
-    output_filepath, mesh_info_dict, raw_inputs, urdf, decompose_dict, cameras_dict, request_add_free_joint
+    output_filepath,
+    mesh_info_dict,
+    raw_inputs,
+    urdf,
+    decompose_dict,
+    cameras_dict,
+    modify_element_dict,
+    request_add_free_joint,
 ):
     """
     Handles all necessary post processing from the originally converted MJCF.
@@ -776,6 +849,9 @@ def fix_mujoco_description(
 
     # Add cameras based on site names
     dom = add_cameras_from_sites(dom, cameras_dict)
+
+    # modify elements based on modify_element tags
+    dom = add_modifiers(dom, modify_element_dict)
 
     # Write the updated file
     with open(destination_file, "w") as file:
@@ -928,7 +1004,7 @@ def main(args=None):
 
     # Part inputs data
     raw_inputs, processed_inputs = parse_inputs_xml(parsed_args.mujoco_inputs)
-    decompose_dict, cameras_dict = get_processed_mujoco_inputs(processed_inputs)
+    decompose_dict, cameras_dict, modify_element_dict = get_processed_mujoco_inputs(processed_inputs)
 
     # Grab the output directory and ensure it ends with '/'
     output_filepath = os.path.join(parsed_args.output, "")
@@ -956,7 +1032,14 @@ def main(args=None):
 
     # Converts objs for use in mujoco, adds tags, inputs, sites, and sensors to the final xml
     fix_mujoco_description(
-        output_filepath, mesh_info_dict, raw_inputs, urdf, decompose_dict, cameras_dict, request_add_free_joint
+        output_filepath,
+        mesh_info_dict,
+        raw_inputs,
+        urdf,
+        decompose_dict,
+        cameras_dict,
+        modify_element_dict,
+        request_add_free_joint,
     )
 
     shutil.copy2(f'{get_package_share_directory("mujoco_ros2_simulation")}/resources/scene.xml', output_filepath)

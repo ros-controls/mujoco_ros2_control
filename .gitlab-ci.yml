@@ -14,8 +14,7 @@ workflow:
 
 stages:
   - lint
-  - build
-  - test
+  - build_and_test
 
 pre-commit-check:
   stage: lint
@@ -32,8 +31,8 @@ pre-commit-check:
       when: always
     - when: never
 
-build:
-  stage: build
+build_and_test:
+  stage: build_and_test
   image:
     name: js-er-code.jsc.nasa.gov:5005/ci_build/docker_with_nasa_certs:latest
   before_script:
@@ -43,24 +42,10 @@ build:
   script:
     - DOCKER_BUILDKIT=1 docker build
         -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}"
-        --pull
         --load
         --target mujoco_ros
         --file docker/Dockerfile
         .
-  tags:
-    - dind
-
-test:
-  stage: test
-  image:
-    name: js-er-code.jsc.nasa.gov:5005/ci_build/docker_with_nasa_certs:latest
-  dependencies:
-    - build
-  before_script:
-    - docker info
-    - docker login -u gitlab-ci-token -p ${CI_JOB_TOKEN} ${CI_REGISTRY}
-  script:
     - |
       docker run --rm \
       ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG} \

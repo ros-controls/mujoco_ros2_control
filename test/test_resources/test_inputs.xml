@@ -28,5 +28,11 @@
     <!-- The position and quaterinion will be filled in by the converter -->
     <camera site="camera_color_optical_frame" name="camera" fovy="58" mode="fixed" resolution="640 480"/>
 
+    <!-- The element with the type and name as listed below will be modified with the remaining attributes -->
+    <!-- If the attribute already existed, it will be overwritten -->
+    <!-- Note that the type and name elements are required -->
+    <modify_element type="joint" name="joint1" frictionloss="1.0" damping="2.0"/>
+    <modify_element type="body" name="forearm" gravcomp="1.0"/>
+
   </processed_inputs>
 </mujoco_inputs>
