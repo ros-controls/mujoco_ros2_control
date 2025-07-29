@@ -466,10 +466,11 @@ def add_mujoco_inputs(dom, raw_inputs):
     """
     root = dom.documentElement
 
-    for child in raw_inputs.childNodes:
-        if child.nodeType == child.ELEMENT_NODE:
-            imported_node = dom.importNode(child, True)
-            root.appendChild(imported_node)
+    if raw_inputs:
+        for child in raw_inputs.childNodes:
+            if child.nodeType == child.ELEMENT_NODE:
+                imported_node = dom.importNode(child, True)
+                root.appendChild(imported_node)
 
     return dom
 
@@ -486,7 +487,7 @@ def get_processed_mujoco_inputs(processed_inputs_element):
     modify_element_dict = dict()
 
     if not processed_inputs_element:
-        return decompose_dict, cameras_dict
+        return decompose_dict, cameras_dict, modify_element_dict
 
     for child in processed_inputs_element.childNodes:
         if child.nodeType != child.ELEMENT_NODE:
