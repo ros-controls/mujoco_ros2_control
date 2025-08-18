@@ -1,16 +1,16 @@
 # MuJoCo ROS 2 Simulation
 
-This package contains a ROS 2 control system interface for the [MuJoCo Simulator](https://mujoco.readthedocs.io/en/3.3.2/overview.html).
+This package contains a ROS 2 control system interface for the [MuJoCo Simulator](https://mujoco.readthedocs.io/en/3.3.4/overview.html).
 It was originally written for simulating robot hardware in NASA Johnson's [iMETRO facility](https://ntrs.nasa.gov/citations/20230015485).
 
-The system interface wraps MuJoCo's [Simulate App](https://github.com/google-deepmind/mujoco/tree/3.3.2/simulate) to provide included functionality.
+The system interface wraps MuJoCo's [Simulate App](https://github.com/google-deepmind/mujoco/tree/3.3.4/simulate) to provide included functionality.
 Because the app is not bundled as a library, we compile it directly from a local install of MuJoCo.
 
 Parts of this library are also based on the MoveIt [mujoco_ros2_control](https://github.com/moveit/mujoco_ros2_control) package.
 
 ## Installation
 
-This interface has only been tested against ROS 2 humble and MuJoCo `3.3.2`.
+This interface has only been tested against ROS 2 humble and MuJoCo `3.3.4`.
 We assume all required ROS dependencies have been installed either manually or with `rosdep`.
 
 A local install of MuJoCo is required to build the application, this package will not handle it for you.
@@ -19,8 +19,8 @@ Refer to their documentation for installation procedures.
 Once installed, set the following environment variables:
 
 ```bash
-MUJOCO_VERSION=3.3.2
-MUJOCO_DIR=/opt/mujoco/mujoco-3.3.2
+MUJOCO_VERSION=3.3.4
+MUJOCO_DIR=/opt/mujoco/mujoco-3.3.4
 ```
 
 From there the library can be compiled with `colcon build ...`, as normal.
@@ -46,6 +46,21 @@ Just specify the plugin and point to a valid MJCF on launch:
     <hardware>
       <plugin>mujoco_ros2_simulation/MujocoSystemInterface</plugin>
       <param name="mujoco_model">$(find my_description)/description/scene.xml</param>
+
+      <!--
+       Optional parameter to override the speed scaling parameters from the Simulate App window
+       and just attempt to run at whatever the desired rate is here. This allows users to run the simulation
+       faster than real time. For example, at 500% speed as set here. If this param is omitted or set to
+       a value <0, then the simulation will run using the slowdown requested from the App.
+      -->
+      <param name="sim_speed_factor">5.0</param>
+
+      <!--
+        Optional parameter to update the simulated camera's color and depth image publish rates. If no
+        parameter is set then all cameras will publish at 5 hz. Note that all cameras in the sim currently
+        publish at the same intervals.
+      -->
+      <param name="camera_publish_rate">6.0</param>
     </hardware>
   ...
 ```

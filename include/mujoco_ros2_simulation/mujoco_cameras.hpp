@@ -65,19 +65,6 @@ struct CameraData
 
 /**
  * @brief Wraps Mujoco cameras for publishing ROS 2 RGB-D streams.
- *
- * The wrapper will pull camera information from the model with the assumption that the camera is
- * attached to a frame called `<CAMERA_NAME>_optical_frame`, which will be included in the image
- * headers. For each camera, images/information will be published to
- *
- *  <CAMERA_NAME>/camera_info
- *  <CAMERA_NAME>/color
- *  <CAMERA_NAME>/depth
- *
- * Also, it is important to note that camera frame conventions for Mujoco are different than ROS's.
- * It is important to account for that in the respective model locations.
- *
- * For now, image publishing rates are hardcoded to 5 hz, and are all executed in sequence.
  */
 class MujocoCameras
 {
@@ -89,9 +76,10 @@ public:
    * @param sim_mutex Provides synchronized access to the mujoco_data object for rendering
    * @param mujoco_data Mujoco data for the simulation
    * @param mujoco_model Mujoco model for the simulation
+   * @param camera_publish_rate The rate to publish all camera images, for now all images are published at the same rate.
    */
   explicit MujocoCameras(rclcpp::Node::SharedPtr& node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
-                         mjModel* mujoco_model);
+                         mjModel* mujoco_model, double camera_publish_rate);
 
   /**
    * @brief Starts the image processing thread in the background.
@@ -113,7 +101,7 @@ public:
 
 private:
   /**
-   * @brief Initializes the rendering context and starts processing at 5 hz.
+   * @brief Initializes the rendering context and starts processing.
    */
   void update_loop();
 
@@ -129,6 +117,10 @@ private:
 
   mjData* mj_data_;
   mjModel* mj_model_;
+  mjData* mj_camera_data_;
+
+  // Image publishing rate
+  double camera_publish_rate_;
 
   // Rendering options for the cameras, currently hard coded to defaults
   mjvOption mjv_opt_;

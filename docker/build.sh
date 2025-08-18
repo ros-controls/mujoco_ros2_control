@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Default values, modify as needed
 IMAGE_NAME="mujoco_ros2_simulation"
 ROS_DISTRO="humble"
-MUJOCO_VERSION="3.3.2"
+MUJOCO_VERSION="3.3.4"
 
 # Grab CPU architecture to support ARM machines
 ARCH="$(uname -m)"

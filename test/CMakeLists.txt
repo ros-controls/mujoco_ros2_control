@@ -1,7 +1,7 @@
 find_package(ament_cmake_gtest REQUIRED)
 
 install(
-  DIRECTORY launch test_resources
+  DIRECTORY launch test_resources config
   DESTINATION share/${PROJECT_NAME}
 )
 

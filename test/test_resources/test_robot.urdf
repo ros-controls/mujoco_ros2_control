@@ -123,6 +123,12 @@
     <hardware>
       <plugin>mujoco_ros2_simulation/MujocoSystemInterface</plugin>
       <param name="mujoco_model">$(find mujoco_ros2_simulation)/test_resources/scene.xml</param>
+
+      <!-- Override the slowdown settings in the Simulate App and run at 3x speed -->
+      <param name="sim_speed_factor">3.0</param>
+
+      <!-- Publish camera images at 6 hz -->
+      <param name="camera_publish_rate">6.0</param>
     </hardware>
     <joint name="joint1">
       <command_interface name="position"/>

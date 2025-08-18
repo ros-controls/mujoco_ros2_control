@@ -44,9 +44,9 @@
 using namespace std::chrono_literals;
 
 // constants
-const double syncMisalign = 0.1;        // maximum misalignment before re-sync (simulation seconds)
-const double simRefreshFraction = 0.7;  // fraction of refresh available for simulation
-const int kErrorLength = 1024;          // load error string length
+const double kSyncMisalign = 0.1;        // maximum misalignment before re-sync (simulation seconds)
+const double kSimRefreshFraction = 0.7;  // fraction of refresh available for simulation
+const int kErrorLength = 1024;           // load error string length
 
 using Seconds = std::chrono::duration<double>;
 
@@ -267,6 +267,7 @@ MujocoSystemInterface::~MujocoSystemInterface()
   if (sim_)
   {
     sim_->exitrequest.store(true);
+    sim_->run = false;
 
     if (physics_thread_.joinable())
     {
@@ -297,15 +298,40 @@ hardware_interface::CallbackReturn MujocoSystemInterface::on_init(const hardware
   }
   system_info_ = info;
 
+  // Helper function to get parameters in hardware info.
+  auto get_parameter = [&](const std::string& key) -> std::optional<std::string> {
+    if (auto it = info.hardware_parameters.find(key); it != info.hardware_parameters.end())
+    {
+      return it->second;
+    }
+    return std::nullopt;
+  };
+
   // Load the model path from hardware parameters
-  if (info.hardware_parameters.count("mujoco_model") == 0)
+  const auto model_path_maybe = get_parameter("mujoco_model");
+  if (!model_path_maybe.has_value())
   {
     RCLCPP_FATAL(rclcpp::get_logger("MujocoSystemInterface"), "Missing 'mujoco_model' in <hardware_parameters>.");
     return hardware_interface::CallbackReturn::ERROR;
   }
-  model_path_ = info.hardware_parameters.at("mujoco_model");
+  model_path_ = model_path_maybe.value();
 
   RCLCPP_INFO_STREAM(rclcpp::get_logger("MujocoSystemInterface"), "Loading 'mujoco_model' from: " << model_path_);
+
+  // Pull the initial speed factor from the hardware parameters, if present
+  sim_speed_factor_ = std::stod(get_parameter("sim_speed_factor").value_or("-1"));
+  if (sim_speed_factor_ > 0)
+  {
+    RCLCPP_INFO_STREAM(rclcpp::get_logger("MujocoSystemInterface"),
+                       "Running the simulation at " << sim_speed_factor_ * 100.0 << " percent speed");
+  }
+  else
+  {
+    RCLCPP_INFO_STREAM(rclcpp::get_logger("MujocoSystemInterface"), "No sim_speed set, using the setting from the UI");
+  }
+
+  // Pull the camera publish rate out of the info, if present, otherwise default to 5 hz.
+  const auto camera_publish_rate = std::stod(get_parameter("camera_publish_rate").value_or("5.0"));
 
   // We essentially reconstruct the 'simulate.cc::main()' function here, and
   // launch a Simulate object with all necessary rendering process/options
@@ -383,7 +409,7 @@ hardware_interface::CallbackReturn MujocoSystemInterface::on_init(const hardware
 
   // Ready cameras
   RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Initializing cameras...");
-  cameras_ = std::make_unique<MujocoCameras>(mujoco_node_, sim_mutex_, mj_data_, mj_model_);
+  cameras_ = std::make_unique<MujocoCameras>(mujoco_node_, sim_mutex_, mj_data_, mj_model_, camera_publish_rate);
   cameras_->register_cameras(info);
 
   // When the interface is activated, we start the physics engine.
@@ -805,7 +831,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     if (sensor.parameters.count("mujoco_type") == 0)
     {
       RCLCPP_INFO_STREAM(rclcpp::get_logger("MujocoSystemInterface"),
-                         "Skipping sensor interface in ros2_control xacro: " << sensor_name);
+                         "Not adding hardware interface for sensor in ros2_control xacro: " << sensor_name);
       continue;
     }
     const auto mujoco_type = sensor.parameters.at("mujoco_type");
@@ -903,10 +929,6 @@ void MujocoSystemInterface::PhysicsLoop()
   // run until asked to exit
   while (!sim_->exitrequest.load())
   {
-    // TODO: We could support reloading the model as the full simulate app does, but it
-    //       may require significant changes in the HW interface to verify.
-    //       https://github.com/google-deepmind/mujoco/blob/3.3.2/simulate/main.cc#L279
-
     // sleep for 1 ms or yield, to let main thread run
     //  yield results in busy wait - which has better timing but kills battery
     //  life
@@ -920,7 +942,7 @@ void MujocoSystemInterface::PhysicsLoop()
     }
 
     {
-      // lock the sim mutex
+      // lock the sim mutex during the update
       const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
 
       // run only if model is present
@@ -938,12 +960,15 @@ void MujocoSystemInterface::PhysicsLoop()
           const auto elapsedCPU = startCPU - syncCPU;
           double elapsedSim = mj_data_->time - syncSim;
 
-          // requested slow-down factor
-          double slowdown = 100 / sim_->percentRealTime[sim_->real_time_index];
+          // Ordinarily the speed factor for the simulation is pulled from the sim UI. However, this is
+          // overridable by setting the "sim_speed_factor" parameter in the hardware info.
+          // If that parameter is set, then we ignore whatever slowdown has been requested from the UI.
+          double speedFactor = sim_speed_factor_ < 0 ? (100.0 / sim_->percentRealTime[sim_->real_time_index]) :
+                                                       (1.0 / sim_speed_factor_);
 
           // misalignment condition: distance from target sim time is bigger
           // than syncmisalign
-          bool misaligned = std::abs(Seconds(elapsedCPU).count() / slowdown - elapsedSim) > syncMisalign;
+          bool misaligned = std::abs(Seconds(elapsedCPU).count() / speedFactor - elapsedSim) > kSyncMisalign;
 
           // out-of-sync (for any reason): reset sync times, step
           if (elapsedSim < 0 || elapsedCPU.count() < 0 || syncCPU.time_since_epoch().count() == 0 || misaligned ||
@@ -974,10 +999,10 @@ void MujocoSystemInterface::PhysicsLoop()
             bool measured = false;
             mjtNum prevSim = mj_data_->time;
 
-            double refreshTime = simRefreshFraction / sim_->refresh_rate;
+            double refreshTime = kSimRefreshFraction / sim_->refresh_rate;
 
-            // step while sim lags behind cpu and within refreshTime
-            while (Seconds((mj_data_->time - syncSim) * slowdown) < mj::Simulate::Clock::now() - syncCPU &&
+            // step while sim lags behind cpu and within refreshTime.
+            while (Seconds((mj_data_->time - syncSim) * speedFactor) < mj::Simulate::Clock::now() - syncCPU &&
                    mj::Simulate::Clock::now() - startCPU < Seconds(refreshTime))
             {
               // measure slowdown before first step
@@ -986,7 +1011,6 @@ void MujocoSystemInterface::PhysicsLoop()
                 sim_->measured_slowdown = std::chrono::duration<double>(elapsedCPU).count() / elapsedSim;
                 measured = true;
               }
-
               // inject noise
               sim_->InjectNoise();
 

@@ -160,6 +160,10 @@ private:
   mjvOption opt_;
   mjvPerturb pert_;
 
+  // Speed scaling parameter. if set to >0 then we ignore the value set in the simulate app and instead
+  // attempt to loop at whatever this is set to. If this is <0, then we use the value from the app.
+  double sim_speed_factor_;
+
   // Primary simulate object
   std::unique_ptr<mujoco::Simulate> sim_;
 

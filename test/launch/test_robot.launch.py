@@ -24,7 +24,7 @@ from launch.substitutions import (
     PathJoinSubstitution,
 )
 from launch_ros.actions import Node
-from launch_ros.parameter_descriptions import ParameterValue
+from launch_ros.parameter_descriptions import ParameterValue, ParameterFile
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -33,11 +33,21 @@ def generate_launch_description():
         [
             PathJoinSubstitution([FindExecutable(name="xacro")]),
             " ",
-            PathJoinSubstitution([FindPackageShare("mujoco_ros2_simulation"), "test_resources", "test_robot.urdf"]),
+            PathJoinSubstitution(
+                [
+                    FindPackageShare("mujoco_ros2_simulation"),
+                    "test_resources",
+                    "test_robot.urdf",
+                ]
+            ),
         ]
     )
 
     robot_description = {"robot_description": ParameterValue(value=robot_description_content, value_type=str)}
+
+    controller_parameters = ParameterFile(
+        PathJoinSubstitution([FindPackageShare("mujoco_ros2_simulation"), "config", "controllers.yaml"]),
+    )
 
     robot_state_publisher_node = Node(
         package="robot_state_publisher",
@@ -55,8 +65,36 @@ def generate_launch_description():
         output="both",
         parameters=[
             {"use_sim_time": True},
+            controller_parameters,
         ],
         remappings=[("~/robot_description", "/robot_description")],
     )
 
-    return LaunchDescription([robot_state_publisher_node, control_node])
+    spawn_joint_state_broadcaster = Node(
+        package="controller_manager",
+        executable="spawner",
+        name="spawn_joint_state_broadcaster",
+        arguments=[
+            "joint_state_broadcaster",
+        ],
+        output="both",
+    )
+
+    spawn_position_controller = Node(
+        package="controller_manager",
+        executable="spawner",
+        name="spawn_position_controller",
+        arguments=[
+            "position_controller",
+        ],
+        output="both",
+    )
+
+    return LaunchDescription(
+        [
+            robot_state_publisher_node,
+            control_node,
+            spawn_joint_state_broadcaster,
+            spawn_position_controller,
+        ]
+    )

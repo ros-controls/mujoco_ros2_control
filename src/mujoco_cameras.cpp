@@ -44,8 +44,12 @@ get_camera_sensor(const hardware_interface::HardwareInfo& hardware_info, const s
 }
 
 MujocoCameras::MujocoCameras(rclcpp::Node::SharedPtr& node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
-                             mjModel* mujoco_model)
-  : node_(node), sim_mutex_(sim_mutex), mj_data_(mujoco_data), mj_model_(mujoco_model)
+                             mjModel* mujoco_model, double camera_publish_rate)
+  : node_(node)
+  , sim_mutex_(sim_mutex)
+  , mj_data_(mujoco_data)
+  , mj_model_(mujoco_model)
+  , camera_publish_rate_(camera_publish_rate)
 {
 }
 
@@ -81,7 +85,6 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
     else
     {
       camera.frame_name = camera.name + "_frame";
-      ;
       camera.info_topic = camera.name + "/camera_info";
       camera.image_topic = camera.name + "/color";
       camera.depth_topic = camera.name + "/depth";
@@ -178,10 +181,13 @@ void MujocoCameras::update_loop()
   mjv_makeScene(mj_model_, &mjv_scn_, 2000);
   mjr_makeContext(mj_model_, &mjr_con_, mjFONTSCALE_150);
 
-  RCLCPP_INFO(node_->get_logger(), "Starting the camera rendering loop");
+  // Initialize data for camera rendering
+  mj_camera_data_ = mj_makeData(mj_model_);
+  RCLCPP_INFO_STREAM(node_->get_logger(),
+                     "Starting the camera rendering loop, publishing at " << camera_publish_rate_ << " Hz");
 
-  // TODO: Support rendering at different rates. For now all cameras are just publishing at 5 hz.
-  rclcpp::Rate rate(5.0);
+  // TODO: Support per-camera publish rates?
+  rclcpp::Rate rate(camera_publish_rate_);
   while (rclcpp::ok() && publish_images_)
   {
     update();
@@ -194,29 +200,38 @@ void MujocoCameras::update()
   // Rendering is done offscreen
   mjr_setBuffer(mjFB_OFFSCREEN, &mjr_con_);
 
+  // Step 1: Lock the sime and copy data for use in all camera rendering.
+  {
+    std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+    mjv_copyData(mj_camera_data_, mj_model_, mj_data_);
+  }
+
+  // Step 2: Render the scene and copy images to relevant camera data containers.
   for (auto& camera : cameras_)
   {
-    // Render simple RGB data for all cameras
-    {
-      std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-      mjv_updateScene(mj_model_, mj_data_, &mjv_opt_, NULL, &camera.mjv_cam, mjCAT_ALL, &mjv_scn_);
-    }
+    // Render scene
+    mjv_updateScene(mj_model_, mj_camera_data_, &mjv_opt_, NULL, &camera.mjv_cam, mjCAT_ALL, &mjv_scn_);
     mjr_render(camera.viewport, &mjv_scn_, &mjr_con_);
 
     // Copy image into relevant buffers
     mjr_readPixels(camera.image_buffer.data(), camera.depth_buffer.data(), camera.viewport, &mjr_con_);
+  }
 
+  // Step 3: Adjust the images and copy depth data.
+  const float near = static_cast<float>(mj_model_->vis.map.znear * mj_model_->stat.extent);
+  const float far = static_cast<float>(mj_model_->vis.map.zfar * mj_model_->stat.extent);
+  const float depth_scale = 1.0f - near / far;
+  for (auto& camera : cameras_)
+  {
     // Fix non-linear projections in the depth image and flip the data.
-    // https://github.com/google-deepmind/mujoco/blob/3.2.7/python/mujoco/renderer.py#L190
-    float near = static_cast<float>(mj_model_->vis.map.znear * mj_model_->stat.extent);
-    float far = static_cast<float>(mj_model_->vis.map.zfar * mj_model_->stat.extent);
+    // https://github.com/google-deepmind/mujoco/blob/3.3.4/python/mujoco/renderer.py#L190
     for (uint32_t h = 0; h < camera.height; h++)
     {
       for (uint32_t w = 0; w < camera.width; w++)
       {
         auto idx = h * camera.width + w;
         auto idx_flipped = (camera.height - 1 - h) * camera.width + w;
-        camera.depth_buffer[idx] = near / (1.0f - camera.depth_buffer[idx] * (1.0f - near / far));
+        camera.depth_buffer[idx] = near / (1.0f - camera.depth_buffer[idx] * (depth_scale));
         camera.depth_buffer_flipped[idx_flipped] = camera.depth_buffer[idx];
       }
     }
@@ -231,9 +246,13 @@ void MujocoCameras::update()
       auto dest_idx = (camera.height - 1 - h) * row_size;
       std::memcpy(&camera.image.data[dest_idx], &camera.image_buffer[src_idx], row_size);
     }
+  }
 
+  // Step 4: Publish the images.
+  for (auto& camera : cameras_)
+  {
     // Publish images and camera info
-    auto time = node_->now();
+    const auto time = node_->now();
     camera.image.header.stamp = time;
     camera.depth_image.header.stamp = time;
     camera.camera_info.header.stamp = time;
