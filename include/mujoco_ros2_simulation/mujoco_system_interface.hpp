@@ -43,6 +43,7 @@
 
 #include "mujoco_ros2_simulation/data.hpp"
 #include "mujoco_ros2_simulation/mujoco_cameras.hpp"
+#include "mujoco_ros2_simulation/mujoco_lidar.hpp"
 
 namespace mujoco_ros2_simulation
 {
@@ -52,8 +53,9 @@ public:
   /**
    * @brief ros2_control SystemInterface to wrap Mujocos Simulate application.
    *
-   * Supports Actuators, Force Torque/IMU Sensors, and RGB-D camera simulations. For more information
-   * on configuration check the comment strings below.
+   * Supports Actuators, Force Torque/IMU Sensors, and RGB-D camera, and Lidar Sensors in ROS 2 simulations.
+   * For more information on configuration refer to the docs, check the comment strings below, and refer to
+   * the example in the test folder.
    */
   MujocoSystemInterface();
   ~MujocoSystemInterface() override;
@@ -181,6 +183,9 @@ private:
 
   // Containers for RGB-D cameras
   std::unique_ptr<MujocoCameras> cameras_;
+
+  // Containers for LIDAR sensors
+  std::unique_ptr<MujocoLidar> lidar_sensors_;
 
   // Mutex used inside simulate.h for protecting model/data, we keep a reference
   // here to protect access to shared data.

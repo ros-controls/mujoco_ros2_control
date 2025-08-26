@@ -3,8 +3,8 @@
   <worldbody>
     <body name="upperarm">
       <inertial pos="0.5 0 0" quat="0.5 0.5 0.5 0.5" mass="27" diaginertia="0.225 0.225 0.0225"/>
-      <joint name="joint1" pos="0 0 0" axis="0 0 1" range="-3.14 3.14" actuatorfrcrange="-1000 1000"/>
-      <body name="forearm" pos="1 0 0">
+      <joint name="joint1" pos="0 0 0" axis="0 0 1" range="-3.14 3.14" actuatorfrcrange="-1000 1000" frictionloss="1.0" damping="2.0"/>
+      <body name="forearm" pos="1 0 0" gravcomp="1.0">
         <inertial pos="0.5 0 0" quat="0.5 0.5 0.5 0.5" mass="27" diaginertia="0.225 0.225 0.0225"/>
         <joint name="joint2" pos="0 0 0" axis="0 0 1" range="-3.14 3.14" actuatorfrcrange="-1000 1000"/>
         <geom size="0.5 0.05 0.05" pos="0.5 0 0" type="box" class="collision"/>
@@ -25,6 +25,12 @@
     </body>
     <site name="world" pos="0 0 0" quat="1.0 0 0 0"/>
     <site name="base" pos="0 0 0" quat="1.0 0 0 0"/>
+    <site name="lidar_sensor_frame" pos="1.0 2.0 0" quat="0.7071054825112363 0 0 -0.7071080798594737"/>
+    <body name="lidar_sensor_frame_lidar_body" pos="1.0 2.0 0" quat="0.6991665401770936 0.6991665401770936 -0.10567000093116563 -0.10567000093116563">
+      <replicate site="lidar_sensor_frame" count="24" sep="-" offset="0 0 0" euler="0 0.025 0">
+        <site name="rf" pos="0.0 0.0 0.0" quat="0.0 0.0 0.0 1.0"/>
+      </replicate>
+    </body>
   </worldbody>
   <option integrator="implicitfast"/>
   <default>
@@ -39,4 +45,7 @@
     <position name="joint1" joint="joint1" kp="1000" dampratio="1.0"/>
     <position name="joint2" joint="joint2" kp="1000" dampratio="1.0"/>
   </actuator>
+  <sensor>
+    <rangefinder name="lidar" site="rf"/>
+  </sensor>
 </mujoco>

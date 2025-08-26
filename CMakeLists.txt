@@ -107,6 +107,7 @@ target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 add_library(mujoco_ros2_simulation SHARED
     src/mujoco_system_interface.cpp
     src/mujoco_cameras.cpp
+    src/mujoco_lidar.cpp
 )
 ament_target_dependencies(mujoco_ros2_simulation
   control_toolbox

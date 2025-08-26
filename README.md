@@ -61,6 +61,12 @@ Just specify the plugin and point to a valid MJCF on launch:
         publish at the same intervals.
       -->
       <param name="camera_publish_rate">6.0</param>
+
+      <!--
+        Optional parameter to update the simulated lidar sensor's scan message publish rates.
+        All lidar sensors in the simulation will be configured to publish these scan messages at the same rate.
+      -->
+      <param name="lidar_publish_rate">10.0</param>
     </hardware>
   ...
 ```
@@ -198,6 +204,52 @@ Default parameters can be overridden with:
   </sensor>
 ```
 
+### Lidar
+
+MuJoCo does not include native support for lidar sensors.
+However, this package offers a ROS 2-like lidar implementation by wrapping sets of [rangefinders](https://mujoco.readthedocs.io/en/stable/XMLreference.html#sensor-rangefinder) together.
+
+MuJoCo rangefinders measure the distance to the nearest surface along the positive `Z` axis of the sensor site.
+The ROS 2 lidar wrapper uses the standard defined in [LaserScan](https://github.com/ros2/common_interfaces/blob/rolling/sensor_msgs/msg/LaserScan.msg#L10) messages.
+In particular, the first rangefinder's `Z` axis (e.g. `rf-00`) must align with the ROS 2 lidar sensor's positive `X` axis.
+
+In the MJCF, use the `replicate` tag along with a `-` separator to add N sites to attach sensors to.
+For example, the following will add 12 sites named `rf-00` to `rf-11` each at a 0.025 radian offset from each other:
+
+```xml
+  <replicate count="12" sep="-" offset="0 0 0" euler="0 0.025 0">
+    <site name="rf" size="0.01" pos="0.0 0.0 0.0" quat="0.0 0.0 0.0 1.0"/>
+  </replicate>
+```
+
+Then a set of rangefinders can be attached to each site with:
+
+```xml
+  <sensor>
+    <!-- We require a sensor name be provided -->
+    <rangefinder name="lidar" site="rf" />
+  </sensor>
+```
+
+The lidar sensor is then configurable through ROS 2 control xacro with:
+
+```xml
+    <!-- Lidar sensors are matched to a set of rangefinder sensors in the MJCF, which should be -->
+    <!-- generated with "replicate" and will generally be of the form "<sensor_name>-01". -->
+    <!-- We assume the lidar sensor starts at angle 0, increments by the specified `angle_increment`, and -->
+    <!-- that there are exactly `num_rangefinders` all named from <sensor_name>-000 to the max -->
+    <!-- <sensor_name>-<num_rangefinders> -->
+    <sensor name="lidar">
+      <param name="frame_name">lidar_sensor_frame</param>
+      <param name="angle_increment">0.025</param>
+      <param name="num_rangefinders">12</param>
+      <param name="range_min">0.05</param>
+      <param name="range_max">10</param>
+      <param name="laserscan_topic">/scan</param>
+    </sensor>
+  </ros2_control>
+```
+
 ## Docker Development Workflow
 
 This project includes a [Dockerfile](./.docker/Dockerfile) for development and testing in an isolated environment.
@@ -227,4 +279,25 @@ ${MUJOCO_DIR}/bin/simulate ${ROS_WS}/src/mujoco_ros2_simulation/test/resources/s
 
 # Or launch the test ROS control interface
 ros2 launch mujoco_ros2_simulation test_robot.launch.py
+```
+
+### Test Robot System
+
+While examples are limited, we maintain a functional example 2-dof robot system in the [test examples](./test/test_resources/test_robot.urdf) space.
+We generally recommend looking there for examples and recommended workflows.
+
+For now, built the drivers with testing enabled, then the test robot system can be launched with:
+
+```bash
+# Brings up the hardware drivers and mujoco interface, along with a single position controller
+ros2 launch mujoco_ros2_simulation test_robot.launch.py
+
+# Launch an rviz2 window with the provided configuration
+rviz2 -d $(ros2 pkg prefix --share mujoco_ros2_simulation)/config/test_robot.rviz
+```
+
+From there, command joints to move with,
+
+```bash
+ros2 topic pub /position_controller/commands std_msgs/msg/Float64MultiArray "data: [-0.25, 0.75]" --once
 ```

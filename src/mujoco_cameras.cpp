@@ -18,6 +18,7 @@
  */
 
 #include "mujoco_ros2_simulation/mujoco_cameras.hpp"
+#include "mujoco_ros2_simulation/utils.hpp"
 
 #include "sensor_msgs/image_encodings.hpp"
 
@@ -25,23 +26,6 @@ using namespace std::chrono_literals;
 
 namespace mujoco_ros2_simulation
 {
-
-/**
- * @brief Returns the sensor's component info for the provided sensor name, if it exists.
- */
-std::optional<hardware_interface::ComponentInfo>
-get_camera_sensor(const hardware_interface::HardwareInfo& hardware_info, const std::string& name)
-{
-  for (size_t sensor_index = 0; sensor_index < hardware_info.sensors.size(); sensor_index++)
-  {
-    const auto& sensor = hardware_info.sensors.at(sensor_index);
-    if (hardware_info.sensors.at(sensor_index).name == name)
-    {
-      return sensor;
-    }
-  }
-  return std::nullopt;
-}
 
 MujocoCameras::MujocoCameras(rclcpp::Node::SharedPtr& node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
                              mjModel* mujoco_model, double camera_publish_rate)
@@ -72,7 +56,7 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
     camera.viewport = { 0, 0, cam_resolution[0], cam_resolution[1] };
 
     // If the hardware_info has a camera of the same name then we pull parameters from there.
-    const auto camera_info_maybe = get_camera_sensor(hardware_info, cam_name);
+    const auto camera_info_maybe = get_sensor_from_info(hardware_info, cam_name);
     if (camera_info_maybe.has_value())
     {
       const auto camera_info = camera_info_maybe.value();
@@ -177,6 +161,9 @@ void MujocoCameras::update_loop()
   mjv_defaultScene(&mjv_scn_);
   mjr_defaultContext(&mjr_con_);
 
+  // Turn rangefinder rendering off so we don't get rays in camera images
+  mjv_opt_.flags[mjtVisFlag::mjVIS_RANGEFINDER] = 0;
+
   // create scene and context
   mjv_makeScene(mj_model_, &mjv_scn_, 2000);
   mjr_makeContext(mj_model_, &mjr_con_, mjFONTSCALE_150);
@@ -200,7 +187,7 @@ void MujocoCameras::update()
   // Rendering is done offscreen
   mjr_setBuffer(mjFB_OFFSCREEN, &mjr_con_);
 
-  // Step 1: Lock the sime and copy data for use in all camera rendering.
+  // Step 1: Lock the sim and copy data for use in all camera rendering.
   {
     std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
     mjv_copyData(mj_camera_data_, mj_model_, mj_data_);

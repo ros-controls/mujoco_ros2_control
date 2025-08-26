@@ -119,6 +119,15 @@
     <origin xyz="0 0 0" rpy="3.14159 0 0"/>
   </joint>
 
+  <!-- In the URDF, the lidar sensor's Z-axis should point "up" so that the sensor data sweeps -->
+  <!-- counter clockwise. We expect the X-axis to be in line with the first rangefinder's Z-axis. -->
+  <link name="lidar_sensor_frame" />
+  <joint name="lidar_sensor_link" type="fixed">
+      <parent link="world"/>
+      <child link="lidar_sensor_frame"/>
+      <origin rpy="0 0 -1.5708" xyz="1.0 2.0 0"/>
+  </joint>
+
   <ros2_control name="MujocoSystem" type="system">
     <hardware>
       <plugin>mujoco_ros2_simulation/MujocoSystemInterface</plugin>
@@ -129,6 +138,9 @@
 
       <!-- Publish camera images at 6 hz -->
       <param name="camera_publish_rate">6.0</param>
+
+      <!-- Publish lidar scans at 10 hz -->
+      <param name="lidar_publish_rate">10.0</param>
     </hardware>
     <joint name="joint1">
       <command_interface name="position"/>
@@ -154,6 +166,20 @@
       <param name="info_topic">/camera/color/camera_info</param>
       <param name="image_topic">/camera/color/image_raw</param>
       <param name="depth_topic">/camera/aligned_depth_to_color/image_raw</param>
+    </sensor>
+
+    <!-- Lidar sensors are matched to a set of rangefinder sensors in the MJCF, which should be -->
+    <!-- generated with the "<lidar>" inputs in the conversion script. The consiste of N rangefinders -->
+    <!-- and will generally be of the form "<sensor_name>-01". These parameters should line up with -->
+    <!-- those documented in the laserscan message. -->
+    <sensor name="lidar">
+      <param name="frame_name">lidar_sensor_frame</param>
+      <param name="angle_increment">0.025</param>
+      <param name="min_angle">-0.3</param>
+      <param name="max_angle">0.3</param>
+      <param name="range_min">0.05</param>
+      <param name="range_max">10</param>
+      <param name="laserscan_topic">/scan</param>
     </sensor>
   </ros2_control>
 

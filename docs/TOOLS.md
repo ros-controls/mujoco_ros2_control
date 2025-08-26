@@ -53,6 +53,8 @@ They can also be adjusted as needed after the fact.
 "${MUJOCO_DIR}"/bin/simulate /tmp/output/scene.xml
 ```
 
+Of note, the test robot has a good chunk of supported functionality, and we recommend using it as a guide.
+
 ## Conversion of CLR
 
 We generally recommend using the `view_robot.launch.py` from description packages to run a conversion for one of our robots.

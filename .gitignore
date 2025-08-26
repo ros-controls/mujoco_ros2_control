@@ -1,0 +1,5 @@
+# Python
+*.pyc
+
+# Mujoco logs
+MUJOCO_LOG.TXT
