@@ -728,11 +728,9 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
       double min_eff, max_eff;
       min_eff = joint_state.joint_limits.has_effort_limits ? -1 * joint_state.joint_limits.max_effort :
                                                              std::numeric_limits<double>::lowest();
-      min_eff = std::max(min_eff, joint_state.min_effort_command);
 
       max_eff = joint_state.joint_limits.has_effort_limits ? joint_state.joint_limits.max_effort :
                                                              std::numeric_limits<double>::max();
-      max_eff = std::min(max_eff, joint_state.max_effort_command);
 
       mj_data_->qfrc_applied[joint_state.mj_vel_adr] = clamp(joint_state.effort_command, min_eff, max_eff);
     }
