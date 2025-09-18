@@ -110,17 +110,44 @@ def extract_mesh_info(raw_xml):
             scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
             rgba = resolve_color(vis)
 
-            # If the same stem appears more than once, keep the first, or change as you prefer
-            mesh_info_dict.setdefault(
-                stem,
-                {
+            mesh_dict_value = {
+                "filename": uri,
+                "scale": scale,
+                "color": rgba,
+            }
+
+            # check to see if the values we are trying to add already exist
+            existing_identifier = None
+            for key, value in mesh_info_dict.items():
+                if value == mesh_dict_value:
+                    existing_identifier = key
+                    break
+
+            # if the values we awant to add are not in the dictionary yet, add them
+            if existing_identifier is None:
+                # if the mesh name is already taken as a key, we make a unique name
+                counter = 0
+                while stem in mesh_info_dict:
+                    counter = counter + 1
+                    stem = pathlib.Path(uri).stem + "__" + str(counter)
+
+                # get the name of the new file so that we can reference it later
+                path_obj = pathlib.Path(uri)
+                new_filepath = str(path_obj.parent / (stem + path_obj.suffix))
+
+                # add the unique name to the dictionary
+                mesh_info_dict[stem] = {
                     "filename": uri,
                     "scale": scale,
                     "color": rgba,
-                },
-            )
+                    "new_filepath": new_filepath,
+                }
 
-    return mesh_info_dict
+                # if we changed the identifier, make sure we update it in the underlying file
+                if stem != pathlib.Path(uri).stem:
+                    raw_xml = raw_xml.replace(uri, new_filepath)
+
+    return raw_xml, mesh_info_dict
 
 
 def replace_package_names(xml_data):
@@ -159,6 +186,7 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
         filename_no_ext = os.path.splitext(filename)[0]
         filename_ext = os.path.splitext(filename)[1]
         full_filepath = mesh_item["filename"]
+        new_filepath = mesh_item["new_filepath"]
         if full_filepath in converted_filenames:
             pass
 
@@ -170,11 +198,11 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
 
         # if we want to decompose the mesh, put it in decomposed filepath, otherwise put it in full
         if filename_no_ext in decompose_dict:
-            assets_relative_filepath = f"{DECOMPOSED_PATH_NAME}/{filename_no_ext}/"
+            assets_relative_filepath = f"{DECOMPOSED_PATH_NAME}/{mesh_name}/"
             os.makedirs(f"{directory}assets/{assets_relative_filepath}", exist_ok=True)
         else:
             assets_relative_filepath = f"{COMPOSED_PATH_NAME}/"
-        assets_relative_filepath += filename_no_ext
+        assets_relative_filepath += mesh_name
 
         # Import the .stl or .dae file
         if filename_ext.lower() == ".stl":
@@ -190,15 +218,15 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                 bpy.ops.wm.obj_export(
                     filepath=f"{directory}assets/{assets_relative_filepath}.obj", forward_axis="Y", up_axis="Z"
                 )
-                xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
+                xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.obj")
 
             else:
                 shutil.copy2(full_filepath, f"{directory}assets/{assets_relative_filepath}.stl")
-                xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.stl")
+                xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.stl")
                 pass
         elif filename_ext.lower() == ".obj":
             shutil.copy2(full_filepath, f"{directory}assets/{assets_relative_filepath}.obj")
-            xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
+            xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.obj")
             pass
             # objs are ok as is
         elif filename_ext.lower() == ".dae":
@@ -220,7 +248,7 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
             bpy.ops.wm.obj_export(
                 filepath=f"{directory}assets/{assets_relative_filepath}.obj", forward_axis="Y", up_axis="Z"
             )
-            xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
+            xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.obj")
         else:
             print(f"Can't convert {full_filepath} \n\tOnly stl and dae file extensions are supported at the moment")
             print(f"extension: {filename_ext}")
@@ -1201,7 +1229,7 @@ def main(args=None):
     xml_data = remove_tag(xml_data, "collision")
 
     xml_data = replace_package_names(xml_data)
-    mesh_info_dict = extract_mesh_info(xml_data)
+    xml_data, mesh_info_dict = extract_mesh_info(xml_data)
     xml_data = convert_to_objs(mesh_info_dict, output_filepath, xml_data, convert_stl_to_obj, decompose_dict)
 
     print("writing data to robot_description_formatted.urdf")
