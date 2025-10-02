@@ -12,7 +12,6 @@
 
   <depend>controller_manager</depend>
   <depend>hardware_interface</depend>
-  <depend>joint_limits</depend>
   <depend>libglfw3-dev</depend>
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>

@@ -25,8 +25,6 @@
 #include <string>
 #include <vector>
 
-#include <joint_limits/joint_limits.hpp>
-
 namespace mujoco_ros2_simulation
 {
 
@@ -42,7 +40,6 @@ struct JointState
   double position_command;
   double velocity_command;
   double effort_command;
-  joint_limits::JointLimits joint_limits;
   bool is_mimic{ false };
   int mimicked_joint_index;
   double mimic_multiplier;
