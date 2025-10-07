@@ -851,6 +851,11 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
         break;
       }
     }
+
+    // Is no mapping was found, try fallback to looking for an actuator with the same name as the joint
+    mujoco_actuator_id = mujoco_actuator_id == -1 ? mj_name2id(mj_model_, mjtObj::mjOBJ_ACTUATOR, joint.name.c_str()) :
+                                                    mujoco_actuator_id;
+
     if (mujoco_actuator_id == -1)
     {
       // This isn't a failure the joint just won't be controllable
