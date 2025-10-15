@@ -52,6 +52,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Configure and install MuJoCo
 ENV MUJOCO_VERSION=${MUJOCO_VERSION}
 ENV MUJOCO_DIR="/opt/mujoco/mujoco-${MUJOCO_VERSION}"
+ENV MUJOCO_INSTALL_DIR=${MUJOCO_DIR}
 RUN mkdir -p ${MUJOCO_DIR}
 
 RUN wget https://github.com/google-deepmind/mujoco/releases/download/${MUJOCO_VERSION}/mujoco-${MUJOCO_VERSION}-linux-${CPU_ARCH}.tar.gz

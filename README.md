@@ -24,7 +24,7 @@ However, a local install of MuJoCo can be used to build the application by setti
 MUJOCO_VERSION=3.3.4
 
 # Wherever it was installed and extracted on your machine
-MUJOCO_DIR=/opt/mujoco/mujoco-3.3.4
+MUJOCO_INSTALL_DIR=/opt/mujoco/mujoco-3.3.4
 ```
 
 From there the library can be compiled with `colcon build ...`, as normal.
