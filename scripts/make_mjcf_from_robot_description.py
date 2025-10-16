@@ -950,7 +950,7 @@ def fix_mujoco_description(
     dom = minidom.parse(full_filepath)
 
     if request_add_free_joint:
-        dom = add_free_joint(dom, urdf)
+        dom = fix_free_joint(dom, urdf)
 
     # Update and add the new fixed assets
     dom = update_obj_assets(dom, output_filepath, mesh_info_dict)
@@ -1188,6 +1188,10 @@ def main(args=None):
 
     # Grab the output directory and ensure it ends with '/'
     output_filepath = os.path.join(parsed_args.output, "")
+
+    # Add a free joint to the urdf
+    if request_add_free_joint:
+        urdf = add_urdf_free_joint(urdf)
 
     # Add required mujoco tags to the starting URDF
     xml_data = add_mujoco_info(urdf)
