@@ -31,7 +31,7 @@ import sys
 
 import numpy as np
 
-from urdf_parser_py.urdf import URDF, Joint, Link, Pose
+from urdf_parser_py.urdf import URDF
 
 from ament_index_python.packages import get_package_share_directory
 from xml.dom import minidom
