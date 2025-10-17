@@ -649,9 +649,11 @@ def parse_inputs_xml(filename=None):
     return raw_inputs, processed_inputs
 
 
-def add_free_joint(dom, urdf, joint_name="floating_base_joint"):
+def fix_free_joint(dom, urdf, joint_name="floating_base_joint"):
     """
-    Optionally adds a free joint to the base of the robot for non-fixed based systems.
+    This change is on the mjcf side, and replaces the "free" joint type with a freejoint tag.
+    This is a special item which explicitly sets all stiffness/damping to 0.
+    https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-freejoint
     """
     robot = URDF.from_xml_string(urdf)
     root_link = robot.get_root()
@@ -659,25 +661,25 @@ def add_free_joint(dom, urdf, joint_name="floating_base_joint"):
         print("Not adding a free joint because world is the URDF root")
         return
 
-    # get the world body
-    world_body = dom.getElementsByTagName("worldbody")[0]
+    # Find all joint elements
+    joints = dom.getElementsByTagName("joint")
 
-    # make a new body with our base
-    root_body = dom.createElement("body")
-    root_body.setAttribute("name", root_link)
+    succesfully_fixed = False
 
-    # make a free joint under that body
-    free_joint = dom.createElement("freejoint")
-    free_joint.setAttribute("name", joint_name)
-    root_body.appendChild(free_joint)
+    # Locate the one with name="virtual_base_joint" of type="free"
+    for joint in joints:
+        if joint.getAttribute("name") == "virtual_base_joint" and joint.getAttribute("type") == "free":
+            # Create the new freejoint element
+            new_joint = dom.createElement("freejoint")
+            new_joint.setAttribute("name", joint_name)
 
-    # move the previous body underneath the new body and joint
-    while world_body.hasChildNodes():
-        child = world_body.firstChild
-        world_body.removeChild(child)
-        root_body.appendChild(child)
+            # Replace the old joint with the new one
+            joint.parentNode.replaceChild(new_joint, joint)
+            succesfully_fixed = True
+            break
 
-    world_body.appendChild(root_body)
+    if not succesfully_fixed:
+        raise ValueError("Did not find a joint of name virtual_base_joint and type free. What did you just do????")
 
     return dom
 
