@@ -1087,6 +1087,10 @@ def add_urdf_free_joint(urdf):
     robot = URDF.from_xml_string(urdf)
     old_root = robot.get_root()
 
+    if old_root == "world":
+        print("Not adding a free joint because world is the URDF root")
+        return
+
     urdf_dom = minidom.parseString(urdf)
 
     # Get the <robot> root element
