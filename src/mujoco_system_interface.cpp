@@ -285,14 +285,14 @@ mjModel* LoadModel(const char* file, mj::Simulate& sim, rclcpp::Node::SharedPtr 
     mjSpec * spec= nullptr;
     spec = mj_parseXMLString(robot_description.c_str(), nullptr, error, 1000);
     mnew = mj_compile(spec, nullptr);
-    mj_deleteSpec(spec);
 
     if (!mnew){
       const char* myerr= mjs_getError(spec);
+      mj_deleteSpec(spec);
       RCLCPP_INFO(node->get_logger(), "Error %s", myerr);
       RCLCPP_FATAL(node->get_logger(), "Failed to compile MuJoCo model: %s", error);
     }
-
+    mj_deleteSpec(spec);
     RCLCPP_INFO(node->get_logger(), "Model body count: %d", mnew->nbody);
     RCLCPP_INFO(node->get_logger(), "Model geom count: %d", mnew->ngeom);
   }
