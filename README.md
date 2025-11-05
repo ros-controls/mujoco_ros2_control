@@ -13,15 +13,16 @@ Parts of this library are also based on the MoveIt [mujoco_ros2_control](https:/
 This interface has only been tested against ROS 2 humble and MuJoCo `3.3.4`.
 We assume all required ROS dependencies have been installed either manually or with `rosdep`.
 
-A local install of MuJoCo is required to build the application, this package will not handle it for you.
-Refer to their documentation for installation procedures.
-
-Once installed, set the following environment variables:
+An install of MuJoCo is required to build the application.
+To specify a locally installed version, set the environment variables:
 
 ```bash
+# Assuming it was installed in this location
 MUJOCO_VERSION=3.3.4
-MUJOCO_DIR=/opt/mujoco/mujoco-3.3.4
+MUJOCO_DIR="/opt/mujoco/mujoco-${MUJOCO_VERSION}"
 ```
+
+If a local install is not found, this package will download the required version at runtime, though this requires a network connection.
 
 From there the library can be compiled with `colcon build ...`, as normal.
 
