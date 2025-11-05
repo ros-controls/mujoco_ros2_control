@@ -35,6 +35,8 @@
 #include <string>
 #include <thread>
 
+#include <std_msgs/msg/string.hpp>
+
 #include <tinyxml2.h>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <pluginlib/class_list_macros.hpp>
@@ -179,71 +181,137 @@ const char* Diverged(int disableflags, const mjData* d)
   return nullptr;
 }
 
-mjModel* LoadModel(const char* file, mj::Simulate& sim)
+mjModel* LoadModel(const char* file, mj::Simulate& sim, rclcpp::Node::SharedPtr node)
 {
+  std::string mujoco_model_path;
+  std::string robot_description;
+  mjModel* mnew = 0;
+
+  //Try to get the mujoco model from URDF
+  
   // this copy is needed so that the mju::strlen call below compiles
   char filename[mj::Simulate::kMaxFilenameLength];
   mju::strcpy_arr(filename, file);
 
   // make sure filename is not empty
-  if (!filename[0])
+  if (filename[0])
   {
-    return nullptr;
-  }
-
-  // load and compile
-  char loadError[kErrorLength] = "";
-  mjModel* mnew = 0;
-  auto load_start = mj::Simulate::Clock::now();
-  if (mju::strlen_arr(filename) > 4 && !std::strncmp(filename + mju::strlen_arr(filename) - 4, ".mjb",
-                                                     mju::sizeof_arr(filename) - mju::strlen_arr(filename) + 4))
-  {
-    mnew = mj_loadModel(filename, nullptr);
-    if (!mnew)
+    // load and compile
+    char loadError[kErrorLength] = "";
+    auto load_start = mj::Simulate::Clock::now();
+    if (mju::strlen_arr(filename) > 4 && !std::strncmp(filename + mju::strlen_arr(filename) - 4, ".mjb",
+                                                      mju::sizeof_arr(filename) - mju::strlen_arr(filename) + 4))
     {
-      mju::strcpy_arr(loadError, "could not load binary model");
-    }
-  }
-  else
-  {
-    mnew = mj_loadXML(filename, nullptr, loadError, kErrorLength);
-
-    // remove trailing newline character from loadError
-    if (loadError[0])
-    {
-      int error_length = mju::strlen_arr(loadError);
-      if (loadError[error_length - 1] == '\n')
+      mnew = mj_loadModel(filename, nullptr);
+      if (!mnew)
       {
-        loadError[error_length - 1] = '\0';
+        mju::strcpy_arr(loadError, "could not load binary model");
       }
     }
-  }
-  auto load_interval = mj::Simulate::Clock::now() - load_start;
-  double load_seconds = Seconds(load_interval).count();
+    else
+    {
+      mnew = mj_loadXML(filename, nullptr, loadError, kErrorLength);
 
-  if (!mnew)
-  {
-    std::printf("%s\n", loadError);
+      // remove trailing newline character from loadError
+      if (loadError[0])
+      {
+        int error_length = mju::strlen_arr(loadError);
+        if (loadError[error_length - 1] == '\n')
+        {
+          loadError[error_length - 1] = '\0';
+        }
+      }
+    }
+    auto load_interval = mj::Simulate::Clock::now() - load_start;
+    double load_seconds = Seconds(load_interval).count();
+
+    if (!mnew)
+    {
+      std::printf("%s\n", loadError);
+      mju::strcpy_arr(sim.load_error, loadError);
+      return nullptr;
+    }
+
+    // compiler warning: print and pause
+    if (loadError[0])
+    {
+      // mj_forward() below will print the warning message
+      std::printf("Model compiled, but simulation warning (paused):\n  %s\n", loadError);
+      sim.run = 0;
+    }
+
+    // if no error and load took more than 1/4 seconds, report load time
+    else if (load_seconds > 0.25)
+    {
+      mju::sprintf_arr(loadError, "Model loaded in %.2g seconds", load_seconds);
+    }
+
     mju::strcpy_arr(sim.load_error, loadError);
-    return nullptr;
+    return mnew;
   }
 
-  // compiler warning: print and pause
-  if (loadError[0])
-  {
-    // mj_forward() below will print the warning message
-    std::printf("Model compiled, but simulation warning (paused):\n  %s\n", loadError);
-    sim.run = 0;
+  // // Try to geto the mujoco_model from parameter.
+  // if (node->has_parameter("mujoco_model_path"))
+  // {
+  //   mujoco_model_path = node->get_parameter("mujoco_model_path").as_string();
+  //   if (!mujoco_model_path.empty())
+  //   {
+  //     RCLCPP_INFO(node->get_logger(), "Using MuJoCo model from path parameter: %s", mujoco_model_path.c_str());
+  //     mnew=mj_loadXML(mujoco_model_path.c_str(), nullptr, nullptr, 0);
+  //     return mnew;
+  //   }
+  // }
+  // RCLCPP_WARN(
+  //   node->get_logger(),
+  //   "Failed to get robot_description from parameter. Will listen on the ~/mujoco_robot_description "
+  //   "topic...");
+  
+  // Try to get the mujoco model from topic
+  rclcpp::QoS qos_profile(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
+  qos_profile.reliable().transient_local().keep_last(1);
+  // Try to get mujoco_model via topic
+  auto mujoco_model_sub = node->create_subscription<std_msgs::msg::String>(
+    "/mujoco_robot_description", qos_profile,
+    [&](const std_msgs::msg::String::SharedPtr msg)
+    {
+      if (!msg->data.empty() && robot_description.empty()) robot_description = msg->data;
+    });
+
+  const auto start = node->now();
+  const auto timeout = rclcpp::Duration::from_seconds(5.0);
+  auto last_print = start;
+
+  while (robot_description.empty() && rclcpp::ok()) {
+    
+    if (node->now() - last_print >= rclcpp::Duration::from_seconds(1.0)) {
+      RCLCPP_INFO(node->get_logger(), "Waiting for /mujoco_robot_description...");
+      last_print = node->now();
+    }
+
+    if (node->now() - start > timeout) {
+      RCLCPP_WARN(node->get_logger(),"Timeout waiting for robot_description_mujoco topic. Falling back to URDF.");
+      break;
+    }
+    rclcpp::sleep_for(std::chrono::milliseconds(200));
   }
+  if (!robot_description.empty()){
+    // Load Mujoco model
+    char error[1000] = "Could not load XML model";
 
-  // if no error and load took more than 1/4 seconds, report load time
-  else if (load_seconds > 0.25)
-  {
-    mju::sprintf_arr(loadError, "Model loaded in %.2g seconds", load_seconds);
+    mjSpec * spec= nullptr;
+    spec = mj_parseXMLString(robot_description.c_str(), nullptr, error, 1000);
+    mnew = mj_compile(spec, nullptr);
+    mj_deleteSpec(spec);
+
+    if (!mnew){
+      const char* myerr= mjs_getError(spec);
+      RCLCPP_INFO(node->get_logger(), "Error %s", myerr);
+      RCLCPP_FATAL(node->get_logger(), "Failed to compile MuJoCo model: %s", error);
+    }
+
+    RCLCPP_INFO(node->get_logger(), "Model body count: %d", mnew->nbody);
+    RCLCPP_INFO(node->get_logger(), "Model geom count: %d", mnew->ngeom);
   }
-
-  mju::strcpy_arr(sim.load_error, loadError);
-
   return mnew;
 }
 
@@ -322,12 +390,18 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   const auto model_path_maybe = get_parameter("mujoco_model");
   if (!model_path_maybe.has_value())
   {
-    RCLCPP_FATAL(rclcpp::get_logger("MujocoSystemInterface"), "Missing 'mujoco_model' in <hardware_parameters>.");
-    return hardware_interface::CallbackReturn::ERROR;
+     RCLCPP_WARN(
+    rclcpp::get_logger("MujocoSystemInterface"),
+    "Parameter 'mujoco_model' not found in <hardware_parameters>. Try to get the mujoco model from parameter or topic"
+    );
+    model_path_.clear();
   }
-  model_path_ = model_path_maybe.value();
-
-  RCLCPP_INFO_STREAM(rclcpp::get_logger("MujocoSystemInterface"), "Loading 'mujoco_model' from: " << model_path_);
+  else
+  {
+    model_path_ = model_path_maybe.value();
+    RCLCPP_INFO_STREAM(rclcpp::get_logger("MujocoSystemInterface"), "Loading 'mujoco_model' from: " << model_path_);
+  }
+  
 
   // Pull the initial speed factor from the hardware parameters, if present
   sim_speed_factor_ = std::stod(get_parameter("sim_speed_factor").value_or("-1"));
@@ -389,7 +463,8 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
 
   // Load the model and data prior to hw registration and starting the physics thread
   sim_->LoadMessage(model_path_.c_str());
-  mj_model_ = LoadModel(model_path_.c_str(), *sim_);
+  auto node = get_node();
+  mj_model_ = LoadModel(model_path_.c_str(), *sim_,  node);
   if (!mj_model_)
   {
     RCLCPP_FATAL(rclcpp::get_logger("MujocoSystemInterface"), "Mujoco failed to load '%s'", model_path_.c_str());
