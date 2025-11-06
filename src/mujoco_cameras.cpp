@@ -164,14 +164,23 @@ void MujocoCameras::update_loop()
   // Turn rangefinder rendering off so we don't get rays in camera images
   mjv_opt_.flags[mjtVisFlag::mjVIS_RANGEFINDER] = 0;
 
+  // Initialize data for camera rendering
+  mj_camera_data_ = mj_makeData(mj_model_);
+  RCLCPP_INFO(node_->get_logger(), "Starting the camera rendering loop, publishing at %f Hz", camera_publish_rate_);
+
   // create scene and context
   mjv_makeScene(mj_model_, &mjv_scn_, 2000);
   mjr_makeContext(mj_model_, &mjr_con_, mjFONTSCALE_150);
 
-  // Initialize data for camera rendering
-  mj_camera_data_ = mj_makeData(mj_model_);
-  RCLCPP_INFO_STREAM(node_->get_logger(),
-                     "Starting the camera rendering loop, publishing at " << camera_publish_rate_ << " Hz");
+  // Ensure the context will support the largest cameras
+  int max_width = 1, max_height = 1;
+  for (const auto& cam : cameras_)
+  {
+    max_width = std::max(max_width, static_cast<int>(cam.width));
+    max_height = std::max(max_height, static_cast<int>(cam.height));
+  }
+  mjr_resizeOffscreen(max_width, max_height, &mjr_con_);
+  RCLCPP_INFO(node_->get_logger(), "Resized offscreen buffer to %d x %d", max_width, max_height);
 
   // TODO: Support per-camera publish rates?
   rclcpp::Rate rate(camera_publish_rate_);
