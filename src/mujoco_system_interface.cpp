@@ -183,8 +183,6 @@ const char* Diverged(int disableflags, const mjData* d)
 
 mjModel* LoadModel(const char* file, mj::Simulate& sim, rclcpp::Node::SharedPtr node)
 {
-  std::string mujoco_model_path;
-  std::string robot_description;
   mjModel* mnew = 0;
 
   //Try to get the mujoco model from URDF
@@ -250,6 +248,8 @@ mjModel* LoadModel(const char* file, mj::Simulate& sim, rclcpp::Node::SharedPtr 
     return mnew;
   }
   
+  std::string robot_description;
+
   // Try to get the mujoco model from topic
   rclcpp::QoS qos_profile(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
   qos_profile.reliable().transient_local().keep_last(1);
@@ -273,7 +273,7 @@ mjModel* LoadModel(const char* file, mj::Simulate& sim, rclcpp::Node::SharedPtr 
     }
 
     if (node->now() - start > timeout) {
-      RCLCPP_WARN(node->get_logger(),"Timeout waiting for robot_description_mujoco topic. Falling back to URDF.");
+      RCLCPP_WARN(node->get_logger(),"Timeout waiting for robot_description_mujoco topic.");
       break;
     }
     rclcpp::sleep_for(std::chrono::milliseconds(200));
@@ -374,9 +374,9 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   const auto model_path_maybe = get_parameter("mujoco_model");
   if (!model_path_maybe.has_value())
   {
-     RCLCPP_WARN(
+     RCLCPP_INFO(
     rclcpp::get_logger("MujocoSystemInterface"),
-    "Parameter 'mujoco_model' not found in <hardware_parameters>. Try to get the mujoco model from parameter or topic"
+    "Parameter 'mujoco_model' not found in <hardware_parameters>. Try to get the mujoco model from topic"
     );
     model_path_.clear();
   }
