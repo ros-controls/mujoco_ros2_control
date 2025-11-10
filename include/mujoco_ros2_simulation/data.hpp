@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "control_toolbox/pid.hpp"
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
@@ -37,6 +38,8 @@ struct JointState
   double position;
   double velocity;
   double effort;
+  control_toolbox::Pid pos_pid;
+  control_toolbox::Pid vel_pid;
   double position_command;
   double velocity_command;
   double effort_command;
@@ -51,8 +54,12 @@ struct JointState
   // Booleans record whether or not we should be writing commands to these interfaces
   // based on if they have been claimed.
   bool is_position_control_enabled{ false };
+  bool is_position_pid_control_enabled{ false };
+  bool is_velocity_pid_control_enabled{ false };
   bool is_velocity_control_enabled{ false };
   bool is_effort_control_enabled{ false };
+  bool has_pos_pid{ false };
+  bool has_vel_pid{ false };
 };
 
 template <typename T>

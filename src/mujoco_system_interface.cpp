@@ -187,6 +187,64 @@ const char* Diverged(int disableflags, const mjData* d)
   return nullptr;
 }
 
+bool extractPIDFromParameters(
+  const std::string & control_mode, const std::string & joint_name,
+  control_toolbox::Pid & pid, rclcpp::Node::SharedPtr node)
+{
+  const std::string parameter_prefix = "pid_gains." + control_mode + "." + joint_name;
+  auto get_pid_entry = [node, parameter_prefix](const std::string & entry, double & value) -> bool {
+      try {
+        // Check if the parameter is declared, if not, declare the default value NaN
+        if (!node->has_parameter(parameter_prefix + "." + entry)) {
+          node->declare_parameter<double>(
+            parameter_prefix + "." + entry,
+            std::numeric_limits<double>::quiet_NaN());
+        }
+        value = node->get_parameter(parameter_prefix + "." + entry).as_double();
+      } catch (rclcpp::exceptions::ParameterNotDeclaredException & ex) {
+        RCLCPP_ERROR(
+          node->get_logger(),
+          "Parameter '%s' not declared, with error %s", entry.c_str(), ex.what());
+        return false;
+      } catch (rclcpp::exceptions::InvalidParameterTypeException & ex) {
+        RCLCPP_ERROR(
+          node->get_logger(),
+          "Parameter '%s' has wrong type: %s", entry.c_str(), ex.what());
+        return false;
+      }
+      return std::isfinite(value);
+    };
+  bool are_pids_set = true;
+  double kp, ki, kd, max_integral_error, min_integral_error;
+  are_pids_set &= get_pid_entry("kp", kp);
+  are_pids_set &= get_pid_entry("ki", ki);
+  are_pids_set &= get_pid_entry("kd", kd);
+  if (are_pids_set) {
+    // RCLCPP_INFO(
+    //       node->get_logger(),
+    //       "Foundamental params set");
+    get_pid_entry("max_integral_error", max_integral_error);
+    get_pid_entry("min_integral_error", min_integral_error);
+    RCLCPP_INFO_STREAM(
+      node->get_logger(),
+      "Setting kp = " << kp << "\t"
+                      << " ki = " << ki << "\t"
+                      << " kd = " << kd << "\t"
+                      << " max_integral_error = " << max_integral_error << "\t"
+                      << " min_integral_error = " << min_integral_error << " from node parameters");
+    control_toolbox::AntiWindupStrategy antiwindup_strat;
+    antiwindup_strat.set_type("none");
+    antiwindup_strat.i_max = max_integral_error;
+    antiwindup_strat.i_min = min_integral_error;
+    pid.initialize(
+      kp, ki, kd,
+      std::numeric_limits<double>::infinity(),
+      -std::numeric_limits<double>::infinity(), antiwindup_strat);
+  }
+
+  return are_pids_set;
+}
+
 std::unordered_map<std::string, std::string> parse_actuators_from_xml(const std::string& xml_path_or_str, bool from_string = false)
 {
   using namespace tinyxml2;
@@ -200,6 +258,7 @@ std::unordered_map<std::string, std::string> parse_actuators_from_xml(const std:
 
   std::unordered_map<std::string, std::string> joint_actuator_types;
   if (err != XML_SUCCESS) {
+    RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Error parsing XML model");
     return joint_actuator_types;
   }
 
@@ -213,7 +272,7 @@ std::unordered_map<std::string, std::string> parse_actuators_from_xml(const std:
     }
   }
   if (!actuators) {
-    RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Actuator not found");
+    RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Actuator tag not found in the MuJoCo model");
     return joint_actuator_types;
   }
 
@@ -223,11 +282,11 @@ std::unordered_map<std::string, std::string> parse_actuators_from_xml(const std:
     const char* joint = elem->Attribute("joint");
     const char* name  = elem->Attribute("name");
 
-    if (joint) {
-      joint_actuator_types[joint] = actuator_type;
-    }
-    else if (name) {
+    if (name) {
       joint_actuator_types[name] = actuator_type;
+    }
+    else {
+      RCLCPP_WARN_STREAM(rclcpp::get_logger("MujocoSystemInterface"), "MuJoCo actuator missing name");
     }
   }
 
@@ -261,11 +320,10 @@ mjModel* LoadModel(const char* file, mj::Simulate& sim, rclcpp::Node::SharedPtr 
     }
     else
     {
-
       actuator_map = parse_actuators_from_xml(filename);
       for (const auto& [name, type] : actuator_map)
       {
-        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Actuator '%s' type '%s'", name.c_str(), type.c_str());
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Found mujoco actuator '%s' of type '%s'", name.c_str(), type.c_str());
       }
 
       mnew = mj_loadXML(filename, nullptr, loadError, kErrorLength);
@@ -345,7 +403,7 @@ mjModel* LoadModel(const char* file, mj::Simulate& sim, rclcpp::Node::SharedPtr 
     actuator_map = parse_actuators_from_xml(robot_description, true);
     for (const auto& [name, type] : actuator_map)
     {
-      RCLCPP_INFO(node->get_logger(), "Actuator '%s' type '%s'", name.c_str(), type.c_str());
+      RCLCPP_INFO(node->get_logger(), "Found mujoco actuator '%s' of type '%s'", name.c_str(), type.c_str());
     }
 
     mjSpec * spec= nullptr;
@@ -442,7 +500,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   {
      RCLCPP_INFO(
     rclcpp::get_logger("MujocoSystemInterface"),
-    "Parameter 'mujoco_model' not found in <hardware_parameters>. Try to get the mujoco model from topic"
+    "Parameter 'mujoco_model' not found in URDF."
     );
     model_path_.clear();
   }
@@ -579,64 +637,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   });
 
   return hardware_interface::CallbackReturn::SUCCESS;
-}
-
-bool extractPIDFromParameters(
-  const std::string & control_mode, const std::string & joint_name,
-  control_toolbox::Pid & pid, rclcpp::Node::SharedPtr node)
-{
-  const std::string parameter_prefix = "pid_gains." + control_mode + "." + joint_name;
-  auto get_pid_entry = [node, parameter_prefix](const std::string & entry, double & value) -> bool {
-      try {
-        // Check if the parameter is declared, if not, declare the default value NaN
-        if (!node->has_parameter(parameter_prefix + "." + entry)) {
-          node->declare_parameter<double>(
-            parameter_prefix + "." + entry,
-            std::numeric_limits<double>::quiet_NaN());
-        }
-        value = node->get_parameter(parameter_prefix + "." + entry).as_double();
-      } catch (rclcpp::exceptions::ParameterNotDeclaredException & ex) {
-        RCLCPP_ERROR(
-          node->get_logger(),
-          "Parameter '%s' not declared, with error %s", entry.c_str(), ex.what());
-        return false;
-      } catch (rclcpp::exceptions::InvalidParameterTypeException & ex) {
-        RCLCPP_ERROR(
-          node->get_logger(),
-          "Parameter '%s' has wrong type: %s", entry.c_str(), ex.what());
-        return false;
-      }
-      return std::isfinite(value);
-    };
-  bool are_pids_set = true;
-  double kp, ki, kd, max_integral_error, min_integral_error;
-  are_pids_set &= get_pid_entry("kp", kp);
-  are_pids_set &= get_pid_entry("ki", ki);
-  are_pids_set &= get_pid_entry("kd", kd);
-  if (are_pids_set) {
-    // RCLCPP_INFO(
-    //       node->get_logger(),
-    //       "Foundamental params set");
-    get_pid_entry("max_integral_error", max_integral_error);
-    get_pid_entry("min_integral_error", min_integral_error);
-    RCLCPP_INFO_STREAM(
-      node->get_logger(),
-      "Setting kp = " << kp << "\t"
-                      << " ki = " << ki << "\t"
-                      << " kd = " << kd << "\t"
-                      << " max_integral_error = " << max_integral_error << "\t"
-                      << " min_integral_error = " << min_integral_error << " from node parameters");
-    control_toolbox::AntiWindupStrategy antiwindup_strat;
-    antiwindup_strat.set_type("none");
-    antiwindup_strat.i_max = max_integral_error;
-    antiwindup_strat.i_min = min_integral_error;
-    pid.initialize(
-      kp, ki, kd,
-      std::numeric_limits<double>::infinity(),
-      -std::numeric_limits<double>::infinity(), antiwindup_strat);
-  }
-
-  return are_pids_set;
 }
 
 std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_state_interfaces()
@@ -889,7 +889,7 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
 
       if (interface_type == hardware_interface::HW_IF_POSITION)
       {
-        if(joint_it->is_pos_pid)
+        if(joint_it->has_pos_pid)
         {
           joint_it->is_position_pid_control_enabled = true;
         }
@@ -902,7 +902,7 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
       }
       else if (interface_type == hardware_interface::HW_IF_VELOCITY)
       {
-        if(joint_it->is_vel_pid)
+        if(joint_it->has_vel_pid)
         {
           joint_it->is_velocity_pid_control_enabled = true;
         }
@@ -1216,13 +1216,8 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           if(extractPIDFromParameters ("position", joint.name, last_joint_state.pos_pid, node)  && is_velocity_actuator)
           {
             last_joint_state.is_position_pid_control_enabled = true;
-            last_joint_state.is_pos_pid=true;
-          }
-          else if(extractPIDFromParameters ("position", joint.name, last_joint_state.pos_pid, node) && is_motor_actuator)
-          {
-            last_joint_state.is_position_pid_control_enabled = true;
-            last_joint_state.is_pos_pid=true;
-
+            last_joint_state.position_command = last_joint_state.position;
+            last_joint_state.has_pos_pid=true;
           }
           else
           {
@@ -1233,6 +1228,8 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
         if(is_position_actuator)
         {
           last_joint_state.is_position_control_enabled = true;
+          last_joint_state.velocity_command =
+              should_override_start_position ? mj_data_->ctrl[joint_state.mj_actuator_id] : last_joint_state.velocity;
           last_joint_state.position_command =
               should_override_start_position ? mj_data_->ctrl[joint_state.mj_actuator_id] : last_joint_state.position;
         }
@@ -1244,7 +1241,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           if(is_motor_actuator && extractPIDFromParameters ("velocity", joint.name, last_joint_state.vel_pid, node))
           {
             last_joint_state.is_velocity_pid_control_enabled = true;
-            last_joint_state.is_vel_pid=true;
+            last_joint_state.has_vel_pid=true;
           }
           else
           {
