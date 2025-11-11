@@ -29,6 +29,15 @@
 namespace mujoco_ros2_simulation
 {
 
+enum class ActuatorType
+{
+  UNKNOWN,
+  MOTOR,
+  POSITION,
+  VELOCITY,
+  GENERAL
+};
+
 /**
  * Wrapper for mujoco actuators and relevant ROS HW interface data.
  */
@@ -40,6 +49,7 @@ struct JointState
   double effort;
   control_toolbox::Pid pos_pid;
   control_toolbox::Pid vel_pid;
+  ActuatorType actuator_type;
   double position_command;
   double velocity_command;
   double effort_command;
