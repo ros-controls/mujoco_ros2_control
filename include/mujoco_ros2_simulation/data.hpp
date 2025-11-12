@@ -31,11 +31,10 @@ namespace mujoco_ros2_simulation
 
 enum class ActuatorType
 {
-  UNKNOWN,
   MOTOR,
   POSITION,
   VELOCITY,
-  GENERAL
+  CUSTOM
 };
 
 /**

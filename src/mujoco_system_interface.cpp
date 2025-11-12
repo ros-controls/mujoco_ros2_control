@@ -1136,15 +1136,9 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
       last_joint_state.actuator_type = ActuatorType::VELOCITY;
     else 
     {
-      last_joint_state.actuator_type = ActuatorType::GENERAL;
-      RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "General MuJoCo actuator for the joint : %s , using effort command interface", joint.name.c_str());
+      last_joint_state.actuator_type = ActuatorType::CUSTOM;
+      RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Custom MuJoCo actuator for the joint : %s , using all command interfaces", joint.name.c_str());
     }
-    // else
-    // {
-    //   last_joint_state.actuator_type = ActuatorType::UNKNOWN;
-    //   throw std::runtime_error(
-    //   std::string("Joint '") + joint.name + "' has an unknown MuJoCo actuator");
-    // }
       
     last_joint_state.has_pos_pid=extractPIDFromParameters ("position", joint.name, last_joint_state.pos_pid, node);
     last_joint_state.has_vel_pid=extractPIDFromParameters ("velocity", joint.name, last_joint_state.vel_pid, node);
@@ -1173,7 +1167,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             continue;
           }
         }
-        if(last_joint_state.actuator_type == ActuatorType::POSITION)
+        if(last_joint_state.actuator_type == ActuatorType::POSITION || last_joint_state.actuator_type == ActuatorType::CUSTOM)
         {
           last_joint_state.is_position_control_enabled = true;
           last_joint_state.position_command =
@@ -1198,7 +1192,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             continue;
           }
         }
-        if(last_joint_state.actuator_type == ActuatorType::VELOCITY)
+        if(last_joint_state.actuator_type == ActuatorType::VELOCITY || last_joint_state.actuator_type == ActuatorType::CUSTOM )
         {
           last_joint_state.is_velocity_control_enabled = true;
           last_joint_state.velocity_command =
