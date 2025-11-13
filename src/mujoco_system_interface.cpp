@@ -1152,6 +1152,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           if(last_joint_state.has_pos_pid)
           {
             last_joint_state.is_position_pid_control_enabled = true;
+            last_joint_state.position_command = last_joint_state.position;
             double p, i, d, i_max, i_min;
             last_joint_state.pos_pid.getGains(p, i, d, i_max, i_min);
 
@@ -1180,7 +1181,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             last_joint_state.is_velocity_pid_control_enabled = true;
             double p, i, d, i_max, i_min;
             last_joint_state.vel_pid.getGains(p, i, d, i_max, i_min);
-
+            last_joint_state.velocity_command = last_joint_state.velocity;
             RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f", joint.name.c_str(), p, i, d, i_max, i_min);
           }
           else
