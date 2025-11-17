@@ -1142,12 +1142,15 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
     
 
     // command interfaces
+    // overwrite joint limit with min/max value
+    bool has_command_interfaces = false;
     for (const auto& command_if : joint.command_interfaces)
     {
+      has_command_interfaces = true;
       // If available, always default to position control at the start
       if (command_if.name.find(hardware_interface::HW_IF_POSITION) != std::string::npos)
       {
-        if(last_joint_state.actuator_type == ActuatorType::VELOCITY || last_joint_state.actuator_type == ActuatorType::MOTOR)
+        if(last_joint_state.actuator_type == ActuatorType::VELOCITY || last_joint_state.actuator_type == ActuatorType::MOTOR || last_joint_state.actuator_type == ActuatorType::CUSTOM)
         {
           if(last_joint_state.has_pos_pid)
           {
@@ -1165,7 +1168,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             continue;
           }
         }
-        else if(last_joint_state.actuator_type == ActuatorType::POSITION || last_joint_state.actuator_type == ActuatorType::CUSTOM)
+        else if(last_joint_state.actuator_type == ActuatorType::POSITION)
         {
           last_joint_state.is_position_control_enabled = true;
           last_joint_state.position_command =
@@ -1174,7 +1177,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
       }
       else if (command_if.name.find(hardware_interface::HW_IF_VELOCITY) != std::string::npos)
       {
-        if(last_joint_state.actuator_type == ActuatorType::POSITION || last_joint_state.actuator_type == ActuatorType::MOTOR)
+        if(last_joint_state.actuator_type == ActuatorType::POSITION || last_joint_state.actuator_type == ActuatorType::MOTOR || last_joint_state.actuator_type == ActuatorType::CUSTOM) 
         {
           if(last_joint_state.actuator_type == ActuatorType::MOTOR && last_joint_state.has_vel_pid)
           {
@@ -1190,7 +1193,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             continue;
           }
         }
-        else if(last_joint_state.actuator_type == ActuatorType::VELOCITY || last_joint_state.actuator_type == ActuatorType::CUSTOM )
+        else if(last_joint_state.actuator_type == ActuatorType::VELOCITY)
         {
           last_joint_state.is_velocity_control_enabled = true;
           last_joint_state.velocity_command =
@@ -1211,7 +1214,11 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
         }
       }
     }
-    if(!last_joint_state.is_position_control_enabled && !last_joint_state.is_velocity_control_enabled && !last_joint_state.is_effort_control_enabled && !last_joint_state.is_position_pid_control_enabled && !last_joint_state.is_velocity_pid_control_enabled)
+    if(!has_command_interfaces)
+    {
+      RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Joint : %s is a passive joint",  joint.name.c_str());
+    }
+    else if(!last_joint_state.is_position_control_enabled && !last_joint_state.is_velocity_control_enabled && !last_joint_state.is_effort_control_enabled && !last_joint_state.is_position_pid_control_enabled && !last_joint_state.is_velocity_pid_control_enabled)
     {
       throw std::runtime_error(
       std::string("Joint '") + joint.name + "' has an unsupported command interface for the specified MuJoCo actuator");
