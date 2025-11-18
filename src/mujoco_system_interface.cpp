@@ -245,7 +245,7 @@ mjModel* LoadModel(const char* file, mj::Simulate& sim, rclcpp::Node::SharedPtr 
   char filename[mj::Simulate::kMaxFilenameLength];
   mju::strcpy_arr(filename, file);
 
-  // make sure filename is not empty
+  // load model from path if the filename is not empty
   if (filename[0])
   {
     // load and compile
@@ -302,9 +302,10 @@ mjModel* LoadModel(const char* file, mj::Simulate& sim, rclcpp::Node::SharedPtr 
     return mnew;
   }
   
+  //Try to get the mujoco model from topic
+
   std::string robot_description;
 
-  // Try to get the mujoco model from topic
   rclcpp::QoS qos_profile(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
   qos_profile.reliable().transient_local().keep_last(1);
   // Try to get mujoco_model via topic
@@ -1164,7 +1165,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           }
           else
           {
-            RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"), "Position command interface for the joint : %s is not supported with velocity or motor actuator", joint.name.c_str());
+            RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"), "Position command interface for the joint : %s is not supported with velocity or motor actuator without defining the PIDs", joint.name.c_str());
             continue;
           }
         }
@@ -1177,34 +1178,36 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
       }
       else if (command_if.name.find(hardware_interface::HW_IF_VELOCITY) != std::string::npos)
       {
-        if(last_joint_state.actuator_type == ActuatorType::POSITION || last_joint_state.actuator_type == ActuatorType::MOTOR || last_joint_state.actuator_type == ActuatorType::CUSTOM) 
+        if(last_joint_state.actuator_type == ActuatorType::POSITION)
         {
-          if(last_joint_state.actuator_type == ActuatorType::MOTOR && last_joint_state.has_vel_pid)
-          {
-            last_joint_state.is_velocity_pid_control_enabled = true;
-            double p, i, d, i_max, i_min;
-            last_joint_state.vel_pid.getGains(p, i, d, i_max, i_min);
-            last_joint_state.velocity_command = last_joint_state.velocity;
-            RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f", joint.name.c_str(), p, i, d, i_max, i_min);
-          }
-          else
-          {
-            RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"), "Velocity command interface for the joint : %s is not supported with position or motor actuator",  joint.name.c_str());
-            continue;
-          }
+          RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"), "Velocity command interface for the joint : %s is not supported with position actuator",  joint.name.c_str());
+          continue;
         }
-        else if(last_joint_state.actuator_type == ActuatorType::VELOCITY)
+        if(last_joint_state.actuator_type == ActuatorType::VELOCITY)
         {
           last_joint_state.is_velocity_control_enabled = true;
           last_joint_state.velocity_command =
               should_override_start_position ? mj_data_->ctrl[joint_state.mj_actuator_id] : last_joint_state.velocity;
+        }
+        else if((last_joint_state.actuator_type == ActuatorType::MOTOR || last_joint_state.actuator_type == ActuatorType::CUSTOM) && last_joint_state.has_vel_pid)
+        {
+          last_joint_state.is_velocity_pid_control_enabled = true;
+          double p, i, d, i_max, i_min;
+          last_joint_state.vel_pid.getGains(p, i, d, i_max, i_min);
+          last_joint_state.velocity_command = last_joint_state.velocity;
+          RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f", joint.name.c_str(), p, i, d, i_max, i_min);
+        }
+        else 
+        {
+          RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"), "Velocity command interface for the joint : %s is not supported with motor or custom actuator without defining the PIDs",  joint.name.c_str());
+          continue;
         }
       }
       else if (command_if.name.find(hardware_interface::HW_IF_EFFORT) != std::string::npos)
       {
         if(last_joint_state.actuator_type == ActuatorType::POSITION || last_joint_state.actuator_type == ActuatorType::VELOCITY)
         {
-          RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"), "Effort command interface for the joint : %s is not supported with position or velocity actuator",  joint.name.c_str());
+          RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"), "Effort command interface for the joint : %s is not supported with position or velocity actuator. Skipping it.",  joint.name.c_str());
           continue;
         }
         else{
