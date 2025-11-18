@@ -187,54 +187,6 @@ const char* Diverged(int disableflags, const mjData* d)
   return nullptr;
 }
 
-bool extractPIDFromParameters(
-  const std::string & control_mode, const std::string & joint_name,
-  control_toolbox::Pid & pid, rclcpp::Node::SharedPtr node)
-{
-  const std::string parameter_prefix = "pid_gains." + control_mode + "." + joint_name;
-  auto get_pid_entry = [node, parameter_prefix](const std::string & entry, double & value) -> bool {
-      try {
-        // Check if the parameter is declared, if not, declare the default value NaN
-        if (!node->has_parameter(parameter_prefix + "." + entry)) {
-          node->declare_parameter<double>(
-            parameter_prefix + "." + entry,
-            std::numeric_limits<double>::quiet_NaN());
-        }
-        value = node->get_parameter(parameter_prefix + "." + entry).as_double();
-      } catch (rclcpp::exceptions::ParameterNotDeclaredException & ex) {
-        RCLCPP_ERROR(
-          node->get_logger(),
-          "Parameter '%s' not declared, with error %s", entry.c_str(), ex.what());
-        return false;
-      } catch (rclcpp::exceptions::InvalidParameterTypeException & ex) {
-        RCLCPP_ERROR(
-          node->get_logger(),
-          "Parameter '%s' has wrong type: %s", entry.c_str(), ex.what());
-        return false;
-      }
-      return std::isfinite(value);
-    };
-  bool are_pids_set = true;
-  double kp, ki, kd, max_integral_error, min_integral_error;
-  are_pids_set &= get_pid_entry("kp", kp);
-  are_pids_set &= get_pid_entry("ki", ki);
-  are_pids_set &= get_pid_entry("kd", kd);
-  if (are_pids_set) {
-    get_pid_entry("max_integral_error", max_integral_error);
-    get_pid_entry("min_integral_error", min_integral_error);
-    control_toolbox::AntiWindupStrategy antiwindup_strat;
-    antiwindup_strat.set_type("none");
-    antiwindup_strat.i_max = max_integral_error;
-    antiwindup_strat.i_min = min_integral_error;
-    pid.initialize(
-      kp, ki, kd,
-      std::numeric_limits<double>::infinity(),
-      -std::numeric_limits<double>::infinity(), antiwindup_strat);
-  }
-
-  return are_pids_set;
-}
-
 mjModel* LoadModel(const char* file, mj::Simulate& sim, rclcpp::Node::SharedPtr node)
 {
   mjModel* mnew = 0;
@@ -957,7 +909,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     {
       double error = joint_state.position_command - mj_data_->qpos[joint_state.mj_pos_adr];
       mj_data_control_->qfrc_applied[joint_state.mj_vel_adr] =
-        joint_state.pos_pid.compute_command(error, period.nanoseconds());
+        joint_state.pos_pid->compute_command(error, period);
     }
     else if (joint_state.is_velocity_control_enabled)
     {
@@ -967,7 +919,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     {
       double error = joint_state.velocity_command - mj_data_->qvel[joint_state.mj_vel_adr];
       mj_data_control_->qfrc_applied[joint_state.mj_vel_adr] =
-        joint_state.vel_pid.compute_command(error, period.nanoseconds());
+        joint_state.vel_pid->compute_command(error, period);
     }
     else if (joint_state.is_effort_control_enabled)
     {
@@ -1127,20 +1079,26 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
     const mjtNum* biasprm = mj_model_->actuator_biasprm + mujoco_actuator_id * NBias;
 
     if (biastype == mjBIAS_NONE)
+    {
       last_joint_state.actuator_type = ActuatorType::MOTOR;
+    }
     else if (biastype == mjBIAS_AFFINE && biasprm[1] != 0)
+    {
       last_joint_state.actuator_type = ActuatorType::POSITION;
+      last_joint_state.pos_pid = std::make_shared<control_toolbox::PidROS>(get_node(), "pid_gains.position." + joint.name, "");
+      last_joint_state.has_pos_pid = last_joint_state.pos_pid->initialize_from_ros_parameters();
+    }
     else if (biastype == mjBIAS_AFFINE && biasprm[1] == 0 && biasprm[2] != 0)
+    {
       last_joint_state.actuator_type = ActuatorType::VELOCITY;
+      last_joint_state.vel_pid = std::make_shared<control_toolbox::PidROS>(get_node(), "pid_gains.velocity." + joint.name, "");
+      last_joint_state.has_vel_pid = last_joint_state.vel_pid->initialize_from_ros_parameters();
+    }
     else 
     {
       last_joint_state.actuator_type = ActuatorType::CUSTOM;
       RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Custom MuJoCo actuator for the joint : %s , using all command interfaces", joint.name.c_str());
     }
-      
-    last_joint_state.has_pos_pid=extractPIDFromParameters ("position", joint.name, last_joint_state.pos_pid, node);
-    last_joint_state.has_vel_pid=extractPIDFromParameters ("velocity", joint.name, last_joint_state.vel_pid, node);
-    
 
     // command interfaces
     // overwrite joint limit with min/max value
@@ -1157,10 +1115,9 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           {
             last_joint_state.is_position_pid_control_enabled = true;
             last_joint_state.position_command = last_joint_state.position;
-            double p, i, d, i_max, i_min;
-            last_joint_state.pos_pid.getGains(p, i, d, i_max, i_min);
+            const auto gains = last_joint_state.pos_pid->get_gains();
 
-            RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Position control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f", joint.name.c_str(), p, i, d, i_max, i_min);
+            RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Position control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s", joint.name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_, gains.i_max_, gains.i_min_, gains.u_min_, gains.u_max_, gains.antiwindup_strat_.to_string().c_str());
 
           }
           else
@@ -1192,10 +1149,9 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
         else if((last_joint_state.actuator_type == ActuatorType::MOTOR || last_joint_state.actuator_type == ActuatorType::CUSTOM) && last_joint_state.has_vel_pid)
         {
           last_joint_state.is_velocity_pid_control_enabled = true;
-          double p, i, d, i_max, i_min;
-          last_joint_state.vel_pid.getGains(p, i, d, i_max, i_min);
+          const auto gains = last_joint_state.vel_pid->get_gains();
           last_joint_state.velocity_command = last_joint_state.velocity;
-          RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f", joint.name.c_str(), p, i, d, i_max, i_min);
+          RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s", joint.name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_, gains.i_max_, gains.i_min_, gains.u_min_, gains.u_max_, gains.antiwindup_strat_.to_string().c_str());
         }
         else 
         {

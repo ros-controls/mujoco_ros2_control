@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "control_toolbox/pid.hpp"
+#include "control_toolbox/pid_ros.hpp"
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
@@ -46,8 +46,8 @@ struct JointState
   double position;
   double velocity;
   double effort;
-  control_toolbox::Pid pos_pid;
-  control_toolbox::Pid vel_pid;
+  std::shared_ptr<control_toolbox::PidROS> pos_pid;
+  std::shared_ptr<control_toolbox::PidROS> vel_pid;
   ActuatorType actuator_type;
   double position_command;
   double velocity_command;
