@@ -1120,7 +1120,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             last_joint_state.position_command = last_joint_state.position;
             const auto gains = last_joint_state.pos_pid->get_gains();
 
-            RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Position control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s", joint.name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_, gains.i_max_, gains.i_min_, gains.u_min_, gains.u_max_, gains.antiwindup_strat_.to_string().c_str());
+            RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Position control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s", joint.name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_, gains.antiwindup_strat_.i_max, gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_, gains.antiwindup_strat_.to_string().c_str());
 
           }
           else
@@ -1154,7 +1154,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           last_joint_state.is_velocity_pid_control_enabled = true;
           const auto gains = last_joint_state.vel_pid->get_gains();
           last_joint_state.velocity_command = last_joint_state.velocity;
-          RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s", joint.name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_, gains.i_max_, gains.i_min_, gains.u_min_, gains.u_max_, gains.antiwindup_strat_.to_string().c_str());
+          RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s", joint.name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_, gains.antiwindup_strat_.i_max, gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_, gains.antiwindup_strat_.to_string().c_str());
         }
         else 
         {
