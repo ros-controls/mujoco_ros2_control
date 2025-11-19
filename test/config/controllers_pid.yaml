@@ -22,41 +22,25 @@ mujocosystem:
           p: 1.0
           i: 0.5
           d: 0.05
-          i_clamp_max: 10.0
-          i_clamp_min: -10.0
           u_clamp_max: 100.0
           u_clamp_min: -100.0
-          tracking_time_constant: 0.02
-          error_deadband: 0.0001
         joint2:
           p: 1.0
           i: 0.5
           d: 0.05
-          i_clamp_max: 10.0
-          i_clamp_min: -10.0
           u_clamp_max: 100.0
           u_clamp_min: -100.0
-          tracking_time_constant: 0.02
-          error_deadband: 0.0001
     pid_gains:
       velocity:
         joint1:
           p: 1.0
           i: 0.5
           d: 0.05
-          i_clamp_max: 10.0
-          i_clamp_min: -10.0
           u_clamp_max: 100.0
           u_clamp_min: -100.0
-          tracking_time_constant: 0.02
-          error_deadband: 0.0001
         joint2:
           p: 1.0
           i: 0.5
           d: 0.05
-          i_clamp_max: 10.0
-          i_clamp_min: -10.0
           u_clamp_max: 100.0
           u_clamp_min: -100.0
-          tracking_time_constant: 0.02
-          error_deadband: 0.0001

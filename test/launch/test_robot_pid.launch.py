@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2025, United States Government, as represented by the
-# Administrator of the National Aeronautics and Space Administration.
+# Copyright (c) 2025, PAL Robotics S.L..
 #
 # All rights reserved.
 #
@@ -48,7 +47,7 @@ def generate_launch_description():
 
     controller_parameters_pid = ParameterFile(
         PathJoinSubstitution([FindPackageShare("mujoco_ros2_simulation"), "config", "controllers_pid.yaml"]),
-    )   
+    )
 
     robot_state_publisher_node = Node(
         package="robot_state_publisher",

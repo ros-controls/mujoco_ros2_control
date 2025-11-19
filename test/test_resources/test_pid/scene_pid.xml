@@ -1,5 +1,5 @@
 <mujoco model="scene">
-  <include file="/home/ortisapoci/exchange/pid_test_ws/src/mujoco_ros2_simulation/test/test_resources/test_pid/test_robot_pid.xml"/>
+  <include file="test_robot_pid.xml"/>
 
   <statistic center="0.4 0 0.4" extent="1"/>
 

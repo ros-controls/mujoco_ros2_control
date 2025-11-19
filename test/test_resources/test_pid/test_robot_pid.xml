@@ -42,13 +42,8 @@
     </default>
   </default>
   <actuator>
-    <position name="joint1" joint="joint1" kp="1000" dampratio="1.0"/>
-    <position name="joint2" joint="joint2" kp="1000" dampratio="1.0"/>
-    <!-- <motor name="joint1_motor" joint="joint1" gear="1"/>
-    <motor name="joint2_motor" joint="joint2" gear="1"/> -->
-    <!-- <velocity name="joint1_vel" joint="joint1" kv="50"/>
-    <velocity name="joint2_vel" joint="joint2" kv="30"/> -->
-
+    <motor name="joint1_motor" joint="joint1" gear="1"/>
+    <motor name="joint2_motor" joint="joint2" gear="1"/>
   </actuator>
   <sensor>
     <rangefinder name="lidar" site="rf"/>
