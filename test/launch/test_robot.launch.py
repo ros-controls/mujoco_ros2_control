@@ -60,7 +60,7 @@ def generate_launch_description():
     )
 
     control_node = Node(
-        package="mujoco_ros2_simulation",
+        package="controller_manager",
         executable="ros2_control_node",
         output="both",
         parameters=[
