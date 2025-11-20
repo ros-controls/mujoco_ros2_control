@@ -1132,7 +1132,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             last_joint_state.actuator_type == ActuatorType::CUSTOM)
         {
           last_joint_state.pos_pid =
-              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.position." + joint.name, "");
+              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.position." + joint.name, "", false);
           last_joint_state.pos_pid->initialize_from_ros_parameters();
           const auto gains = last_joint_state.pos_pid->get_gains();
           last_joint_state.has_pos_pid =
@@ -1168,12 +1168,6 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
       }
       else if (command_if.name.find(hardware_interface::HW_IF_VELOCITY) != std::string::npos)
       {
-        last_joint_state.vel_pid =
-            std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.velocity." + joint.name, "");
-        last_joint_state.vel_pid->initialize_from_ros_parameters();
-        const auto gains = last_joint_state.vel_pid->get_gains();
-        last_joint_state.has_vel_pid =
-            std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
         if (last_joint_state.actuator_type == ActuatorType::POSITION)
         {
           RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"),
@@ -1187,27 +1181,36 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           last_joint_state.velocity_command =
               should_override_start_position ? mj_data_->ctrl[joint_state.mj_actuator_id] : last_joint_state.velocity;
         }
-        else if ((last_joint_state.actuator_type == ActuatorType::MOTOR ||
-                  last_joint_state.actuator_type == ActuatorType::CUSTOM) &&
-                 last_joint_state.has_vel_pid)
+        else if (last_joint_state.actuator_type == ActuatorType::MOTOR ||
+                 last_joint_state.actuator_type == ActuatorType::CUSTOM)
         {
-          last_joint_state.is_velocity_pid_control_enabled = true;
+          last_joint_state.vel_pid =
+              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.velocity." + joint.name, "", false);
+          last_joint_state.vel_pid->initialize_from_ros_parameters();
           const auto gains = last_joint_state.vel_pid->get_gains();
-          last_joint_state.velocity_command = last_joint_state.velocity;
-          RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
-                      "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
-                      "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
-                      joint.name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_, gains.antiwindup_strat_.i_max,
-                      gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
-                      gains.antiwindup_strat_.to_string().c_str());
-        }
-        else
-        {
-          RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"),
-                       "Velocity command interface for the joint : %s is not supported with motor or custom actuator "
-                       "without defining the PIDs",
-                       joint.name.c_str());
-          continue;
+          last_joint_state.has_vel_pid =
+              std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
+
+          if (last_joint_state.has_vel_pid)
+          {
+            last_joint_state.is_velocity_pid_control_enabled = true;
+            const auto gains = last_joint_state.vel_pid->get_gains();
+            last_joint_state.velocity_command = last_joint_state.velocity;
+            RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                        "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
+                        "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
+                        joint.name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_, gains.antiwindup_strat_.i_max,
+                        gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
+                        gains.antiwindup_strat_.to_string().c_str());
+          }
+          else
+          {
+            RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"),
+                         "Velocity command interface for the joint : %s is not supported with motor or custom actuator "
+                         "without defining the PIDs",
+                         joint.name.c_str());
+            continue;
+          }
         }
       }
       else if (command_if.name.find(hardware_interface::HW_IF_EFFORT) != std::string::npos)
