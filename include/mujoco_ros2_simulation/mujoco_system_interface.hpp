@@ -73,6 +73,30 @@ public:
   hardware_interface::return_type read(const rclcpp::Time& time, const rclcpp::Duration& period) override;
   hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
+  /**
+   * @brief Returns a copy of the MuJoCo model.
+   *
+   * This method locks the simulation mutex to ensure thread safety.
+   * @param dest Pointer to an mjModel structure where the copy will be stored. The pointer will be allocated if it is nullptr.
+   */
+  void get_model(mjModel*& dest);
+
+  /**
+   * @brief Returns a copy of the current MuJoCo data.
+   *
+   * This method locks the simulation mutex to ensure thread safety.
+   * @param dest Pointer to an mjData structure where the copy will be stored. The pointer will be allocated if it is nullptr.
+   */
+  void get_data(mjData*& dest);
+
+  /**
+   * @brief Sets the MuJoCo data to the provided value.
+   *
+   * This method locks the simulation mutex to ensure thread safety.
+   * @param mj_data Pointer to an mjData structure containing the new data.
+   */
+  void set_data(mjData* mj_data);
+
 private:
   /**
    * @brief Loads actuator information into the HW interface.

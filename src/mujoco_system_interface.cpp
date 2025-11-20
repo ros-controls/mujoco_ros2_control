@@ -1212,6 +1212,28 @@ void MujocoSystemInterface::publish_clock()
   clock_publisher_->publish(sim_time_msg);
 }
 
+void MujocoSystemInterface::get_model(mjModel*& dest)
+{
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  mj_copyModel(dest, mj_model_);
+}
+
+void MujocoSystemInterface::get_data(mjData*& dest)
+{
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  if (dest == nullptr)
+  {
+    dest = mj_makeData(mj_model_);
+  }
+  mj_copyData(dest, mj_model_, mj_data_);
+}
+
+void MujocoSystemInterface::set_data(mjData* mj_data)
+{
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  mj_copyData(mj_data_, mj_model_, mj_data);
+}
+
 }  // namespace mujoco_ros2_simulation
 
 #include "pluginlib/class_list_macros.hpp"
