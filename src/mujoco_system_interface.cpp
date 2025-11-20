@@ -1118,14 +1118,6 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
                   "Custom MuJoCo actuator for the joint : %s , using all command interfaces", joint.name.c_str());
     }
 
-    last_joint_state.pos_pid =
-        std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.position." + joint.name, "");
-    last_joint_state.has_pos_pid = last_joint_state.pos_pid->initialize_from_ros_parameters();
-
-    last_joint_state.vel_pid =
-        std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.velocity." + joint.name, "");
-    last_joint_state.has_vel_pid = last_joint_state.vel_pid->initialize_from_ros_parameters();
-
     // command interfaces
     // overwrite joint limit with min/max value
     bool has_command_interfaces = false;
@@ -1139,6 +1131,12 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             last_joint_state.actuator_type == ActuatorType::MOTOR ||
             last_joint_state.actuator_type == ActuatorType::CUSTOM)
         {
+          last_joint_state.pos_pid =
+              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.position." + joint.name, "");
+          last_joint_state.pos_pid->initialize_from_ros_parameters();
+          const auto gains = last_joint_state.pos_pid->get_gains();
+          last_joint_state.has_pos_pid =
+              std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
           if (last_joint_state.has_pos_pid)
           {
             last_joint_state.is_position_pid_control_enabled = true;
@@ -1170,6 +1168,12 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
       }
       else if (command_if.name.find(hardware_interface::HW_IF_VELOCITY) != std::string::npos)
       {
+        last_joint_state.vel_pid =
+            std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.velocity." + joint.name, "");
+        last_joint_state.vel_pid->initialize_from_ros_parameters();
+        const auto gains = last_joint_state.vel_pid->get_gains();
+        last_joint_state.has_vel_pid =
+            std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
         if (last_joint_state.actuator_type == ActuatorType::POSITION)
         {
           RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"),

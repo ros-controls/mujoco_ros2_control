@@ -46,8 +46,8 @@ struct JointState
   double position;
   double velocity;
   double effort;
-  std::shared_ptr<control_toolbox::PidROS> pos_pid;
-  std::shared_ptr<control_toolbox::PidROS> vel_pid;
+  std::shared_ptr<control_toolbox::PidROS> pos_pid{ nullptr };
+  std::shared_ptr<control_toolbox::PidROS> vel_pid{ nullptr };
   ActuatorType actuator_type;
   double position_command;
   double velocity_command;

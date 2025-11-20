@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2025, PAL Robotics S.L..
+# Copyright (c) 2025, PAL Robotics S.L.
 #
 # All rights reserved.
 #
