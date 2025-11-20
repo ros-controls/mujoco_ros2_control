@@ -137,6 +137,14 @@ private:
   void register_sensors(const hardware_interface::HardwareInfo& info);
 
   /**
+   * @brief Sets the initial simulation conditions (pos, vel, ctrl) values from provided filepath.
+   *
+   * @param override_start_position_file filepath that contains starting positions
+   * @return success of reading the file and setting the positions
+   */
+  bool set_override_start_positions(const std::string& override_start_position_file);
+
+  /**
    * @brief Set the initial pose for all actuators if provided in the URDF.
    */
   void set_initial_pose();

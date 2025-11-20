@@ -35,6 +35,7 @@
 #include <string>
 #include <thread>
 
+#include <tinyxml2.h>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <pluginlib/class_list_macros.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -830,6 +831,39 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
 {
   joint_states_.resize(hardware_info.joints.size());
 
+  // Pull the name of the file to load for starting config, if present. We only override start position if that
+  // parameter exists and it is not an empty string
+  bool should_override_start_position = false;
+  auto it = hardware_info.hardware_parameters.find("override_start_position_file");
+  if (it != hardware_info.hardware_parameters.end())
+  {
+    should_override_start_position = !it->second.empty();
+  }
+
+  // If we have that file present, load the initial positions from that file to the appropriate mj_data_ structures
+  if (should_override_start_position)
+  {
+    std::string override_start_position_file = it->second;
+    bool success = set_override_start_positions(override_start_position_file);
+    if (!success)
+    {
+      RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"),
+                   "Failed to load override start positions from %s. Falling back to urdf initial positions.",
+                   override_start_position_file.c_str());
+      should_override_start_position = false;
+    }
+    else
+    {
+      RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Loaded initial positions from file %s.",
+                  override_start_position_file.c_str());
+    }
+  }
+  else
+  {
+    RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                "override_start_position_file not passed. Loading initial positions from ros2_control xacro.");
+  }
+
   for (size_t joint_index = 0; joint_index < hardware_info.joints.size(); joint_index++)
   {
     auto joint = hardware_info.joints.at(joint_index);
@@ -915,43 +949,55 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
       }
     };
 
-    // Set initial values if they are set in the info
+    // Set initial values if they are set in the info, or from override start position file
     for (const auto& state_if : joint.state_interfaces)
     {
       if (state_if.name == hardware_interface::HW_IF_POSITION)
       {
-        last_joint_state.position = get_initial_value(state_if);
+        last_joint_state.position =
+            should_override_start_position ? mj_data_->qpos[joint_state.mj_pos_adr] : get_initial_value(state_if);
       }
       else if (state_if.name == hardware_interface::HW_IF_VELOCITY)
       {
-        last_joint_state.velocity = get_initial_value(state_if);
+        last_joint_state.velocity =
+            should_override_start_position ? mj_data_->qvel[joint_state.mj_vel_adr] : get_initial_value(state_if);
       }
       else if (state_if.name == hardware_interface::HW_IF_EFFORT)
       {
+        // We never set data for effort from an initial conditions file, so just default to the initial value if it exists.
         last_joint_state.effort = get_initial_value(state_if);
       }
     }
 
     // command interfaces
-    // overwrite joint limit with min/max value
     for (const auto& command_if : joint.command_interfaces)
     {
       // If available, always default to position control at the start
       if (command_if.name.find(hardware_interface::HW_IF_POSITION) != std::string::npos)
       {
         last_joint_state.is_position_control_enabled = true;
-        last_joint_state.position_command = last_joint_state.position;
+        last_joint_state.position_command =
+            should_override_start_position ? mj_data_->ctrl[joint_state.mj_actuator_id] : last_joint_state.position;
       }
       else if (command_if.name.find(hardware_interface::HW_IF_VELOCITY) != std::string::npos)
       {
         last_joint_state.is_velocity_control_enabled = true;
-        last_joint_state.velocity_command = last_joint_state.velocity;
+        last_joint_state.velocity_command =
+            should_override_start_position ? mj_data_->ctrl[joint_state.mj_actuator_id] : last_joint_state.velocity;
       }
       else if (command_if.name.find(hardware_interface::HW_IF_EFFORT) != std::string::npos)
       {
         last_joint_state.is_effort_control_enabled = true;
-        last_joint_state.effort_command = last_joint_state.effort;
+        last_joint_state.effort_command =
+            should_override_start_position ? mj_data_->ctrl[joint_state.mj_actuator_id] : last_joint_state.effort;
       }
+    }
+
+    // When we override the start position, we set qpos from that file. Otherwise, we need to set it from initial
+    // conditions from the urdf.
+    if (!should_override_start_position)
+    {
+      set_initial_pose();
     }
   }
 }
@@ -1049,6 +1095,77 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
                           "Invalid mujoco_type passed to the mujoco hardware interface: " << mujoco_type);
     }
   }
+}
+
+bool MujocoSystemInterface::set_override_start_positions(const std::string& override_start_position_file)
+{
+  tinyxml2::XMLDocument doc;
+  if (doc.LoadFile(override_start_position_file.c_str()) != tinyxml2::XML_SUCCESS)
+  {
+    RCLCPP_ERROR_STREAM(rclcpp::get_logger("MujocoSystemInterface"),
+                        "Failed to load override start position file " << override_start_position_file.c_str() << ".");
+    return false;
+  }
+
+  // get the <key> element
+  tinyxml2::XMLElement* keyElem = doc.FirstChildElement("key");
+  if (!keyElem)
+  {
+    RCLCPP_ERROR_STREAM(rclcpp::get_logger("MujocoSystemInterface"),
+                        "<key> element not found in override start position file.");
+    return false;
+  }
+
+  auto parseAttr = [&](tinyxml2::XMLElement* elem, const char* attrName) -> std::vector<double> {
+    std::vector<double> result;
+
+    const char* text = elem->Attribute(attrName);
+    if (!text)
+    {
+      RCLCPP_ERROR_STREAM(rclcpp::get_logger("MujocoSystemInterface"),
+                          "Attribute '" << attrName << "' not found in override start position file.");
+      return result;  // return empty vector
+    }
+
+    std::stringstream ss(text);
+    double v;
+    while (ss >> v)
+    {
+      result.push_back(v);
+    }
+
+    return result;
+  };
+
+  std::vector<double> qpos = parseAttr(keyElem, "qpos");
+  std::vector<double> qvel = parseAttr(keyElem, "qvel");
+  std::vector<double> ctrl = parseAttr(keyElem, "ctrl");
+
+  // we already put out an error message saying that it couldn't load specific things, so we don't need to say anything else
+  if (qpos.empty() || qvel.empty() || ctrl.empty())
+  {
+    return false;
+  }
+
+  if ((qpos.size() != static_cast<size_t>(mj_model_->nq)) || (qvel.size() != static_cast<size_t>(mj_model_->nv)) ||
+      (ctrl.size() != static_cast<size_t>(mj_model_->nu)))
+  {
+    RCLCPP_ERROR_STREAM(rclcpp::get_logger("MujocoSystemInterface"),
+                        "Mismatch in data types in override starting positions. Numbers are:\n\t"
+                            << "qpos size in file: " << qpos.size() << ", qpos size in model: " << mj_model_->nq
+                            << "\n\t"
+                            << "qvel size in file: " << qvel.size() << ", qvel size in model: " << mj_model_->nv
+                            << "\n\t"
+                            << "ctrl size in file: " << ctrl.size() << ", ctrl size in model: " << mj_model_->nu);
+    return false;
+  }
+
+  // copy data from the input information into the mj_data_ object
+  std::copy(qpos.begin(), qpos.end(), mj_data_->qpos);
+  std::copy(qvel.begin(), qvel.end(), mj_data_->qvel);
+  std::copy(ctrl.begin(), ctrl.end(), mj_data_->ctrl);
+
+  return true;
 }
 
 void MujocoSystemInterface::set_initial_pose()
