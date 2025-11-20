@@ -28,6 +28,7 @@ from launch.substitutions import (
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue, ParameterFile
 from launch_ros.substitutions import FindPackageShare
+from launch.actions import ExecuteProcess
 
 
 def generate_launch_description():
@@ -55,6 +56,39 @@ def generate_launch_description():
     )
 
     robot_description = {"robot_description": ParameterValue(value=robot_description_content, value_type=str)}
+
+    converter_command = [
+        "python3",
+        PathJoinSubstitution([
+            FindPackageShare("mujoco_ros2_simulation"),
+            "scripts", 
+            "make_mjcf_from_robot_description.py", 
+        ]),
+        # "--urdf", PathJoinSubstitution([
+        #     FindPackageShare("mujoco_ros2_simulation"),
+        #     "test_resources",
+        #     "test_robot.urdf",
+        # ]),
+        # "--m", PathJoinSubstitution([
+        #     FindPackageShare("mujoco_ros2_simulation"),
+        #     "test_resources",
+        #     "kangaroo_inputs.xml",
+        # ]),
+        # "--o", PathJoinSubstitution([
+        #     FindPackageShare("mujoco_ros2_simulation"),
+        #     "test_resources",
+        #     "output_mjcf_command",        
+        # ]),
+        # "--s",
+    ]
+
+    converter_process = ExecuteProcess(
+        cmd=converter_command,
+        name="make_mjcf_from_robot_description",
+        output="screen",
+    #   True to see the output
+        emulate_tty=True,
+    )
 
     controller_parameters = ParameterFile(
         PathJoinSubstitution([FindPackageShare("mujoco_ros2_simulation"), "config", "controllers.yaml"]),
@@ -107,5 +141,6 @@ def generate_launch_description():
             control_node,
             spawn_joint_state_broadcaster,
             spawn_position_controller,
+            converter_process,
         ]
     )

@@ -207,7 +207,7 @@ install(PROGRAMS
 )
 
 install(
-  DIRECTORY resources
+  DIRECTORY resources scripts
   DESTINATION share/${PROJECT_NAME}
 )
 
