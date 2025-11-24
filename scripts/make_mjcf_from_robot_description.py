@@ -649,9 +649,11 @@ def parse_inputs_xml(filename=None):
     return raw_inputs, processed_inputs
 
 
-def add_free_joint(dom, urdf, joint_name="floating_base_joint"):
+def fix_free_joint(dom, urdf, joint_name="floating_base_joint"):
     """
-    Optionally adds a free joint to the base of the robot for non-fixed based systems.
+    This change is on the mjcf side, and replaces the "free" joint type with a freejoint tag.
+    This is a special item which explicitly sets all stiffness/damping to 0.
+    https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-freejoint
     """
     robot = URDF.from_xml_string(urdf)
     root_link = robot.get_root()
@@ -659,25 +661,25 @@ def add_free_joint(dom, urdf, joint_name="floating_base_joint"):
         print("Not adding a free joint because world is the URDF root")
         return
 
-    # get the world body
-    world_body = dom.getElementsByTagName("worldbody")[0]
+    # Find all joint elements
+    joints = dom.getElementsByTagName("joint")
 
-    # make a new body with our base
-    root_body = dom.createElement("body")
-    root_body.setAttribute("name", root_link)
+    succesfully_fixed = False
 
-    # make a free joint under that body
-    free_joint = dom.createElement("freejoint")
-    free_joint.setAttribute("name", joint_name)
-    root_body.appendChild(free_joint)
+    # Locate the one with name="virtual_base_joint" of type="free"
+    for joint in joints:
+        if joint.getAttribute("name") == "virtual_base_joint" and joint.getAttribute("type") == "free":
+            # Create the new freejoint element
+            new_joint = dom.createElement("freejoint")
+            new_joint.setAttribute("name", joint_name)
 
-    # move the previous body underneath the new body and joint
-    while world_body.hasChildNodes():
-        child = world_body.firstChild
-        world_body.removeChild(child)
-        root_body.appendChild(child)
+            # Replace the old joint with the new one
+            joint.parentNode.replaceChild(new_joint, joint)
+            succesfully_fixed = True
+            break
 
-    world_body.appendChild(root_body)
+    if not succesfully_fixed:
+        raise ValueError("Did not find a joint of name virtual_base_joint and type free. What did you just do????")
 
     return dom
 
@@ -948,7 +950,7 @@ def fix_mujoco_description(
     dom = minidom.parse(full_filepath)
 
     if request_add_free_joint:
-        dom = add_free_joint(dom, urdf)
+        dom = fix_free_joint(dom, urdf)
 
     # Update and add the new fixed assets
     dom = update_obj_assets(dom, output_filepath, mesh_info_dict)
@@ -1081,6 +1083,65 @@ def get_urdf_transforms(urdf_string):
     return results
 
 
+def add_urdf_free_joint(urdf):
+    """
+    Adds a free joint to the top of the urdf. This makes Mujoco create a
+    floating joint so that a base is free to move, like on an AMR.
+    """
+
+    # get the old root link
+    robot = URDF.from_xml_string(urdf)
+    old_root = robot.get_root()
+
+    if old_root == "world":
+        print("Not adding a free joint because world is the URDF root")
+        return
+
+    urdf_dom = minidom.parseString(urdf)
+
+    # Get the <robot> root element
+    robot_elem = urdf_dom.getElementsByTagName("robot")[0]
+
+    ###################################
+    # virtual base link
+    virtual_link = urdf_dom.createElement("link")
+    virtual_link.setAttribute("name", "virtual_base")
+
+    ###################################
+    # joint of virtual base link to dummy link
+    virtual_joint = urdf_dom.createElement("joint")
+    virtual_joint.setAttribute("name", "virtual_base_joint")
+    virtual_joint.setAttribute("type", "floating")
+
+    # <parent link="virtual_base"/>
+    parent_elem = urdf_dom.createElement("parent")
+    parent_elem.setAttribute("link", "virtual_base")
+    virtual_joint.appendChild(parent_elem)
+
+    # <child link="old_root"/>
+    child_elem = urdf_dom.createElement("child")
+    child_elem.setAttribute("link", old_root)  # replace with your real root link name
+    virtual_joint.appendChild(child_elem)
+
+    # <origin xyz="0 0 0" rpy="0 0 0"/>
+    origin_elem = urdf_dom.createElement("origin")
+    origin_elem.setAttribute("xyz", "0 0 0")
+    origin_elem.setAttribute("rpy", "0 0 0")
+    virtual_joint.appendChild(origin_elem)
+
+    # Insert the elements at the top of the robot definition
+    robot_elem.insertBefore(virtual_joint, robot_elem.firstChild)
+    robot_elem.insertBefore(virtual_link, robot_elem.firstChild)
+
+    # Use minidom to format the string with line breaks and indentation
+    formatted_xml = urdf_dom.toprettyxml(indent="    ")
+
+    # Remove extra newlines that minidom adds after each tag
+    formatted_xml = "\n".join([line for line in formatted_xml.splitlines() if line.strip()])
+
+    return formatted_xml
+
+
 def main(args=None):
 
     parser = argparse.ArgumentParser(description="Convert a full URDF to MJCF for use in Mujoco")
@@ -1097,7 +1158,10 @@ def main(args=None):
     parser.add_argument("-o", "--output", default="mjcf_data", help="Generated output path")
     parser.add_argument("-c", "--convert_stl_to_obj", action="store_true", help="If we should convert .stls to .objs")
     parser.add_argument(
-        "-f", "--add_free_joint", action="store_true", help="Adds a free joint as the base link for mobile robots"
+        "-f",
+        "--add_free_joint",
+        action="store_true",
+        help="Adds a free joint before the root link of the robot in the urdf before conversion",
     )
 
     # remove ros args to make argparser heppy
@@ -1124,6 +1188,10 @@ def main(args=None):
 
     # Grab the output directory and ensure it ends with '/'
     output_filepath = os.path.join(parsed_args.output, "")
+
+    # Add a free joint to the urdf
+    if request_add_free_joint:
+        urdf = add_urdf_free_joint(urdf)
 
     # Add required mujoco tags to the starting URDF
     xml_data = add_mujoco_info(urdf)
