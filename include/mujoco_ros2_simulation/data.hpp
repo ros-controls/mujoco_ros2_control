@@ -34,7 +34,10 @@ namespace mujoco_ros2_simulation
  *  - MOTOR for MuJoCo motor actuator
  *  - POSITION for MuJoCo position actuator
  *  - VELOCITY for MuJoCo velocity actuator
- *  - CUSTOM  for MuJoCo general actuator
+ *  - CUSTOM  for MuJoCo general actuator or other types
+ *
+ * \note the MuJoCo types are as per the MuJoCo documentation:
+ * https://mujoco.readthedocs.io/en/latest/XMLreference.html#actuator
  */
 
 enum class ActuatorType
