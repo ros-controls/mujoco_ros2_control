@@ -267,18 +267,13 @@ mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node)
       });
 
   auto start = std::chrono::steady_clock::now();
-  auto last_print = start;
-  auto timeout = std::chrono::seconds(5);
+  auto timeout = std::chrono::seconds(10);
 
   while (robot_description.empty() && rclcpp::ok())
   {
     auto now = std::chrono::steady_clock::now();
 
-    if (now - last_print >= std::chrono::seconds(1))
-    {
-      RCLCPP_INFO(node->get_logger(), "Waiting for /mujoco_robot_description...");
-      last_print = now;
-    }
+    RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Waiting for /mujoco_robot_description...");
 
     if (now - start > timeout)
     {
