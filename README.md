@@ -52,7 +52,10 @@ Just specify the plugin and point to a valid MJCF on launch:
       <param name="mujoco_model">$(find my_description)/description/scene.xml</param>
 
       <!--
-       Optional parameter to load the PIDs that can be used with the actuators loaded with the MuJoCo model. The velocity actuator supports position mode with the PID gains and the rest of the actuation models support both position and velocity mode provided the corresponding PID gains. The gains should be in ROS parameters format and is loaded by the control_toolbox::PidROS class
+       Optional parameter to load the PIDs that can be used with the actuators loaded with the MuJoCo model. 
+       The velocity actuator supports position mode with the PID gains, and the rest of the actuation models 
+       support both position and velocity mode provided the corresponding PID gains. The gains should be in ROS 
+       parameters format to be loaded by the control_toolbox::PidROS class.
         -->
       <param name="pids_config_file">$(find my_description)/config/pids.yaml</param>
 

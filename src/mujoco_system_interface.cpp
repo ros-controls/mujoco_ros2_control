@@ -192,7 +192,8 @@ mjModel* LoadModel(const char* file, mj::Simulate& sim, rclcpp::Node::SharedPtr 
 {
   mjModel* mnew = 0;
 
-  // Try to get the mujoco model from URDF
+  // Try to get the mujoco model from URDF.
+  // If it is not available, create a subscription and listen for the model on a topic.
 
   // this copy is needed so that the mju::strlen call below compiles
   char filename[mj::Simulate::kMaxFilenameLength];
