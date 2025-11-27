@@ -1103,13 +1103,16 @@ def get_urdf_transforms(urdf_string):
 
     return results
 
-def publish_model_on_topic(output_filepath, temp_dir, args=None):
+def publish_model_on_topic(publish_topic, output_filepath, args=None):
 
     import rclpy
     from rclpy.node import Node
     from std_msgs.msg import String
     from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 
+    # Remove leading slash if present
+    publish_topic = publish_topic.lstrip('/')
+    
      # --- Node ROS2 for model publishing MJCF ---
     class MjcfPublisher(Node):
         def __init__(self, mjcf_path):
@@ -1121,7 +1124,7 @@ def publish_model_on_topic(output_filepath, temp_dir, args=None):
             durability=QoSDurabilityPolicy.TRANSIENT_LOCAL
             )
 
-            self.publisher_ = self.create_publisher(String, 'mujoco_robot_description', qos_profile)
+            self.publisher_ = self.create_publisher(String, publish_topic, qos_profile)
             self.timer = self.create_timer(1.0, self.publish_mjcf)
             self.mjcf_path = mjcf_path
 
@@ -1146,9 +1149,6 @@ def publish_model_on_topic(output_filepath, temp_dir, args=None):
             rclpy.shutdown()
         except Exception:
             pass
-        if temp_dir is not None:
-            temp_dir.cleanup()
-            print("Temporary directory cleaned up.", flush=True)
 
 def add_urdf_free_joint(urdf):
     """
