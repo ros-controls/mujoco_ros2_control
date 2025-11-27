@@ -1271,44 +1271,38 @@ def main(args=None):
 
     convert_stl_to_obj = parsed_args.convert_stl_to_obj
 
+    # Determine the path of the output directory 
+    temp_dir=None
     if parsed_args.save_only:
         output_filepath = os.path.join(parsed_args.output, "")
         print(f"Using destination directory: {output_filepath}")
-    else:
+    elif parsed_args.publish_topic:
         temp_dir = tempfile.TemporaryDirectory()
         output_filepath = os.path.join(temp_dir.name, "")
         print(f"Using temporary directory: {output_filepath}")
+    else:
+        raise ValueError("You must specify at least one of the following options: --publish_topic or --save-only.")
 
     # Add a free joint to the urdf
     if request_add_free_joint:
         urdf = add_urdf_free_joint(urdf)
 
     # If exists the mujoco_input.xml get the input tags from that file, otherwise try to get them from URDF
-    if not parsed_args.mujoco_inputs:
-        if parsed_args.urdf:
-            parsed_args.mujoco_inputs= parsed_args.urdf
-        elif not parsed_args.save_only:
-            print("writing URDF model from string to robot_description.urdf")
-            robot_description_filename = "robot_description.urdf"
-            with open(output_filepath + "robot_description.urdf", "w") as file:
-                # Remove extra newlines that minidom adds after each tag
-                urdf_data = "\n".join([line for line in urdf.splitlines() if line.strip()])
-                file.write(urdf_data)
-                parsed_args.mujoco_inputs= os.path.join(temp_dir.name, "robot_description.urdf")
+    mujoco_inputs_file = parsed_args.mujoco_inputs or urdf_path
     
-    raw_inputs, processed_inputs = parse_inputs_xml(parsed_args.mujoco_inputs)
+    raw_inputs, processed_inputs = parse_inputs_xml(mujoco_inputs_file)
     decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_inputs)
 
 
     # Add required mujoco tags to the starting URDF
-    xml_data = add_mujoco_info(urdf,output_filepath)
+    xml_data = add_mujoco_info(urdf, output_filepath)
 
     # get rid of collision data, assuming the visual data is much better resolution.
     # not sure if this is the best move...
     xml_data = remove_tag(xml_data, "collision")
 
     xml_data = replace_package_names(xml_data)
-    mesh_info_dict = extract_mesh_info(xml_data)
+    mesh_info_dict = extract_mesh_info(xml_data, parsed_args.asset_dir, decompose_dict)
     xml_data = convert_to_objs(mesh_info_dict, output_filepath, xml_data, convert_stl_to_obj, decompose_dict)
 
     print("writing data to robot_description_formatted.urdf")
@@ -1334,8 +1328,12 @@ def main(args=None):
         request_add_free_joint,
     )
    
-    if not parsed_args.save_only:
-        publish_model_on_topic(output_filepath, temp_dir, args)
+    if parsed_args.publish_topic:
+        publish_model_on_topic(parsed_args.publish_topic, output_filepath, args)
+    
+    if temp_dir is not None:
+            temp_dir.cleanup()
+            print("Temporary directory cleaned up.", flush=True)
 
 
 if __name__ == "__main__":
