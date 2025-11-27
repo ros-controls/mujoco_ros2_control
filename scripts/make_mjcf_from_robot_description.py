@@ -1212,7 +1212,7 @@ def add_urdf_free_joint(urdf):
 def main(args=None):
 
     parser = argparse.ArgumentParser(description="Convert a full URDF to MJCF for use in Mujoco")
-    parser.add_argument("-u", "--urdf", required=False, help="Optionally pass an existing URDF file")
+    parser.add_argument("-u", "--urdf", required=False, default=None, help="Optionally pass an existing URDF file")
     parser.add_argument(
         "-r", "--robot_description", required=False, help="Optionally pass the robot description string"
     )
@@ -1220,9 +1220,11 @@ def main(args=None):
         "-m",
         "--mujoco_inputs",
         required=False,
+        default=None,
         help="Optionally specify a defaults xml for default settings, actuators, options, and additional sensors",
     )
     parser.add_argument("-o", "--output", default="mjcf_data", help="Generated output path")
+    parser.add_argument("-p", "--publish_topic", required=False, default= None, help="Optionally specify the topic to publish the MuJoCo model")
     parser.add_argument("-c", "--convert_stl_to_obj", action="store_true", help="If we should convert .stls to .objs")
     parser.add_argument(
         "-s", "--save_only",
@@ -1235,6 +1237,12 @@ def main(args=None):
         action="store_true",
         help="Adds a free joint before the root link of the robot in the urdf before conversion",
     )
+    parser.add_argument(
+        "-a" ,"--asset_dir",
+        required=False,
+        default=None,
+        help="Optional path to a existing asset folder"
+    )
 
     # remove ros args to make argparser heppy
     args_without_filename = sys.argv[1:]
@@ -1243,12 +1251,21 @@ def main(args=None):
 
     parsed_args = parser.parse_args(args_without_filename)
 
+    # Load URDF from file, string, or topic
+    urdf_path = None
     if parsed_args.urdf:
         urdf = get_xml_from_file(parsed_args.urdf)
-    elif parsed_args.robot_description:
-        urdf = parsed_args.robot_description
+        urdf_path = parsed_args.urdf
     else:
-        urdf = get_urdf_from_rsp(args)
+        if parsed_args.robot_description:
+            urdf = parsed_args.robot_description
+        else:
+            urdf = get_urdf_from_rsp(args)
+        # Create a tempfile and store the URDF
+        tmp = tempfile.NamedTemporaryFile()
+        with open(tmp.name, 'w') as f:
+            f.write(urdf)
+        urdf_path = tmp.name
 
     request_add_free_joint = parsed_args.add_free_joint
 
