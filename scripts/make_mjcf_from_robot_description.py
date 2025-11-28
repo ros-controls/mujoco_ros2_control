@@ -223,20 +223,19 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                 xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.stl")
                 pass
         elif filename_ext.lower() == ".obj":
-            # If import external .obj import also the .mtl since it is needed for the obj2mjcf
             if convert_stl_to_obj:
+                # If import PREVIOUS GENERATED .obj 
                 mesh_dir = os.path.splitext(full_filepath)[0]
-                mtl_file = mesh_dir+ ".mtl"
-                if os.path.exists(mtl_file):
-                    shutil.copy2(mtl_file, f"{directory}assets/{assets_relative_filepath}.mtl")
-                else:
-                    print(f"Not found {full_filepath}, obj2mjcf requires it.")
-                if mesh_item["is_decomposed"]:
-                    if os.path.exists(mesh_dir):
-                        dst_base = f"{directory}assets/"+f"{DECOMPOSED_PATH_NAME}/{filename_no_ext}/{filename_no_ext}"
-                        shutil.copytree(mesh_dir, dst_base, dirs_exist_ok=True)
-            shutil.copy2(full_filepath, f"{directory}assets/{assets_relative_filepath}.obj")
-            xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
+                if os.path.exists(mesh_dir):
+                    if mesh_item["is_decomposed"]:
+                        dst_base = f"{directory}assets/"+f"{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}"
+                    else:
+                        dst_base = f"{directory}assets/"+f"{COMPOSED_PATH_NAME}/{mesh_name}"
+                    shutil.copytree(mesh_dir, dst_base, dirs_exist_ok=True)
+            else:
+                #If import .obj files from URDF 
+                shutil.copy2(full_filepath, f"{directory}assets/{assets_relative_filepath}.obj")
+                xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
             pass
             # objs are ok as is
         elif filename_ext.lower() == ".dae":
@@ -311,28 +310,35 @@ def set_up_axis_to_z_up(dae_file_path):
 
 
 def run_obj2mjcf(output_filepath, decompose_dict, mesh_info_dict):
+    backup_dir = tempfile.mkdtemp()
+    backup_composed = os.path.join(backup_dir, "composed")
+    backup_decomposed = os.path.join(backup_dir, "decomposed")
+    os.makedirs(backup_composed, exist_ok=True)
+    os.makedirs(backup_decomposed, exist_ok=True)
+
     # remove the folders in the asset directory so that we are clean to run obj2mjcf
     with os.scandir(f"{output_filepath}assets/{COMPOSED_PATH_NAME}") as entries:
         for entry in entries:
             if entry.is_dir():
+                src = entry.path
+                dst = os.path.join(backup_composed, entry.name)
+                shutil.copytree(src, dst)
                 shutil.rmtree(entry.path)
 
     # remove the folders in the asset directory so that we are clean to run obj2mjcf
     top_level_path = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}"
-    backup_dir = tempfile.mkdtemp()
     for item in os.listdir(top_level_path):
-        # keep this folder
-        if mesh_info_dict[item]["is_decomposed"]:  
-            src = os.path.join(top_level_path, item)
-            dst = os.path.join(backup_dir, item)
-            shutil.copytree(src, dst)
-        else:
             first_level_path = os.path.join(top_level_path, item)
             if os.path.isdir(first_level_path):
                 # Now check inside this first-level directory
                 for sub_item in os.listdir(first_level_path):
                     second_level_path = os.path.join(first_level_path, sub_item)
                     if os.path.isdir(second_level_path):
+                        # keep this folder
+                        if mesh_info_dict[item]["is_decomposed"]:  
+                            src = second_level_path
+                            dst = os.path.join(backup_decomposed, item)
+                            shutil.copytree(src, dst)
                         shutil.rmtree(second_level_path)
 
     # run obj2mjcf to generate folders of processed objs
@@ -353,13 +359,19 @@ def run_obj2mjcf(output_filepath, decompose_dict, mesh_info_dict):
             ]
             subprocess.run(cmd)
 
-    for item in os.listdir(backup_dir):
-        src = os.path.join(backup_dir, item)
-        dst = os.path.join(top_level_path, item)
-
+    for item in os.listdir(backup_decomposed):
+        src = os.path.join(backup_decomposed, item)
+        dst = os.path.join(f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{item}", item)
         if os.path.exists(dst):
-            shutil.rmtree(dst)  # remove if obj2mjcf recreated something
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst)
 
+    # Restore composed meshes (if needed)
+    for item in os.listdir(backup_composed):
+        src = os.path.join(backup_composed, item)
+        dst = os.path.join(f"{output_filepath}assets/{COMPOSED_PATH_NAME}", item)
+        if os.path.exists(dst):
+            shutil.rmtree(dst)
         shutil.copytree(src, dst)
     
     shutil.rmtree(backup_dir)
@@ -1280,7 +1292,7 @@ def main(args=None):
         default=None,
         help="Optionally specify a defaults xml for default settings, actuators, options, and additional sensors",
     )
-    parser.add_argument("-o", "--output", default="mjcf_data", help="Generated output path")
+    parser.add_argument("-o", "--output", default=None, help="Generated output path")
     parser.add_argument("-p", "--publish_topic", required=False, default= None, help="Optionally specify the topic to publish the MuJoCo model")
     parser.add_argument("-c", "--convert_stl_to_obj", action="store_true", help="If we should convert .stls to .objs")
     parser.add_argument(
@@ -1331,14 +1343,17 @@ def main(args=None):
     # Determine the path of the output directory 
     temp_dir=None
     if parsed_args.save_only:
-        output_filepath = os.path.join(parsed_args.output, "")
-        print(f"Using destination directory: {output_filepath}")
+        if parsed_args.output:
+            output_filepath = os.path.join(parsed_args.output, "")
+            print(f"Using destination directory: {output_filepath}")
+        else:
+            raise ValueError(" --save-only is missing the path of the output folder.")
     elif parsed_args.publish_topic:
         temp_dir = tempfile.TemporaryDirectory()
         output_filepath = os.path.join(temp_dir.name, "")
         print(f"Using temporary directory: {output_filepath}")
     else:
-        raise ValueError("You must specify at least one of the following options: --publish_topic or --save-only.")
+        raise ValueError("You must specify at least one of the following options: --publish_topic or --save-only with the path of the folder.")
 
     # Add a free joint to the urdf
     if request_add_free_joint:
