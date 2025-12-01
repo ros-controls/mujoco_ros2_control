@@ -133,6 +133,9 @@
       <plugin>mujoco_ros2_simulation/MujocoSystemInterface</plugin>
       <param name="mujoco_model">$(find mujoco_ros2_simulation)/test_resources/scene.xml</param>
 
+      <!-- Uncomment this to use the keyframe from shown file as the starting configuration. -->
+      <!-- <param name="override_start_position_file">$(find mujoco_ros2_simulation)/config/start_positions.xml</param> -->
+
       <!-- Override the slowdown settings in the Simulate App and run at 3x speed -->
       <param name="sim_speed_factor">3.0</param>
 
