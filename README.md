@@ -374,4 +374,6 @@ ros2 topic pub /position_controller/commands std_msgs/msg/Float64MultiArray "dat
 ```
 
 > [!TIP]
-> UI panels can be toggled with `Tab` or `Shift+Tab`. All standard MuJoCo keyboard shortcuts are available. To see a short list, press `F1`.
+> UI panels can be toggled with `Tab` or `Shift+Tab`.
+> All standard MuJoCo keyboard shortcuts are available.
+> To see a short list, press `F1`.
