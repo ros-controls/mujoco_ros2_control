@@ -123,7 +123,8 @@ Incompatible actuator-interface combinations trigger an error.
 
 Refer to Mujoco's [actuation model](https://mujoco.readthedocs.io/en/stable/computation/index.html#geactuation) for more information.
 
-Of note, only one type of MuJoCo actuator per-joint can be controllable at a time, and the type CANNOT be switched during runtime (i.e., switching from position to motor actuator is not supported). However, the active command interface can be switched dynamically, allowing control to shift between position, velocity, or effort as supported by the actuator type.
+Of note, only one type of MuJoCo actuator per-joint can be controllable at a time, and the type CANNOT be switched during runtime (i.e., switching from position to motor actuator is not supported).
+However, the active command interface can be switched dynamically, allowing control to shift between position, velocity, or effort as supported by the actuator type.
 Users are required to manually adjust actuator types and command interfaces to ensure that they are compatible.
 
 For example a position controlled joint on the mujoco
