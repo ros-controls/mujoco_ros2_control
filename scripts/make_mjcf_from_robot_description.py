@@ -216,20 +216,10 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                 xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.stl")
                 pass
         elif filename_ext.lower() == ".obj":
-            # mesh_dir = os.path.splitext(full_filepath)[0]
             mesh_dir = os.path.dirname(os.path.splitext(full_filepath)[0])
-            if convert_stl_to_obj and os.path.exists(mesh_dir):
-                # If import PREVIOUS GENERATED .obj 
-                if filename_no_ext in decompose_dict:
-                    dst_base= f"{directory}assets/{DECOMPOSED_PATH_NAME}/{filename_no_ext}/{filename_no_ext}/"
-                else:
-                    dst_base = f"{directory}assets/{COMPOSED_PATH_NAME}/{filename_no_ext}"
-                shutil.copytree(mesh_dir, dst_base, dirs_exist_ok=True)
-                xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
-            else:
+            if not (convert_stl_to_obj and os.path.exists(mesh_dir)):
                 #If import .obj files from URDF 
                 shutil.copy2(full_filepath, f"{directory}assets/{assets_relative_filepath}.obj")
-                xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
             pass
             # objs are ok as is
         elif filename_ext.lower() == ".dae":
@@ -304,21 +294,11 @@ def set_up_axis_to_z_up(dae_file_path):
 
 
 def run_obj2mjcf(output_filepath, decompose_dict):
-    
-    # Create temporal folder uused for the backup existing asset 
-    backup_dir = tempfile.mkdtemp()
-    backup_composed = os.path.join(backup_dir, COMPOSED_PATH_NAME)
-    backup_decomposed = os.path.join(backup_dir, DECOMPOSED_PATH_NAME)
-    os.makedirs(backup_composed, exist_ok=True)
-    os.makedirs(backup_decomposed, exist_ok=True)
 
     # remove the folders in the asset directory so that we are clean to run obj2mjcf
     with os.scandir(f"{output_filepath}assets/{COMPOSED_PATH_NAME}") as entries:
         for entry in entries:
             if entry.is_dir():
-                src = entry.path
-                dst = os.path.join(backup_composed, entry.name)
-                shutil.copytree(src, dst)
                 shutil.rmtree(entry.path)
 
     # remove the folders in the asset directory so that we are clean to run obj2mjcf
@@ -330,10 +310,6 @@ def run_obj2mjcf(output_filepath, decompose_dict):
                 for sub_item in os.listdir(first_level_path):
                     second_level_path = os.path.join(first_level_path, sub_item)
                     if os.path.isdir(second_level_path):
-                        # keep this folder
-                        src = second_level_path
-                        dst = os.path.join(backup_decomposed, item)
-                        shutil.copytree(src, dst)
                         shutil.rmtree(second_level_path)
 
     # run obj2mjcf to generate folders of processed objs
@@ -352,23 +328,6 @@ def run_obj2mjcf(output_filepath, decompose_dict):
                 threshold,
             ]
             subprocess.run(cmd)
-
-    for item in os.listdir(backup_decomposed):
-        src = os.path.join(backup_decomposed, item)
-        dst = os.path.join(f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{item}", item)
-        if os.path.exists(dst):
-            shutil.rmtree(dst)
-        shutil.copytree(src, dst)
-
-    # Restore composed meshes (if needed)
-    for item in os.listdir(backup_composed):
-        src = os.path.join(backup_composed, item)
-        dst = os.path.join(f"{output_filepath}assets/{COMPOSED_PATH_NAME}", item)
-        if os.path.exists(dst):
-            shutil.rmtree(dst)
-        shutil.copytree(src, dst)
-    
-    shutil.rmtree(backup_dir)
     
 
 def update_obj_assets(dom, output_filepath, mesh_info_dict):
@@ -1029,6 +988,23 @@ def fix_mujoco_description(
 
     # Run conversions for mjcf
     run_obj2mjcf(output_filepath, decompose_dict)
+
+     #Copy existing folders to the final directory
+    for mesh_name in mesh_info_dict:
+        mesh_item = mesh_info_dict[mesh_name]
+        filename = os.path.basename(mesh_item["filename"])
+        filename_no_ext = os.path.splitext(filename)[0]
+        filename_ext = os.path.splitext(filename)[1]
+        full = mesh_item["filename"]
+        if filename_ext.lower() == ".obj":
+            mesh_dir = os.path.dirname(os.path.splitext(full)[0])
+            if os.path.exists(mesh_dir):
+                # # If import PREVIOUS GENERATED .obj 
+                if filename_no_ext in decompose_dict:
+                    dst_base= f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{filename_no_ext}/{filename_no_ext}/"
+                else:
+                    dst_base = f"{output_filepath}assets/{COMPOSED_PATH_NAME}/{filename_no_ext}"
+                shutil.copytree(mesh_dir, dst_base, dirs_exist_ok=True)
 
     # Parse the DAE file
     dom = minidom.parse(full_filepath)
