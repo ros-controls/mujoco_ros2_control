@@ -74,7 +74,13 @@ else()
 
   set(MUJOCO_INCLUDE_DIR ${MUJOCO_DIR}/include)
   set(MUJOCO_SIMULATE_DIR ${MUJOCO_DIR}/simulate)
-  message(STATUS "MuJoCo library found: ${MUJOCO_LIB}")
+
+  message(STATUS "Installing ${MUJOCO_LIB} to the install directory...")
+  install(
+    DIRECTORY ${MUJOCO_DIR}/lib/
+    DESTINATION lib
+    FILES_MATCHING PATTERN "libmujoco.so*"
+  )
 endif()
 
 # Fetch lodepng dependency.
@@ -146,6 +152,10 @@ add_library(mujoco_ros2_simulation SHARED
     src/mujoco_system_interface.cpp
     src/mujoco_cameras.cpp
     src/mujoco_lidar.cpp
+)
+# Ensure MuJoCo library can be found at runtime regardless of how it was installed above
+set_target_properties(mujoco_ros2_simulation PROPERTIES
+  INSTALL_RPATH "\$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
 )
 target_link_libraries(mujoco_ros2_simulation
   ${MUJOCO_LIB}
