@@ -17,6 +17,7 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>sensor_msgs</depend>
+  <depend>mujoco_vendor</depend>
 
   <test_depend>joint_state_broadcaster</test_depend>
   <test_depend>position_controllers</test_depend>
