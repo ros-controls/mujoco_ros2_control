@@ -3,28 +3,28 @@
     pid_gains:
       position:
         joint1:
-          p: 1.0
-          i: 0.5
-          d: 0.05
+          p: 200.0
+          i: 0.005
+          d: 50.0
           u_clamp_max: 100.0
           u_clamp_min: -100.0
         joint2:
-          p: 1.0
-          i: 0.5
-          d: 0.05
+          p: 200.0
+          i: 0.005
+          d: 50.0
           u_clamp_max: 100.0
           u_clamp_min: -100.0
     pid_gains:
       velocity:
         joint1:
-          p: 1.0
-          i: 0.5
-          d: 0.05
+          p: 100.0
+          i: 0.001
+          d: 5.0
           u_clamp_max: 100.0
           u_clamp_min: -100.0
         joint2:
-          p: 1.0
-          i: 0.5
-          d: 0.05
+          p: 100.0
+          i: 0.001
+          d: 5.0
           u_clamp_max: 100.0
           u_clamp_min: -100.0
