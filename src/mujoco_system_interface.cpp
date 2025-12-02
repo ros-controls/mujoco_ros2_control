@@ -36,9 +36,11 @@
 #include <thread>
 
 #include <tinyxml2.h>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <pluginlib/class_list_macros.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include "lodepng.h"
 
 #define MUJOCO_PLUGIN_DIR "mujoco_plugin"
 
@@ -370,10 +372,36 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     sim_ = std::make_unique<mj::Simulate>(std::make_unique<mj::GlfwAdapter>(), &cam_, &opt_, &pert_,
                                           /* is_passive = */ false);
 
+    // Add ros2 control icon for the taskbar
+    std::string icon_location =
+        ament_index_cpp::get_package_share_directory("mujoco_ros2_simulation") + "/resources/mujoco_logo.png";
+    std::vector<unsigned char> image;
+    unsigned width, height;
+    unsigned error = lodepng::decode(image, width, height, icon_location);
+
+    // Only process the icon if we successfully loaded it. Otherwise, just proceed without
+    if (error)
+    {
+      RCLCPP_WARN_STREAM(rclcpp::get_logger("MujocoSystemInterface"),
+                         "LodePNG error " << error << ": " << lodepng_error_text(error)
+                                          << ". Icon file not loaded: " << icon_location);
+    }
+    else
+    {
+      GLFWimage icon;
+      icon.width = width;
+      icon.height = height;
+      icon.pixels = image.data();
+
+      GLFWwindow* window_pointer = glfwGetCurrentContext();
+
+      glfwSetWindowIcon(window_pointer, 1, &icon);
+    }
+
     // Hide UI panels programmatically
     sim_->ui0_enable = false;  // Hide left panel
     sim_->ui1_enable = false;  // Hide right panel
-
+    
     // Notify sim that we are ready
     sim_ready->set_value();
 
