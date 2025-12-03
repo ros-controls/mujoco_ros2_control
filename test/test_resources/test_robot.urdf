@@ -1,82 +1,82 @@
-<robot name="two_dof_robot">
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="two_dof_robot">
+
+  <!-- Whether or not to use PID control -->
+  <xacro:arg name="use_pid" default="false"/>
 
   <link name="world"/>
 
   <link name="base"/>
   <joint name="base_link" type="fixed">
-      <axis rpy="0 0 0" xyz="0 0 0"/>
-      <parent link="world"/>
-      <child link="base"/>
+    <axis rpy="0 0 0" xyz="0 0 0"/>
+    <parent link="world"/>
+    <child link="base"/>
   </joint>
 
   <link name="upperarm">
-      <inertial>
-          <origin xyz="0.5 0 0" rpy="0 0 0"/>
-          <mass value="27.0"/>
-          <inertia
-              ixx="0.0225" ixy="0.0"  ixz="0.0"
-              iyy="0.225"  iyz="0.0"  izz="0.225"/>
-      </inertial>
-      <visual>
-          <geometry>
-              <box size="1.0 0.1 0.1"/>
-          </geometry>
-          <origin rpy="0 0 0" xyz="0.5 0 0"/>
-          <material name="red">
-              <color rgba="1.0 0 0 1.0"/>
-          </material>
-      </visual>
-      <collision>
-          <geometry>
-              <box size="1.0 0.1 0.1"/>
-          </geometry>
-          <origin rpy="0 0 0" xyz="0.5 0 0"/>
-      </collision>
+    <inertial>
+      <origin xyz="0.5 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.0225" ixy="0.0" ixz="0.0" iyy="0.225" iyz="0.0" izz="0.225"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="1.0 0.1 0.1"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0.5 0 0"/>
+      <material name="red">
+        <color rgba="1.0 0 0 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="1.0 0.1 0.1"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0.5 0 0"/>
+    </collision>
   </link>
   <joint name="joint1" type="revolute">
-      <axis rpy="0 0 0" xyz="0 0 1"/>
-      <parent link="base"/>
-      <child link="upperarm"/>
-      <limit lower="-3.14" upper="3.14" velocity="3.14" effort="1000" />
+    <axis rpy="0 0 0" xyz="0 0 1"/>
+    <parent link="base"/>
+    <child link="upperarm"/>
+    <limit lower="-3.14" upper="3.14" velocity="3.14" effort="1000" />
   </joint>
 
   <link name="forearm">
-      <inertial>
-          <origin xyz="0.5 0 0" rpy="0 0 0"/>
-          <mass value="27.0"/>
-          <inertia
-              ixx="0.0225" ixy="0.0"  ixz="0.0"
-              iyy="0.225"  iyz="0.0"  izz="0.225"/>
-      </inertial>
-      <visual>
-          <geometry>
-              <box size="1.0 0.1 0.1"/>
-          </geometry>
-          <origin rpy="0 0 0" xyz="0.5 0 0"/>
-          <material name="blue">
-              <color rgba="0 0 1.0 1.0"/>
-          </material>
-      </visual>
-      <collision>
-          <geometry>
-              <box size="1.0 0.1 0.1"/>
-          </geometry>
-          <origin rpy="0 0 0" xyz="0.5 0 0"/>
-      </collision>
+    <inertial>
+      <origin xyz="0.5 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.0225" ixy="0.0" ixz="0.0" iyy="0.225" iyz="0.0" izz="0.225"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="1.0 0.1 0.1"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0.5 0 0"/>
+      <material name="blue">
+        <color rgba="0 0 1.0 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="1.0 0.1 0.1"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0.5 0 0"/>
+    </collision>
   </link>
   <joint name="joint2" type="revolute">
-      <axis rpy="0 0 0" xyz="0 0 1"/>
-      <parent link="upperarm"/>
-      <child link="forearm"/>
-      <origin rpy="0 0 0" xyz="1 0 0"/>
-      <limit lower="-3.14" upper="3.14" velocity="3.14" effort="1000" />
+    <axis rpy="0 0 0" xyz="0 0 1"/>
+    <parent link="upperarm"/>
+    <child link="forearm"/>
+    <origin rpy="0 0 0" xyz="1 0 0"/>
+    <limit lower="-3.14" upper="3.14" velocity="3.14" effort="1000" />
   </joint>
 
   <link name="ee_link" />
   <joint name="ee_joint" type="fixed">
-      <parent link="forearm"/>
-      <child link="ee_link"/>
-      <origin rpy="0 0 0" xyz="1 0 0"/>
+    <parent link="forearm"/>
+    <child link="ee_link"/>
+    <origin rpy="0 0 0" xyz="1 0 0"/>
   </joint>
 
   <link name="camera_link">
@@ -123,15 +123,24 @@
   <!-- counter clockwise. We expect the X-axis to be in line with the first rangefinder's Z-axis. -->
   <link name="lidar_sensor_frame" />
   <joint name="lidar_sensor_link" type="fixed">
-      <parent link="world"/>
-      <child link="lidar_sensor_frame"/>
-      <origin rpy="0 0 -1.5708" xyz="1.0 2.0 0"/>
+    <parent link="world"/>
+    <child link="lidar_sensor_frame"/>
+    <origin rpy="0 0 -1.5708" xyz="1.0 2.0 0"/>
   </joint>
 
+  <!-- ROS2 Control Configuration -->
   <ros2_control name="MujocoSystem" type="system">
     <hardware>
       <plugin>mujoco_ros2_simulation/MujocoSystemInterface</plugin>
-      <param name="mujoco_model">$(find mujoco_ros2_simulation)/test_resources/scene.xml</param>
+
+      <!-- Conditional mujoco_model parameter based on use_pid -->
+      <xacro:if value="$(arg use_pid)">
+        <param name="mujoco_model">$(find mujoco_ros2_simulation)/test_resources/test_pid/scene_pid.xml</param>
+        <param name="pids_config_file">$(find mujoco_ros2_simulation)/config/mujoco_pid.yaml</param>
+      </xacro:if>
+      <xacro:unless value="$(arg use_pid)">
+        <param name="mujoco_model">$(find mujoco_ros2_simulation)/test_resources/scene.xml</param>
+      </xacro:unless>
 
       <!-- Uncomment this to use the keyframe from shown file as the starting configuration. -->
       <!-- <param name="override_start_position_file">$(find mujoco_ros2_simulation)/config/start_positions.xml</param> -->
@@ -143,10 +152,13 @@
       <param name="camera_publish_rate">6.0</param>
 
       <!-- Publish lidar scans at 10 hz -->
-      <param name="lidar_publish_rate">10.0</param>
+      <param name="lidar_publish_rate">1.0</param>
     </hardware>
     <joint name="joint1">
       <command_interface name="position"/>
+      <xacro:if value="$(arg use_pid)">
+        <command_interface name="velocity"/>
+      </xacro:if>
       <state_interface name="position">
         <param name="initial_value">0.0</param>
       </state_interface>
@@ -155,6 +167,9 @@
     </joint>
     <joint name="joint2">
       <command_interface name="position"/>
+      <xacro:if value="$(arg use_pid)">
+        <command_interface name="velocity"/>
+      </xacro:if>
       <state_interface name="position">
         <param name="initial_value">0.0</param>
       </state_interface>
@@ -185,5 +200,4 @@
       <param name="laserscan_topic">/scan</param>
     </sensor>
   </ros2_control>
-
 </robot>
