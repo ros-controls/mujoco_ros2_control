@@ -419,6 +419,9 @@ For now, built the drivers with testing enabled, then the test robot system can 
 # Brings up the hardware drivers and mujoco interface, along with a single position controller
 ros2 launch mujoco_ros2_simulation test_robot.launch.py
 
+# Or optionally include the PID controller as mentioned above
+ros2 launch mujoco_ros2_simulation test_robot.launch.py use_pid:=true
+
 # Launch an rviz2 window with the provided configuration
 rviz2 -d $(ros2 pkg prefix --share mujoco_ros2_simulation)/config/test_robot.rviz
 ```
