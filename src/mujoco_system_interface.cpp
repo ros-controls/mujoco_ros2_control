@@ -507,6 +507,9 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       glfwSetWindowIcon(window_pointer, 1, &icon);
     }
 
+    // Hide UI panels programmatically
+    sim_->ui0_enable = false;  // Hide left panel
+    sim_->ui1_enable = false;  // Hide right panel
     // Notify sim that we are ready
     sim_ready->set_value();
 

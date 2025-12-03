@@ -108,9 +108,10 @@ It is the same executable and parameters as the upstream, but requires updating 
     )
 ```
 
-> **_NOTE_**: We can remove the the ROS 2 control node after the next ros2_control upstream release,
-as the simulation requires [this PR](https://github.com/ros-controls/ros2_control/pull/2654) to run.
-The hardware interface _should_ then be compatible with `humble`, `jazzy`, and `kilted`.
+> [!NOTE]
+> We can remove the the ROS 2 control node after the next ros2_control upstream release,
+> as the simulation requires [this PR](https://github.com/ros-controls/ros2_control/pull/2654) to run.
+> The hardware interface _should_ then be compatible with `humble`, `jazzy`, and `kilted`.
 
 ### Joints
 
@@ -347,7 +348,8 @@ The lidar sensor is then configurable through ROS 2 control xacro with:
 
 This project includes a [compose](./docker-compose.yml) and [Dockerfile](./.docker/Dockerfile) for development and testing in an isolated environment.
 
-**Note**: you may need to give docker access to xhost with `xhost +local:docker` to ensure the container has access to the host UI.
+> [!NOTE]
+> You may need to give docker access to xhost with `xhost +local:docker` to ensure the container has access to the host UI.
 
 For users on arm64 machines, be sure to specify the `CPU_ARCH` variable in your environment when building.
 
@@ -377,7 +379,9 @@ ${MUJOCO_DIR}/bin/simulate ${ROS_WS}/src/mujoco_ros2_simulation/test/test_resour
 ros2 launch mujoco_ros2_simulation test_robot.launch.py
 ```
 
-> **_NOTE:_** Rendering contexts in containers can be tricky.
+> [!NOTE]
+> Rendering contexts in containers can be tricky.
+
 Users may need to tweak the compose file to support their specific host OS or GPUs.
 For more information refer to the comments in the compose file.
 
@@ -424,3 +428,8 @@ From there, command joints to move with,
 ```bash
 ros2 topic pub /position_controller/commands std_msgs/msg/Float64MultiArray "data: [-0.25, 0.75]" --once
 ```
+
+> [!TIP]
+> UI panels can be toggled with `Tab` or `Shift+Tab`.
+> All standard MuJoCo keyboard shortcuts are available.
+> To see a short list, press `F1`.
