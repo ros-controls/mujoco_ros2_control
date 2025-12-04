@@ -32,7 +32,8 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
 
-    use_pid = DeclareLaunchArgument("use_pid", default_value="false", description="If we should use PID control")
+    # Refer https://github.com/ros-controls/mujoco_ros2_simulation?tab=readme-ov-file#joints
+    use_pid = DeclareLaunchArgument("use_pid", default_value="false", description="If we should use PID control to enable other control modes")
 
     robot_description_content = Command(
         [
