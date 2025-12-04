@@ -1403,9 +1403,9 @@ def main(args=None):
         default=None,
         help="Optionally pass an existing folder with pre-generated OBJ meshes.",
     )
-    parser.add_argument("--scene", required=False, default=None, help="OOptionally pass an existing xml for the scene")
+    parser.add_argument("--scene", required=False, default=None, help="Optionally pass an existing xml for the scene")
 
-    # remove ros args to make argparser heppy
+    # remove ros args to make argparser happy
     args_without_filename = sys.argv[1:]
     while "--ros-args" in args_without_filename:
         args_without_filename.remove("--ros-args")
