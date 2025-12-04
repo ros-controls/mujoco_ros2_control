@@ -518,13 +518,19 @@ def update_non_obj_assets(dom, output_filepath):
     return dom
 
 
-def add_mujoco_inputs(dom, raw_inputs):
+def add_mujoco_inputs(dom, raw_inputs, scene_inputs):
     """
-    Copies all elements under the "raw_inputs" xml tag directly in the provided dom.
-    This is useful for adding things like actuators, options, or defaults. But any tag that
+    Copies all elements under the "raw_inputs" and "scene_inputs" XML tags directly in the provided dom.
+    This is useful for adding things like actuators, options, or defaults or scene-specific elements. But any tag that
     is supported in the MJCF can be added here.
     """
     root = dom.documentElement
+
+    if scene_inputs:
+        for child in scene_inputs.childNodes:
+            if child.nodeType == child.ELEMENT_NODE:
+                imported_node = dom.importNode(child, True)
+                root.appendChild(imported_node)
 
     if raw_inputs:
         for child in raw_inputs.childNodes:
@@ -728,7 +734,54 @@ def parse_inputs_xml(filename=None):
         return raw_inputs, processed_inputs
 
 
-def fix_free_joint(dom, urdf, joint_name="floating_base_joint"):
+def parse_scene_xml(filename=None):
+    """
+    This script can accept the scene in the form of an xml file. This allows users to inject this data
+    into the MJCF that is not necessarily included in the URDF.
+    """
+    
+    if not filename:
+        return None
+
+    print(f"Parsing mujoco scene from: {filename}")
+
+    dom = minidom.parse(filename)
+    root = dom.documentElement
+    
+    scene_inputs = None
+
+    if root.tagName == "mujoco":
+        # The file itself is a standalone xml
+        scene_inputs = root
+        return scene_inputs
+
+    elif root.tagName == "robot":
+        # The file is a URDF 
+        mujoco_inputs_node = None
+
+        # find <mujoco_inputs>
+        for child in root.childNodes:
+            if child.nodeType == child.ELEMENT_NODE and child.tagName == "mujoco_inputs":
+                mujoco_inputs_node = child
+                break
+
+        if mujoco_inputs_node is None:
+            # URDF without mujoco_inputs is allowed
+            return None
+
+        # parse children of <mujoco_inputs>
+        for child in mujoco_inputs_node.childNodes:
+            if child.nodeType != child.ELEMENT_NODE:
+                continue
+            if child.tagName == "scene":
+                scene_inputs = child
+    else:
+        raise ValueError( f"Root tag in file must be either 'mujoco_inputs' (standalone XML) or 'robot' (URDF), not '{root.tagName}'") 
+    
+    return scene_inputs  
+
+
+def add_free_joint(dom, urdf, joint_name="floating_base_joint"):
     """
     This change is on the mjcf side, and replaces the "free" joint type with a freejoint tag.
     This is a special item which explicitly sets all stiffness/damping to 0.
@@ -1007,6 +1060,7 @@ def fix_mujoco_description(
     output_filepath,
     mesh_info_dict,
     raw_inputs,
+    scene_inputs,
     urdf,
     decompose_dict,
     cameras_dict,
@@ -1046,14 +1100,14 @@ def fix_mujoco_description(
     dom = minidom.parse(full_filepath)
 
     if request_add_free_joint:
-        dom = fix_free_joint(dom, urdf)
+        dom = add_free_joint(dom, urdf)
 
     # Update and add the new fixed assets
     dom = update_obj_assets(dom, output_filepath, mesh_info_dict)
     dom = update_non_obj_assets(dom, output_filepath)
 
     # Add the mujoco input elements
-    dom = add_mujoco_inputs(dom, raw_inputs)
+    dom = add_mujoco_inputs(dom, raw_inputs, scene_inputs)
 
     # Add links as sites
     dom = add_links_as_sites(urdf, dom, request_add_free_joint)
@@ -1177,6 +1231,7 @@ def get_urdf_transforms(urdf_string):
         results[link.name] = get_parent_chain(link.name)
 
     return results
+
 
 def publish_model_on_topic(publish_topic, output_filepath, args=None):
 
