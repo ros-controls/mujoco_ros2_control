@@ -703,8 +703,8 @@ def parse_inputs_xml(filename=None):
     raw_inputs = None
     processed_inputs = None
 
-    # Case 1: The file itself is mujoco_inputs.xml
     if root.tagName == "mujoco_inputs":
+        # The file itself is a standalone xml
         for child in root.childNodes:
             if child.nodeType != child.ELEMENT_NODE:
                 continue
@@ -712,11 +712,9 @@ def parse_inputs_xml(filename=None):
                 raw_inputs = child
             elif child.tagName == "processed_inputs":
                 processed_inputs = child
-        return raw_inputs, processed_inputs
 
-
-    # Case 2: It is a URDF with a <mujoco_inputs> block
-    if root.tagName == "robot":
+    elif root.tagName == "robot":
+        # The file is a URDF 
         mujoco_inputs_node = None
 
         # find <mujoco_inputs>
@@ -726,7 +724,7 @@ def parse_inputs_xml(filename=None):
                 break
 
         if mujoco_inputs_node is None:
-            # URDF without mujoco_inputs → allowed
+            # URDF without mujoco_inputs is allowed
             return None, None
 
         # parse children of <mujoco_inputs>
@@ -737,8 +735,10 @@ def parse_inputs_xml(filename=None):
                 raw_inputs = child
             elif child.tagName == "processed_inputs":
                 processed_inputs = child
+    else:
+        raise ValueError( f"Root tag in file must be either 'mujoco_inputs' (standalone XML) or 'robot' (URDF), not '{root.tagName}'")   
 
-        return raw_inputs, processed_inputs
+    return raw_inputs, processed_inputs
 
 
 def parse_scene_xml(filename=None):
