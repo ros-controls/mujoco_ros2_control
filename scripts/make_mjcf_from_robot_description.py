@@ -1363,12 +1363,13 @@ def add_urdf_free_joint(urdf):
 
 def write_mujoco_scene(scene_inputs, output_filepath):
     from xml.dom.minidom import Document, Node
+
     dom = Document()
 
     root = dom.createElement("mujoco")
     root.setAttribute("model", "scene")
     dom.appendChild(root)
-    
+
     # Add an <include> tag for the mujoco description
     include_node = dom.createElement("include")
     include_node.setAttribute("file", "mujoco_description_formatted.xml")
@@ -1383,7 +1384,7 @@ def write_mujoco_scene(scene_inputs, output_filepath):
                 if child.nodeType == Node.ELEMENT_NODE and child.tagName == "scene":
                     scene_node = child
                     break
-                
+
         # If a <scene> node was found, import all of its child nodes
         if scene_node:
             for child in scene_node.childNodes:
@@ -1488,11 +1489,11 @@ def main(args=None):
     mujoco_scene_file = parsed_args.scene or urdf_path
 
     raw_inputs, processed_inputs = parse_inputs_xml(mujoco_inputs_file)
-    
+
     scene_inputs = None
     if parsed_args.publish_topic or (parsed_args.save_only and not parsed_args.scene):
         scene_inputs = parse_scene_xml(mujoco_scene_file)
-    
+
     # Copy the scene tags from URDF to a separate xml il not publishing
     if not parsed_args.publish_topic and parsed_args.save_only and scene_inputs:
         print("Copying scene tags from URDF to a separate xml")
@@ -1501,15 +1502,12 @@ def main(args=None):
 
     decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_inputs)
 
-
     if parsed_args.asset_dir:
-        assets_filepath= parsed_args.asset_dir
+        assets_filepath = parsed_args.asset_dir
         if not os.path.isabs(parsed_args.asset_dir):
             assets_filepath = os.path.join(os.getcwd(), parsed_args.asset_dir)
-        if output_filepath+"assets" == assets_filepath:
-            raise ValueError(
-                "Output folder must be different from (or not inside) the assets folder"
-            )
+        if output_filepath + "assets" == assets_filepath:
+            raise ValueError("Output folder must be different from (or not inside) the assets folder")
 
     # Add a free joint to the urdf
     if request_add_free_joint:
@@ -1556,9 +1554,10 @@ def main(args=None):
     if parsed_args.publish_topic:
         publish_model_on_topic(parsed_args.publish_topic, output_filepath, args)
 
-   # Copy the existing scene.xml to the output folder if not publishing
+    # Copy the existing scene.xml to the output folder if not publishing
     if not parsed_args.publish_topic and parsed_args.save_only and parsed_args.scene:
-        shutil.copy2(f'{parsed_args.scene}', output_filepath)
+        shutil.copy2(f"{parsed_args.scene}", output_filepath)
+
 
 if __name__ == "__main__":
     main()
