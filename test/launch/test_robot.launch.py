@@ -37,6 +37,8 @@ def generate_launch_description():
         "use_pid", default_value="false", description="If we should use PID control to enable other control modes"
     )
 
+    headless = DeclareLaunchArgument("headless", default_value="false", description="Run in headless mode")
+
     robot_description_content = Command(
         [
             PathJoinSubstitution([FindExecutable(name="xacro")]),
@@ -51,6 +53,9 @@ def generate_launch_description():
             " ",
             "use_pid:=",
             LaunchConfiguration("use_pid"),
+            " ",
+            "headless:=",
+            LaunchConfiguration("headless"),
         ]
     )
 
@@ -103,6 +108,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             use_pid,
+            headless,
             robot_state_publisher_node,
             control_node,
             spawn_joint_state_broadcaster,
