@@ -125,7 +125,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
                 if stem in decompose_dict:
                     # Decomposed mesh: check if a pre-generated OBJ exists and threshold matches
                     mesh_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/{stem}/{stem}/{stem}.obj"
-                    settings_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/decomposition_thresholds.json"
+                    settings_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/metadata.json"
 
                     if os.path.exists(mesh_file) and os.path.exists(settings_file):
                         try:
@@ -350,7 +350,7 @@ def run_obj2mjcf(output_filepath, decompose_dict):
     cmd = ["obj2mjcf", "--obj-dir", f"{output_filepath}assets/{COMPOSED_PATH_NAME}", "--save-mjcf"]
     subprocess.run(cmd)
 
-    thresholds_file = os.path.join(f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}", "decomposition_thresholds.json")
+    thresholds_file = os.path.join(f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}", "metadata.json")
 
     if os.path.exists(thresholds_file):
         with open(thresholds_file) as f:
@@ -1455,6 +1455,18 @@ def main(args=None):
             "You must specify at least one of the following options: "
             "--publish_topic or --save-only with the path of the folder."
         )
+
+    if parsed_args.asset_dir:
+        assets_filepath= parsed_args.asset_dir
+        if not os.path.isabs(parsed_args.asset_dir):
+            assets_filepath = os.path.join(os.getcwd(), parsed_args.asset_dir)
+        print(assets_filepath)
+        print(output_filepath+"assets")
+
+        if output_filepath+"assets" == assets_filepath:
+            raise ValueError(
+                "Output folder must be different from (or not inside) the assets folder"
+            )
 
     # Add a free joint to the urdf
     if request_add_free_joint:
