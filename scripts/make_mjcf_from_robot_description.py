@@ -1369,6 +1369,7 @@ def write_mujoco_scene(scene_inputs, output_filepath):
     root.setAttribute("model", "scene")
     dom.appendChild(root)
     
+    # Add an <include> tag for the mujoco description
     include_node = dom.createElement("include")
     include_node.setAttribute("file", "mujoco_description_formatted.xml")
     root.appendChild(include_node)
@@ -1382,7 +1383,8 @@ def write_mujoco_scene(scene_inputs, output_filepath):
                 if child.nodeType == Node.ELEMENT_NODE and child.tagName == "scene":
                     scene_node = child
                     break
-
+                
+        # If a <scene> node was found, import all of its child nodes
         if scene_node:
             for child in scene_node.childNodes:
                 if child.nodeType == Node.TEXT_NODE and not child.data.strip():
