@@ -41,6 +41,7 @@
 #include <unordered_map>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <hardware_interface/lexical_casts.hpp>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <pluginlib/class_list_macros.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -66,6 +67,108 @@ namespace mujoco_ros2_simulation
 {
 namespace mj = ::mujoco;
 namespace mju = ::mujoco::sample_util;
+
+/**
+ * No-op UI adapter to support running the drivers in a headless environment.
+ */
+class HeadlessAdapter : public mj::PlatformUIAdapter
+{
+public:
+  HeadlessAdapter() = default;
+  ~HeadlessAdapter() override = default;
+
+  std::pair<double, double> GetCursorPosition() const override
+  {
+    return { 0.0, 0.0 };
+  }
+  double GetDisplayPixelsPerInch() const override
+  {
+    return 96.0;
+  }
+  std::pair<int, int> GetFramebufferSize() const override
+  {
+    return { 800, 600 };
+  }
+  std::pair<int, int> GetWindowSize() const override
+  {
+    return { 800, 600 };
+  }
+  bool IsGPUAccelerated() const override
+  {
+    return false;
+  }
+  void PollEvents() override
+  {
+  }
+  void SetClipboardString(const char* /*text*/) override
+  {
+  }
+  void SetVSync(bool /*enabled*/) override
+  {
+  }
+  void SetWindowTitle(const char* /*title*/) override
+  {
+  }
+  bool ShouldCloseWindow() const override
+  {
+    return false;
+  }
+  void SwapBuffers() override
+  {
+  }
+  void ToggleFullscreen() override
+  {
+  }
+
+  bool IsLeftMouseButtonPressed() const override
+  {
+    return false;
+  }
+  bool IsMiddleMouseButtonPressed() const override
+  {
+    return false;
+  }
+  bool IsRightMouseButtonPressed() const override
+  {
+    return false;
+  }
+
+  bool IsAltKeyPressed() const override
+  {
+    return false;
+  }
+  bool IsCtrlKeyPressed() const override
+  {
+    return false;
+  }
+  bool IsShiftKeyPressed() const override
+  {
+    return false;
+  }
+
+  bool IsMouseButtonDownEvent(int /*act*/) const override
+  {
+    return false;
+  }
+  bool IsKeyDownEvent(int /*act*/) const override
+  {
+    return false;
+  }
+
+  int TranslateKeyCode(int /*key*/) const override
+  {
+    return 0;
+  }
+  mjtButton TranslateMouseButton(int /*button*/) const override
+  {
+    return mjBUTTON_NONE;
+  }
+
+  bool RefreshMjrContext(const mjModel* /*m*/, int /*fontscale*/) override
+  {
+    return false;
+  }
+};
 
 // Clamps v to the lo or high value
 double clamp(double v, double lo, double hi)
@@ -457,6 +560,10 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // Pull the lidar publish rate out of the info, if present, otherwise default to 5 hz.
   const auto lidar_publish_rate = std::stod(get_parameter("lidar_publish_rate").value_or("5.0"));
 
+  // Check for headless mode
+  bool headless = hardware_interface::parse_bool(get_parameter("headless").value_or("false"));
+  RCLCPP_INFO_EXPRESSION(rclcpp::get_logger("MujocoSystemInterface"), headless, "Running in HEADLESS mode.");
+
   // We essentially reconstruct the 'simulate.cc::main()' function here, and
   // launch a Simulate object with all necessary rendering process/options
   // attached.
@@ -476,47 +583,57 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   auto sim_ready = std::make_shared<std::promise<void>>();
   std::future<void> sim_ready_future = sim_ready->get_future();
 
-  // Launch the UI loop in the background
-  ui_thread_ = std::thread([this, sim_ready]() {
-    sim_ = std::make_unique<mj::Simulate>(std::make_unique<mj::GlfwAdapter>(), &cam_, &opt_, &pert_,
+  if (headless)
+  {
+    sim_ = std::make_unique<mj::Simulate>(std::make_unique<HeadlessAdapter>(), &cam_, &opt_, &pert_,
                                           /* is_passive = */ false);
-
-    // Add ros2 control icon for the taskbar
-    std::string icon_location =
-        ament_index_cpp::get_package_share_directory("mujoco_ros2_simulation") + "/resources/mujoco_logo.png";
-    std::vector<unsigned char> image;
-    unsigned width, height;
-    unsigned error = lodepng::decode(image, width, height, icon_location);
-
-    // Only process the icon if we successfully loaded it. Otherwise, just proceed without
-    if (error)
-    {
-      RCLCPP_WARN_STREAM(rclcpp::get_logger("MujocoSystemInterface"),
-                         "LodePNG error " << error << ": " << lodepng_error_text(error)
-                                          << ". Icon file not loaded: " << icon_location);
-    }
-    else
-    {
-      GLFWimage icon;
-      icon.width = width;
-      icon.height = height;
-      icon.pixels = image.data();
-
-      GLFWwindow* window_pointer = glfwGetCurrentContext();
-
-      glfwSetWindowIcon(window_pointer, 1, &icon);
-    }
-
-    // Hide UI panels programmatically
-    sim_->ui0_enable = false;  // Hide left panel
-    sim_->ui1_enable = false;  // Hide right panel
     // Notify sim that we are ready
     sim_ready->set_value();
+  }
+  else
+  {
+    // Launch the UI loop in the background
+    ui_thread_ = std::thread([this, sim_ready]() {
+      sim_ = std::make_unique<mj::Simulate>(std::make_unique<mj::GlfwAdapter>(), &cam_, &opt_, &pert_,
+                                            /* is_passive = */ false);
 
-    RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Starting the mujoco rendering thread...");
-    // Blocks until terminated
-    sim_->RenderLoop();
-  });
+      // Add ros2 control icon for the taskbar
+      std::string icon_location =
+          ament_index_cpp::get_package_share_directory("mujoco_ros2_simulation") + "/resources/mujoco_logo.png";
+      std::vector<unsigned char> image;
+      unsigned width, height;
+      unsigned error = lodepng::decode(image, width, height, icon_location);
+
+      // Only process the icon if we successfully loaded it. Otherwise, just proceed without
+      if (error)
+      {
+        RCLCPP_WARN_STREAM(rclcpp::get_logger("MujocoSystemInterface"),
+                           "LodePNG error " << error << ": " << lodepng_error_text(error)
+                                            << ". Icon file not loaded: " << icon_location);
+      }
+      else
+      {
+        GLFWimage icon;
+        icon.width = width;
+        icon.height = height;
+        icon.pixels = image.data();
+
+        GLFWwindow* window_pointer = glfwGetCurrentContext();
+
+        glfwSetWindowIcon(window_pointer, 1, &icon);
+      }
+
+      // Hide UI panels programmatically
+      sim_->ui0_enable = false;  // Hide left panel
+      sim_->ui1_enable = false;  // Hide right panel
+      // Notify sim that we are ready
+      sim_ready->set_value();
+
+      RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Starting the mujoco rendering thread...");
+      // Blocks until terminated
+      sim_->RenderLoop();
+    });
+  }
 
   if (sim_ready_future.wait_for(2s) == std::future_status::timeout)
   {
@@ -604,10 +721,20 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   sim_->opt.flags[mjVIS_RANGEFINDER] = false;
 
   // When the interface is activated, we start the physics engine.
-  physics_thread_ = std::thread([this]() {
+  physics_thread_ = std::thread([this, headless]() {
     // Load the simulation and do an initial forward pass
     RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Starting the mujoco physics thread...");
-    sim_->Load(mj_model_, mj_data_, model_path_.c_str());
+    if (headless)
+    {
+      const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+      sim_->m_ = mj_model_;
+      sim_->d_ = mj_data_;
+      mju::strcpy_arr(sim_->filename, model_path_.c_str());
+    }
+    else
+    {
+      sim_->Load(mj_model_, mj_data_, model_path_.c_str());
+    }
     // lock the sim mutex
     {
       const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);

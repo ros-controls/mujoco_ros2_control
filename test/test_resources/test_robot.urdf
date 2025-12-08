@@ -3,6 +3,7 @@
 
   <!-- Whether or not to use PID control -->
   <xacro:arg name="use_pid" default="false"/>
+  <xacro:arg name="headless" default="false"/>
 
   <link name="world"/>
 
@@ -147,6 +148,9 @@
 
       <!-- Override the slowdown settings in the Simulate App and run at 3x speed -->
       <param name="sim_speed_factor">3.0</param>
+
+      <!-- If set to true, will not launch the Simulate App window -->
+      <param name="headless">$(arg headless)</param>
 
       <!-- Publish camera images at 6 hz -->
       <param name="camera_publish_rate">6.0</param>
