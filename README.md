@@ -88,6 +88,12 @@ Just specify the plugin and point to a valid MJCF on launch:
         All lidar sensors in the simulation will be configured to publish these scan messages at the same rate.
       -->
       <param name="lidar_publish_rate">10.0</param>
+
+      <!--
+        The parameter headless can be used to choose whether to launch the MuJoCo simulator in headless mode or not.
+        By default, it is set to false
+      -->
+      <param name="headless">false</param>
     </hardware>
   ...
 ```
