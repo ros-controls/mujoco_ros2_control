@@ -131,6 +131,12 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
 void MujocoCameras::init()
 {
   // Start the rendering thread process
+  if (!glfwInit())
+  {
+    RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Disabling camera publishing.");
+    publish_images_ = false;
+    return;
+  }
   publish_images_ = true;
   rendering_thread_ = std::thread(&MujocoCameras::update_loop, this);
 }
@@ -150,7 +156,6 @@ void MujocoCameras::close()
 void MujocoCameras::update_loop()
 {
   // We create an offscreen context specific to this process for managing camera rendering.
-  glfwInit();
   glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
   GLFWwindow* window = glfwCreateWindow(1, 1, "", NULL, NULL);
   glfwMakeContextCurrent(window);
