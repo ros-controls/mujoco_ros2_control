@@ -3,10 +3,10 @@
   <worldbody>
     <body name="upperarm">
       <inertial pos="0.5 0 0" quat="0.5 0.5 0.5 0.5" mass="27" diaginertia="0.225 0.225 0.0225"/>
-      <joint name="joint1" pos="0 0 0" axis="0 0 1" range="-3.14 3.14" actuatorfrcrange="-1000 1000" frictionloss="1.0" damping="2.0"/>
+      <joint name="actuator1" pos="0 0 0" axis="0 0 1" range="-3.14 3.14" actuatorfrcrange="-1000 1000" frictionloss="1.0" damping="2.0"/>
       <body name="forearm" pos="1 0 0" gravcomp="1.0">
         <inertial pos="0.5 0 0" quat="0.5 0.5 0.5 0.5" mass="27" diaginertia="0.225 0.225 0.0225"/>
-        <joint name="joint2" pos="0 0 0" axis="0 0 1" range="-3.14 3.14" actuatorfrcrange="-1000 1000"/>
+        <joint name="actuator2" pos="0 0 0" axis="0 0 1" range="-3.14 3.14" actuatorfrcrange="-1000 1000"/>
         <geom size="0.5 0.05 0.05" pos="0.5 0 0" type="box" class="collision"/>
         <geom size="0.5 0.05 0.05" pos="0.5 0 0" type="box" rgba="0 0 1 1" class="visual"/>
         <geom size="0.05 0.05 0.05" pos="1.05 0 0.1" type="box" class="collision"/>
@@ -42,8 +42,8 @@
     </default>
   </default>
   <actuator>
-    <position name="joint1" joint="joint1" kp="1000" dampratio="1.0"/>
-    <position name="joint2" joint="joint2" kp="1000" dampratio="1.0"/>
+    <position name="actuator1" joint="actuator1" kp="1000" dampratio="1.0"/>
+    <position name="actuator2" joint="actuator2" kp="1000" dampratio="1.0"/>
   </actuator>
   <sensor>
     <rangefinder name="lidar" site="rf"/>

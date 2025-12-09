@@ -257,6 +257,14 @@
       <state_interface name="effort"/>
       <state_interface name="torque"/>
     </joint>
+    <transmission name="joint1_trans">
+      <plugin>transmission_interface/SimpleTransmission</plugin>
+      <actuator name="actuator1" role="actuator1"/>
+      <joint name="joint1" role="joint1">
+        <mechanical_reduction>1.0</mechanical_reduction>
+        <offset>0.0</offset>
+      </joint>
+    </transmission>
     <joint name="joint2">
       <command_interface name="position"/>
       <xacro:if value="$(arg use_pid)">
@@ -271,6 +279,14 @@
       <state_interface name="effort"/>
       <state_interface name="torque"/>
     </joint>
+    <transmission name="joint2_trans">
+      <plugin>transmission_interface/SimpleTransmission</plugin>
+      <actuator name="actuator2" role="actuator1"/>
+      <joint name="joint2" role="joint1">
+        <mechanical_reduction>1.0</mechanical_reduction>
+        <offset>0.0</offset>
+      </joint>
+    </transmission>
 
     <!-- For cameras, the sensor name _must_ match the camera name in the MJCF -->
     <sensor name="camera">

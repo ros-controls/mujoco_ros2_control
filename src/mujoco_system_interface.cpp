@@ -696,6 +696,50 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   register_joints(get_hardware_info());
   register_sensors(get_hardware_info());
   set_initial_pose();
+  auto transmissions = get_hardware_info().transmissions;
+  for (const auto & t_info : transmissions)
+  {
+      RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                "Transmission '%s' has the following actuators:", t_info.name.c_str());
+
+        for (const auto & actuator_info : t_info.actuators)
+        {
+          RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                    "  Actuator name: %s", actuator_info.name.c_str());
+
+            auto it = std::find_if(
+              joint_states_.begin(),
+              joint_states_.end(),
+              [&](const JointState & j) {
+                  if (j.mj_actuator_id < 0) return false;
+                  const char* mujoco_actuator_name = mj_id2name(mj_model_, mjOBJ_ACTUATOR, j.mj_actuator_id);
+                  return actuator_info.name == mujoco_actuator_name;
+              });
+
+
+            if (it != joint_states_.end())
+            {
+                RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                            "Transmission actuator '%s' matches the MuJoCo actuator",
+                            actuator_info.name.c_str());
+                double reduction = 1.0;
+                double offset = 0.0;
+                if (!t_info.joints.empty())
+                {
+                    reduction = t_info.joints[0].mechanical_reduction;
+                    offset = t_info.joints[0].offset;
+                }
+
+                
+            }
+            else
+            {
+                RCLCPP_WARN(rclcpp::get_logger("MujocoSystemInterface"),
+                            "Transmission actuator '%s' not found in MuJoCo model",
+                            actuator_info.name.c_str());
+            }
+        }
+  }
 
   // Time publisher will be pushed from the physics_thread_
   clock_publisher_ = mujoco_node_->create_publisher<rosgraph_msgs::msg::Clock>("/clock", 1);
@@ -1154,6 +1198,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 void MujocoSystemInterface::register_joints(const hardware_interface::HardwareInfo& hardware_info)
 {
   joint_states_.resize(hardware_info.joints.size());
+  auto transmissions = get_hardware_info().transmissions;
 
   // Pull the name of the file to load for starting config, if present. We only override start position if that
   // parameter exists and it is not an empty string
