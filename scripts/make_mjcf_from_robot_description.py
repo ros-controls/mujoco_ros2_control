@@ -18,7 +18,6 @@
 # under the License.
 
 import argparse
-import bpy
 import mujoco
 import os
 import pathlib
@@ -32,6 +31,7 @@ import json
 import math
 
 import numpy as np
+import trimesh  # Added trimesh
 
 from urdf_parser_py.urdf import URDF
 
@@ -212,10 +212,6 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
 
         print(f"processing {full_filepath}")
 
-        # Clear any existing objects in the scene
-        bpy.ops.object.select_all(action="SELECT")
-        bpy.ops.object.delete(use_global=False)
-
         # if we want to decompose the mesh, put it in decomposed filepath, otherwise put it in full
         if filename_no_ext in decompose_dict:
             assets_relative_filepath = f"{DECOMPOSED_PATH_NAME}/{filename_no_ext}/"
@@ -224,22 +220,26 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
             assets_relative_filepath = f"{COMPOSED_PATH_NAME}/"
         assets_relative_filepath += filename_no_ext
 
+        output_path = f"{directory}assets/{assets_relative_filepath}.obj"
+
         # Import the .stl or .dae file
         if filename_ext.lower() == ".stl":
             if filename_no_ext in decompose_dict and not convert_stl_to_obj:
                 raise ValueError("The --convert_stl_to_obj argument must be specified to decompose .stl mesh")
             if convert_stl_to_obj:
-                bpy.ops.wm.stl_import(filepath=full_filepath)
+                # Load mesh using trimesh
+                mesh = trimesh.load(full_filepath)
 
                 # bring in file color from urdf
-                new_mat = bpy.data.materials.new(name=f"material_{filename_no_ext}")
-                new_mat.diffuse_color = mesh_item["color"]
-                o = bpy.context.selected_objects[0]
-                o.active_material = new_mat
+                if "color" in mesh_item:
+                    # trimesh expects 0-255 uint8 for colors
+                    rgba = mesh_item["color"]
+                    color_uint8 = (np.array(rgba) * 255).astype(np.uint8)
+                    # Apply to all faces
+                    mesh.visual.face_colors = color_uint8
 
-                bpy.ops.wm.obj_export(
-                    filepath=f"{directory}assets/{assets_relative_filepath}.obj", forward_axis="Y", up_axis="Z"
-                )
+                # Export to OBJ
+                mesh.export(output_path)
                 xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
 
             else:
@@ -262,20 +262,27 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
             z_up_dae_txt = set_up_axis_to_z_up(full_filepath)
 
             # make a temporary file rather than overwriting the old one
-            temp_file = tempfile.NamedTemporaryFile(suffix=".dae", delete=False)
+            temp_file = tempfile.NamedTemporaryFile(suffix=".dae", mode="w+", delete=False)
             temp_filepath = temp_file.name
             try:
-                with open(temp_filepath, "w") as f:
-                    f.write(z_up_dae_txt)
-                    # import into blender
-                    bpy.ops.wm.collada_import(filepath=temp_filepath)
-            finally:
+                temp_file.write(z_up_dae_txt)
                 temp_file.close()
-                os.remove(temp_filepath)
 
-            bpy.ops.wm.obj_export(
-                filepath=f"{directory}assets/{assets_relative_filepath}.obj", forward_axis="Y", up_axis="Z"
-            )
+                # Load scene using trimesh
+                scene = trimesh.load(temp_filepath)
+
+                # DAEs load as a Scene, we need to convert to a single mesh
+                if isinstance(scene, trimesh.Scene):
+                    # Concatenate all geometries in the scene
+                    mesh = scene.to_mesh()
+                else:
+                    mesh = scene
+
+                mesh.export(output_path)
+            finally:
+                if os.path.exists(temp_filepath):
+                    os.remove(temp_filepath)
+
             xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
         else:
             print(f"Can't convert {full_filepath} \n\tOnly stl and dae file extensions are supported at the moment")
