@@ -1295,10 +1295,7 @@ def publish_model_on_topic(publish_topic, output_filepath, args=None):
         pass
     finally:
         mjcf_node.destroy_node()
-        try:
-            rclpy.shutdown()
-        except Exception:
-            pass
+        rclpy.try_shutdown()
 
 
 def add_urdf_free_joint(urdf):
@@ -1479,10 +1476,7 @@ def main(args=None):
         temp_dir = tempfile.TemporaryDirectory()
         output_filepath = os.path.join(temp_dir.name, "")
     else:
-        raise ValueError(
-            "You must specify at least one of the following options: "
-            "--publish_topic or --save_only."
-        )
+        raise ValueError("You must specify at least one of the following options: " "--publish_topic or --save_only.")
 
     # Use provided MuJoCo input or scene XML files if given; otherwise use the URDF.
     mujoco_inputs_file = parsed_args.mujoco_inputs or urdf_path
