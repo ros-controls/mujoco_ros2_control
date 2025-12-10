@@ -1481,7 +1481,7 @@ def main(args=None):
     else:
         raise ValueError(
             "You must specify at least one of the following options: "
-            "--publish_topic or --save-only with the path of the folder."
+            "--publish_topic or --save_only."
         )
 
     # Use provided MuJoCo input or scene XML files if given; otherwise use the URDF.
@@ -1506,7 +1506,7 @@ def main(args=None):
         assets_filepath = parsed_args.asset_dir
         if not os.path.isabs(parsed_args.asset_dir):
             assets_filepath = os.path.join(os.getcwd(), parsed_args.asset_dir)
-        if output_filepath + "assets" == assets_filepath:
+        if output_filepath + "assets" in assets_filepath:
             raise ValueError("Output folder must be different from (or not inside) the assets folder")
 
     # Add a free joint to the urdf
