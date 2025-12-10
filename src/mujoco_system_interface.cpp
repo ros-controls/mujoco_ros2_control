@@ -617,20 +617,22 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
         icon.width = width;
         icon.height = height;
         icon.pixels = image.data();
-
-        GLFWwindow* window_pointer = glfwGetCurrentContext();
-
-        glfwSetWindowIcon(window_pointer, 1, &icon);
+        glfwSetWindowIcon(glfwGetCurrentContext(), 1, &icon);
       }
+
+      // Set glfw window size to max size of the primary monitor
+      const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+      glfwSetWindowSize(glfwGetCurrentContext(), mode->width, mode->height);
 
       // Hide UI panels programmatically
       sim_->ui0_enable = false;  // Hide left panel
       sim_->ui1_enable = false;  // Hide right panel
+
       // Notify sim that we are ready
       sim_ready->set_value();
 
-      RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Starting the mujoco rendering thread...");
       // Blocks until terminated
+      RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Starting the mujoco rendering thread...");
       sim_->RenderLoop();
     });
   }
