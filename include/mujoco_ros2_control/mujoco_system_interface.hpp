@@ -110,6 +110,15 @@ private:
   void register_joints(const hardware_interface::HardwareInfo& info);
 
   /**
+   * @brief Loads transmission information into the HW interface.
+   *
+   * Will pull transmission information from the provided HardwareInfo, and map it to the appropriate
+   * joints/actuators in the sim's mujoco data. This is primarily used to have cases where the URDF
+   * specifies the transmission ratios between joints and physical actuators.
+   */
+  bool register_transmissions(const hardware_interface::HardwareInfo& info);
+
+  /**
    * @brief Constructs all sensor data containers for the interface
    *
    * Pulls sensors (FTS and IMUs) out of the HardwareInfo and uses it to map relevant data containers
