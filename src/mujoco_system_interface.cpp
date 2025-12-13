@@ -32,6 +32,7 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <regex>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -459,6 +460,70 @@ ActuatorType getActuatorType(const mjModel* mj_model, int mujoco_actuator_id)
   return actuator_type;
 }
 
+/**
+ * @brief Get the MuJoCo actuator ID based on the actuator name.
+ * @param actuator_name The name of the actuator.
+ * @param mj_model Pointer to the MuJoCo model.
+ * @return The actuator ID if found, otherwise -1.
+ */
+int get_actuator_id(const std::string& actuator_name, const mjModel* mj_model)
+{
+  // Find the actuator ID in the mujoco model based on the actuator name
+  for (int i = 0; i < mj_model->nu; ++i)
+  {
+    const char* mujoco_actuator_name = mj_id2name(mj_model, mjOBJ_ACTUATOR, i);
+    if (actuator_name == mujoco_actuator_name)
+    {
+      return i;
+    }
+  }
+  return -1;  // Actuator not found
+}
+
+/**
+ * @brief Get the corresponding actuator name for a given joint name using transmissions.
+ * @param joint_name The name of the joint.
+ * @param hardware_info The hardware information containing transmissions.
+ * @param mj_model Pointer to the MuJoCo model.
+ * @return The corresponding actuator name if found, otherwise returns the joint name.
+ */
+std::string get_joint_actuator_name(const std::string& joint_name,
+                                    const hardware_interface::HardwareInfo& hardware_info, const mjModel* mj_model)
+{
+  std::string actuator_name = joint_name;  // Default to joint name
+
+  for (const auto& transmission : hardware_info.transmissions)
+  {
+    for (const auto& joint : transmission.joints)
+    {
+      if (joint.name == joint_name)
+      {
+        if (get_actuator_id(joint_name, mj_model) != -1)
+        {
+          return joint_name;  // Direct match found
+        }
+        // replace "joint" with "actuator" for the corresponding role
+        const std::string corresponding_actuator_role = std::regex_replace(joint.role, std::regex("joint"), "actuator");
+        for (const auto& actuator : transmission.actuators)
+        {
+          if (actuator.role == corresponding_actuator_role)
+          {
+            RCLCPP_INFO(rclcpp::get_logger("mujoco_system"), "Mapped joint '%s' to actuator '%s' based on role '%s'",
+                        joint_name.c_str(), actuator.name.c_str(), corresponding_actuator_role.c_str());
+            return actuator.name;
+          }
+        }
+        RCLCPP_WARN(rclcpp::get_logger("mujoco_system"),
+                    "No matching actuator found for joint '%s' with role '%s'. Using joint name as actuator name.",
+                    joint_name.c_str(), joint.role.c_str());
+        break;
+      }
+    }
+  }
+
+  return actuator_name;
+}
+
 MujocoSystemInterface::MujocoSystemInterface() = default;
 
 MujocoSystemInterface::~MujocoSystemInterface()
@@ -695,7 +760,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // Pull joint and sensor information
   register_joints(get_hardware_info());
   register_sensors(get_hardware_info());
-  if(!register_transmissions(get_hardware_info()))
+  if (!register_transmissions(get_hardware_info()))
   {
     RCLCPP_FATAL(rclcpp::get_logger("MujocoSystemInterface"), "Failed to register transmissions, exiting...");
     return hardware_interface::CallbackReturn::FAILURE;
@@ -1195,10 +1260,11 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
   for (size_t joint_index = 0; joint_index < hardware_info.joints.size(); joint_index++)
   {
     auto joint = hardware_info.joints.at(joint_index);
-    int mujoco_joint_id = mj_name2id(mj_model_, mjtObj::mjOBJ_JOINT, joint.name.c_str());
+    const std::string actuator_name = get_joint_actuator_name(joint.name, hardware_info, mj_model_);
+    int mujoco_joint_id = mj_name2id(mj_model_, mjtObj::mjOBJ_JOINT, actuator_name.c_str());
     if (mujoco_joint_id == -1)
     {
-      RCLCPP_ERROR_STREAM(get_logger(), "Failed to find joint in mujoco model, joint name: " << joint.name);
+      RCLCPP_ERROR_STREAM(get_logger(), "Failed to find joint in mujoco model, joint name: " << actuator_name);
       continue;
     }
 
@@ -1215,8 +1281,9 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
     }
 
     // Is no mapping was found, try fallback to looking for an actuator with the same name as the joint
-    mujoco_actuator_id = mujoco_actuator_id == -1 ? mj_name2id(mj_model_, mjtObj::mjOBJ_ACTUATOR, joint.name.c_str()) :
-                                                    mujoco_actuator_id;
+    mujoco_actuator_id = mujoco_actuator_id == -1 ?
+                             mj_name2id(mj_model_, mjtObj::mjOBJ_ACTUATOR, actuator_name.c_str()) :
+                             mujoco_actuator_id;
 
     // Add to the joint hw information map
     joint_hw_info_.insert(std::make_pair(joint.name, joint));
@@ -1294,7 +1361,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
     if (mujoco_actuator_id == -1)
     {
       // This isn't a failure the joint just won't be controllable
-      RCLCPP_WARN_STREAM(get_logger(), "No actuator found for joint: " << joint.name);
+      RCLCPP_WARN_STREAM(get_logger(), "No actuator found for joint: " << actuator_name);
       continue;
     }
 
@@ -1303,7 +1370,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
     if (last_joint_state.actuator_type == ActuatorType::CUSTOM)
     {
       RCLCPP_INFO(get_logger(), "Custom MuJoCo actuator for the joint : %s , using all command interfaces",
-                  joint.name.c_str());
+                  actuator_name.c_str());
     }
 
     // command interfaces
@@ -1320,7 +1387,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
 
         if (last_joint_state.actuator_type == ActuatorType::POSITION)
         {
-          RCLCPP_INFO(get_logger(), "Using MuJoCo position actuator for the joint : '%s'", joint.name.c_str());
+          RCLCPP_INFO(get_logger(), "Using MuJoCo position actuator for the joint : '%s'", actuator_name.c_str());
           // Direct position control enabled for position actuator
           last_joint_state.is_position_control_enabled = true;
           last_joint_state.position_command =
@@ -1331,7 +1398,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
                  last_joint_state.actuator_type == ActuatorType::CUSTOM)
         {
           last_joint_state.pos_pid =
-              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.position." + joint.name, "", false);
+              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.position." + actuator_name, "", false);
           last_joint_state.pos_pid->initialize_from_ros_parameters();
           const auto gains = last_joint_state.pos_pid->get_gains();
           last_joint_state.has_pos_pid =
@@ -1345,8 +1412,8 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             RCLCPP_INFO(get_logger(),
                         "Position control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
                         "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
-                        joint.name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_, gains.antiwindup_strat_.i_max,
-                        gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
+                        actuator_name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_,
+                        gains.antiwindup_strat_.i_max, gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
                         gains.antiwindup_strat_.to_string().c_str());
           }
           else
@@ -1354,7 +1421,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             RCLCPP_ERROR(get_logger(),
                          "Position command interface for the joint : %s is not supported with velocity or motor "
                          "actuator without defining the PIDs",
-                         joint.name.c_str());
+                         actuator_name.c_str());
           }
         }
       }
@@ -1364,10 +1431,10 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
         // Direct control for velocity actuators; velocity PID required for motor or custom actuators.
         RCLCPP_ERROR_EXPRESSION(get_logger(), last_joint_state.actuator_type == ActuatorType::POSITION,
                                 "Velocity command interface for the joint : %s is not supported with position actuator",
-                                joint.name.c_str());
+                                actuator_name.c_str());
         if (last_joint_state.actuator_type == ActuatorType::VELOCITY)
         {
-          RCLCPP_INFO(get_logger(), "Using MuJoCo velocity actuator for the joint : '%s'", joint.name.c_str());
+          RCLCPP_INFO(get_logger(), "Using MuJoCo velocity actuator for the joint : '%s'", actuator_name.c_str());
           // Direct velocity control enabled for velocity actuator
           last_joint_state.is_velocity_control_enabled = true;
           last_joint_state.velocity_command =
@@ -1377,7 +1444,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
                  last_joint_state.actuator_type == ActuatorType::CUSTOM)
         {
           last_joint_state.vel_pid =
-              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.velocity." + joint.name, "", false);
+              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.velocity." + actuator_name, "", false);
           last_joint_state.vel_pid->initialize_from_ros_parameters();
           const auto gains = last_joint_state.vel_pid->get_gains();
           last_joint_state.has_vel_pid =
@@ -1391,8 +1458,8 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             RCLCPP_INFO(get_logger(),
                         "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
                         "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
-                        joint.name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_, gains.antiwindup_strat_.i_max,
-                        gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
+                        actuator_name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_,
+                        gains.antiwindup_strat_.i_max, gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
                         gains.antiwindup_strat_.to_string().c_str());
           }
           else
@@ -1400,7 +1467,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
             RCLCPP_ERROR(get_logger(),
                          "Velocity command interface for the joint : %s is not supported with motor or custom actuator "
                          "without defining the PIDs",
-                         joint.name.c_str());
+                         actuator_name.c_str());
           }
         }
       }
@@ -1416,11 +1483,11 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
                 last_joint_state.actuator_type == ActuatorType::VELOCITY,
             "Effort command interface for the joint : %s is not supported with position or velocity actuator."
             "Skipping it.",
-            joint.name.c_str());
+            actuator_name.c_str());
         if (last_joint_state.actuator_type == ActuatorType::MOTOR ||
             last_joint_state.actuator_type == ActuatorType::CUSTOM)
         {
-          RCLCPP_INFO(get_logger(), "Using MuJoCo motor or custom actuator for the joint : '%s'", joint.name.c_str());
+          RCLCPP_INFO(get_logger(), "Using MuJoCo motor or custom actuator for the joint : '%s'", actuator_name.c_str());
           // Direct effort control enabled for MOTOR or CUSTOM actuator
           last_joint_state.is_effort_control_enabled = true;
           last_joint_state.effort_command =
@@ -1430,13 +1497,13 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
     }
     if (!has_command_interfaces)
     {
-      RCLCPP_INFO(get_logger(), "Joint : %s is a passive joint", joint.name.c_str());
+      RCLCPP_INFO(get_logger(), "Joint : %s is a passive joint", actuator_name.c_str());
     }
     else if (!last_joint_state.is_position_control_enabled && !last_joint_state.is_velocity_control_enabled &&
              !last_joint_state.is_effort_control_enabled && !last_joint_state.is_position_pid_control_enabled &&
              !last_joint_state.is_velocity_pid_control_enabled)
     {
-      throw std::runtime_error(std::string("Joint '") + joint.name +
+      throw std::runtime_error(std::string("Joint '") + actuator_name +
                                "' has an unsupported command interface for the specified MuJoCo actuator");
     }
 
@@ -1452,17 +1519,6 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
 bool MujocoSystemInterface::register_transmissions(const hardware_interface::HardwareInfo& hardware_info)
 {
   const auto transmissions = hardware_info.transmissions;
-  const auto find_actuator_in_model = [this](const std::string& actuator_name) {
-    for (int i = 0; i < mj_model_->nu; ++i)
-    {
-      const char* mujoco_actuator_name = mj_id2name(mj_model_, mjOBJ_ACTUATOR, i);
-      if (actuator_name == mujoco_actuator_name)
-      {
-        return i;
-      }
-    }
-    return -1;
-  };
   for (const auto& t_info : transmissions)
   {
     RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
@@ -1473,7 +1529,7 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
     for (const auto& joint_info : t_info.joints)
     {
       RCLCPP_DEBUG(rclcpp::get_logger("MujocoSystemInterface"), "Joint name: %s", joint_info.name.c_str());
-      if (find_actuator_in_model(joint_info.name) != -1)
+      if (get_actuator_id(joint_info.name, mj_model_) != -1)
       {
         RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Transmission joint '%s' matches the MuJoCo actuator",
                     joint_info.name.c_str());
@@ -1501,7 +1557,7 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
     {
       RCLCPP_DEBUG(rclcpp::get_logger("MujocoSystemInterface"), "Actuator name: %s", actuator_info.name.c_str());
 
-      if (find_actuator_in_model(actuator_info.name) != -1)
+      if (get_actuator_id(actuator_info.name, mj_model_) != -1)
       {
         RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
                     "Transmission actuator '%s' matches the MuJoCo actuator", actuator_info.name.c_str());
@@ -1515,10 +1571,11 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
       }
     }
 
-    if(!all_transmission_actuators)
+    if (!all_transmission_actuators)
     {
       RCLCPP_ERROR(rclcpp::get_logger("MujocoSystemInterface"),
-                   "Not all transmission actuators and joints for transmission '%s' found as MuJoCo actuators. This shouldn't happen.",
+                   "Not all transmission actuators and joints for transmission '%s' found as MuJoCo actuators. This "
+                   "shouldn't happen.",
                    t_info.name.c_str());
       return false;
     }
