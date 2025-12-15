@@ -19,11 +19,7 @@ import time
 import unittest
 
 from ament_index_python.packages import get_package_share_directory
-from controller_manager.test_utils import (
-    check_controllers_running,
-    check_if_js_published,
-    check_node_running
-)
+from controller_manager.test_utils import check_controllers_running, check_if_js_published, check_node_running
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -35,28 +31,30 @@ import rclpy
 from rosgraph_msgs.msg import Clock
 from std_msgs.msg import Float64MultiArray
 from sensor_msgs.msg import JointState
+from controller_manager_msgs.srv import ListHardwareInterfaces
 
 
 # This function specifies the processes to be run for our test
-def generate_test_description_common(use_pid='false'):
+def generate_test_description_common(use_pid="false"):
     # This is necessary to get unbuffered output from the process under test
     proc_env = os.environ.copy()
-    proc_env['PYTHONUNBUFFERED'] = '1'
+    proc_env["PYTHONUNBUFFERED"] = "1"
     launch_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
-                get_package_share_directory('mujoco_ros2_simulation'),
-                'launch/test_robot.launch.py',
+                get_package_share_directory("mujoco_ros2_simulation"),
+                "launch/test_robot.launch.py",
             )
         ),
-        launch_arguments={'headless': 'true', 'use_pid': use_pid}.items(),
+        launch_arguments={"headless": "true", "use_pid": use_pid}.items(),
     )
 
     return LaunchDescription([launch_include, KeepAliveProc(), ReadyToTest()])
 
+
 @pytest.mark.rostest
 def generate_test_description():
-    return generate_test_description_common(use_pid='false')
+    return generate_test_description_common(use_pid="false")
 
 
 class TestFixture(unittest.TestCase):
@@ -70,36 +68,36 @@ class TestFixture(unittest.TestCase):
         rclpy.shutdown()
 
     def setUp(self):
-        self.node = rclpy.create_node('test_node')
+        self.node = rclpy.create_node("test_node")
 
     def tearDown(self):
         self.node.destroy_node()
 
     def test_node_start(self, proc_output):
-        check_node_running(self.node, 'robot_state_publisher')
+        check_node_running(self.node, "robot_state_publisher")
 
     def test_clock(self):
-        topic_list = [('/clock', Clock)]
+        topic_list = [("/clock", Clock)]
         with WaitForTopics(topic_list, timeout=10.0):
-            print('/clock is receiving messages!')
+            print("/clock is receiving messages!")
 
     def test_check_if_msgs_published(self):
         check_if_js_published(
-            '/joint_states',
+            "/joint_states",
             [
-                'joint1',
-                'joint2',
+                "joint1",
+                "joint2",
             ],
         )
 
     def test_arm(self, launch_service, proc_info, proc_output):
 
         # Check if the controllers are running
-        cnames = ['position_controller', 'joint_state_broadcaster']
+        cnames = ["position_controller", "joint_state_broadcaster"]
         check_controllers_running(self.node, cnames)
 
         # Create a publisher to send commands to the position controller
-        pub = self.node.create_publisher(Float64MultiArray, '/position_controller/commands', 10)
+        pub = self.node.create_publisher(Float64MultiArray, "/position_controller/commands", 10)
 
         # Wait for subscriber to connect
         end_time = time.time() + 10
@@ -118,14 +116,78 @@ class TestFixture(unittest.TestCase):
         time.sleep(2.0)
 
         # Now, check that the joint states have been updated accordingly
-        joint_state_topic = '/joint_states'
+        joint_state_topic = "/joint_states"
         wait_for_topics = WaitForTopics([(joint_state_topic, JointState)], timeout=20.0)
         assert wait_for_topics.wait(), f"Topic '{joint_state_topic}' not found!"
         msgs = wait_for_topics.received_messages(joint_state_topic)
         msg = msgs[0]
         assert len(msg.name) >= 2, "Joint states message doesn't have 2 joints"
-        joint1_index = msg.name.index('joint1')
-        joint2_index = msg.name.index('joint2')
-        self.assertAlmostEqual(msg.position[joint1_index], 0.5, delta=0.05, msg="joint1 did not reach the commanded position")
-        self.assertAlmostEqual(msg.position[joint2_index], -0.5, delta=0.05, msg="joint2 did not reach the commanded position")
+        joint1_index = msg.name.index("joint1")
+        joint2_index = msg.name.index("joint2")
+        self.assertAlmostEqual(
+            msg.position[joint1_index], 0.5, delta=0.05, msg="joint1 did not reach the commanded position"
+        )
+        self.assertAlmostEqual(
+            msg.position[joint2_index], -0.5, delta=0.05, msg="joint2 did not reach the commanded position"
+        )
 
+
+class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        rclpy.init()
+
+    @classmethod
+    def tearDownClass(cls):
+        rclpy.shutdown()
+
+    def setUp(self):
+        self.node = rclpy.create_node("test_node")
+
+    def tearDown(self):
+        self.node.destroy_node()
+
+    def test_available_hardware_interfaces(self):
+        # Call /controller_manager/list_hardware_interfaces service and check the response
+        client = self.node.create_client(ListHardwareInterfaces, "/controller_manager/list_hardware_interfaces")
+        if not client.wait_for_service(timeout_sec=10.0):
+            self.fail("Service /controller_manager/list_hardware_interfaces not available")
+
+        request = ListHardwareInterfaces.Request()
+        future = client.call_async(request)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        if future.result() is None:
+            self.fail("Service call to /controller_manager/list_hardware_interfaces failed")
+        response = future.result()
+
+        # available state interfaces
+        available_state_interfaces_names = [iface.name for iface in response.state_interfaces]
+        assert (
+            len(available_state_interfaces_names) == 8
+        ), f"Expected 8 state interfaces, got {len(available_state_interfaces_names)}"
+        expected_state_interfaces = [
+            "joint1/position",
+            "joint1/velocity",
+            "joint1/effort",
+            "joint1/torque",
+            "joint2/position",
+            "joint2/velocity",
+            "joint2/effort",
+            "joint2/torque",
+        ]
+        assert set(available_state_interfaces_names) == set(
+            expected_state_interfaces
+        ), f"State interfaces do not match expected. Got: {available_state_interfaces_names}"
+
+        # available command interfaces
+        available_command_interfaces_names = [iface.name for iface in response.command_interfaces]
+        assert (
+            len(available_command_interfaces_names) == 2
+        ), f"Expected 2 command interfaces, got {len(available_command_interfaces_names)}"
+        expected_command_interfaces = ["joint1/position", "joint2/position"]
+        assert set(available_command_interfaces_names) == set(
+            expected_command_interfaces
+        ), f"Command interfaces do not match expected. Got: {available_command_interfaces_names}"
+
+        self.node.get_logger().info("Available hardware interfaces check passed.")

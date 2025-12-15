@@ -16,12 +16,79 @@
 
 import sys
 import os
-sys.path.append(os.path.dirname(__file__))
-
+import rclpy
 import pytest
-from robot_launch_test import generate_test_description_common
-from robot_launch_test import TestFixture  # noqa: F401
+import unittest
+
+from controller_manager_msgs.srv import ListHardwareInterfaces
+
+sys.path.append(os.path.dirname(__file__))  # noqa: E402
+
+from robot_launch_test import generate_test_description_common  # noqa: E402
+from robot_launch_test import TestFixture  # noqa: F401, E402
+
 
 @pytest.mark.rostest
 def generate_test_description():
-    return generate_test_description_common(use_pid='true')
+    return generate_test_description_common(use_pid="true")
+
+
+class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        rclpy.init()
+
+    @classmethod
+    def tearDownClass(cls):
+        rclpy.shutdown()
+
+    def setUp(self):
+        self.node = rclpy.create_node("test_node")
+
+    def tearDown(self):
+        self.node.destroy_node()
+
+    def test_available_hardware_interfaces(self):
+        # Call /controller_manager/list_hardware_interfaces service and check the response
+        client = self.node.create_client(ListHardwareInterfaces, "/controller_manager/list_hardware_interfaces")
+        if not client.wait_for_service(timeout_sec=10.0):
+            self.fail("Service /controller_manager/list_hardware_interfaces not available")
+
+        request = ListHardwareInterfaces.Request()
+        future = client.call_async(request)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        if future.result() is None:
+            self.fail("Service call to /controller_manager/list_hardware_interfaces failed")
+        response = future.result()
+
+        # available state interfaces
+        available_state_interfaces_names = [iface.name for iface in response.state_interfaces]
+        assert (
+            len(available_state_interfaces_names) == 8
+        ), f"Expected 8 state interfaces, got {len(available_state_interfaces_names)}"
+        expected_state_interfaces = [
+            "joint1/position",
+            "joint1/velocity",
+            "joint1/effort",
+            "joint1/torque",
+            "joint2/position",
+            "joint2/velocity",
+            "joint2/effort",
+            "joint2/torque",
+        ]
+        assert set(available_state_interfaces_names) == set(
+            expected_state_interfaces
+        ), f"State interfaces do not match expected. Got: {available_state_interfaces_names}"
+
+        # available command interfaces
+        available_command_interfaces_names = [iface.name for iface in response.command_interfaces]
+        assert (
+            len(available_command_interfaces_names) == 4
+        ), f"Expected 4 command interfaces, got {len(available_command_interfaces_names)}"
+        expected_command_interfaces = ["joint1/position", "joint1/velocity", "joint2/position", "joint2/velocity"]
+        assert set(available_command_interfaces_names) == set(
+            expected_command_interfaces
+        ), f"Command interfaces do not match expected. Got: {available_command_interfaces_names}"
+
+        self.node.get_logger().info("Available hardware interfaces check passed.")
