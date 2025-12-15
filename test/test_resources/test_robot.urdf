@@ -181,6 +181,8 @@
         <param name="initial_value">0.0</param>
       </state_interface>
       <state_interface name="velocity"/>
+
+       <!-- Effort and torque are semantically different but map to the same underlying data. -->
       <state_interface name="effort"/>
       <state_interface name="torque"/>
     </joint>
