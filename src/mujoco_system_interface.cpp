@@ -699,6 +699,8 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
 
   // Time publisher will be pushed from the physics_thread_
   clock_publisher_ = mujoco_node_->create_publisher<rosgraph_msgs::msg::Clock>("/clock", 1);
+  clock_realtime_publisher_ =
+      std::make_shared<realtime_tools::RealtimePublisher<rosgraph_msgs::msg::Clock>>(clock_publisher_);
 
   // Ready cameras
   RCLCPP_INFO(get_logger(), "Initializing cameras...");
@@ -1623,8 +1625,7 @@ void MujocoSystemInterface::PhysicsLoop()
   while (!sim_->exitrequest.load())
   {
     // sleep for 1 ms or yield, to let main thread run
-    //  yield results in busy wait - which has better timing but kills battery
-    //  life
+    //  yield results in busy wait - which has better timing but kills battery life
     if (sim_->run && sim_->busywait)
     {
       std::this_thread::yield();
@@ -1699,8 +1700,9 @@ void MujocoSystemInterface::PhysicsLoop()
             double refreshTime = kSimRefreshFraction / sim_->refresh_rate;
 
             // step while sim lags behind cpu and within refreshTime.
-            while (Seconds((mj_data_->time - syncSim) * speedFactor) < mj::Simulate::Clock::now() - syncCPU &&
-                   mj::Simulate::Clock::now() - startCPU < Seconds(refreshTime))
+            auto currentCPU = mj::Simulate::Clock::now();
+            while (Seconds((mj_data_->time - syncSim) * speedFactor) < currentCPU - syncCPU &&
+                   currentCPU - startCPU < Seconds(refreshTime))
             {
               // measure slowdown before first step
               if (!measured && elapsedSim)
@@ -1733,6 +1735,9 @@ void MujocoSystemInterface::PhysicsLoop()
               {
                 break;
               }
+
+              // Update current CPU time for next iteration
+              currentCPU = mj::Simulate::Clock::now();
             }
           }
 
@@ -1772,7 +1777,7 @@ void MujocoSystemInterface::publish_clock()
 
   rosgraph_msgs::msg::Clock sim_time_msg;
   sim_time_msg.clock = sim_time_ros;
-  clock_publisher_->publish(sim_time_msg);
+  clock_realtime_publisher_->try_publish(sim_time_msg);
 }
 
 void MujocoSystemInterface::get_model(mjModel*& dest)
