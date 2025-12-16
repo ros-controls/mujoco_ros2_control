@@ -17,6 +17,7 @@ find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(Threads REQUIRED)
+find_package(transmission_interface REQUIRED)
 
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
@@ -188,6 +189,11 @@ target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
 install(TARGETS mujoco_ros2_control
   LIBRARY DESTINATION lib/${PROJECT_NAME}
 )
+
+ament_target_dependencies(mujoco_ros2_simulation
+  transmission_interface
+)
+
 
 # Install the ROS 2 control node
 add_executable(ros2_control_node src/mujoco_ros2_control_node.cpp)
