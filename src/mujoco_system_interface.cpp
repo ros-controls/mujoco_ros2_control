@@ -31,6 +31,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <limits>
 #include <new>
 #include <regex>
 #include <stdexcept>
@@ -47,6 +48,11 @@
 #include <pluginlib/class_list_macros.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include "lodepng.h"
+
+#include "transmission_interface/simple_transmission.hpp"
+#include "transmission_interface/transmission.hpp"
+#include "transmission_interface/transmission_interface_exception.hpp"
+#include "transmission_interface/simple_transmission_loader.hpp"
 
 #include "control_toolbox/pid.hpp"
 
@@ -68,6 +74,12 @@ namespace mujoco_ros2_control
 {
 namespace mj = ::mujoco;
 namespace mju = ::mujoco::sample_util;
+
+std::vector<std::shared_ptr<transmission_interface::Transmission>> transmission_instances;
+MujocoSystemInterface::InterfaceData::InterfaceData(const std::string & name)
+: name_(name), command_(std::numeric_limits<double>::quiet_NaN()), state_(std::numeric_limits<double>::quiet_NaN()), transmission_passthrough_(std::numeric_limits<double>::quiet_NaN())
+{
+}
 
 /**
  * No-op UI adapter to support running the drivers in a headless environment.
@@ -1518,11 +1530,31 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
 
 bool MujocoSystemInterface::register_transmissions(const hardware_interface::HardwareInfo& hardware_info)
 {
-  const auto transmissions = hardware_info.transmissions;
-  for (const auto& t_info : transmissions)
+  auto hardware_transmissions = hardware_info.transmissions;
+  auto transmission_loader = transmission_interface::SimpleTransmissionLoader();
+
+  // Determine the length needed for the vector for joint and actuator data structures
+  // For now 3* because expose all command interfaces
+  const auto num_joints = std::accumulate(
+    hardware_transmissions.begin(), hardware_transmissions.end(), 0ul,
+    [](const auto & acc, const auto & trans_info) { return acc + 3*trans_info.joints.size(); });
+
+  const auto num_actuators = std::accumulate(
+    hardware_transmissions.begin(), hardware_transmissions.end(), 0ul,
+    [](const auto & acc, const auto & trans_info) { return acc + 3*trans_info.actuators.size(); });
+
+  // reserve the space needed for joint and actuator data structures
+  joint_interfaces_.reserve(num_joints);
+  actuator_interfaces_.reserve(num_actuators);
+
+  for (const auto& t_info : hardware_transmissions)
   {
-    RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
-                "Transmission '%s' has the following actuators:", t_info.name.c_str());
+    if (t_info.type != "transmission_interface/SimpleTransmission")
+    {
+      RCLCPP_FATAL(
+        get_logger(), "Transmission '%s' of type '%s' not supported",
+        t_info.name.c_str(), t_info.type.c_str());
+    }
 
     // Check if all joints are present in the model as mujoco actuators, if so, do nothing
     bool all_transmission_joints_found = true;
@@ -1579,14 +1611,82 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
                    t_info.name.c_str());
       return false;
     }
-  }
 
-  // auto it = std::find_if(joint_states_.begin(), joint_states_.end(), [&](const JointState& j) {
-  //   if (j.mj_actuator_id < 0)
-  //     return false;
-  //   const char* mujoco_actuator_name = mj_id2name(mj_model_, mjOBJ_ACTUATOR, j.mj_actuator_id);
-  //   return actuator_info.name == mujoco_actuator_name;
-  // });
+    std::shared_ptr<transmission_interface::Transmission> transmission;
+    
+    // Load the transmission from URDF as a SipleTransmission 
+    try
+    {
+      transmission = transmission_loader.load(t_info);
+    }
+    catch (const transmission_interface::TransmissionInterfaceException & exc)
+    {
+      RCLCPP_FATAL(
+        get_logger(), "Error while loading %s: %s", t_info.name.c_str(), exc.what());
+    }
+
+    // Create the joint_handles vector for each joint in the transmission
+    std::vector<transmission_interface::JointHandle> joint_handles;
+    for (const auto & joint_info : t_info.joints)
+    {
+      const std::vector<std::string> hw_types = {
+          hardware_interface::HW_IF_POSITION,
+          hardware_interface::HW_IF_VELOCITY,
+          hardware_interface::HW_IF_EFFORT
+      };
+
+      for (const auto & hw_if : hw_types)
+      {
+          const auto joint_interface =
+          joint_interfaces_.insert(joint_interfaces_.end(), InterfaceData(joint_info.name));
+
+          transmission_interface::JointHandle joint_handle(
+              joint_info.name,
+              hw_if,
+              &joint_interface->transmission_passthrough_
+          );
+          joint_handles.push_back(joint_handle);
+      }
+    }
+
+    // Create the actuator_handles vector for each actuator in the transmission
+    std::vector<transmission_interface::ActuatorHandle> actuator_handles;
+    for (const auto & actuator_info : t_info.actuators)
+    {
+      const std::vector<std::string> hw_types = {
+          hardware_interface::HW_IF_POSITION,
+          hardware_interface::HW_IF_VELOCITY,
+          hardware_interface::HW_IF_EFFORT
+      };
+
+      for (const auto & hw_if : hw_types)
+      {
+        const auto actuator_interface =
+          actuator_interfaces_.insert(actuator_interfaces_.end(), InterfaceData(actuator_info.name));
+
+          transmission_interface::ActuatorHandle actuator_handle(
+              actuator_info.name,
+              hw_if,
+              &actuator_interface->transmission_passthrough_
+          );
+          actuator_handles.push_back(actuator_handle);
+      }
+    }
+
+    try
+    {
+      transmission->configure(joint_handles, actuator_handles);
+    }
+    catch (const transmission_interface::TransmissionInterfaceException & exc)
+    {
+      RCLCPP_FATAL(
+        get_logger(), "Error while configuring %s: %s", t_info.name.c_str(), exc.what());
+      return false;
+    }
+
+    transmission_instances.push_back(transmission);
+    
+  }    
 
   return true;
 }
