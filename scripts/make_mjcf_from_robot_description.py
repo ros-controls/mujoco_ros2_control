@@ -52,11 +52,11 @@ def add_mujoco_info(raw_xml, output_filepath, publish_topic):
 
     # Use relative path for fixed directory otherwise use absolute path
     if not publish_topic:
-        meshdir = "assets"
+        asset_dir = "assets"
     else:
-        meshdir = os.path.join(output_filepath, "assets")
+        asset_dir = os.path.join(output_filepath, "assets")
 
-    compiler_element.setAttribute("meshdir", meshdir)
+    compiler_element.setAttribute("assetdir", asset_dir)
     compiler_element.setAttribute("balanceinertia", "true")
     compiler_element.setAttribute("discardvisual", "false")
     compiler_element.setAttribute("strippath", "false")
@@ -191,6 +191,72 @@ def replace_package_names(xml_data):
     return xml_data
 
 
+# get required images from dae so that we can copy them to the temporary filepath
+def get_images_from_dae(dae_path):
+
+    dae_dir = os.path.dirname(dae_path)
+
+    doc = minidom.parse(dae_path)
+
+    image_paths = []
+    seen = set()
+
+    # access data from dae files with this structure to access image_filepath
+    # <library_images>
+    #     <image id="id" name="name">
+    #         <init_from>image_filepath</init_from>
+    #     </image>
+    # </library_images>
+    for image in doc.getElementsByTagName("image"):
+        init_from_elems = image.getElementsByTagName("init_from")
+        if not init_from_elems:
+            continue
+
+        path = init_from_elems[0].firstChild
+        if path is None:
+            continue
+
+        image_path = path.nodeValue.strip()
+
+        # Resolve relative paths
+        if not os.path.isabs(image_path):
+            image_path = os.path.normpath(os.path.join(dae_dir, image_path))
+
+        # make sure it is an image
+        if image_path.lower().endswith((".png", ".jpg", ".jpeg")):
+            # ignore duplucates
+            if image_path not in seen:
+                seen.add(image_path)
+                image_paths.append(image_path)
+
+    return image_paths
+
+
+# Change all files that match "material_{some_int}.{png, jpg, jpeg}" in a specified directory to be "material_{modifier}_{some_int}.{png, jpg, jpeg}"
+# This is important because trimesh puts out materials that look like material_{some_int}.{png, jpg, jpeg}, and they need to be indexed per item
+def rename_material_textures(dir_path, modifier):
+    dir_path = pathlib.Path(dir_path)
+
+    # regex to match files we want to modify
+    pattern = re.compile(r"^material_(\d+)\.(png|jpg|jpeg)$", re.IGNORECASE)
+
+    for path in dir_path.iterdir():
+        if not path.is_file():
+            continue
+
+        m = pattern.match(path.name)
+        if not m:
+            continue
+
+        # extract important components and reorder
+        index, ext = m.groups()
+        new_name = f"material_{modifier}_{index}.{ext}"
+        new_path = path.with_name(new_name)
+
+        print(f"{path.name} -> {new_name}")
+        path.rename(new_path)
+
+
 def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, decompose_dict):
     # keep track of files we have already processed so we don't do it again
     converted_filenames = []
@@ -260,24 +326,38 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
             pass
             # objs are ok as is
         elif filename_ext.lower() == ".dae":
+            # keep track of the image files that we need to copy from the dae
+            image_files = get_images_from_dae(full_filepath)
+            # keep track of the files that were copied to tmp directory to delete
+            copied_image_files = []
+
             # set z axis to up in the dae file because that is how mujoco expects it
             z_up_dae_txt = set_up_axis_to_z_up(full_filepath)
 
             # make a temporary file rather than overwriting the old one
             temp_file = tempfile.NamedTemporaryFile(suffix=".dae", mode="w+", delete=False)
             temp_filepath = temp_file.name
+            temp_folder = os.path.dirname(temp_filepath)
             try:
                 temp_file.write(z_up_dae_txt)
                 temp_file.close()
 
+                # copy relevant images into the temporary directory
+                for image_file in image_files:
+                    shutil.copy2(image_file, temp_folder)
+                    copied_image_files.append(f"{temp_folder}/{os.path.basename(image_file)}")
+
                 # Load scene using trimesh
-                scene = trimesh.load(temp_filepath)
+                scene = trimesh.load(temp_filepath, force=trimesh.scene)
 
                 # give the material a unique name so that it can be properly referenced
-                mtl_name = "mtl_" + str(mtl_num)
+                mtl_modifier = f"m{mtl_num}"
+                mtl_name = "mtl_" + mtl_modifier
                 mtl_filepath = os.path.dirname(output_path) + f"/{mtl_name}"
 
                 scene.export(output_path, include_color=True, mtl_name=mtl_name)
+                # rename textures
+                rename_material_textures(dir_path=os.path.dirname(output_path), modifier=mtl_modifier)
 
                 # we need to modify the material names to not all be material_X so they don't conflict
                 # all of the objs will have a line that looks like
@@ -292,7 +372,7 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                     for filepath in [mtl_filepath, output_path]:
                         with open(filepath, "r") as f:
                             data = f.read()
-                        data = data.replace("material_", f"material_{mtl_num}_")
+                        data = data.replace("material_", f"material_{mtl_modifier}_")
                         with open(filepath, "w") as f:
                             f.write(data)
                 # increment
@@ -300,6 +380,11 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
             finally:
                 if os.path.exists(temp_filepath):
                     os.remove(temp_filepath)
+
+            # get rid of copied image files in the temporary file directory
+            for copied_image_file in copied_image_files:
+                if os.path.exists(copied_image_file):
+                    os.remove(copied_image_file)
 
             xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
         else:
@@ -470,6 +555,17 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
             sub_materials = sub_asset_element.getElementsByTagName("material")
             for sub_material in sub_materials:
                 asset_element.appendChild(sub_material)
+
+            # bring in the textures, and modify filepath to properly reference filepaths
+            sub_textures = sub_asset_element.getElementsByTagName("texture")
+            for sub_texture in sub_textures:
+                if sub_texture.hasAttribute("file"):
+                    sub_texture_file = sub_texture.getAttribute("file")
+                    if composed_type == DECOMPOSED_PATH_NAME:
+                        sub_texture.setAttribute("file", f"{composed_type}/{mesh_name}/{mesh_name}/{sub_texture_file}")
+                    else:
+                        sub_texture.setAttribute("file", f"{composed_type}/{mesh_name}/{sub_texture_file}")
+                    asset_element.appendChild(sub_texture)
 
             sub_body = sub_dom.getElementsByTagName("body")
             sub_body = sub_body[0]
