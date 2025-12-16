@@ -480,16 +480,32 @@ ActuatorType getActuatorType(const mjModel* mj_model, int mujoco_actuator_id)
  */
 int get_actuator_id(const std::string& actuator_name, const mjModel* mj_model)
 {
-  // Find the actuator ID in the mujoco model based on the actuator name
+
+  int mujoco_joint_id = mj_name2id(mj_model, mjtObj::mjOBJ_JOINT, actuator_name.c_str());
+  if (mujoco_joint_id == -1)
+  {
+    RCLCPP_ERROR_STREAM(rclcpp::get_logger("MujocoSystemInterface"),
+                        "Failed to find joint in mujoco model, joint name: " << actuator_name);
+  }
+
+  // Try to locate the matching actuator id for the joint, if available
+  int mujoco_actuator_id = -1;
   for (int i = 0; i < mj_model->nu; ++i)
   {
-    const char* mujoco_actuator_name = mj_id2name(mj_model, mjOBJ_ACTUATOR, i);
-    if (actuator_name == mujoco_actuator_name)
+    // If it is the correct type and matches the joint id, we're done
+    if (mj_model->actuator_trntype[i] == mjTRN_JOINT && mj_model->actuator_trnid[2 * i] == mujoco_joint_id)
     {
-      return i;
+      mujoco_actuator_id = i;
+      break;
     }
   }
-  return -1;  // Actuator not found
+
+  // Is no mapping was found, try fallback to looking for an actuator with the same name as the joint
+  mujoco_actuator_id = mujoco_actuator_id == -1 ?
+                            mj_name2id(mj_model, mjtObj::mjOBJ_ACTUATOR, actuator_name.c_str()) :
+                            mujoco_actuator_id;
+  return mujoco_actuator_id;
+
 }
 
 /**
