@@ -197,6 +197,18 @@ private:
 
   rclcpp::Logger get_logger() const;
 
+  struct InterfaceData
+  {
+    explicit InterfaceData(const std::string & name);
+
+    std::string name_;
+    double command_;
+    double state_;
+
+    // this is the "sink" that will be part of the transmission Joint/Actuator handles
+    double transmission_passthrough_;
+  };
+
   // System information
   std::string model_path_;
 
@@ -254,6 +266,10 @@ private:
 
   // Data containers for the HW interface
   std::vector<JointState> joint_states_;
+  // Transmission structure
+  std::vector<InterfaceData> joint_interfaces_;
+  std::vector<InterfaceData> actuator_interfaces_;
+  
   std::vector<FTSensorData> ft_sensor_data_;
   std::vector<IMUSensorData> imu_sensor_data_;
 };
