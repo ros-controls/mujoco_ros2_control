@@ -1260,6 +1260,57 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     }
   }
 
+  // Transmissions
+  std::for_each(
+    joint_interfaces_.begin(), joint_interfaces_.end(),
+    [this](auto & joint_interface)
+    {
+      auto it = std::find_if(joint_states_.begin(), joint_states_.end(),
+                          [&](const auto& js) 
+                          { 
+                            return js.name == joint_interface.name_; 
+                          });
+
+      if (it != joint_states_.end())
+      {
+        if ((it->is_position_control_enabled || it->is_position_pid_control_enabled) )
+        {
+          joint_interface.command_ = it->position_command;
+        }
+        else if((it->is_velocity_control_enabled || it->is_velocity_pid_control_enabled))
+        { 
+          joint_interface.command_ = it->velocity_command;
+        }
+        else
+        {
+          joint_interface.command_ = it->effort_command;
+        }
+      }
+    });
+
+  std::for_each(
+    joint_interfaces_.begin(), joint_interfaces_.end(),
+    [](auto & joint_interface)
+    { 
+        joint_interface.transmission_passthrough_ = joint_interface.command_;
+    });
+
+  // transmission -> actuator
+  std::for_each(
+    transmission_instances.begin(), transmission_instances.end(),
+    [](auto & transmission) { 
+      transmission->joint_to_actuator(); 
+    });
+
+  // 
+  std::for_each(
+    actuator_interfaces_.begin(), actuator_interfaces_.end(),
+    [](auto & actuator_interface)
+    { 
+      actuator_interface.command_ = actuator_interface.transmission_passthrough_; 
+    });
+
+  
   // Joint commands
   // TODO: Support command limits. For now those ranges can be limited in the mujoco actuators themselves.
   for (auto& joint_state : joint_states_)
@@ -1270,27 +1321,88 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
       continue;
     }
 
-    if (joint_state.is_position_control_enabled)
+    auto act = std::find_if(actuator_interfaces_.begin(), actuator_interfaces_.end(),
+                              [&](const auto & act) { return get_actuator_id(act.name_, mj_model_) == joint_state.mj_actuator_id; });
+
+    if (act != actuator_interfaces_.end())
     {
-      mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.position_command;
+      if (joint_state.is_position_control_enabled)
+      {
+        mj_data_control_->ctrl[joint_state.mj_actuator_id] = act->command_;
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                      "Joint '%s': transmission POSITION command = %f",
+                      joint_state.name.c_str(), act->command_);
+      }
+      else if (joint_state.is_position_pid_control_enabled)
+      {
+        double error = act->command_ - mj_data_->qpos[joint_state.mj_pos_adr];
+        mj_data_control_->qfrc_applied[joint_state.mj_vel_adr] = joint_state.pos_pid->compute_command(error, period);
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                      "Joint '%s': transmission POSITION command = %f",
+                      joint_state.name.c_str(), act->command_);
+      }
+      else if (joint_state.is_velocity_control_enabled)
+      {
+        mj_data_control_->ctrl[joint_state.mj_actuator_id] = act->command_;
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                      "Joint '%s': transmission VELOCITY command = %f",
+                      joint_state.name.c_str(), act->command_);
+      }
+      else if (joint_state.is_velocity_pid_control_enabled)
+      {
+        double error = act->command_ - mj_data_->qvel[joint_state.mj_vel_adr];
+        mj_data_control_->qfrc_applied[joint_state.mj_vel_adr] = joint_state.vel_pid->compute_command(error, period);
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                        "Joint '%s': transmission VELOCITY_PID command, error = %f",
+                        joint_state.name.c_str(), error);
+      }
+      else if (joint_state.is_effort_control_enabled)
+      {
+        mj_data_control_->ctrl[joint_state.mj_actuator_id] = act->command_;
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                        "Joint '%s': transmission EFFORT command = %f",
+                        joint_state.name.c_str(), act->command_);
+      }
     }
-    else if (joint_state.is_position_pid_control_enabled)
+    else
     {
-      double error = joint_state.position_command - mj_data_->qpos[joint_state.mj_pos_adr];
-      mj_data_control_->qfrc_applied[joint_state.mj_vel_adr] = joint_state.pos_pid->compute_command(error, period);
-    }
-    else if (joint_state.is_velocity_control_enabled)
-    {
-      mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.velocity_command;
-    }
-    else if (joint_state.is_velocity_pid_control_enabled)
-    {
-      double error = joint_state.velocity_command - mj_data_->qvel[joint_state.mj_vel_adr];
-      mj_data_control_->qfrc_applied[joint_state.mj_vel_adr] = joint_state.vel_pid->compute_command(error, period);
-    }
-    else if (joint_state.is_effort_control_enabled)
-    {
-      mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.effort_command;
+      if (joint_state.is_position_control_enabled)
+      {
+        mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.position_command;
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                      "Joint '%s': direct POSITION command = %f",
+                      joint_state.name.c_str(), joint_state.position_command);
+      }
+      else if (joint_state.is_position_pid_control_enabled)
+      {
+        double error = joint_state.position_command - mj_data_->qpos[joint_state.mj_pos_adr];
+        mj_data_control_->qfrc_applied[joint_state.mj_vel_adr] = joint_state.pos_pid->compute_command(error, period);
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                      "Joint '%s': direct POSITION command = %f",
+                      joint_state.name.c_str(), joint_state.position_command);
+      }
+      else if (joint_state.is_velocity_control_enabled)
+      {
+        mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.velocity_command;
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                      "Joint '%s': direct VELOCITY command = %f",
+                      joint_state.name.c_str(), joint_state.velocity_command);
+      }
+      else if (joint_state.is_velocity_pid_control_enabled)
+      {
+        double error = joint_state.velocity_command - mj_data_->qvel[joint_state.mj_vel_adr];
+        mj_data_control_->qfrc_applied[joint_state.mj_vel_adr] = joint_state.vel_pid->compute_command(error, period);
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                      "Joint '%s': direct VELOCITY_PID command, error = %f",
+                      joint_state.name.c_str(), error);
+      }
+      else if (joint_state.is_effort_control_enabled)
+      {
+        mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.effort_command;
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                      "Joint '%s': direct EFFORT command = %f",
+                      joint_state.name.c_str(), joint_state.effort_command);
+      }
     }
   }
 
