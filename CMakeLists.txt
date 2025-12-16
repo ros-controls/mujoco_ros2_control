@@ -172,6 +172,7 @@ target_link_libraries(mujoco_ros2_control
   rclcpp_lifecycle::rclcpp_lifecycle
   control_toolbox::control_toolbox
   sensor_msgs::sensor_msgs_library
+  transmission_interface::transmission_interface
   Eigen3::Eigen
   Threads::Threads
   lodepng
@@ -189,11 +190,6 @@ target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
 install(TARGETS mujoco_ros2_control
   LIBRARY DESTINATION lib/${PROJECT_NAME}
 )
-
-ament_target_dependencies(mujoco_ros2_simulation
-  transmission_interface
-)
-
 
 # Install the ROS 2 control node
 add_executable(ros2_control_node src/mujoco_ros2_control_node.cpp)
