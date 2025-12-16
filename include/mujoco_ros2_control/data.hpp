@@ -21,6 +21,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+#include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include "control_toolbox/pid_ros.hpp"
 
 #include <string>
@@ -50,20 +51,34 @@ enum class ActuatorType
 };
 
 /**
+ * Data structure for each command/state interface.
+ */
+struct InterfaceData
+{
+  explicit InterfaceData(const std::string& name) : name_(name)
+  {
+  }
+
+  std::string name_;
+  double command_ = std::numeric_limits<double>::quiet_NaN();
+  double state_ = std::numeric_limits<double>::quiet_NaN();
+
+  // this is the "sink" that will be part of the transmission Joint/Actuator handles
+  double transmission_passthrough_ = std::numeric_limits<double>::quiet_NaN();
+};
+
+/**
  * Wrapper for mujoco actuators and relevant ROS HW interface data.
  */
 struct JointState
 {
   std::string name;
-  double position;
-  double velocity;
-  double effort;
+  InterfaceData position_interface{ hardware_interface::HW_IF_POSITION };
+  InterfaceData velocity_interface{ hardware_interface::HW_IF_VELOCITY };
+  InterfaceData effort_interface{ hardware_interface::HW_IF_EFFORT };
   std::shared_ptr<control_toolbox::PidROS> pos_pid{ nullptr };
   std::shared_ptr<control_toolbox::PidROS> vel_pid{ nullptr };
   ActuatorType actuator_type{ ActuatorType::UNKNOWN };
-  double position_command;
-  double velocity_command;
-  double effort_command;
   bool is_mimic{ false };
   int mimicked_joint_index;
   double mimic_multiplier;

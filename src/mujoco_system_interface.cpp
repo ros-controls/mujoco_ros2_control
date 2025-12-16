@@ -76,13 +76,6 @@ namespace mj = ::mujoco;
 namespace mju = ::mujoco::sample_util;
 
 std::vector<std::shared_ptr<transmission_interface::Transmission>> transmission_instances;
-MujocoSystemInterface::InterfaceData::InterfaceData(const std::string& name)
-  : name_(name)
-  , command_(std::numeric_limits<double>::quiet_NaN())
-  , state_(std::numeric_limits<double>::quiet_NaN())
-  , transmission_passthrough_(std::numeric_limits<double>::quiet_NaN())
-{
-}
 
 /**
  * No-op UI adapter to support running the drivers in a headless environment.
@@ -859,16 +852,18 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
       {
         if (state_if.name == hardware_interface::HW_IF_POSITION)
         {
-          new_state_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_POSITION, &joint.position);
+          new_state_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_POSITION,
+                                            &joint.position_interface.state_);
         }
         else if (state_if.name == hardware_interface::HW_IF_VELOCITY)
         {
-          new_state_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_VELOCITY, &joint.velocity);
+          new_state_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_VELOCITY,
+                                            &joint.velocity_interface.state_);
         }
         else if (state_if.name == hardware_interface::HW_IF_EFFORT ||
                  state_if.name == hardware_interface::HW_IF_TORQUE || state_if.name == hardware_interface::HW_IF_FORCE)
         {
-          new_state_interfaces.emplace_back(joint.name, state_if.name, &joint.effort);
+          new_state_interfaces.emplace_back(joint.name, state_if.name, &joint.effort_interface.state_);
         }
       }
     }
@@ -1007,19 +1002,21 @@ std::vector<hardware_interface::CommandInterface> MujocoSystemInterface::export_
         if (command_if.name.find(hardware_interface::HW_IF_POSITION) != std::string::npos)
         {
           if (joint.is_position_control_enabled || joint.is_position_pid_control_enabled)
-            new_command_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_POSITION, &joint.position_command);
+            new_command_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_POSITION,
+                                                &joint.position_interface.command_);
         }
         else if (command_if.name.find(hardware_interface::HW_IF_VELOCITY) != std::string::npos)
         {
           if (joint.is_velocity_control_enabled || joint.is_velocity_pid_control_enabled)
-            new_command_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_VELOCITY, &joint.velocity_command);
+            new_command_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_VELOCITY,
+                                                &joint.velocity_interface.command_);
         }
         else if (command_if.name == hardware_interface::HW_IF_EFFORT ||
                  command_if.name == hardware_interface::HW_IF_TORQUE ||
                  command_if.name == hardware_interface::HW_IF_FORCE)
         {
           if (joint.is_effort_control_enabled)
-            new_command_interfaces.emplace_back(joint.name, command_if.name, &joint.effort_command);
+            new_command_interfaces.emplace_back(joint.name, command_if.name, &joint.effort_interface.command_);
         }
       }
     }
@@ -1158,9 +1155,9 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // Joint states
   for (auto& joint_state : joint_states_)
   {
-    joint_state.position = mj_data_control_->qpos[joint_state.mj_pos_adr];
-    joint_state.velocity = mj_data_control_->qvel[joint_state.mj_vel_adr];
-    joint_state.effort = mj_data_control_->qfrc_actuator[joint_state.mj_vel_adr];
+    joint_state.position_interface.state_ = mj_data_control_->qpos[joint_state.mj_pos_adr];
+    joint_state.velocity_interface.state_ = mj_data_control_->qvel[joint_state.mj_vel_adr];
+    joint_state.effort_interface.state_ = mj_data_control_->qfrc_actuator[joint_state.mj_vel_adr];
   }
 
   // Transmissions
@@ -1171,15 +1168,15 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     {
       if ((it->is_position_control_enabled || it->is_position_pid_control_enabled))
       {
-        actuator_interface.state_ = it->position;
+        actuator_interface.state_ = it->position_interface.state_;
       }
       else if ((it->is_velocity_control_enabled || it->is_velocity_pid_control_enabled))
       {
-        actuator_interface.state_ = it->velocity;
+        actuator_interface.state_ = it->velocity_interface.state_;
       }
       else
       {
-        actuator_interface.command_ = it->effort_command;
+        actuator_interface.state_ = it->effort_interface.state_;
       }
     }
   });
@@ -1237,12 +1234,12 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   {
     if (joint_state.is_mimic)
     {
-      joint_state.position_command =
-          joint_state.mimic_multiplier * joint_states_.at(joint_state.mimicked_joint_index).position_command;
-      joint_state.velocity_command =
-          joint_state.mimic_multiplier * joint_states_.at(joint_state.mimicked_joint_index).velocity_command;
-      joint_state.effort_command =
-          joint_state.mimic_multiplier * joint_states_.at(joint_state.mimicked_joint_index).effort_command;
+      joint_state.position_interface.command_ =
+          joint_state.mimic_multiplier * joint_states_.at(joint_state.mimicked_joint_index).position_interface.command_;
+      joint_state.velocity_interface.command_ =
+          joint_state.mimic_multiplier * joint_states_.at(joint_state.mimicked_joint_index).velocity_interface.command_;
+      joint_state.effort_interface.command_ =
+          joint_state.mimic_multiplier * joint_states_.at(joint_state.mimicked_joint_index).effort_interface.command_;
     }
   }
 
@@ -1255,15 +1252,15 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     {
       if ((it->is_position_control_enabled || it->is_position_pid_control_enabled))
       {
-        joint_interface.command_ = it->position_command;
+        joint_interface.command_ = it->position_interface.command_;
       }
       else if ((it->is_velocity_control_enabled || it->is_velocity_pid_control_enabled))
       {
-        joint_interface.command_ = it->velocity_command;
+        joint_interface.command_ = it->velocity_interface.command_;
       }
       else
       {
-        joint_interface.command_ = it->effort_command;
+        joint_interface.command_ = it->effort_interface.command_;
       }
     }
   });
@@ -1333,35 +1330,35 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     {
       if (joint_state.is_position_control_enabled)
       {
-        mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.position_command;
+        mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.position_interface.command_;
         RCLCPP_INFO(get_logger(), "Joint '%s': direct POSITION command = %f", joint_state.name.c_str(),
-                    joint_state.position_command);
+                    joint_state.position_interface.command_);
       }
       else if (joint_state.is_position_pid_control_enabled)
       {
-        double error = joint_state.position_command - mj_data_->qpos[joint_state.mj_pos_adr];
+        double error = joint_state.position_interface.command_ - mj_data_->qpos[joint_state.mj_pos_adr];
         mj_data_control_->qfrc_applied[joint_state.mj_vel_adr] = joint_state.pos_pid->compute_command(error, period);
         RCLCPP_INFO(get_logger(), "Joint '%s': direct POSITION command = %f", joint_state.name.c_str(),
-                    joint_state.position_command);
+                    joint_state.position_interface.command_);
       }
       else if (joint_state.is_velocity_control_enabled)
       {
-        mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.velocity_command;
+        mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.velocity_interface.command_;
         RCLCPP_INFO(get_logger(), "Joint '%s': direct VELOCITY command = %f", joint_state.name.c_str(),
-                    joint_state.velocity_command);
+                    joint_state.velocity_interface.command_);
       }
       else if (joint_state.is_velocity_pid_control_enabled)
       {
-        double error = joint_state.velocity_command - mj_data_->qvel[joint_state.mj_vel_adr];
+        double error = joint_state.velocity_interface.command_ - mj_data_->qvel[joint_state.mj_vel_adr];
         mj_data_control_->qfrc_applied[joint_state.mj_vel_adr] = joint_state.vel_pid->compute_command(error, period);
         RCLCPP_INFO(get_logger(), "Joint '%s': direct VELOCITY_PID command, error = %f", joint_state.name.c_str(),
                     error);
       }
       else if (joint_state.is_effort_control_enabled)
       {
-        mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.effort_command;
+        mj_data_control_->ctrl[joint_state.mj_actuator_id] = joint_state.effort_interface.command_;
         RCLCPP_INFO(get_logger(), "Joint '%s': direct EFFORT command = %f", joint_state.name.c_str(),
-                    joint_state.effort_command);
+                    joint_state.effort_interface.command_);
       }
     }
   }
@@ -1490,19 +1487,19 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
     {
       if (state_if.name == hardware_interface::HW_IF_POSITION)
       {
-        last_joint_state.position =
+        last_joint_state.position_interface.state_ =
             should_override_start_position ? mj_data_->qpos[joint_state.mj_pos_adr] : get_initial_value(state_if);
       }
       else if (state_if.name == hardware_interface::HW_IF_VELOCITY)
       {
-        last_joint_state.velocity =
+        last_joint_state.velocity_interface.state_ =
             should_override_start_position ? mj_data_->qvel[joint_state.mj_vel_adr] : get_initial_value(state_if);
       }
       else if (state_if.name == hardware_interface::HW_IF_EFFORT || state_if.name == hardware_interface::HW_IF_TORQUE ||
                state_if.name == hardware_interface::HW_IF_FORCE)
       {
         // We never set data for effort from an initial conditions file, so just default to the initial value if it exists.
-        last_joint_state.effort = get_initial_value(state_if);
+        last_joint_state.effort_interface.state_ = get_initial_value(state_if);
       }
     }
 
@@ -1538,8 +1535,9 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           RCLCPP_INFO(get_logger(), "Using MuJoCo position actuator for the joint : '%s'", actuator_name.c_str());
           // Direct position control enabled for position actuator
           last_joint_state.is_position_control_enabled = true;
-          last_joint_state.position_command =
-              should_override_start_position ? mj_data_->ctrl[joint_state.mj_actuator_id] : last_joint_state.position;
+          last_joint_state.position_interface.command_ = should_override_start_position ?
+                                                             mj_data_->ctrl[joint_state.mj_actuator_id] :
+                                                             last_joint_state.position_interface.state_;
         }
         else if (last_joint_state.actuator_type == ActuatorType::VELOCITY ||
                  last_joint_state.actuator_type == ActuatorType::MOTOR ||
@@ -1554,7 +1552,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           if (last_joint_state.has_pos_pid)
           {
             last_joint_state.is_position_pid_control_enabled = true;
-            last_joint_state.position_command = last_joint_state.position;
+            last_joint_state.position_interface.command_ = last_joint_state.position_interface.state_;
             const auto gains = last_joint_state.pos_pid->get_gains();
 
             RCLCPP_INFO(get_logger(),
@@ -1585,8 +1583,9 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           RCLCPP_INFO(get_logger(), "Using MuJoCo velocity actuator for the joint : '%s'", actuator_name.c_str());
           // Direct velocity control enabled for velocity actuator
           last_joint_state.is_velocity_control_enabled = true;
-          last_joint_state.velocity_command =
-              should_override_start_position ? mj_data_->ctrl[joint_state.mj_actuator_id] : last_joint_state.velocity;
+          last_joint_state.velocity_interface.command_ = should_override_start_position ?
+                                                             mj_data_->ctrl[joint_state.mj_actuator_id] :
+                                                             last_joint_state.velocity_interface.state_;
         }
         else if (last_joint_state.actuator_type == ActuatorType::MOTOR ||
                  last_joint_state.actuator_type == ActuatorType::CUSTOM)
@@ -1602,7 +1601,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           {
             last_joint_state.is_velocity_pid_control_enabled = true;
             const auto gains = last_joint_state.vel_pid->get_gains();
-            last_joint_state.velocity_command = last_joint_state.velocity;
+            last_joint_state.velocity_interface.command_ = last_joint_state.velocity_interface.state_;
             RCLCPP_INFO(get_logger(),
                         "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
                         "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
@@ -1638,8 +1637,9 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
           RCLCPP_INFO(get_logger(), "Using MuJoCo motor or custom actuator for the joint : '%s'", actuator_name.c_str());
           // Direct effort control enabled for MOTOR or CUSTOM actuator
           last_joint_state.is_effort_control_enabled = true;
-          last_joint_state.effort_command =
-              should_override_start_position ? mj_data_->ctrl[joint_state.mj_actuator_id] : last_joint_state.effort;
+          last_joint_state.effort_interface.command_ = should_override_start_position ?
+                                                           mj_data_->ctrl[joint_state.mj_actuator_id] :
+                                                           last_joint_state.effort_interface.state_;
         }
       }
     }
@@ -1986,7 +1986,7 @@ void MujocoSystemInterface::set_initial_pose()
 {
   for (auto& joint_state : joint_states_)
   {
-    mj_data_->qpos[joint_state.mj_pos_adr] = joint_state.position;
+    mj_data_->qpos[joint_state.mj_pos_adr] = joint_state.position_interface.state_;
   }
 
   // Copy into the control data for reads

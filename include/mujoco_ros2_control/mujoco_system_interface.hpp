@@ -197,18 +197,6 @@ private:
 
   rclcpp::Logger get_logger() const;
 
-  struct InterfaceData
-  {
-    explicit InterfaceData(const std::string& name);
-
-    std::string name_;
-    double command_;
-    double state_;
-
-    // this is the "sink" that will be part of the transmission Joint/Actuator handles
-    double transmission_passthrough_;
-  };
-
   // System information
   std::string model_path_;
 
