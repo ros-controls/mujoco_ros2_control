@@ -199,7 +199,7 @@ private:
 
   struct InterfaceData
   {
-    explicit InterfaceData(const std::string & name);
+    explicit InterfaceData(const std::string& name);
 
     std::string name_;
     double command_;
@@ -269,7 +269,7 @@ private:
   // Transmission structure
   std::vector<InterfaceData> joint_interfaces_;
   std::vector<InterfaceData> actuator_interfaces_;
-  
+
   std::vector<FTSensorData> ft_sensor_data_;
   std::vector<IMUSensorData> imu_sensor_data_;
 };
