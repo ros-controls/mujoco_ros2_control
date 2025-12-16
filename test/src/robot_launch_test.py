@@ -30,7 +30,7 @@ import pytest
 import rclpy
 from rosgraph_msgs.msg import Clock
 from std_msgs.msg import Float64MultiArray
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import JointState, Image, CameraInfo
 from controller_manager_msgs.srv import ListHardwareInterfaces
 
 
@@ -90,7 +90,7 @@ class TestFixture(unittest.TestCase):
             ],
         )
 
-    def test_arm(self, launch_service, proc_info, proc_output):
+    def test_arm(self):
 
         # Check if the controllers are running
         cnames = ["position_controller", "joint_state_broadcaster"]
@@ -130,6 +130,18 @@ class TestFixture(unittest.TestCase):
         self.assertAlmostEqual(
             msg.position[joint2_index], -0.5, delta=0.05, msg="joint2 did not reach the commanded position"
         )
+
+    def test_camera_topics(self):
+        topic_list = [
+            ("/camera/color/image_raw", Image),
+            ("/camera/color/camera_info", CameraInfo),
+            ("/camera/aligned_depth_to_color/image_raw", Image),
+        ]
+        wait_for_topics = WaitForTopics(topic_list, timeout=5.0)
+        assert wait_for_topics.wait(), "Not all camera topics were received in time!"
+        assert wait_for_topics.topics_not_received() == set(), "Some topics were not received!"
+        assert wait_for_topics.topics_received() == {t[0] for t in topic_list}, "Not all topics were received!"
+        wait_for_topics.shutdown()
 
 
 class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
