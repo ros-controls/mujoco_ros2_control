@@ -224,6 +224,10 @@ In the corresponding ros2_control xacro, this becomes a single sensor:
     <param name="mujoco_type">fts</param>
     <!-- There is no requirement for the mujoco_sensor_name to match the ros2_control sensor name -->
     <param name="mujoco_sensor_name">fts_sensor</param>
+    <!-- Default value of force_mjcf_suffix is '_force' -->
+    <param name="force_mjcf_suffix">_force</param>
+    <!-- Default value of torque_mjcf_suffix is '_torque' -->
+    <param name="torque_mjcf_suffix">_torque</param>
     <state_interface name="force.x"/>
     <state_interface name="force.y"/>
     <state_interface name="force.z"/>
@@ -250,6 +254,12 @@ Which then map to the corresponding ros2_control sensor:
     <param name="mujoco_type">imu</param>
     <!-- There is no requirement for the mujoco_sensor_name to match the ros2_control sensor name -->
     <param name="mujoco_sensor_name">imu_sensor</param>
+    <!-- Default value of orientation_mjcf_suffix is '_quat' -->
+    <param name="orientation_mjcf_suffix">_quat</param>
+    <!-- Default value of angular_velocity_mjcf_suffix is '_gyro' -->
+    <param name="angular_velocity_mjcf_suffix">_gyro</param>
+    <!-- Default value of linear_acceleration_mjcf_suffix is '_accel' -->
+    <param name="linear_acceleration_mjcf_suffix">_accel</param>
     <state_interface name="orientation.x"/>
     <state_interface name="orientation.y"/>
     <state_interface name="orientation.z"/>

@@ -1446,6 +1446,15 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
 
 void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareInfo& hardware_info)
 {
+  // Helper function to get parameters in hardware info.
+  auto get_parameter_or = [&](const std::string& key, const std::string& default_value) -> std::string {
+    if (auto it = get_hardware_info().hardware_parameters.find(key); it != get_hardware_info().hardware_parameters.end())
+    {
+      return it->second;
+    }
+    return default_value;
+  };
+
   for (size_t sensor_index = 0; sensor_index < hardware_info.sensors.size(); sensor_index++)
   {
     auto sensor = hardware_info.sensors.at(sensor_index);
@@ -1481,8 +1490,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     {
       FTSensorData sensor_data;
       sensor_data.name = sensor_name;
-      sensor_data.force.name = mujoco_sensor_name + "_force";
-      sensor_data.torque.name = mujoco_sensor_name + "_torque";
+      sensor_data.force.name = mujoco_sensor_name + get_parameter_or("force_mjcf_suffix", "_force");
+      sensor_data.torque.name = mujoco_sensor_name + get_parameter_or("torque_mjcf_suffix", "_torque");
 
       int force_sensor_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.force.name.c_str());
       int torque_sensor_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.torque.name.c_str());
@@ -1504,9 +1513,11 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     {
       IMUSensorData sensor_data;
       sensor_data.name = sensor_name;
-      sensor_data.orientation.name = mujoco_sensor_name + "_quat";
-      sensor_data.angular_velocity.name = mujoco_sensor_name + "_gyro";
-      sensor_data.linear_acceleration.name = mujoco_sensor_name + "_accel";
+      sensor_data.orientation.name = mujoco_sensor_name + get_parameter_or("orientation_mjcf_suffix", "_quat");
+      sensor_data.angular_velocity.name =
+          mujoco_sensor_name + get_parameter_or("angular_velocity_mjcf_suffix", "_gyro");
+      sensor_data.linear_acceleration.name =
+          mujoco_sensor_name + get_parameter_or("linear_acceleration_mjcf_suffix", "_accel");
 
       // Initialize to all zeros as we do not use these yet.
       sensor_data.orientation_covariance.resize(9, 0.0);
