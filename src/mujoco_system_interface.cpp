@@ -1275,15 +1275,15 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 
     if (it != joint_states_.end())
     {
-      if ((it->is_position_control_enabled || it->is_position_pid_control_enabled))
+      if ((it->is_position_control_enabled || it->is_position_pid_control_enabled) && joint_interface.command_interface_ == hardware_interface::HW_IF_POSITION)
       {
         joint_interface.command_ = it->position_interface.command_;
       }
-      else if ((it->is_velocity_control_enabled || it->is_velocity_pid_control_enabled))
+      else if ((it->is_velocity_control_enabled || it->is_velocity_pid_control_enabled) && joint_interface.command_interface_ == hardware_interface::HW_IF_VELOCITY )
       {
         joint_interface.command_ = it->velocity_interface.command_;
       }
-      else
+      else if ((it->is_effort_control_enabled) && joint_interface.command_interface_ == hardware_interface::HW_IF_EFFORT)
       {
         joint_interface.command_ = it->effort_interface.command_;
       }
