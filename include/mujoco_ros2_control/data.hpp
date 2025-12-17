@@ -55,11 +55,12 @@ enum class ActuatorType
  */
 struct InterfaceData
 {
-  explicit InterfaceData(const std::string& name) : name_(name)
+  explicit InterfaceData(const std::string& name, const std::string& command_interface) : name_(name), command_interface_(command_interface)
   {
   }
 
   std::string name_;
+  std::string command_interface_;
   double command_ = std::numeric_limits<double>::quiet_NaN();
   double state_ = std::numeric_limits<double>::quiet_NaN();
 
@@ -73,9 +74,9 @@ struct InterfaceData
 struct JointState
 {
   std::string name;
-  InterfaceData position_interface{ hardware_interface::HW_IF_POSITION };
-  InterfaceData velocity_interface{ hardware_interface::HW_IF_VELOCITY };
-  InterfaceData effort_interface{ hardware_interface::HW_IF_EFFORT };
+  InterfaceData position_interface{ name, hardware_interface::HW_IF_POSITION };
+  InterfaceData velocity_interface{ name, hardware_interface::HW_IF_VELOCITY };
+  InterfaceData effort_interface{ name, hardware_interface::HW_IF_EFFORT };
   std::shared_ptr<control_toolbox::PidROS> pos_pid{ nullptr };
   std::shared_ptr<control_toolbox::PidROS> vel_pid{ nullptr };
   ActuatorType actuator_type{ ActuatorType::UNKNOWN };

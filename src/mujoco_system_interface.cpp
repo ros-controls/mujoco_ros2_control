@@ -1769,7 +1769,7 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
 
       for (const auto& hw_if : hw_types)
       {
-        const auto joint_interface = joint_interfaces_.insert(joint_interfaces_.end(), InterfaceData(joint_info.name));
+        const auto joint_interface = joint_interfaces_.insert(joint_interfaces_.end(), InterfaceData(joint_info.name, hw_if));
 
         transmission_interface::JointHandle joint_handle(joint_info.name, hw_if,
                                                          &joint_interface->transmission_passthrough_);
@@ -1788,7 +1788,7 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
       for (const auto& hw_if : hw_types)
       {
         const auto actuator_interface =
-            actuator_interfaces_.insert(actuator_interfaces_.end(), InterfaceData(actuator_info.name));
+            actuator_interfaces_.insert(actuator_interfaces_.end(), InterfaceData(actuator_info.name, hw_if));
 
         transmission_interface::ActuatorHandle actuator_handle(actuator_info.name, hw_if,
                                                                &actuator_interface->transmission_passthrough_);
