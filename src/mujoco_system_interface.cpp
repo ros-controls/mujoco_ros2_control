@@ -1161,22 +1161,24 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   }
 
   // Transmissions
-  std::for_each(actuator_interfaces_.begin(), actuator_interfaces_.end(), [this](auto& actuator_interface) {
-    auto it = std::find_if(joint_states_.begin(), joint_states_.end(),
-                           [&](const auto& js) { return js.name == actuator_interface.name_; });
-    if (it != joint_states_.end())
+  std::for_each(joint_states_.begin(), joint_states_.end(), [this](auto& it) {
+    
+    auto actuator_interface = std::find_if(actuator_interfaces_.begin(), actuator_interfaces_.end(),
+                           [&](const auto& act) { return it.mj_actuator_id == get_actuator_id(act.name_, mj_model_); });
+
+    if (actuator_interface != actuator_interfaces_.end())
     {
-      if ((it->is_position_control_enabled || it->is_position_pid_control_enabled))
+      if ((it.is_position_control_enabled || it.is_position_pid_control_enabled) && actuator_interface->command_interface_ == hardware_interface::HW_IF_POSITION )
       {
-        actuator_interface.state_ = it->position_interface.state_;
+        actuator_interface->state_ = it.position_interface.state_;
       }
-      else if ((it->is_velocity_control_enabled || it->is_velocity_pid_control_enabled))
+      else if ((it.is_velocity_control_enabled || it.is_velocity_pid_control_enabled) && actuator_interface->command_interface_ == hardware_interface::HW_IF_VELOCITY)
       {
-        actuator_interface.state_ = it->velocity_interface.state_;
+        actuator_interface->state_ = it.velocity_interface.state_;
       }
-      else
+      else if (((it.is_effort_control_enabled) && actuator_interface->command_interface_ == hardware_interface::HW_IF_EFFORT))
       {
-        actuator_interface.state_ = it->effort_interface.state_;
+        actuator_interface->state_ = it.effort_interface.state_;
       }
     }
   });
@@ -1193,6 +1195,29 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // joint: transmission -> state
   std::for_each(joint_interfaces_.begin(), joint_interfaces_.end(),
                 [](auto& joint_interface) { joint_interface.state_ = joint_interface.transmission_passthrough_; });
+
+  for (auto& joint_state : joint_states_)
+  {
+    auto it = std::find_if(joint_interfaces_.begin(), joint_interfaces_.end(),
+                           [&](const auto& js) { 
+                            return joint_state.name == js.name_ ; });
+  
+    if (it != joint_interfaces_.end())
+    {
+      if ((joint_state.is_position_control_enabled || joint_state.is_position_pid_control_enabled) && it->command_interface_ == hardware_interface::HW_IF_POSITION)
+      {
+        joint_state.position_interface.state_= it->state_;
+      }
+      else if ((joint_state.is_velocity_control_enabled || joint_state.is_velocity_pid_control_enabled)  && it->command_interface_ == hardware_interface::HW_IF_VELOCITY)
+      {
+        joint_state.velocity_interface.state_ = it->state_;
+      }
+      else if (((joint_state.is_effort_control_enabled) && it->name_ == hardware_interface::HW_IF_EFFORT))
+      {
+        joint_state.effort_interface.state_ = it->state_;
+      }
+    }
+  }
 
   // IMU Sensor data
   for (auto& data : imu_sensor_data_)
