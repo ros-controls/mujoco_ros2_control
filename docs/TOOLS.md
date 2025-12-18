@@ -1,6 +1,5 @@
 # Mujoco To ROS Tools
 
-> **NOTE**: TODO: This tool is broken on jazzy and beyond, stick with the `humble-devel` branch until https://github.com/NASA-JSC-Robotics/mujoco_ros2_control/issues/22 is resolve.
 
 > **WARNING**: These tools are highly experimental.
 Expect things to be broken.
