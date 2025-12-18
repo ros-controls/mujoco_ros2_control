@@ -21,7 +21,7 @@
 
 #include <hardware_interface/hardware_info.hpp>
 
-namespace mujoco_ros2_simulation
+namespace mujoco_ros2_control
 {
 
 /**
@@ -41,4 +41,4 @@ get_sensor_from_info(const hardware_interface::HardwareInfo& hardware_info, cons
   return std::nullopt;
 }
 
-}  // namespace mujoco_ros2_simulation
+}  // namespace mujoco_ros2_control

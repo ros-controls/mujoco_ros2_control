@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "mujoco_ros2_simulation/mujoco_system_interface.hpp"
+#include "mujoco_ros2_control/mujoco_system_interface.hpp"
 #include "array_safety.h"
 
 #include <cerrno>
@@ -63,7 +63,7 @@ using Seconds = std::chrono::duration<double>;
 /// \brief vector with the current actuator for each joint
 std::unordered_map<std::string, std::string> actuator_map;
 
-namespace mujoco_ros2_simulation
+namespace mujoco_ros2_control
 {
 namespace mj = ::mujoco;
 namespace mju = ::mujoco::sample_util;
@@ -598,7 +598,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
 
       // Add ros2 control icon for the taskbar
       std::string icon_location =
-          ament_index_cpp::get_package_share_directory("mujoco_ros2_simulation") + "/resources/mujoco_logo.png";
+          ament_index_cpp::get_package_share_directory("mujoco_ros2_control") + "/resources/mujoco_logo.png";
       std::vector<unsigned char> image;
       unsigned width, height;
       unsigned error = lodepng::decode(image, width, height, icon_location);
@@ -1818,7 +1818,7 @@ rclcpp::Logger MujocoSystemInterface::get_logger() const
   return logger_;
 }
 
-}  // namespace mujoco_ros2_simulation
+}  // namespace mujoco_ros2_control
 
 #include "pluginlib/class_list_macros.hpp"
-PLUGINLIB_EXPORT_CLASS(mujoco_ros2_simulation::MujocoSystemInterface, hardware_interface::SystemInterface);
+PLUGINLIB_EXPORT_CLASS(mujoco_ros2_control::MujocoSystemInterface, hardware_interface::SystemInterface);

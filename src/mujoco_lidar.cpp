@@ -17,10 +17,10 @@
  * under the License.
  */
 
-#include "mujoco_ros2_simulation/mujoco_lidar.hpp"
-#include "mujoco_ros2_simulation/utils.hpp"
+#include "mujoco_ros2_control/mujoco_lidar.hpp"
+#include "mujoco_ros2_control/utils.hpp"
 
-namespace mujoco_ros2_simulation
+namespace mujoco_ros2_control
 {
 
 /**
@@ -279,4 +279,4 @@ void MujocoLidar::update()
   }
 }
 
-}  // namespace mujoco_ros2_simulation
+}  // namespace mujoco_ros2_control

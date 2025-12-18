@@ -42,11 +42,11 @@
 #include "glfw_adapter.h"  // for mj::GlfwAdapter
 #include "simulate.h"      // must be on your include path, handled by CMake
 
-#include "mujoco_ros2_simulation/data.hpp"
-#include "mujoco_ros2_simulation/mujoco_cameras.hpp"
-#include "mujoco_ros2_simulation/mujoco_lidar.hpp"
+#include "mujoco_ros2_control/data.hpp"
+#include "mujoco_ros2_control/mujoco_cameras.hpp"
+#include "mujoco_ros2_control/mujoco_lidar.hpp"
 
-namespace mujoco_ros2_simulation
+namespace mujoco_ros2_control
 {
 class MujocoSystemInterface : public hardware_interface::SystemInterface
 {
@@ -249,4 +249,4 @@ private:
   std::vector<IMUSensorData> imu_sensor_data_;
 };
 
-}  // namespace mujoco_ros2_simulation
+}  // namespace mujoco_ros2_control

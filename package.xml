@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>mujoco_ros2_simulation</name>
+  <name>mujoco_ros2_control</name>
   <version>0.0.0</version>
   <description>ros2_control wrapper for the Mujoco Simulate application</description>
   <maintainer email="nathan.b.dunkelberger@nasa.gov">Nathan Dunkelberger</maintainer>

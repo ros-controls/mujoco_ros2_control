@@ -132,19 +132,19 @@
   <!-- ROS2 Control Configuration -->
   <ros2_control name="MujocoSystem" type="system">
     <hardware>
-      <plugin>mujoco_ros2_simulation/MujocoSystemInterface</plugin>
+      <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
 
       <!-- Conditional mujoco_model parameter based on use_pid -->
       <xacro:if value="$(arg use_pid)">
-        <param name="mujoco_model">$(find mujoco_ros2_simulation)/test_resources/test_pid/scene_pid.xml</param>
-        <param name="pids_config_file">$(find mujoco_ros2_simulation)/config/mujoco_pid.yaml</param>
+        <param name="mujoco_model">$(find mujoco_ros2_control)/test_resources/test_pid/scene_pid.xml</param>
+        <param name="pids_config_file">$(find mujoco_ros2_control)/config/mujoco_pid.yaml</param>
       </xacro:if>
       <xacro:unless value="$(arg use_pid)">
-        <param name="mujoco_model">$(find mujoco_ros2_simulation)/test_resources/scene.xml</param>
+        <param name="mujoco_model">$(find mujoco_ros2_control)/test_resources/scene.xml</param>
       </xacro:unless>
 
       <!-- Uncomment this to use the keyframe from shown file as the starting configuration. -->
-      <!-- <param name="override_start_position_file">$(find mujoco_ros2_simulation)/config/start_positions.xml</param> -->
+      <!-- <param name="override_start_position_file">$(find mujoco_ros2_control)/config/start_positions.xml</param> -->
 
       <!-- Override the slowdown settings in the Simulate App and run at 3x speed -->
       <param name="sim_speed_factor">3.0</param>

@@ -48,7 +48,7 @@ Just specify the plugin and point to a valid MJCF on launch:
 ```xml
   <ros2_control name="MujocoSystem" type="system">
     <hardware>
-      <plugin>mujoco_ros2_simulation/MujocoSystemInterface</plugin>
+      <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
       <param name="mujoco_model">$(find my_description)/description/scene.xml</param>
 
       <!--
@@ -104,7 +104,7 @@ It is the same executable and parameters as the upstream, but requires updating 
 ```python
     control_node = Node(
         # Specify the control node from this package!
-        package="mujoco_ros2_simulation",
+        package="mujoco_ros2_control",
         executable="ros2_control_node",
         output="both",
         parameters=[
@@ -391,10 +391,10 @@ For example, launch the included test scene with,
 
 ```bash
 # Evaluate using the included mujoco simulate application
-${MUJOCO_DIR}/bin/simulate ${ROS_WS}/src/mujoco_ros2_simulation/test/test_resources/scene.xml
+${MUJOCO_DIR}/bin/simulate ${ROS_WS}/src/mujoco_ros2_control/test/test_resources/scene.xml
 
 # Or launch the test ROS control interface
-ros2 launch mujoco_ros2_simulation test_robot.launch.py
+ros2 launch mujoco_ros2_control test_robot.launch.py
 ```
 
 > [!NOTE]
@@ -435,13 +435,13 @@ For now, built the drivers with testing enabled, then the test robot system can 
 
 ```bash
 # Brings up the hardware drivers and mujoco interface, along with a single position controller
-ros2 launch mujoco_ros2_simulation test_robot.launch.py
+ros2 launch mujoco_ros2_control test_robot.launch.py
 
 # Or optionally include the PID controller as mentioned above
-ros2 launch mujoco_ros2_simulation test_robot.launch.py use_pid:=true
+ros2 launch mujoco_ros2_control test_robot.launch.py use_pid:=true
 
 # Launch an rviz2 window with the provided configuration
-rviz2 -d $(ros2 pkg prefix --share mujoco_ros2_simulation)/config/test_robot.rviz
+rviz2 -d $(ros2 pkg prefix --share mujoco_ros2_control)/config/test_robot.rviz
 ```
 
 From there, command joints to move with,

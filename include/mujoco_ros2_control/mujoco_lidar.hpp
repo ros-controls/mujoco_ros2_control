@@ -32,7 +32,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 
-namespace mujoco_ros2_simulation
+namespace mujoco_ros2_control
 {
 
 struct LidarData
@@ -129,4 +129,4 @@ private:
   std::atomic_bool publish_lidar_;
 };
 
-}  // namespace mujoco_ros2_simulation
+}  // namespace mujoco_ros2_control

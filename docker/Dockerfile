@@ -61,11 +61,11 @@ RUN tar -xzf "mujoco-${MUJOCO_VERSION}-linux-${CPU_ARCH}.tar.gz" -C $(dirname "$
 
 # Setup a ROS workspace
 ENV ROS_WS="/opt/mujoco/ws"
-RUN mkdir -p ${ROS_WS}/src/mujoco_ros2_simulation
+RUN mkdir -p ${ROS_WS}/src/mujoco_ros2_control
 WORKDIR ${ROS_WS}
 
 # Copy package manifests for installing rosdeps
-COPY --from=package-manifests /src/ ${ROS_WS}/src/mujoco_ros2_simulation
+COPY --from=package-manifests /src/ ${ROS_WS}/src/mujoco_ros2_control
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -75,7 +75,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     rosdep install -iry --from-paths src/
 
 # Copy remaining source
-COPY . ${ROS_WS}/src/mujoco_ros2_simulation/
+COPY . ${ROS_WS}/src/mujoco_ros2_control/
 
 RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
     && colcon build \

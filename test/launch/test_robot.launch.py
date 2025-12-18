@@ -33,7 +33,7 @@ from launch.actions import ExecuteProcess
 
 def generate_launch_description():
 
-    # Refer https://github.com/ros-controls/mujoco_ros2_simulation?tab=readme-ov-file#joints
+    # Refer https://github.com/ros-controls/mujoco_ros2_control?tab=readme-ov-file#joints
     use_pid = DeclareLaunchArgument(
         "use_pid", default_value="false", description="If we should use PID control to enable other control modes"
     )
@@ -46,7 +46,7 @@ def generate_launch_description():
             " ",
             PathJoinSubstitution(
                 [
-                    FindPackageShare("mujoco_ros2_simulation"),
+                    FindPackageShare("mujoco_ros2_control"),
                     "test_resources",
                     "test_robot.urdf",
                 ]
@@ -66,7 +66,7 @@ def generate_launch_description():
         "python3",
         PathJoinSubstitution(
             [
-                FindPackageShare("mujoco_ros2_simulation"),
+                FindPackageShare("mujoco_ros2_control"),
                 "scripts",
                 "make_mjcf_from_robot_description.py",
             ]
@@ -82,7 +82,7 @@ def generate_launch_description():
     )
 
     controller_parameters = ParameterFile(
-        PathJoinSubstitution([FindPackageShare("mujoco_ros2_simulation"), "config", "controllers.yaml"]),
+        PathJoinSubstitution([FindPackageShare("mujoco_ros2_control"), "config", "controllers.yaml"]),
     )
 
     robot_state_publisher_node = Node(
@@ -96,7 +96,7 @@ def generate_launch_description():
     )
 
     control_node = Node(
-        package="mujoco_ros2_simulation",
+        package="mujoco_ros2_control",
         executable="ros2_control_node",
         output="both",
         parameters=[

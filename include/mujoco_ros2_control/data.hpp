@@ -26,7 +26,7 @@
 #include <string>
 #include <vector>
 
-namespace mujoco_ros2_simulation
+namespace mujoco_ros2_control
 {
 
 /**
@@ -111,4 +111,4 @@ struct IMUSensorData
   std::vector<double> linear_acceleration_covariance;
 };
 
-}  // namespace mujoco_ros2_simulation
+}  // namespace mujoco_ros2_control

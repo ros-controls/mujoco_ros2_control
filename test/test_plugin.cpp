@@ -47,7 +47,7 @@ protected:
 
 TEST_F(MujocoSystemInterfaceLoadingTest, test_load_plugin)
 {
-  const std::string class_name = "mujoco_ros2_simulation/MujocoSystemInterface";
+  const std::string class_name = "mujoco_ros2_control/MujocoSystemInterface";
 
   // Pluginlib should find the class
   ASSERT_TRUE(plugin_loader_->isClassAvailable(class_name));

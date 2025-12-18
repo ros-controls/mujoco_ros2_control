@@ -42,7 +42,7 @@ def generate_test_description_common(use_pid="false"):
     launch_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
-                get_package_share_directory("mujoco_ros2_simulation"),
+                get_package_share_directory("mujoco_ros2_control"),
                 "launch/test_robot.launch.py",
             )
         ),

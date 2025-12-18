@@ -17,14 +17,14 @@
  * under the License.
  */
 
-#include "mujoco_ros2_simulation/mujoco_cameras.hpp"
-#include "mujoco_ros2_simulation/utils.hpp"
+#include "mujoco_ros2_control/mujoco_cameras.hpp"
+#include "mujoco_ros2_control/utils.hpp"
 
 #include "sensor_msgs/image_encodings.hpp"
 
 using namespace std::chrono_literals;
 
-namespace mujoco_ros2_simulation
+namespace mujoco_ros2_control
 {
 
 MujocoCameras::MujocoCameras(rclcpp::Node::SharedPtr& node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
@@ -264,4 +264,4 @@ void MujocoCameras::update()
   }
 }
 
-}  // namespace mujoco_ros2_simulation
+}  // namespace mujoco_ros2_control

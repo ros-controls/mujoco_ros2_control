@@ -1,7 +1,7 @@
 [workspace]
 authors = ["Erik Holum <erik.holum@nasa.gov>"]
 channels = ["conda-forge", "https://prefix.dev/robostack-jazzy"]
-name = "mujoco_ros2_simulation"
+name = "mujoco_ros2_control"
 platforms = ["linux-aarch64", "linux-64"]
 version = "0.1.0"
 

@@ -34,7 +34,7 @@ services:
     #           capabilities: [ gpu ]
     volumes:
       # Mount the source code.
-      - ./:/opt/mujoco/ws/src/mujoco_ros2_simulation:rw
+      - ./:/opt/mujoco/ws/src/mujoco_ros2_control:rw
       # Allows graphical programs in the container.
       - x11_sock:/tmp/.X11-unix
       - /tmp/.X11-unix:/tmp/.X11-unix:rw

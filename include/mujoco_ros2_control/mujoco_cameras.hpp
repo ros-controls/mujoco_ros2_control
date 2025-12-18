@@ -34,7 +34,7 @@
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
-namespace mujoco_ros2_simulation
+namespace mujoco_ros2_control
 {
 
 struct CameraData
@@ -136,4 +136,4 @@ private:
   std::atomic_bool publish_images_;
 };
 
-}  // namespace mujoco_ros2_simulation
+}  // namespace mujoco_ros2_control
