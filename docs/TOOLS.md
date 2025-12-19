@@ -41,7 +41,7 @@ options:
   -f, --add_free_joint  Adds a free joint as the base link for mobile robots
 ```
 
-A sample URDF and inputs file are provided in [test_robot.urdf](test/test_resources/test_robot.urdf) and [test_inputs.xml](test/test_resources/test_inputs.xml).
+A sample URDF and inputs file are provided in [test_robot.urdf](../test/test_resources/test_robot.urdf) and [test_inputs.xml](../test/test_resources/test_inputs.xml).
 
 To convert the URDF, run the following from the repo root
 
