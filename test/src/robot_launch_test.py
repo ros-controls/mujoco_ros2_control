@@ -29,16 +29,18 @@ from launch_testing_ros import WaitForTopics
 import pytest
 import rclpy
 from rosgraph_msgs.msg import Clock
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState, Image, CameraInfo
 from controller_manager_msgs.srv import ListHardwareInterfaces
 
 
 # This function specifies the processes to be run for our test
-def generate_test_description_common(use_pid="false"):
+def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false"):
     # This is necessary to get unbuffered output from the process under test
     proc_env = os.environ.copy()
     proc_env["PYTHONUNBUFFERED"] = "1"
+    os.environ["USE_MJCF_FROM_TOPIC"] = use_mjcf_from_topic
+
     launch_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -46,7 +48,7 @@ def generate_test_description_common(use_pid="false"):
                 "launch/test_robot.launch.py",
             )
         ),
-        launch_arguments={"headless": "true", "use_pid": use_pid}.items(),
+        launch_arguments={"headless": "true", "use_pid": use_pid, "use_mjcf_from_topic": use_mjcf_from_topic}.items(),
     )
 
     return LaunchDescription([launch_include, KeepAliveProc(), ReadyToTest()])
@@ -205,3 +207,35 @@ class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
         ), f"Command interfaces do not match expected. Got: {available_command_interfaces_names}"
 
         self.node.get_logger().info("Available hardware interfaces check passed.")
+
+
+class TestMJCFGenerationFromURDF(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("USE_MJCF_FROM_TOPIC") != "true":
+            raise unittest.SkipTest("Skipping MJCF generation tests because use_mjcf_from_topic is not true")
+        rclpy.init()
+
+    @classmethod
+    def tearDownClass(cls):
+        rclpy.shutdown()
+
+    def setUp(self):
+        self.node = rclpy.create_node("test_node")
+
+    def tearDown(self):
+        self.node.destroy_node()
+
+    def test_check_for_mujoco_robot_description_topic(self):
+        topic_list = [
+            ("/mujoco_robot_description", String),
+        ]
+        wait_for_topics = WaitForTopics(topic_list, timeout=15.0)
+        assert wait_for_topics.wait(), "The MuJoCo robot description topic is not published"
+        wait_for_topics.shutdown()
+
+        # Now, get the received message and check if it contains expected content
+        msgs = wait_for_topics.received_messages("/mujoco_robot_description")
+        msg = msgs[0]
+        assert "<mujoco" in msg.data, "The MuJoCo robot description does not contain expected content"
