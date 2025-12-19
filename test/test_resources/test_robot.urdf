@@ -18,7 +18,7 @@
   <link name="upperarm">
     <inertial>
       <origin xyz="0.5 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
+      <mass value="27.0"/>
       <inertia ixx="0.0225" ixy="0.0" ixz="0.0" iyy="0.225" iyz="0.0" izz="0.225"/>
     </inertial>
     <visual>
@@ -47,7 +47,7 @@
   <link name="forearm">
     <inertial>
       <origin xyz="0.5 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
+      <mass value="27.0"/>
       <inertia ixx="0.0225" ixy="0.0" ixz="0.0" iyy="0.225" iyz="0.0" izz="0.225"/>
     </inertial>
     <visual>
