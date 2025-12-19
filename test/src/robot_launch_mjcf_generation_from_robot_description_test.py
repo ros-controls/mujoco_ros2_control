@@ -29,4 +29,3 @@ from robot_launch_test import TestFixture, TestMJCFGenerationFromURDF  # noqa: F
 @pytest.mark.rostest
 def generate_test_description():
     return generate_test_description_common(use_pid="true", use_mjcf_from_topic="true")
-

@@ -22,10 +22,11 @@ import pytest
 sys.path.append(os.path.dirname(__file__))  # noqa: E402
 
 from robot_launch_test import generate_test_description_common  # noqa: E402
-from robot_launch_test import TestFixture, TestFixtureHardwareInterfacesCheck, TestMJCFGenerationFromURDF  # noqa: F401, E402
+from robot_launch_test import TestFixture  # noqa: F401, E402
+from robot_launch_test import TestFixtureHardwareInterfacesCheck  # noqa: F401, E402
+from robot_launch_test import TestMJCFGenerationFromURDF  # noqa: F401, E402
 
 
 @pytest.mark.rostest
 def generate_test_description():
     return generate_test_description_common(use_pid="false", use_mjcf_from_topic="true")
-
