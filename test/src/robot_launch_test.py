@@ -28,6 +28,7 @@ from launch_testing.util import KeepAliveProc
 from launch_testing_ros import WaitForTopics
 import pytest
 import rclpy
+from rclpy.qos import QoSProfile, DurabilityPolicy
 from rosgraph_msgs.msg import Clock
 from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState, Image, CameraInfo
@@ -228,14 +229,23 @@ class TestMJCFGenerationFromURDF(unittest.TestCase):
         self.node.destroy_node()
 
     def test_check_for_mujoco_robot_description_topic(self):
-        topic_list = [
-            ("/mujoco_robot_description", String),
-        ]
-        wait_for_topics = WaitForTopics(topic_list, timeout=15.0)
-        assert wait_for_topics.wait(), "The MuJoCo robot description topic is not published"
-        wait_for_topics.shutdown()
+        # Create a QoS profile for transient_local topics
+        qos_profile = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
-        # Now, get the received message and check if it contains expected content
-        msgs = wait_for_topics.received_messages("/mujoco_robot_description")
-        msg = msgs[0]
+        received_msgs = []
+
+        def callback(msg):
+            received_msgs.append(msg)
+
+        sub = self.node.create_subscription(String, "/mujoco_robot_description", callback, qos_profile)
+
+        end_time = time.time() + 15.0
+        while time.time() < end_time:
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+            if received_msgs:
+                break
+
+        self.assertTrue(received_msgs, "The MuJoCo robot description topic is not published")
+        msg = received_msgs[0]
         assert "<mujoco" in msg.data, "The MuJoCo robot description does not contain expected content"
+        self.node.destroy_subscription(sub)
