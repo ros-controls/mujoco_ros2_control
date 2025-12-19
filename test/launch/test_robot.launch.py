@@ -41,7 +41,7 @@ def generate_launch_description():
     headless = DeclareLaunchArgument("headless", default_value="false", description="Run in headless mode")
 
     use_mjcf_from_topic = DeclareLaunchArgument(
-        "use_mjcf_fuse_mjcf_from_topicrom_topic",
+        "use_mjcf_from_topic",
         default_value="false",
         description="When set to true, the MJCF is generated at runtime from URDF",
     )
@@ -71,7 +71,7 @@ def generate_launch_description():
 
     robot_description = {"robot_description": ParameterValue(value=robot_description_content, value_type=str)}
 
-    converter_arguments_without_pids = [
+    converter_arguments_no_pid = [
         "--robot_description",
         robot_description_content,
         "--m",
@@ -94,28 +94,26 @@ def generate_launch_description():
         "/mujoco_robot_description",
     ]
 
-    converter_arguments_with_pids = [
+    converter_arguments_pid = [
         "--publish_topic",
         "/mujoco_robot_description",
     ]
 
-    print(converter_arguments_without_pids)
-
-    converter_node_without_pids = Node(
+    converter_node_no_pid = Node(
         package="mujoco_ros2_control",
         executable="make_mjcf_from_robot_description.py",
         output="both",
         emulate_tty=True,
-        arguments=converter_arguments_without_pids,
+        arguments=converter_arguments_no_pid,
         condition=UnlessCondition(LaunchConfiguration("use_pid")),
     )
 
-    converter_node_with_pids = Node(
+    converter_node_pid = Node(
         package="mujoco_ros2_control",
         executable="make_mjcf_from_robot_description.py",
         output="both",
         emulate_tty=True,
-        arguments=converter_arguments_with_pids,
+        arguments=converter_arguments_pid,
         condition=IfCondition(LaunchConfiguration("use_pid")),
     )
 
@@ -172,7 +170,7 @@ def generate_launch_description():
             control_node,
             spawn_joint_state_broadcaster,
             spawn_position_controller,
-            converter_node_with_pids,
-            converter_node_without_pids,
+            converter_node_pid,
+            converter_node_no_pid,
         ]
     )
