@@ -362,71 +362,7 @@ The lidar sensor is then configurable through ROS 2 control xacro with:
   </ros2_control>
 ```
 
-## Docker Development Workflow
-
-This project includes a [compose](./docker-compose.yml) and [Dockerfile](./.docker/Dockerfile) for development and testing in an isolated environment.
-
-> [!NOTE]
-> You may need to give docker access to xhost with `xhost +local:docker` to ensure the container has access to the host UI.
-
-For users on arm64 machines, be sure to specify the `CPU_ARCH` variable in your environment when building.
-
-```bash
-docker compose build
-```
-
-The service can be started with:
-
-```bash
-# Start the service in one shell (or start detached)
-docker compose up
-
-# Connect to it in another
-docker compose exec dev bash
-```
-
-This will launch a container with the source code mounted in a colcon workspace.
-From there the source can be modified, built, tested, or otherwise used as normal.
-For example, launch the included test scene with,
-
-```bash
-# Evaluate using the included mujoco simulate application
-${MUJOCO_DIR}/bin/simulate ${ROS_WS}/src/mujoco_ros2_control/test/test_resources/scene.xml
-
-# Or launch the test ROS control interface
-ros2 launch mujoco_ros2_control test_robot.launch.py
-```
-
-> [!NOTE]
-> Rendering contexts in containers can be tricky.
-
-Users may need to tweak the compose file to support their specific host OS or GPUs.
-For more information refer to the comments in the compose file.
-
-## Pixi Development Workflow
-
-A [pixi](https://pixi.sh/latest/installation/) and [robostack](https://robostack.github.io) workflow is also provided.
-The environment is currently only compatible with Jazzy.
-
-To run ensure pixi is installed.
-Then,
-
-```bash
-# Setup the build environment
-pixi run setup-colcon
-
-# Build the package
-pixi run build
-
-# Run tests
-pixi run test
-
-# Launch an interactive shell and source the install
-pixi shell
-source install/setup.bash
-```
-
-### Test Robot System
+## Test Robot System
 
 While examples are limited, we maintain a functional example 2-dof robot system in the [test examples](./test/test_resources/test_robot.urdf) space.
 We generally recommend looking there for examples and recommended workflows.
@@ -454,3 +390,7 @@ ros2 topic pub /position_controller/commands std_msgs/msg/Float64MultiArray "dat
 > UI panels can be toggled with `Tab` or `Shift+Tab`.
 > All standard MuJoCo keyboard shortcuts are available.
 > To see a short list, press `F1`.
+
+## Development
+
+More information is provided in the [developers guide](./docs/DEVELOPMENT.md) document.
