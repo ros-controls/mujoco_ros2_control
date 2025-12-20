@@ -1722,7 +1722,7 @@ void MujocoSystemInterface::PhysicsLoop()
                 measured = true;
               }
               // inject noise
-              sim_->InjectNoise();
+              sim_->InjectNoise(-1);
 
               // Copy data to the control
               mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, mj_model_->nu);
