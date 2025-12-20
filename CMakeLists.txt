@@ -41,7 +41,7 @@ else()
   include(FetchContent)
 
   # Detect architecture
-  set(MUJOCO_VERSION "3.3.4")
+  set(MUJOCO_VERSION "3.4.0")
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
     set(CPU_ARCH "x86_64")
   elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")

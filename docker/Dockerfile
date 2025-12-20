@@ -14,7 +14,7 @@ FROM ros:${ROS_DISTRO} AS mujoco_ros
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Defaults for the MuJoCo install, CPU_ARCH may be set to aarch64 for arm cpus
-ARG MUJOCO_VERSION=3.3.4
+ARG MUJOCO_VERSION=3.4.0
 ARG CPU_ARCH=x86_64
 
 ARG DEBIAN_FRONTEND=noninteractive
