@@ -245,7 +245,7 @@ class TestMJCFGenerationFromURDF(unittest.TestCase):
             if received_msgs:
                 break
 
-        self.assertTrue(received_msgs, "The MuJoCo robot description topic is not published")
+        assert received_msgs, "The MuJoCo robot description topic is not published"
         msg = received_msgs[0]
         assert "<mujoco" in msg.data, "The MuJoCo robot description does not contain expected content"
         self.node.destroy_subscription(sub)
