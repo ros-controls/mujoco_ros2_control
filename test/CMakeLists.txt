@@ -20,3 +20,11 @@ add_launch_test(src/robot_launch_test.py
 add_launch_test(src/robot_launch_pid_test.py
   TIMEOUT 50
 )
+
+add_launch_test(src/robot_launch_mjcf_generation_test.py
+  TIMEOUT 50
+)
+
+add_launch_test(src/robot_launch_mjcf_generation_from_robot_description_test.py
+  TIMEOUT 50
+)

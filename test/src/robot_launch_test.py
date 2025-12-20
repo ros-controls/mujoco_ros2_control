@@ -28,17 +28,20 @@ from launch_testing.util import KeepAliveProc
 from launch_testing_ros import WaitForTopics
 import pytest
 import rclpy
+from rclpy.qos import QoSProfile, DurabilityPolicy
 from rosgraph_msgs.msg import Clock
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState, Image, CameraInfo
 from controller_manager_msgs.srv import ListHardwareInterfaces
 
 
 # This function specifies the processes to be run for our test
-def generate_test_description_common(use_pid="false"):
+def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false"):
     # This is necessary to get unbuffered output from the process under test
     proc_env = os.environ.copy()
     proc_env["PYTHONUNBUFFERED"] = "1"
+    os.environ["USE_MJCF_FROM_TOPIC"] = use_mjcf_from_topic
+
     launch_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -46,7 +49,7 @@ def generate_test_description_common(use_pid="false"):
                 "launch/test_robot.launch.py",
             )
         ),
-        launch_arguments={"headless": "true", "use_pid": use_pid}.items(),
+        launch_arguments={"headless": "true", "use_pid": use_pid, "use_mjcf_from_topic": use_mjcf_from_topic}.items(),
     )
 
     return LaunchDescription([launch_include, KeepAliveProc(), ReadyToTest()])
@@ -205,3 +208,44 @@ class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
         ), f"Command interfaces do not match expected. Got: {available_command_interfaces_names}"
 
         self.node.get_logger().info("Available hardware interfaces check passed.")
+
+
+class TestMJCFGenerationFromURDF(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("USE_MJCF_FROM_TOPIC") != "true":
+            raise unittest.SkipTest("Skipping MJCF generation tests because use_mjcf_from_topic is not true")
+        rclpy.init()
+
+    @classmethod
+    def tearDownClass(cls):
+        rclpy.shutdown()
+
+    def setUp(self):
+        self.node = rclpy.create_node("test_node")
+
+    def tearDown(self):
+        self.node.destroy_node()
+
+    def test_check_for_mujoco_robot_description_topic(self):
+        # Create a QoS profile for transient_local topics
+        qos_profile = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+
+        received_msgs = []
+
+        def callback(msg):
+            received_msgs.append(msg)
+
+        sub = self.node.create_subscription(String, "/mujoco_robot_description", callback, qos_profile)
+
+        end_time = time.time() + 15.0
+        while time.time() < end_time:
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+            if received_msgs:
+                break
+
+        assert received_msgs, "The MuJoCo robot description topic is not published"
+        msg = received_msgs[0]
+        assert "<mujoco" in msg.data, "The MuJoCo robot description does not contain expected content"
+        self.node.destroy_subscription(sub)

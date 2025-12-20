@@ -26,9 +26,9 @@ from launch.substitutions import (
     PathJoinSubstitution,
 )
 from launch_ros.actions import Node
+from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.parameter_descriptions import ParameterValue, ParameterFile
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import ExecuteProcess
 
 
 def generate_launch_description():
@@ -39,6 +39,12 @@ def generate_launch_description():
     )
 
     headless = DeclareLaunchArgument("headless", default_value="false", description="Run in headless mode")
+
+    use_mjcf_from_topic = DeclareLaunchArgument(
+        "use_mjcf_from_topic",
+        default_value="false",
+        description="When set to true, the MJCF is generated at runtime from URDF",
+    )
 
     robot_description_content = Command(
         [
@@ -57,28 +63,58 @@ def generate_launch_description():
             " ",
             "headless:=",
             LaunchConfiguration("headless"),
+            " ",
+            "use_mjcf_from_topic:=",
+            LaunchConfiguration("use_mjcf_from_topic"),
         ]
     )
 
     robot_description = {"robot_description": ParameterValue(value=robot_description_content, value_type=str)}
 
-    converter_command = [
-        "python3",
+    converter_arguments_no_pid = [
+        "--robot_description",
+        robot_description_content,
+        "--m",
         PathJoinSubstitution(
             [
                 FindPackageShare("mujoco_ros2_control"),
-                "scripts",
-                "make_mjcf_from_robot_description.py",
+                "test_resources",
+                "test_inputs.xml",
             ]
         ),
+        "--scene",
+        PathJoinSubstitution(
+            [
+                FindPackageShare("mujoco_ros2_control"),
+                "test_resources",
+                "scene_info.xml",
+            ]
+        ),
+        "--publish_topic",
+        "/mujoco_robot_description",
     ]
 
-    converter_process = ExecuteProcess(
-        cmd=converter_command,
-        name="make_mjcf_from_robot_description",
-        output="screen",
-        #   True to see the output
+    converter_arguments_pid = [
+        "--publish_topic",
+        "/mujoco_robot_description",
+    ]
+
+    converter_node_no_pid = Node(
+        package="mujoco_ros2_control",
+        executable="make_mjcf_from_robot_description.py",
+        output="both",
         emulate_tty=True,
+        arguments=converter_arguments_no_pid,
+        condition=UnlessCondition(LaunchConfiguration("use_pid")),
+    )
+
+    converter_node_pid = Node(
+        package="mujoco_ros2_control",
+        executable="make_mjcf_from_robot_description.py",
+        output="both",
+        emulate_tty=True,
+        arguments=converter_arguments_pid,
+        condition=IfCondition(LaunchConfiguration("use_pid")),
     )
 
     controller_parameters = ParameterFile(
@@ -129,10 +165,12 @@ def generate_launch_description():
         [
             use_pid,
             headless,
+            use_mjcf_from_topic,
             robot_state_publisher_node,
             control_node,
             spawn_joint_state_broadcaster,
             spawn_position_controller,
-            converter_process,
+            converter_node_pid,
+            converter_node_no_pid,
         ]
     )
