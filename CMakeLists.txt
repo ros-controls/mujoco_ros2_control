@@ -64,10 +64,27 @@ endif()
 
 if(GLFW3_FOUND)
   # Create glfw target from pkg-config (standard for system packages)
-  add_library(glfw INTERFACE)
-  target_include_directories(glfw INTERFACE ${GLFW3_INCLUDE_DIRS})
-  target_link_libraries(glfw INTERFACE ${GLFW3_LIBRARIES})
-  target_compile_options(glfw INTERFACE ${GLFW3_CFLAGS_OTHER})
+  # Use find_library to get actual library path for proper linking
+  find_library(GLFW3_LIBRARY_FILE
+    NAMES glfw glfw3
+    PATHS ${GLFW3_LIBRARY_DIRS} /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
+    NO_DEFAULT_PATH
+  )
+  if(NOT GLFW3_LIBRARY_FILE)
+    find_library(GLFW3_LIBRARY_FILE NAMES glfw glfw3)
+  endif()
+  if(GLFW3_LIBRARY_FILE)
+    add_library(glfw INTERFACE)
+    target_include_directories(glfw INTERFACE ${GLFW3_INCLUDE_DIRS})
+    target_link_libraries(glfw INTERFACE ${GLFW3_LIBRARY_FILE})
+    target_compile_options(glfw INTERFACE ${GLFW3_CFLAGS_OTHER})
+  else()
+    # Fallback to pkg-config libraries if find_library fails
+    add_library(glfw INTERFACE)
+    target_include_directories(glfw INTERFACE ${GLFW3_INCLUDE_DIRS})
+    target_link_libraries(glfw INTERFACE ${GLFW3_LIBRARIES})
+    target_compile_options(glfw INTERFACE ${GLFW3_CFLAGS_OTHER})
+  endif()
 else()
   # Fallback: try CMake config (for conda/pixi environments)
   find_package(glfw3 QUIET)
@@ -215,7 +232,7 @@ target_include_directories(
   platform_ui_adapter PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR}
                              $<TARGET_PROPERTY:glfw,INTERFACE_INCLUDE_DIRECTORIES>
 )
-target_link_libraries(platform_ui_adapter PUBLIC ${MUJOCO_LIB})
+target_link_libraries(platform_ui_adapter PUBLIC ${MUJOCO_LIB} glfw)
 target_compile_options(platform_ui_adapter PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 add_library(mujoco::platform_ui_adapter ALIAS platform_ui_adapter)
 
@@ -231,7 +248,7 @@ target_sources(
   PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.cc ${MUJOCO_SIMULATE_DIR}/array_safety.h
 )
 target_include_directories(libsimulate PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
-target_link_libraries(libsimulate PUBLIC lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
+target_link_libraries(libsimulate PUBLIC lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB} glfw)
 target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 
 # Mujoco ROS 2 control system interface (this package)

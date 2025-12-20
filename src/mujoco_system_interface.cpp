@@ -463,26 +463,29 @@ MujocoSystemInterface::MujocoSystemInterface() = default;
 
 MujocoSystemInterface::~MujocoSystemInterface()
 {
-  // Stop camera rendering loop
+  // Stop camera rendering loop (if not already stopped in on_deactivate)
   if (cameras_)
   {
     cameras_->close();
   }
 
-  // Stop lidar sensor loop
+  // Stop lidar sensor loop (if not already stopped in on_deactivate)
   if (lidar_sensors_)
   {
     lidar_sensors_->close();
   }
 
-  // Stop ROS
+  // Stop ROS executor
   if (executor_)
   {
     executor_->cancel();
-    executor_thread_.join();
+    if (executor_thread_.joinable())
+    {
+      executor_thread_.join();
+    }
   }
 
-  // If sim_ is created and running, clean shut it down
+  // If sim_ is created and running, clean shut it down (if not already stopped in on_deactivate)
   if (sim_)
   {
     sim_->exitrequest.store(true);
@@ -499,17 +502,21 @@ MujocoSystemInterface::~MujocoSystemInterface()
   }
 
   // Cleanup data and the model, if they haven't been
+  // Only cleanup after all threads are stopped to avoid race conditions
   if (mj_data_)
   {
     mj_deleteData(mj_data_);
+    mj_data_ = nullptr;
   }
   if (mj_data_control_)
   {
     mj_deleteData(mj_data_control_);
+    mj_data_control_ = nullptr;
   }
   if (mj_model_)
   {
     mj_deleteModel(mj_model_);
+    mj_model_ = nullptr;
   }
 }
 
@@ -946,7 +953,42 @@ MujocoSystemInterface::on_deactivate(const rclcpp_lifecycle::State& /*previous_s
 {
   RCLCPP_INFO(get_logger(), "Deactivating MuJoCo hardware interface and shutting down Simulate...");
 
-  // TODO: Should we shut mujoco things down here or in the destructor?
+  // Stop ROS executor first (it may be publishing clock or accessing resources)
+  if (executor_)
+  {
+    executor_->cancel();
+    if (executor_thread_.joinable())
+    {
+      executor_thread_.join();
+    }
+  }
+
+  // Stop camera and lidar rendering loops before ROS context becomes invalid
+  if (cameras_)
+  {
+    cameras_->close();
+  }
+
+  if (lidar_sensors_)
+  {
+    lidar_sensors_->close();
+  }
+
+  // Stop physics and UI threads before ROS context becomes invalid
+  if (sim_)
+  {
+    sim_->exitrequest.store(true);
+    sim_->run = false;
+
+    if (physics_thread_.joinable())
+    {
+      physics_thread_.join();
+    }
+    if (ui_thread_.joinable())
+    {
+      ui_thread_.join();
+    }
+  }
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -1633,7 +1675,7 @@ void MujocoSystemInterface::PhysicsLoop()
   mjtNum syncSim = 0;
 
   // run until asked to exit
-  while (!sim_->exitrequest.load())
+  while (sim_ && !sim_->exitrequest.load())
   {
     // sleep for 1 ms or yield, to let main thread run
     //  yield results in busy wait - which has better timing but kills battery life
@@ -1647,8 +1689,20 @@ void MujocoSystemInterface::PhysicsLoop()
     }
 
     {
+      // Safety check: ensure sim_ and sim_mutex_ are still valid
+      if (!sim_ || !sim_mutex_)
+      {
+        break;
+      }
+
       // lock the sim mutex during the update
       const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+
+      // Double-check after acquiring lock (sim_ might be deleted during shutdown)
+      if (!sim_ || !mj_model_ || !mj_data_)
+      {
+        break;
+      }
 
       // run only if model is present
       if (mj_model_)
@@ -1781,6 +1835,12 @@ void MujocoSystemInterface::PhysicsLoop()
 
 void MujocoSystemInterface::publish_clock()
 {
+  // Safety check: ensure mj_data_ is still valid (may be deleted during shutdown)
+  if (!mj_data_ || !clock_realtime_publisher_)
+  {
+    return;
+  }
+
   auto sim_time = mj_data_->time;
   int32_t sim_time_sec = static_cast<int32_t>(std::floor(sim_time));
   uint32_t sim_time_nanosec = static_cast<uint32_t>((sim_time - sim_time_sec) * 1e9);

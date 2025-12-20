@@ -198,12 +198,23 @@ void MujocoCameras::update_loop()
 
 void MujocoCameras::update()
 {
+  // Safety check: ensure model and data are still valid
+  if (!mj_model_ || !mj_data_ || !mj_camera_data_)
+  {
+    return;
+  }
+
   // Rendering is done offscreen
   mjr_setBuffer(mjFB_OFFSCREEN, &mjr_con_);
 
   // Step 1: Lock the sim and copy data for use in all camera rendering.
   {
     std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+    // Double-check after acquiring lock (model/data might be deleted during shutdown)
+    if (!mj_model_ || !mj_data_ || !mj_camera_data_)
+    {
+      return;
+    }
     mjv_copyData(mj_camera_data_, mj_model_, mj_data_);
   }
 
