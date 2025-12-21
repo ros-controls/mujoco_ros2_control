@@ -1721,8 +1721,15 @@ void MujocoSystemInterface::PhysicsLoop()
                 sim_->measured_slowdown = std::chrono::duration<double>(elapsedCPU).count() / elapsedSim;
                 measured = true;
               }
-              // inject noise
+// inject noise
+// Use mjVERSION_HEADER and if it is greater than 337 then do one thing or another
+// Needed due to
+// https://github.com/google-deepmind/mujoco/commit/401bf431b8b0fe6e0a619412a607b5135dc4ded4#diff-3dc22ceeebd71304c41d349c6d273bda172ea88ff49c772dbdcf51b9b19bbd33R2943
+#if mjVERSION_HEADER < 337
               sim_->InjectNoise();
+#else
+              sim_->InjectNoise(-1);
+#endif
 
               // Copy data to the control
               mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, mj_model_->nu);
