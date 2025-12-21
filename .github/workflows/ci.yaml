@@ -36,11 +36,17 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+      - name: Set image tag name
+        id: set_tag
+        run: |
+          github_ref_name="${{ github.head_ref || github.ref_name }}"
+          image_tag=$(echo "$github_ref_name" | sed 's/\//-/g')
+          echo "tag=${image_tag}" >> $GITHUB_OUTPUT
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           file: docker/Dockerfile
-          tags: mujoco_ros2_control:${{ github.head_ref || github.ref_name }}
+          tags: mujoco_ros2_control:${{ steps.set_tag.outputs.tag }}
           target: mujoco_ros
           build-args: |
             ROS_DISTRO=${{ matrix.ros_distro }}
@@ -51,7 +57,7 @@ jobs:
       - name: Run tests
         run: |
           docker run --rm \
-            mujoco_ros2_control:${{ github.head_ref || github.ref_name }} \
+            mujoco_ros2_control:${{ steps.set_tag.outputs.tag }} \
             bash -c "
               colcon test &&
               colcon test-result --verbose
