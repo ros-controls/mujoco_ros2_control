@@ -1,6 +1,6 @@
-# MuJoCo ROS 2 Simulation
+# MuJoCo ros2_control Simulation
 
-This package contains a ROS 2 control system interface for the [MuJoCo Simulator](https://mujoco.readthedocs.io/en/3.3.4/overview.html).
+This package contains a ros2_control system interface for the [MuJoCo Simulator](https://mujoco.readthedocs.io/en/3.3.4/overview.html).
 It was originally written for simulating robot hardware in NASA Johnson's [iMETRO facility](https://ntrs.nasa.gov/citations/20230015485).
 
 The system interface wraps MuJoCo's [Simulate App](https://github.com/google-deepmind/mujoco/tree/3.3.4/simulate) to provide included functionality.
@@ -362,71 +362,7 @@ The lidar sensor is then configurable through ROS 2 control xacro with:
   </ros2_control>
 ```
 
-## Docker Development Workflow
-
-This project includes a [compose](./docker-compose.yml) and [Dockerfile](./.docker/Dockerfile) for development and testing in an isolated environment.
-
-> [!NOTE]
-> You may need to give docker access to xhost with `xhost +local:docker` to ensure the container has access to the host UI.
-
-For users on arm64 machines, be sure to specify the `CPU_ARCH` variable in your environment when building.
-
-```bash
-docker compose build
-```
-
-The service can be started with:
-
-```bash
-# Start the service in one shell (or start detached)
-docker compose up
-
-# Connect to it in another
-docker compose exec dev bash
-```
-
-This will launch a container with the source code mounted in a colcon workspace.
-From there the source can be modified, built, tested, or otherwise used as normal.
-For example, launch the included test scene with,
-
-```bash
-# Evaluate using the included mujoco simulate application
-${MUJOCO_DIR}/bin/simulate ${ROS_WS}/src/mujoco_ros2_control/test/test_resources/scene.xml
-
-# Or launch the test ROS control interface
-ros2 launch mujoco_ros2_control test_robot.launch.py
-```
-
-> [!NOTE]
-> Rendering contexts in containers can be tricky.
-
-Users may need to tweak the compose file to support their specific host OS or GPUs.
-For more information refer to the comments in the compose file.
-
-## Pixi Development Workflow
-
-A [pixi](https://pixi.sh/latest/installation/) and [robostack](https://robostack.github.io) workflow is also provided.
-The environment is currently only compatible with Jazzy.
-
-To run ensure pixi is installed.
-Then,
-
-```bash
-# Setup the build environment
-pixi run setup-colcon
-
-# Build the package
-pixi run build
-
-# Run tests
-pixi run test
-
-# Launch an interactive shell and source the install
-pixi shell
-source install/setup.bash
-```
-
-### Test Robot System
+## Test Robot System
 
 While examples are limited, we maintain a functional example 2-dof robot system in the [test examples](./test/test_resources/test_robot.urdf) space.
 We generally recommend looking there for examples and recommended workflows.
@@ -455,47 +391,7 @@ ros2 topic pub /position_controller/commands std_msgs/msg/Float64MultiArray "dat
 > All standard MuJoCo keyboard shortcuts are available.
 > To see a short list, press `F1`.
 
-## Development Workflow within ROS 2 Workspace
+## Development
 
-This package can be built in a standard ROS 2 workspace on Linux/Ubuntu. This workflow is recommended for integrating with existing ROS 2 workspaces or for developers working with rolling builds from `ros2_control` or `ros2_controllers` projects. For isolated development environments, consider using the [Docker Development Workflow](#docker-development-workflow) or [Pixi Development Workflow](#pixi-development-workflow) instead.
+More information is provided in the [developers guide](./docs/DEVELOPMENT.md) document.
 
-> [!WARNING]
-> Special care is needed when building in a ROS 2 workspace because ROS 2 packages from system installations or rolling builds may not be compatible with the versions pinned in `pixi.lock`. Version mismatches can cause ABI incompatibilities leading to segmentation faults (SIGSEGV) during runtime, such as `ros2_control_node` crashing with exit code -11 during hardware initialization. Ensure that your ROS 2 workspace uses compatible package versions to avoid build conflicts and runtime crashes. See [issue #30](https://github.com/ros-controls/mujoco_ros2_control/issues/30) for more details.
-
-### Dependencies
-
-Install required system dependencies:
-
-```bash
-# Install ROS 2 dependencies via rosdep
-rosdep update --rosdistro $ROS_DISTRO
-rosdep install --from-paths src --ignore-src -r -y
-
-# Install additional build dependencies
-sudo apt-get install libglfw3-dev sccache mold
-```
-
-**Note:** `mold` is a Linux-only linker optimization. On macOS/Windows, it will be automatically skipped during the build.
-
-### Build
-
-From your ROS 2 workspace root:
-
-```bash
-# Source ROS 2 installation
-source /opt/ros/$ROS_DISTRO/setup.bash
-
-# Build the package
-colcon build --symlink-install --packages-select mujoco_ros2_control
-
-# Source the workspace
-source install/setup.bash
-```
-
-The build system will:
-- Automatically download MuJoCo 3.3.4 if not found locally
-- Use `pkg-config` to find GLFW (system package) or fall back to CMake config (conda/pixi environments)
-- Require `sccache` for compiler caching (cross-platform)
-- Require `mold` linker on Linux for faster linking (skipped on other platforms)
-
-If any required dependency is missing, CMake will provide clear error messages with installation instructions.

@@ -43,6 +43,8 @@ mold = ">=2.40.2,<3"
 libcap = ">=2.76,<3"
 glfw = ">=3.4,<4"
 filelock = ">=3.20.0,<4"
+trimesh = ">=4.10.1"
+pip = "*"
 
 # ROS dependencies
 ros-jazzy-ros-base = "*"
@@ -60,3 +62,5 @@ ros-jazzy-rviz2 = "*"
 
 [pypi-dependencies]
 xacro = ">=2.1.1, <3"
+obj2mjcf = ">=0.0.25"
+mujoco = "==3.3.4"

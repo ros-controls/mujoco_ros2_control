@@ -4,6 +4,7 @@
   <!-- Whether or not to use PID control -->
   <xacro:arg name="use_pid" default="false"/>
   <xacro:arg name="headless" default="false"/>
+  <xacro:arg name="use_mjcf_from_topic" default="false"/>
 
   <link name="world"/>
 
@@ -17,7 +18,7 @@
   <link name="upperarm">
     <inertial>
       <origin xyz="0.5 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
+      <mass value="27.0"/>
       <inertia ixx="0.0225" ixy="0.0" ixz="0.0" iyy="0.225" iyz="0.0" izz="0.225"/>
     </inertial>
     <visual>
@@ -46,7 +47,7 @@
   <link name="forearm">
     <inertial>
       <origin xyz="0.5 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
+      <mass value="27.0"/>
       <inertia ixx="0.0225" ixy="0.0" ixz="0.0" iyy="0.225" iyz="0.0" izz="0.225"/>
     </inertial>
     <visual>
@@ -129,6 +130,84 @@
     <origin rpy="0 0 -1.5708" xyz="1.0 2.0 0"/>
   </joint>
 
+  <!-- Inorder to test the model generation from tags within the URDF, we test that when both -->
+  <!-- `use_mjcf_from_topic` and `use_pid` args are set to true -->
+  <xacro:if value="$(eval use_mjcf_from_topic)">
+    <xacro:if value="$(eval use_pid)">
+      <mujoco_inputs>
+
+        <!-- The contents of `raw_inputs` will be copied and pasted directly into the MJCF -->
+        <raw_inputs>
+          <option integrator="implicitfast"/>
+
+          <default>
+            <default class="visual">
+              <geom group="2" type="mesh" contype="0" conaffinity="0"/>
+            </default>
+            <default class="collision">
+              <geom group="3" type="mesh"/>
+            </default>
+          </default>
+
+          <actuator>
+            <motor name="joint1_motor" joint="joint1" gear="1"/>
+            <motor name="joint2_motor" joint="joint2" gear="1"/>
+          </actuator>
+
+          <sensor>
+            <rangefinder name="lidar" site="rf" />
+          </sensor>
+        </raw_inputs>
+
+        <!-- Specific inputs that require processing from the conversion script-->
+        <processed_inputs>
+          <!-- Specifying decompose_mesh will set the `decompose` flag when using obj2mjcf -->
+          <decompose_mesh mesh_name="shoulder_link" threshold="0.05"/>
+
+          <!-- The camera with the specified values will be added at the specified site name. -->
+          <!-- The position and quaterinion will be filled in by the converter -->
+          <camera site="camera_color_optical_frame" name="camera" fovy="58" mode="fixed" resolution="640 480"/>
+
+          <!-- Adds a lidar tag below a site tag to support a lidar sensor. -->
+          <!-- In the URDF, we assume that that the sensor frame has the Z-axis pointed directly up in the sensor -->
+          <!-- frame. This tag will create rangefinders in the MJCF between min_angle and max_angle at each -->
+          <!-- angle_increment rotated about the replicate frame's Y axis. The hardware intercface then combines -->
+          <!-- them into a single LaserScan message. -->
+          <lidar ref_site="lidar_sensor_frame" sensor_name="rf" min_angle="-0.3" max_angle="0.3" angle_increment="0.025" />
+
+          <!-- The element with the type and name as listed below will be modified with the remaining attributes -->
+          <!-- If the attribute already existed, it will be overwritten -->
+          <!-- Note that the type and name elements are required -->
+          <modify_element type="joint" name="joint1" frictionloss="1.0" damping="2.0"/>
+          <modify_element type="body" name="forearm" gravcomp="1.0"/>
+
+        </processed_inputs>
+
+        <!-- scene tag inside the xacro also allows to generate the mjcf description with the scene information -->
+        <scene>
+          <statistic center="0.4 0 0.4" extent="1"/>
+
+          <visual>
+            <headlight diffuse="0.6 0.6 0.6" ambient="0.1 0.1 0.1" specular="0 0 0"/>
+            <rgba haze="0.15 0.25 0.35 1"/>
+            <global azimuth="120" elevation="-20"/>
+          </visual>
+
+          <asset>
+            <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+            <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+              markrgb="0.8 0.8 0.8" width="300" height="300"/>
+            <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5"/>
+          </asset>
+
+          <worldbody>
+            <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+          </worldbody>
+        </scene>
+      </mujoco_inputs>
+    </xacro:if>
+  </xacro:if>
+
   <!-- ROS2 Control Configuration -->
   <ros2_control name="MujocoSystem" type="system">
     <hardware>
@@ -136,11 +215,17 @@
 
       <!-- Conditional mujoco_model parameter based on use_pid -->
       <xacro:if value="$(arg use_pid)">
-        <param name="mujoco_model">$(find mujoco_ros2_control)/test_resources/test_pid/scene_pid.xml</param>
         <param name="pids_config_file">$(find mujoco_ros2_control)/config/mujoco_pid.yaml</param>
       </xacro:if>
-      <xacro:unless value="$(arg use_pid)">
-        <param name="mujoco_model">$(find mujoco_ros2_control)/test_resources/scene.xml</param>
+
+      <xacro:unless value="$(arg use_mjcf_from_topic)">
+        <xacro:if value="$(arg use_pid)">
+            <param name="mujoco_model">$(find mujoco_ros2_control)/test_resources/test_pid/scene_pid.xml</param>
+        </xacro:if>
+
+        <xacro:unless value="$(arg use_pid)">
+          <param name="mujoco_model">$(find mujoco_ros2_control)/test_resources/scene.xml</param>
+        </xacro:unless>
       </xacro:unless>
 
       <!-- Uncomment this to use the keyframe from shown file as the starting configuration. -->

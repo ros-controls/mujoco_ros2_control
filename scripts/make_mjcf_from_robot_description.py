@@ -1403,8 +1403,8 @@ def publish_model_on_topic(publish_topic, output_filepath, args=None):
             )
 
             self.publisher_ = self.create_publisher(String, publish_topic, qos_profile)
-            self.timer = self.create_timer(1.0, self.publish_mjcf)
             self.mjcf_path = mjcf_path
+            self.publish_mjcf()
 
         def publish_mjcf(self):
             with open(self.mjcf_path) as f:
