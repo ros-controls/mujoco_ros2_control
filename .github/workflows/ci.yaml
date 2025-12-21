@@ -57,7 +57,7 @@ jobs:
       - name: Run tests
         run: |
           docker run --rm \
-            mujoco_ros2_control::${{ steps.set_tag.outputs.tag }} \
+            mujoco_ros2_control:${{ steps.set_tag.outputs.tag }} \
             bash -c "
               colcon test &&
               colcon test-result --verbose
