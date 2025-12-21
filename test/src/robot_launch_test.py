@@ -133,6 +133,7 @@ class TestFixture(unittest.TestCase):
         self.assertAlmostEqual(
             msg.position[joint2_index], -0.5, delta=0.05, msg="joint2 did not reach the commanded position"
         )
+        wait_for_topics.shutdown()
 
     # Runs the tests when the DISPLAY is set
     @unittest.skipIf(os.environ.get("DISPLAY", "") == "", "Skipping camera tests in headless mode.")
