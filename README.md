@@ -394,4 +394,3 @@ ros2 topic pub /position_controller/commands std_msgs/msg/Float64MultiArray "dat
 ## Development
 
 More information is provided in the [developers guide](./docs/DEVELOPMENT.md) document.
-
