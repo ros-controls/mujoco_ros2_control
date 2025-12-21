@@ -16,7 +16,7 @@ LDFLAGS = "-L${CONDA_PREFIX}/lib -Wl,-rpath,${CONDA_PREFIX}/lib"
 CXXFLAGS = "-fuse-ld=mold"
 
 # The default location for mujoco
-MUJOCO_DIR="${PIXI_PROJECT_ROOT}/mujoco/mujoco-3.3.4"
+MUJOCO_DIR="${PIXI_PROJECT_ROOT}/mujoco/mujoco-3.4.0"
 
 [tasks]
 # Setup tasks
@@ -63,4 +63,4 @@ ros-jazzy-rviz2 = "*"
 [pypi-dependencies]
 xacro = ">=2.1.1, <3"
 obj2mjcf = ">=0.0.25"
-mujoco = "==3.3.4"
+mujoco = "==3.4.0"

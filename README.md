@@ -1,16 +1,16 @@
 # MuJoCo ros2_control Simulation
 
-This package contains a ros2_control system interface for the [MuJoCo Simulator](https://mujoco.readthedocs.io/en/3.3.4/overview.html).
+This package contains a ros2_control system interface for the [MuJoCo Simulator](https://mujoco.readthedocs.io/en/3.4.0/overview.html).
 It was originally written for simulating robot hardware in NASA Johnson's [iMETRO facility](https://ntrs.nasa.gov/citations/20230015485).
 
-The system interface wraps MuJoCo's [Simulate App](https://github.com/google-deepmind/mujoco/tree/3.3.4/simulate) to provide included functionality.
+The system interface wraps MuJoCo's [Simulate App](https://github.com/google-deepmind/mujoco/tree/3.4.0/simulate) to provide included functionality.
 Because the app is not bundled as a library, we compile it directly from a local install of MuJoCo.
 
 Parts of this library are also based on the MoveIt [mujoco_ros2_control](https://github.com/moveit/mujoco_ros2_control) package.
 
 ## Installation
 
-This interface has only been tested against ROS 2 jazzy and MuJoCo `3.3.4`.
+This interface has only been tested against ROS 2 jazzy and MuJoCo `3.4.0`.
 It should also be compatible with kilted and rolling, but we do not actively maintain those.
 We assume all required ROS dependencies have been installed either manually or with `rosdep`.
 
@@ -21,10 +21,10 @@ However, a local install of MuJoCo can be used to build the application by setti
 
 ```bash
 # The tested version
-MUJOCO_VERSION=3.3.4
+MUJOCO_VERSION=3.4.0
 
 # Wherever it was installed and extracted on your machine
-MUJOCO_INSTALL_DIR=/opt/mujoco/mujoco-3.3.4
+MUJOCO_INSTALL_DIR=/opt/mujoco/mujoco-3.4.0
 ```
 
 From there the library can be compiled with `colcon build ...`, as normal.

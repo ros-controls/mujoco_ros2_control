@@ -225,7 +225,7 @@ void MujocoCameras::update()
   for (auto& camera : cameras_)
   {
     // Fix non-linear projections in the depth image and flip the data.
-    // https://github.com/google-deepmind/mujoco/blob/3.3.4/python/mujoco/renderer.py#L190
+    // https://github.com/google-deepmind/mujoco/blob/3.4.0/python/mujoco/renderer.py#L190
     for (uint32_t h = 0; h < camera.height; h++)
     {
       for (uint32_t w = 0; w < camera.width; w++)
