@@ -57,4 +57,4 @@ check_virtual_env
 check_dependencies
 
 # Get all the arguments of the bash script and then forward it to the make_mjcf_from_robot_description.py script
-ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py "$@"
+exec ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py "$@"
