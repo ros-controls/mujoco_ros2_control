@@ -26,9 +26,8 @@
   <test_depend>urdfdom_py</test_depend>
   <test_depend>xacro</test_depend>
 
-  <exec_depend>python3-mujoco-pip</exec_depend>
-  <exec_depend>python3-trimesh-pip</exec_depend>
-  <exec_depend>python3-obj2mjcf-pip</exec_depend>
+  <exec_depend>python3-venv</exec_depend>
+  <exec_depend>python3-pip</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

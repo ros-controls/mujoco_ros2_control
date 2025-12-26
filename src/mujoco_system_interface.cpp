@@ -372,7 +372,7 @@ mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node)
       });
 
   auto start = std::chrono::steady_clock::now();
-  auto timeout = std::chrono::seconds(10);
+  auto timeout = std::chrono::seconds(120);
 
   while (robot_description.empty() && rclcpp::ok())
   {
@@ -382,8 +382,8 @@ mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node)
 
     if (now - start > timeout)
     {
-      RCLCPP_WARN(node->get_logger(), "Timeout waiting for /mujoco_robot_description topic.");
-      break;
+      RCLCPP_WARN(node->get_logger(), "Timeout waiting for /mujoco_robot_description topic. Aborting...");
+      exit(1);
     }
 
     rclcpp::sleep_for(std::chrono::milliseconds(200));
