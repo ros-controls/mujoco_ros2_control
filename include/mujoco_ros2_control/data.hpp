@@ -55,7 +55,8 @@ enum class ActuatorType
  */
 struct InterfaceData
 {
-  explicit InterfaceData(const std::string& name, const std::string& command_interface) : name_(name), command_interface_(command_interface)
+  explicit InterfaceData(const std::string& name, const std::string& command_interface)
+    : name_(name), command_interface_(command_interface)
   {
   }
 
@@ -71,7 +72,7 @@ struct InterfaceData
 /**
  * Wrapper for mujoco actuators and relevant ROS HW interface data.
  */
-struct JointState
+struct MuJoCoActuatorData
 {
   std::string name;
   InterfaceData position_interface{ name, hardware_interface::HW_IF_POSITION };
@@ -80,9 +81,6 @@ struct JointState
   std::shared_ptr<control_toolbox::PidROS> pos_pid{ nullptr };
   std::shared_ptr<control_toolbox::PidROS> vel_pid{ nullptr };
   ActuatorType actuator_type{ ActuatorType::UNKNOWN };
-  bool is_mimic{ false };
-  int mimicked_joint_index;
-  double mimic_multiplier;
   int mj_joint_type;
   int mj_pos_adr;
   int mj_vel_adr;
@@ -97,6 +95,21 @@ struct JointState
   bool is_effort_control_enabled{ false };
   bool has_pos_pid{ false };
   bool has_vel_pid{ false };
+};
+
+/**
+ * Structure for the URDF joint data.
+ */
+struct URDFJointData
+{
+  std::string name;
+  InterfaceData position_interface{ name, hardware_interface::HW_IF_POSITION };
+  InterfaceData velocity_interface{ name, hardware_interface::HW_IF_VELOCITY };
+  InterfaceData effort_interface{ name, hardware_interface::HW_IF_EFFORT };
+
+  bool is_mimic{ false };
+  int mimicked_joint_index;
+  double mimic_multiplier;
 };
 
 template <typename T>

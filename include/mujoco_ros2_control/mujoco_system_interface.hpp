@@ -252,8 +252,9 @@ private:
   std::unordered_map<std::string, hardware_interface::ComponentInfo> joint_hw_info_;
   std::unordered_map<std::string, hardware_interface::ComponentInfo> sensors_hw_info_;
 
-  // Data containers for the HW interface
-  std::vector<JointState> joint_states_;
+  // Data containers for the MuJoCo Actuators 
+  std::vector<MuJoCoActuatorData> mujoco_actuator_data_;
+
   // Transmission structure
   std::vector<InterfaceData> joint_interfaces_;
   std::vector<InterfaceData> actuator_interfaces_;
