@@ -540,18 +540,27 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   else
   {
     model_path_ = model_path_maybe.value();
-    RCLCPP_INFO_STREAM(get_logger(), "Loading 'mujoco_model' from: " << model_path_);
+    // trim the trailing and leading whitespaces
+    model_path_.erase(0, model_path_.find_first_not_of(" \t\n\r\f\v"));
+    model_path_.erase(model_path_.find_last_not_of(" \t\n\r\f\v") + 1);
+    const std::filesystem::path path_to_file(model_path_);
+    if (!std::filesystem::exists(path_to_file))
+    {
+      RCLCPP_FATAL(get_logger(), "MuJoCo model file '%s' does not exist!", model_path_.c_str());
+      return hardware_interface::CallbackReturn::ERROR;
+    }
+    RCLCPP_INFO(get_logger(), "Loading 'mujoco_model' from: '%s'", model_path_.c_str());
   }
 
   // Pull the initial speed factor from the hardware parameters, if present
   sim_speed_factor_ = std::stod(get_parameter("sim_speed_factor").value_or("-1"));
   if (sim_speed_factor_ > 0)
   {
-    RCLCPP_INFO_STREAM(get_logger(), "Running the simulation at " << sim_speed_factor_ * 100.0 << " percent speed");
+    RCLCPP_INFO(get_logger(), "Running the simulation at %.2f percent speed", sim_speed_factor_ * 100.0);
   }
   else
   {
-    RCLCPP_INFO_STREAM(get_logger(), "No sim_speed set, using the setting from the UI");
+    RCLCPP_INFO(get_logger(), "No sim_speed set, using the setting from the UI");
   }
 
   // Pull the camera publish rate out of the info, if present, otherwise default to 5 hz.
@@ -655,8 +664,13 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   node_options.append_parameter_override("use_sim_time", rclcpp::ParameterValue(true));
   if (pids_config_file.has_value())
   {
+    std::string pids_config_file_path = pids_config_file.value();
+    // trim the trailing and leading whitespaces
+    pids_config_file_path.erase(0, pids_config_file_path.find_first_not_of(" \t\n\r\f\v"));
+    pids_config_file_path.erase(pids_config_file_path.find_last_not_of(" \t\n\r\f\v") + 1);
+
     // Check if the file exists
-    const std::filesystem::path path_to_file(pids_config_file.value());
+    const std::filesystem::path path_to_file(pids_config_file_path);
     if (!std::filesystem::exists(path_to_file))
     {
       RCLCPP_FATAL(get_logger(), "PID config file '%s' does not exist!", pids_config_file->c_str());
