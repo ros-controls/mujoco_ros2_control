@@ -19,6 +19,7 @@
   <depend>sensor_msgs</depend>
   <depend>control_toolbox</depend>
   <depend>transmission_interface</depend>
+  <depend>backward_ros</depend>
 
   <test_depend>joint_state_broadcaster</test_depend>
   <test_depend>position_controllers</test_depend>

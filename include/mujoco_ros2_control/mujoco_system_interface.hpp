@@ -46,6 +46,12 @@
 #include "mujoco_ros2_control/mujoco_cameras.hpp"
 #include "mujoco_ros2_control/mujoco_lidar.hpp"
 
+#include <pluginlib/class_list_macros.hpp>
+#include <pluginlib/class_loader.hpp>
+#include "transmission_interface/transmission.hpp"
+#include "transmission_interface/transmission_interface_exception.hpp"
+#include "transmission_interface/transmission_loader.hpp"
+
 namespace mujoco_ros2_control
 {
 class MujocoSystemInterface : public hardware_interface::SystemInterface
@@ -100,6 +106,8 @@ public:
   void set_data(mjData* mj_data);
 
 private:
+  void register_mujoco_actuators();
+
   /**
    * @brief Loads actuator information into the HW interface.
    *
@@ -252,12 +260,15 @@ private:
   std::unordered_map<std::string, hardware_interface::ComponentInfo> joint_hw_info_;
   std::unordered_map<std::string, hardware_interface::ComponentInfo> sensors_hw_info_;
 
-  // Data containers for the MuJoCo Actuators 
+  // Data containers for the MuJoCo Actuators
   std::vector<MuJoCoActuatorData> mujoco_actuator_data_;
 
-  // Transmission structure
-  std::vector<InterfaceData> joint_interfaces_;
-  std::vector<InterfaceData> actuator_interfaces_;
+  // Data containers for the URDF joints
+  std::vector<URDFJointData> urdf_joint_data_;
+
+  // Transmission instances
+  std::unique_ptr<pluginlib::ClassLoader<transmission_interface::TransmissionLoader>> transmission_loader_ = nullptr;
+  std::vector<std::shared_ptr<transmission_interface::Transmission>> transmission_instances_;
 
   std::vector<FTSensorData> ft_sensor_data_;
   std::vector<IMUSensorData> imu_sensor_data_;

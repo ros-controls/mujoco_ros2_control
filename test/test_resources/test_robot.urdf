@@ -261,7 +261,7 @@
       <plugin>transmission_interface/SimpleTransmission</plugin>
       <actuator name="actuator1" role="actuator1"/>
       <joint name="joint1" role="joint1">
-        <mechanical_reduction>1.0</mechanical_reduction>
+        <mechanical_reduction>2.0</mechanical_reduction>
         <offset>0.0</offset>
       </joint>
     </transmission>
@@ -283,7 +283,7 @@
       <plugin>transmission_interface/SimpleTransmission</plugin>
       <actuator name="actuator2" role="actuator1"/>
       <joint name="joint2" role="joint1">
-        <mechanical_reduction>1.0</mechanical_reduction>
+        <mechanical_reduction>0.5</mechanical_reduction>
         <offset>0.0</offset>
       </joint>
     </transmission>

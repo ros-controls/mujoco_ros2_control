@@ -74,17 +74,17 @@ struct InterfaceData
  */
 struct MuJoCoActuatorData
 {
-  std::string name;
+  std::string name = "";
   InterfaceData position_interface{ name, hardware_interface::HW_IF_POSITION };
   InterfaceData velocity_interface{ name, hardware_interface::HW_IF_VELOCITY };
   InterfaceData effort_interface{ name, hardware_interface::HW_IF_EFFORT };
   std::shared_ptr<control_toolbox::PidROS> pos_pid{ nullptr };
   std::shared_ptr<control_toolbox::PidROS> vel_pid{ nullptr };
   ActuatorType actuator_type{ ActuatorType::UNKNOWN };
-  int mj_joint_type;
-  int mj_pos_adr;
-  int mj_vel_adr;
-  int mj_actuator_id;
+  int mj_joint_type = -1;
+  int mj_pos_adr = -1;
+  int mj_vel_adr = -1;
+  int mj_actuator_id = -1;
 
   // Booleans record whether or not we should be writing commands to these interfaces
   // based on if they have been claimed.
@@ -95,6 +95,20 @@ struct MuJoCoActuatorData
   bool is_effort_control_enabled{ false };
   bool has_pos_pid{ false };
   bool has_vel_pid{ false };
+
+  void copy_state_to_transmission()
+  {
+    position_interface.transmission_passthrough_ = position_interface.state_;
+    velocity_interface.transmission_passthrough_ = velocity_interface.state_;
+    effort_interface.transmission_passthrough_ = effort_interface.state_;
+  }
+
+  void copy_command_from_transmission()
+  {
+    position_interface.command_ = position_interface.transmission_passthrough_;
+    velocity_interface.command_ = velocity_interface.transmission_passthrough_;
+    effort_interface.command_ = effort_interface.transmission_passthrough_;
+  }
 };
 
 /**
@@ -102,7 +116,7 @@ struct MuJoCoActuatorData
  */
 struct URDFJointData
 {
-  std::string name;
+  std::string name = "";
   InterfaceData position_interface{ name, hardware_interface::HW_IF_POSITION };
   InterfaceData velocity_interface{ name, hardware_interface::HW_IF_VELOCITY };
   InterfaceData effort_interface{ name, hardware_interface::HW_IF_EFFORT };
@@ -110,6 +124,24 @@ struct URDFJointData
   bool is_mimic{ false };
   int mimicked_joint_index;
   double mimic_multiplier;
+
+  bool is_position_control_enabled{ false };
+  bool is_velocity_control_enabled{ false };
+  bool is_effort_control_enabled{ false };
+
+  void copy_state_from_transmission()
+  {
+    position_interface.state_ = position_interface.transmission_passthrough_;
+    velocity_interface.state_ = velocity_interface.transmission_passthrough_;
+    effort_interface.state_ = effort_interface.transmission_passthrough_;
+  }
+
+  void copy_command_to_transmission()
+  {
+    position_interface.transmission_passthrough_ = position_interface.command_;
+    velocity_interface.transmission_passthrough_ = velocity_interface.command_;
+    effort_interface.transmission_passthrough_ = effort_interface.command_;
+  }
 };
 
 template <typename T>
