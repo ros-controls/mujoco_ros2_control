@@ -82,6 +82,21 @@ public:
   hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
   /**
+   * @brief Converts actuator states to joint states.
+   *
+   * This method reads the current states of the actuators in the MuJoCo simulation and updates the corresponding joint
+   * states in the ROS 2 control interface either through transmissions or directly.
+   */
+  void actuator_state_to_joint_state();
+
+  /**
+   * @brief Converts joint commands to actuator commands.
+   *
+   * This method takes the command inputs for the joints from the ROS 2 control interface and translates them into
+   * appropriate commands for the actuators in the MuJoCo simulation, considering any loaded transmissions or directly.
+   */
+  void joint_command_to_actuator_command();
+  /**
    * @brief Returns a copy of the MuJoCo model.
    *
    * This method locks the simulation mutex to ensure thread safety.

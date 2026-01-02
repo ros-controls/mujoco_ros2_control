@@ -557,6 +557,11 @@ MujocoSystemInterface::~MujocoSystemInterface()
     executor_thread_.join();
   }
 
+  // Remove all transmission instances
+  transmission_instances_.clear();
+  mujoco_actuator_data_.clear();
+  urdf_joint_data_.clear();
+
   // If sim_ is created and running, clean shut it down
   if (sim_)
   {
@@ -1162,13 +1167,7 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
                 actuator_state.effort_interface.state_);
   }
 
-  // transmission: actuator -> joint
-  std::for_each(transmission_instances_.begin(), transmission_instances_.end(),
-                [](auto& transmission) { transmission->actuator_to_joint(); });
-
-  // joint: transmission -> state
-  std::for_each(urdf_joint_data_.begin(), urdf_joint_data_.end(),
-                [](auto& joint_interface) { joint_interface.copy_state_from_transmission(); });
+  actuator_state_to_joint_state();
 
   // IMU Sensor data
   for (auto& data : imu_sensor_data_)
@@ -1237,17 +1236,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
                 joint.effort_interface.state_);
   }
 
-  // Transmissions
-  std::for_each(urdf_joint_data_.begin(), urdf_joint_data_.end(),
-                [](auto& joint_interface) { joint_interface.copy_command_to_transmission(); });
-
-  // transmission -> actuator
-  std::for_each(transmission_instances_.begin(), transmission_instances_.end(),
-                [](auto& transmission) { transmission->joint_to_actuator(); });
-
-  // set the commands to the mujoco actuators
-  std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
-                [](auto& actuator_interface) { actuator_interface.copy_command_from_transmission(); });
+  joint_command_to_actuator_command();
 
   // Joint commands
   // TODO: Support command limits. For now those ranges can be limited in the mujoco actuators themselves.
@@ -1342,6 +1331,60 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   }
 
   return hardware_interface::return_type::OK;
+}
+
+void MujocoSystemInterface::actuator_state_to_joint_state()
+{
+  // transmission: actuator -> joint
+  std::for_each(transmission_instances_.begin(), transmission_instances_.end(),
+                [](auto& transmission) { transmission->actuator_to_joint(); });
+
+  // joint: transmission -> state
+  std::for_each(urdf_joint_data_.begin(), urdf_joint_data_.end(),
+                [](auto& joint_interface) { joint_interface.copy_state_from_transmission(); });
+
+  // If the actuator name and joint name is same (which is the case for non transmission joints), we need to copy
+  // the state from actuator to joint here as there is no transmission instance to do that.
+  for (auto& joint : urdf_joint_data_)
+  {
+    std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
+      if (actuator_interface.name == joint.name)
+      {
+        joint.position_interface.state_ = actuator_interface.position_interface.state_;
+        joint.velocity_interface.state_ = actuator_interface.velocity_interface.state_;
+        joint.effort_interface.state_ = actuator_interface.effort_interface.state_;
+      }
+    });
+  }
+}
+
+void MujocoSystemInterface::joint_command_to_actuator_command()
+{
+  // Transmissions
+  std::for_each(urdf_joint_data_.begin(), urdf_joint_data_.end(),
+                [](auto& joint_interface) { joint_interface.copy_command_to_transmission(); });
+
+  // transmission -> actuator
+  std::for_each(transmission_instances_.begin(), transmission_instances_.end(),
+                [](auto& transmission) { transmission->joint_to_actuator(); });
+
+  // set the commands to the mujoco actuators
+  std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
+                [](auto& actuator_interface) { actuator_interface.copy_command_from_transmission(); });
+
+  // If the actuator name and joint name is same (which is the case for non transmission joints), we need to copy
+  // the command from joint to actuator here as there is no transmission instance to do that.
+  for (auto& joint : urdf_joint_data_)
+  {
+    std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
+      if (actuator_interface.name == joint.name)
+      {
+        actuator_interface.position_interface.command_ = joint.position_interface.command_;
+        actuator_interface.velocity_interface.command_ = joint.velocity_interface.command_;
+        actuator_interface.effort_interface.command_ = joint.effort_interface.command_;
+      }
+    });
+  }
 }
 
 void MujocoSystemInterface::register_joints(const hardware_interface::HardwareInfo& hardware_info)
@@ -1663,19 +1706,10 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
 
 bool MujocoSystemInterface::register_transmissions(const hardware_interface::HardwareInfo& hardware_info)
 {
+  transmission_instances_.clear();
   auto hardware_transmissions = hardware_info.transmissions;
   transmission_loader_ = std::make_unique<pluginlib::ClassLoader<transmission_interface::TransmissionLoader>>(
       "transmission_interface", "transmission_interface::TransmissionLoader");
-
-  // Determine the length needed for the vector for joint and actuator data structures
-  // For now 3* because expose all command interfaces
-  const auto num_joints =
-      std::accumulate(hardware_transmissions.begin(), hardware_transmissions.end(), 0ul,
-                      [](const auto& acc, const auto& trans_info) { return acc + 3 * trans_info.joints.size(); });
-
-  const auto num_actuators =
-      std::accumulate(hardware_transmissions.begin(), hardware_transmissions.end(), 0ul,
-                      [](const auto& acc, const auto& trans_info) { return acc + 3 * trans_info.actuators.size(); });
 
   for (const auto& t_info : hardware_transmissions)
   {
@@ -1845,6 +1879,8 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
 
     transmission_instances_.push_back(transmission);
   }
+  RCLCPP_INFO_EXPRESSION(get_logger(), !transmission_instances_.empty(), "Registered %zu transmissions",
+                         transmission_instances_.size());
 
   return true;
 }
