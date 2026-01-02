@@ -1161,10 +1161,6 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     actuator_state.velocity_interface.state_ = mj_data_control_->qvel[actuator_state.mj_vel_adr];
     actuator_state.effort_interface.state_ = mj_data_control_->qfrc_actuator[actuator_state.mj_vel_adr];
     actuator_state.copy_state_to_transmission();
-
-    RCLCPP_INFO(get_logger(), "Actuator '%s': State (pos = %f, vel = %f, effort = %f)", actuator_state.name.c_str(),
-                actuator_state.position_interface.state_, actuator_state.velocity_interface.state_,
-                actuator_state.effort_interface.state_);
   }
 
   actuator_state_to_joint_state();
@@ -1197,15 +1193,6 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.torque.data.y() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 1];
     data.torque.data.z() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 2];
   }
-
-  for (auto& joint : urdf_joint_data_)
-  {
-    RCLCPP_INFO(get_logger(),
-                "Joint '%s': command (pos = %f, vel = %f, effort = %f) State (pos = %f, vel = %f, effort = %f)",
-                joint.name.c_str(), joint.position_interface.command_, joint.velocity_interface.command_,
-                joint.effort_interface.command_, joint.position_interface.state_, joint.velocity_interface.state_,
-                joint.effort_interface.state_);
-  }
   return hardware_interface::return_type::OK;
 }
 
@@ -1226,108 +1213,34 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     }
   }
 
-  RCLCPP_INFO(get_logger(), "Writing commands to Mujoco actuators...");
-  for (auto& joint : urdf_joint_data_)
-  {
-    RCLCPP_INFO(get_logger(),
-                "Joint '%s': command (pos = %f, vel = %f, effort = %f) State (pos = %f, vel = %f, effort = %f)",
-                joint.name.c_str(), joint.position_interface.command_, joint.velocity_interface.command_,
-                joint.effort_interface.command_, joint.position_interface.state_, joint.velocity_interface.state_,
-                joint.effort_interface.state_);
-  }
-
   joint_command_to_actuator_command();
 
   // Joint commands
   // TODO: Support command limits. For now those ranges can be limited in the mujoco actuators themselves.
   for (auto& actuator : mujoco_actuator_data_)
   {
-    if (actuator.mj_actuator_id == -1)
+    if (actuator.is_position_control_enabled)
     {
-      // Skip joints without actuators
-      continue;
+      mj_data_control_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.command_;
     }
-
-    auto act = std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](const auto& act) {
-      return get_actuator_id(act.name, mj_model_) == actuator.mj_actuator_id;
-    });
-
-    if (act != mujoco_actuator_data_.end())
+    else if (actuator.is_position_pid_control_enabled)
     {
-      if (actuator.is_position_control_enabled)
-      {
-        mj_data_control_->ctrl[actuator.mj_actuator_id] = act->position_interface.command_;
-        RCLCPP_INFO(get_logger(), "Joint '%s': transmission POSITION command = %f", actuator.name.c_str(),
-                    act->position_interface.command_);
-      }
-      else if (actuator.is_position_pid_control_enabled)
-      {
-        double error = act->position_interface.command_ - mj_data_->qpos[actuator.mj_pos_adr];
-        mj_data_control_->qfrc_applied[actuator.mj_vel_adr] = actuator.pos_pid->compute_command(error, period);
-        RCLCPP_INFO(get_logger(), "Joint '%s': transmission POSITION command = %f", actuator.name.c_str(),
-                    act->position_interface.command_);
-      }
-      else if (actuator.is_velocity_control_enabled)
-      {
-        mj_data_control_->ctrl[actuator.mj_actuator_id] = act->velocity_interface.command_;
-        RCLCPP_INFO(get_logger(), "Joint '%s': transmission VELOCITY command = %f", actuator.name.c_str(),
-                    act->velocity_interface.command_);
-      }
-      else if (actuator.is_velocity_pid_control_enabled)
-      {
-        double error = act->velocity_interface.command_ - mj_data_->qvel[actuator.mj_vel_adr];
-        mj_data_control_->qfrc_applied[actuator.mj_vel_adr] = actuator.vel_pid->compute_command(error, period);
-        RCLCPP_INFO(get_logger(), "Joint '%s': transmission VELOCITY_PID command, error = %f", actuator.name.c_str(),
-                    error);
-      }
-      else if (actuator.is_effort_control_enabled)
-      {
-        mj_data_control_->ctrl[actuator.mj_actuator_id] = act->effort_interface.command_;
-        RCLCPP_INFO(get_logger(), "Joint '%s': transmission EFFORT command = %f", actuator.name.c_str(),
-                    act->effort_interface.command_);
-      }
+      double error = actuator.position_interface.command_ - mj_data_->qpos[actuator.mj_pos_adr];
+      mj_data_control_->qfrc_applied[actuator.mj_vel_adr] = actuator.pos_pid->compute_command(error, period);
     }
-    else
+    else if (actuator.is_velocity_control_enabled)
     {
-      if (actuator.is_position_control_enabled)
-      {
-        mj_data_control_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.command_;
-        RCLCPP_INFO(get_logger(), "Joint '%s': direct POSITION command = %f", actuator.name.c_str(),
-                    actuator.position_interface.command_);
-      }
-      else if (actuator.is_position_pid_control_enabled)
-      {
-        double error = actuator.position_interface.command_ - mj_data_->qpos[actuator.mj_pos_adr];
-        mj_data_control_->qfrc_applied[actuator.mj_vel_adr] = actuator.pos_pid->compute_command(error, period);
-        RCLCPP_INFO(get_logger(), "Joint '%s': direct POSITION command = %f", actuator.name.c_str(),
-                    actuator.position_interface.command_);
-      }
-      else if (actuator.is_velocity_control_enabled)
-      {
-        mj_data_control_->ctrl[actuator.mj_actuator_id] = actuator.velocity_interface.command_;
-        RCLCPP_INFO(get_logger(), "Joint '%s': direct VELOCITY command = %f", actuator.name.c_str(),
-                    actuator.velocity_interface.command_);
-      }
-      else if (actuator.is_velocity_pid_control_enabled)
-      {
-        double error = actuator.velocity_interface.command_ - mj_data_->qvel[actuator.mj_vel_adr];
-        mj_data_control_->qfrc_applied[actuator.mj_vel_adr] = actuator.vel_pid->compute_command(error, period);
-        RCLCPP_INFO(get_logger(), "Joint '%s': direct VELOCITY_PID command, error = %f", actuator.name.c_str(), error);
-      }
-      else if (actuator.is_effort_control_enabled)
-      {
-        mj_data_control_->ctrl[actuator.mj_actuator_id] = actuator.effort_interface.command_;
-        RCLCPP_INFO(get_logger(), "Joint '%s': direct EFFORT command = %f", actuator.name.c_str(),
-                    actuator.effort_interface.command_);
-      }
+      mj_data_control_->ctrl[actuator.mj_actuator_id] = actuator.velocity_interface.command_;
     }
-  }
-
-  for (auto& actuator : mujoco_actuator_data_)
-  {
-    RCLCPP_INFO(get_logger(), "Actuator '%s': Command (pos = %f, vel = %f, effort = %f)", actuator.name.c_str(),
-                actuator.position_interface.command_, actuator.velocity_interface.command_,
-                actuator.effort_interface.command_);
+    else if (actuator.is_velocity_pid_control_enabled)
+    {
+      double error = actuator.velocity_interface.command_ - mj_data_->qvel[actuator.mj_vel_adr];
+      mj_data_control_->qfrc_applied[actuator.mj_vel_adr] = actuator.vel_pid->compute_command(error, period);
+    }
+    else if (actuator.is_effort_control_enabled)
+    {
+      mj_data_control_->ctrl[actuator.mj_actuator_id] = actuator.effort_interface.command_;
+    }
   }
 
   return hardware_interface::return_type::OK;
