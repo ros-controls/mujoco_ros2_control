@@ -119,7 +119,8 @@ def extract_mesh_info(raw_xml):
             # check to see if the values we are trying to add already exist
             existing_identifier = None
             for key, value in mesh_info_dict.items():
-                if value == mesh_dict_value:
+                # check if our set is a subset of an already existing set
+                if mesh_dict_value.items() <= value.items():
                     existing_identifier = key
                     break
 
