@@ -1492,13 +1492,10 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
         std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
                      [&actuator_name](const MuJoCoActuatorData& actuator) { return actuator.name == actuator_name; });
     const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
-    if (!actuator_exists)
-    {
-      // This isn't a failure the joint just won't be controllable
-      RCLCPP_WARN(get_logger(), "Failed to find the actuator : '%s' for the URDF joint : '%s' in the MuJoCo model",
-                  actuator_name.c_str(), joint.name.c_str());
-    }
-
+    // This isn't a failure the joint just won't be controllable
+    RCLCPP_WARN_EXPRESSION(get_logger(), !actuator_exists,
+                           "Failed to find actuator for joint : %s. This joint will be treated as a passive joint.",
+                           joint.name.c_str());
     RCLCPP_INFO_EXPRESSION(get_logger(), joint.command_interfaces.empty(), "Joint : %s is a passive joint",
                            joint.name.c_str());
     if (!joint.command_interfaces.empty() && !actuator_exists)
