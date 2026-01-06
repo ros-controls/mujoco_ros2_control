@@ -109,6 +109,13 @@ struct MuJoCoActuatorData
     velocity_interface.command_ = velocity_interface.transmission_passthrough_;
     effort_interface.command_ = effort_interface.transmission_passthrough_;
   }
+
+  void copy_command_to_state()
+  {
+    position_interface.state_ = position_interface.command_;
+    velocity_interface.state_ = velocity_interface.command_;
+    effort_interface.state_ = effort_interface.command_;
+  }
 };
 
 /**
@@ -120,6 +127,8 @@ struct URDFJointData
   InterfaceData position_interface{ name, hardware_interface::HW_IF_POSITION };
   InterfaceData velocity_interface{ name, hardware_interface::HW_IF_VELOCITY };
   InterfaceData effort_interface{ name, hardware_interface::HW_IF_EFFORT };
+
+  std::vector<std::string> command_interfaces = {};
 
   bool is_mimic{ false };
   int mimicked_joint_index;
@@ -141,6 +150,13 @@ struct URDFJointData
     position_interface.transmission_passthrough_ = position_interface.command_;
     velocity_interface.transmission_passthrough_ = velocity_interface.command_;
     effort_interface.transmission_passthrough_ = effort_interface.command_;
+  }
+
+  void copy_state_to_command()
+  {
+    position_interface.command_ = position_interface.state_;
+    velocity_interface.command_ = velocity_interface.state_;
+    effort_interface.command_ = effort_interface.state_;
   }
 };
 

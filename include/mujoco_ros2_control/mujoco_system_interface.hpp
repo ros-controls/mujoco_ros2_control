@@ -121,7 +121,9 @@ public:
   void set_data(mjData* mj_data);
 
 private:
-  void register_mujoco_actuators();
+  bool register_mujoco_actuators();
+
+  void register_joints_new(const hardware_interface::HardwareInfo& info);
 
   /**
    * @brief Loads actuator information into the HW interface.
@@ -140,6 +142,8 @@ private:
    * specifies the transmission ratios between joints and physical actuators.
    */
   bool register_transmissions(const hardware_interface::HardwareInfo& info);
+
+  bool initialize_initial_positions(const hardware_interface::HardwareInfo& info);
 
   /**
    * @brief Constructs all sensor data containers for the interface
@@ -287,6 +291,9 @@ private:
 
   std::vector<FTSensorData> ft_sensor_data_;
   std::vector<IMUSensorData> imu_sensor_data_;
+
+  bool override_mujoco_actuator_positions_{ false };
+  bool override_urdf_joint_positions_{ false };
 };
 
 }  // namespace mujoco_ros2_control
