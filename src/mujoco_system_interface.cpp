@@ -1389,11 +1389,13 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 
     if (trn_type == mjTRN_JOINT)
     {
+      // <motor name="joint1_motor" joint="actuator1" gear="1"/>
+      // this should get actuator1 as actuator_name
       const char* joint_name = mj_id2name(mj_model_, mjOBJ_JOINT, target_id);
       if (joint_name)
       {
         actuator_data.name = std::string(joint_name);
-        RCLCPP_INFO(get_logger(), "Registering actuator '%s' for joint '%s'", act_name, joint_name);
+        RCLCPP_INFO(get_logger(), "Registering actuator '%s' for joint '%s'", actuator_data.name.c_str(), joint_name);
       }
       else
       {
