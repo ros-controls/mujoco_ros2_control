@@ -121,9 +121,13 @@ public:
   void set_data(mjData* mj_data);
 
 private:
+  /**
+   * @brief Loads actuator information from MuJoCo model into the SystemInterface.
+   *
+   * This function reads the actuator definitions from the MuJoCo model and initializes their corresponding
+   * state and command information of the actuator handles.
+   */
   bool register_mujoco_actuators();
-
-  void register_joints_new(const hardware_interface::HardwareInfo& info);
 
   /**
    * @brief Loads actuator information into the HW interface.
