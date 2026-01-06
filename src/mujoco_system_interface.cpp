@@ -1909,7 +1909,7 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
   return true;
 }
 
-bool MujocoSystemInterface::initialize_initial_positions(const hardware_interface::HardwareInfo& hardware_info)
+bool MujocoSystemInterface::initialize_initial_positions(const hardware_interface::HardwareInfo& /*hardware_info*/)
 {
   if (override_mujoco_actuator_positions_)
   {
