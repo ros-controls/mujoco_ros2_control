@@ -36,7 +36,7 @@ from controller_manager_msgs.srv import ListHardwareInterfaces
 
 
 # This function specifies the processes to be run for our test
-def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false"):
+def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false", test_transmissions="false"):
     # This is necessary to get unbuffered output from the process under test
     proc_env = os.environ.copy()
     proc_env["PYTHONUNBUFFERED"] = "1"
@@ -49,7 +49,12 @@ def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false
                 "launch/test_robot.launch.py",
             )
         ),
-        launch_arguments={"headless": "true", "use_pid": use_pid, "use_mjcf_from_topic": use_mjcf_from_topic}.items(),
+        launch_arguments={
+            "headless": "true",
+            "use_pid": use_pid,
+            "use_mjcf_from_topic": use_mjcf_from_topic,
+            "test_transmissions": test_transmissions,
+        }.items(),
     )
 
     return LaunchDescription([launch_include, KeepAliveProc(), ReadyToTest()])
