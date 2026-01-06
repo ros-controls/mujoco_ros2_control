@@ -35,6 +35,7 @@
 #include <rclcpp_lifecycle/state.hpp>
 #include <realtime_tools/realtime_publisher.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 
 #include <mujoco/mujoco.h>
 
@@ -265,6 +266,11 @@ private:
   // Primary clock publisher for the world
   std::shared_ptr<rclcpp::Publisher<rosgraph_msgs::msg::Clock>> clock_publisher_;
   realtime_tools::RealtimePublisher<rosgraph_msgs::msg::Clock>::SharedPtr clock_realtime_publisher_;
+
+  // Actuators state publisher
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::JointState>> actuator_state_publisher_;
+  realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>::SharedPtr actuator_state_realtime_publisher_;
+  sensor_msgs::msg::JointState actuator_state_msg_;
 
   // Containers for RGB-D cameras
   std::unique_ptr<MujocoCameras> cameras_;

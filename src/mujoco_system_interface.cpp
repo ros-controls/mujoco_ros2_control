@@ -804,6 +804,11 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   clock_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<rosgraph_msgs::msg::Clock>>(clock_publisher_);
 
+  actuator_state_publisher_ =
+      mujoco_node_->create_publisher<sensor_msgs::msg::JointState>("/mujoco_actuator_state", 100);
+  actuator_state_realtime_publisher_ =
+      std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(actuator_state_publisher_);
+
   // Register all MuJoCo actuators
   if (!register_mujoco_actuators())
   {
@@ -863,6 +868,12 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     // Blocks until terminated
     PhysicsLoop();
   });
+
+  actuator_state_msg_.name.clear();
+  for (const auto& actuator : mujoco_actuator_data_)
+  {
+    actuator_state_msg_.name.push_back(actuator.name);
+  }
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -1186,16 +1197,27 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
   return hardware_interface::return_type::OK;
 }
 
-hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& /*time*/,
-                                                            const rclcpp::Duration& /*period*/)
+hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& time, const rclcpp::Duration& /*period*/)
 {
   // Joint states
+  actuator_state_msg_.header.stamp = time;
+  actuator_state_msg_.position.clear();
+  actuator_state_msg_.velocity.clear();
+  actuator_state_msg_.effort.clear();
   for (auto& actuator_state : mujoco_actuator_data_)
   {
     actuator_state.position_interface.state_ = mj_data_control_->qpos[actuator_state.mj_pos_adr];
     actuator_state.velocity_interface.state_ = mj_data_control_->qvel[actuator_state.mj_vel_adr];
     actuator_state.effort_interface.state_ = mj_data_control_->qfrc_actuator[actuator_state.mj_vel_adr];
     actuator_state.copy_state_to_transmission();
+    actuator_state_msg_.position.push_back(actuator_state.position_interface.state_);
+    actuator_state_msg_.velocity.push_back(actuator_state.velocity_interface.state_);
+    actuator_state_msg_.effort.push_back(actuator_state.effort_interface.state_);
+  }
+  // Publish actuator states
+  if (actuator_state_realtime_publisher_)
+  {
+    actuator_state_realtime_publisher_->try_publish(actuator_state_msg_);
   }
 
   actuator_state_to_joint_state();
