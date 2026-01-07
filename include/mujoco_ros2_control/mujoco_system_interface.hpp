@@ -53,6 +53,7 @@
 #include "transmission_interface/transmission_interface_exception.hpp"
 #include "transmission_interface/transmission_loader.hpp"
 
+// defining these for humble, because they are defined elsewhere in future versions, and we use them in this file
 #ifdef ROS_DISTRO_HUMBLE
 namespace hardware_interface
 {
