@@ -128,7 +128,7 @@ class TestFixture(unittest.TestCase):
         pub.publish(msg)
 
         # Allow some time for the message to be processed
-        time.sleep(2.0)
+        time.sleep(3.0)
 
         # Now, check that the joint states have been updated accordingly
         joint_state_topic = "/joint_states"
