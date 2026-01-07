@@ -32,6 +32,7 @@ from launch_ros.actions import Node
 from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.parameter_descriptions import ParameterValue, ParameterFile
 from launch_ros.substitutions import FindPackageShare
+import os
 
 
 def launch_setup(context, *args, **kwargs):
@@ -198,6 +199,8 @@ def launch_setup(context, *args, **kwargs):
             {"use_sim_time": True},
             controller_parameters,
         ],
+        # humble requires a remapping of the robot description topic to function properly
+        remappings=[("~/robot_description", "/robot_description")] if os.environ.get("ROS_DISTRO") == "humble" else [],
         on_exit=Shutdown(),
     )
 

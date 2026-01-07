@@ -82,6 +82,15 @@ int main(int argc, char ** argv)
   std::thread cm_thread(
     [cm, thread_priority, use_sim_time, manage_overruns]()
     {
+      // portable function that gets now from the cm on humble or later appropriately
+      auto get_cm_now = [](const auto& cm) -> rclcpp::Time {
+#ifdef ROS_DISTRO_HUMBLE
+        return cm->now();
+#else
+        return cm->get_trigger_clock()->now();
+#endif
+      };
+
       rclcpp::Parameter cpu_affinity_param;
       if (cm->get_parameter("cpu_affinity", cpu_affinity_param))
       {
@@ -137,7 +146,7 @@ int main(int argc, char ** argv)
       auto const period = std::chrono::nanoseconds(1'000'000'000 / cm->get_update_rate());
 
       // for calculating the measured period of the loop
-      rclcpp::Time previous_time = cm->get_trigger_clock()->now();
+      rclcpp::Time previous_time = get_cm_now(cm);
       std::this_thread::sleep_for(period);
 
       std::chrono::steady_clock::time_point next_iteration_time{std::chrono::steady_clock::now()};
@@ -145,14 +154,14 @@ int main(int argc, char ** argv)
       while (rclcpp::ok())
       {
         // calculate measured period
-        auto const current_time = cm->get_trigger_clock()->now();
+        auto const current_time = get_cm_now(cm);
         auto const measured_period = current_time - previous_time;
         previous_time = current_time;
 
         // execute update loop
-        cm->read(cm->get_trigger_clock()->now(), measured_period);
-        cm->update(cm->get_trigger_clock()->now(), measured_period);
-        cm->write(cm->get_trigger_clock()->now(), measured_period);
+        cm->read(get_cm_now(cm), measured_period);
+        cm->update(get_cm_now(cm), measured_period);
+        cm->write(get_cm_now(cm), measured_period);
 
         // wait until we hit the end of the period
         if (use_sim_time)

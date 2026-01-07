@@ -150,6 +150,22 @@ target_include_directories(libsimulate PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_IN
 target_link_libraries(libsimulate PUBLIC lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
 target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 
+# add compile definition for ros distro to enable compatibility with older versions
+# this will allow something like
+# #ifdef ROS_DISTRO_HUMBLE
+#   // do something for humble-specific
+# #else
+#   // do something for everything else
+# #endif
+if(DEFINED ENV{ROS_DISTRO})
+  string(TOUPPER "$ENV{ROS_DISTRO}" ROS_DISTRO_UPPER)
+  string(REPLACE "-" "_" ROS_DISTRO_UPPER "${ROS_DISTRO_UPPER}")
+
+  add_compile_definitions(ROS_DISTRO_${ROS_DISTRO_UPPER})
+else()
+  message(FATAL_ERROR "ROS_DISTRO is not set. Did you source ROS?")
+endif()
+
 # Mujoco ROS 2 control system interface (this package)
 add_library(mujoco_ros2_control SHARED
     src/mujoco_system_interface.cpp
@@ -165,7 +181,7 @@ target_link_libraries(mujoco_ros2_control
   ${sensor_msgs_TARGETS}
   mujoco::libsimulate
   controller_manager::controller_manager
-  controller_manager::controller_manager_parameters
+  # controller_manager::controller_manager_parameters
   hardware_interface::hardware_interface
   hardware_interface::mock_components
   pluginlib::pluginlib

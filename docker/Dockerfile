@@ -24,19 +24,19 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
     apt-get install -y \
-      gdb \
-      libglfw3-dev \
-      libvirglrenderer1 \
-      libgl1-mesa-dri \
-      libglx-mesa0 \
-      libxi6 \
-      libxkbcommon0 \
-      mesa-utils \
-      python3-pip \
-      tmux \
-      wget \
-      xterm \
-      vim
+    gdb \
+    libglfw3-dev \
+    libvirglrenderer1 \
+    libgl1-mesa-dri \
+    libglx-mesa0 \
+    libxi6 \
+    libxkbcommon0 \
+    mesa-utils \
+    python3-pip \
+    tmux \
+    wget \
+    xterm \
+    vim
 
 # Install extra python dependencies
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
@@ -77,11 +77,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Copy remaining source
 COPY . ${ROS_WS}/src/mujoco_ros2_control/
 
-RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
-    && colcon build \
-      --symlink-install \
-      --event-handlers console_direct+ \
-      --cmake-args "-DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo"
+# RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
+#     && colcon build \
+#     --symlink-install \
+#     --event-handlers console_direct+ \
+#     --cmake-args "-DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo"
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN echo "source /entrypoint.sh" >> ~/.bashrc

@@ -653,9 +653,19 @@ MujocoSystemInterface::~MujocoSystemInterface()
 }
 
 hardware_interface::CallbackReturn
+// after humble switches from HardwareInfo to HardwareComponentInterfaceParams. This keeps it backwards compatible
+// between the two distros
+#ifdef ROS_DISTRO_HUMBLE
+MujocoSystemInterface::on_init(const hardware_interface::HardwareInfo& info)
+#else
 MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterfaceParams& params)
+#endif
 {
+#ifdef ROS_DISTRO_HUMBLE
+  if (hardware_interface::SystemInterface::on_init(info) != hardware_interface::CallbackReturn::SUCCESS)
+#else
   if (hardware_interface::SystemInterface::on_init(params) != hardware_interface::CallbackReturn::SUCCESS)
+#endif
   {
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -1314,6 +1324,15 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 
   joint_command_to_actuator_command();
 
+  // portable lambda function to compute pid command using either function name for the correct distro
+  auto pid_compute_command = [](auto& pid, const auto& error, const auto& period) -> double {
+#ifdef ROS_DISTRO_HUMBLE
+    return pid->computeCommand(error, period);
+#else
+    return pid->compute_command(error, period);
+#endif
+  };
+
   // Joint commands
   // TODO: Support command limits. For now those ranges can be limited in the mujoco actuators themselves.
   for (auto& actuator : mujoco_actuator_data_)
@@ -1325,7 +1344,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     else if (actuator.is_position_pid_control_enabled)
     {
       double error = actuator.position_interface.command_ - mj_data_->qpos[actuator.mj_pos_adr];
-      mj_data_control_->qfrc_applied[actuator.mj_vel_adr] = actuator.pos_pid->compute_command(error, period);
+      mj_data_control_->qfrc_applied[actuator.mj_vel_adr] = pid_compute_command(actuator.pos_pid, error, period);
     }
     else if (actuator.is_velocity_control_enabled)
     {
@@ -1334,7 +1353,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     else if (actuator.is_velocity_pid_control_enabled)
     {
       double error = actuator.velocity_interface.command_ - mj_data_->qvel[actuator.mj_vel_adr];
-      mj_data_control_->qfrc_applied[actuator.mj_vel_adr] = actuator.vel_pid->compute_command(error, period);
+      mj_data_control_->qfrc_applied[actuator.mj_vel_adr] = pid_compute_command(actuator.vel_pid, error, period);
     }
     else if (actuator.is_effort_control_enabled)
     {
@@ -1551,6 +1570,15 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 
 void MujocoSystemInterface::register_urdf_joints(const hardware_interface::HardwareInfo& hardware_info)
 {
+  // portable lambda function to get pid gains using either function name for the correct distro
+  auto get_pid_gains = [](auto& pid) -> control_toolbox::Pid::Gains {
+#ifdef ROS_DISTRO_HUMBLE
+    return pid->getGains();
+#else
+    return pid->get_gains();
+#endif
+  };
+
   RCLCPP_INFO(get_logger(), "Registering joints...");
   urdf_joint_data_.resize(hardware_info.joints.size());
 
@@ -1663,6 +1691,7 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
                                                   hardware_interface::HW_IF_TORQUE, hardware_interface::HW_IF_FORCE });
     joint_data.command_interfaces = command_interface_names;
 
+
     for (const auto& command_if : command_interface_names)
     {
       // If available, always default to position control at the start
@@ -1685,14 +1714,17 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
           {
             actuator_it->is_position_control_enabled = false;
             actuator_it->is_position_pid_control_enabled = true;
-            const auto gains = actuator_it->pos_pid->get_gains();
 
+// just disabling for humble because the member variables are different. Could make a different one for humble if desired
+#ifndef ROS_DISTRO_HUMBLE
+            const auto gains = get_pid_gains(actuator_it->pos_pid.pos_pid);
             RCLCPP_INFO(get_logger(),
                         "Position control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
                         "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
                         actuator_name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_,
                         gains.antiwindup_strat_.i_max, gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
                         gains.antiwindup_strat_.to_string().c_str());
+#endif
           }
           else
           {
@@ -1722,13 +1754,16 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
           {
             actuator_it->is_velocity_control_enabled = false;
             actuator_it->is_velocity_pid_control_enabled = true;
-            const auto gains = actuator_it->vel_pid->get_gains();
+// just disabling for humble because the member variables are different. Could make a different one for humble if desired
+#ifndef ROS_DISTRO_HUMBLE
+            const auto gains = get_pid_gains(actuator_it->vel_pid);
             RCLCPP_INFO(get_logger(),
                         "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
                         "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
                         actuator_name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_,
                         gains.antiwindup_strat_.i_max, gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
                         gains.antiwindup_strat_.to_string().c_str());
+#endif
           }
           else
           {
@@ -2324,7 +2359,12 @@ void MujocoSystemInterface::publish_clock()
 
   rosgraph_msgs::msg::Clock sim_time_msg;
   sim_time_msg.clock = sim_time_ros;
+// fixing for different naming convention on humble vs everything else
+#ifdef ROS_DISTRO_HUMBLE
+  clock_realtime_publisher_->tryPublish(sim_time_msg);
+#else
   clock_realtime_publisher_->try_publish(sim_time_msg);
+#endif
 }
 
 void MujocoSystemInterface::get_model(mjModel*& dest)
