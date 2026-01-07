@@ -805,7 +805,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       std::make_shared<realtime_tools::RealtimePublisher<rosgraph_msgs::msg::Clock>>(clock_publisher_);
 
   actuator_state_publisher_ =
-      mujoco_node_->create_publisher<sensor_msgs::msg::JointState>("/mujoco_actuator_state", 100);
+      mujoco_node_->create_publisher<sensor_msgs::msg::JointState>("/mujoco_actuators_states", 100);
   actuator_state_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(actuator_state_publisher_);
 

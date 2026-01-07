@@ -99,11 +99,11 @@ class TestFixture(unittest.TestCase):
             ],
         )
 
-    def test_check_if_mujoco_actuator_state_published(self):
+    def test_check_if_mujoco_actuators_states_published(self):
         if os.environ.get("TEST_TRANSMISSIONS") != "true":
-            check_if_js_published("/mujoco_actuator_state", ["joint1", "joint2"])
+            check_if_js_published("/mujoco_actuators_states", ["joint1", "joint2"])
         else:
-            check_if_js_published("/mujoco_actuator_state", ["actuator1", "actuator2"])
+            check_if_js_published("/mujoco_actuators_states", ["actuator1", "actuator2"])
 
     def test_arm(self):
 
@@ -147,7 +147,7 @@ class TestFixture(unittest.TestCase):
         )
 
         # MuJoCo actuator state
-        actuator_state_topic = "/mujoco_actuator_state"
+        actuator_state_topic = "/mujoco_actuators_states"
         wait_for_topics = WaitForTopics([(actuator_state_topic, JointState)], timeout=20.0)
         assert wait_for_topics.wait(), f"Topic '{actuator_state_topic}' not found!"
         msgs = wait_for_topics.received_messages(actuator_state_topic)
