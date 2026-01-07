@@ -77,11 +77,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Copy remaining source
 COPY . ${ROS_WS}/src/mujoco_ros2_control/
 
-# RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
-#     && colcon build \
-#     --symlink-install \
-#     --event-handlers console_direct+ \
-#     --cmake-args "-DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo"
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
+    && colcon build \
+    --symlink-install \
+    --event-handlers console_direct+ \
+    --cmake-args "-DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo"
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN echo "source /entrypoint.sh" >> ~/.bashrc
