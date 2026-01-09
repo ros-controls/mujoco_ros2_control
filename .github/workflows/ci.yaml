@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        ros_distro: [jazzy, kilted, rolling]
+        ros_distro: [humble, jazzy, kilted, rolling]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
