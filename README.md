@@ -77,6 +77,13 @@ Just specify the plugin and point to a valid MJCF on launch:
       <param name="override_start_position_file">$(find my_description)/config/start_positions.xml</param>
 
       <!--
+        Optional parameter to choose a topic name from which it can subscribe and get the MJCF contents
+        to load the model. This is only used, when the mujoco_model parameter is not set.
+        By default, this parameter is initialized to /mujoco_robot_description
+      -->
+      <param name="mujoco_model_topic">/mujoco_robot_description</param>
+
+      <!--
         Optional parameter to update the simulated camera's color and depth image publish rates. If no
         parameter is set then all cameras will publish at 5 hz. Note that all cameras in the sim currently
         publish at the same intervals.
