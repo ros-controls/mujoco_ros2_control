@@ -64,6 +64,14 @@ using Seconds = std::chrono::duration<double>;
 
 namespace mujoco_ros2_control
 {
+template <typename T>
+void add_items(std::vector<T>& vector, const std::vector<T>& items)
+{
+  for (const auto& item : items)
+  {
+    ros2_control::add_item(vector, item);
+  }
+}
 namespace mj = ::mujoco;
 namespace mju = ::mujoco::sample_util;
 
@@ -557,7 +565,7 @@ std::vector<std::string> get_interfaces_in_order(const std::vector<std::string>&
       ordered_interfaces.push_back(interface);
     }
   }
-  ros2_control::add_items(ordered_interfaces, available_interfaces);
+  mujoco_ros2_control::add_items(ordered_interfaces, available_interfaces);
   return ordered_interfaces;
 }
 
@@ -1845,7 +1853,7 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
                                     .c_str());
 
       std::vector<std::string> joint_hw_types = joint_info.state_interfaces;
-      ros2_control::add_items(joint_hw_types, joint_info.command_interfaces);
+      mujoco_ros2_control::add_items(joint_hw_types, joint_info.command_interfaces);
 
       // Get the URDFJointData of the joint to set the control flags
       auto urdf_joint_it = std::find_if(urdf_joint_data_.begin(), urdf_joint_data_.end(),
