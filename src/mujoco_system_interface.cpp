@@ -1859,12 +1859,6 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
     for (const auto& joint_info : t_info.joints)
     {
       RCLCPP_INFO(get_logger(), "Creating joint handle for joint: %s", joint_info.name.c_str());
-      RCLCPP_INFO(
-          get_logger(),
-          fmt::format("\tThe state interfaces here are : '{}'", fmt::join(joint_info.state_interfaces, "', '")).c_str());
-      RCLCPP_INFO(get_logger(), fmt::format("\tThe command interfaces here are : '{}'",
-                                            fmt::join(joint_info.command_interfaces, "', '"))
-                                    .c_str());
 
       std::vector<std::string> joint_hw_types = joint_info.state_interfaces;
       mujoco_ros2_control::add_items(joint_hw_types, joint_info.command_interfaces);
