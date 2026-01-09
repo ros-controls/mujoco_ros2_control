@@ -72,7 +72,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
       - name: Cache build directories and sccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ${{ env.SCCACHE_DIR }}
