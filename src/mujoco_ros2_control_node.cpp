@@ -18,6 +18,7 @@
 #include <string>
 #include <thread>
 
+#include <hardware_interface/version.h>
 #include <controller_manager/controller_manager.hpp>
 #include <rclcpp/executors.hpp>
 #include <realtime_tools/realtime_helpers.hpp>
@@ -84,7 +85,7 @@ int main(int argc, char ** argv)
     {
       // portable function that gets now from the cm on humble or later appropriately
       auto get_cm_now = [](const auto& cm) -> rclcpp::Time {
-#ifdef ROS_DISTRO_HUMBLE
+#if HARDWARE_INTERFACE_VERSION_MAJOR < 3
         return cm->now();
 #else
         return cm->get_trigger_clock()->now();

@@ -655,17 +655,13 @@ MujocoSystemInterface::~MujocoSystemInterface()
 hardware_interface::CallbackReturn
 // after humble switches from HardwareInfo to HardwareComponentInterfaceParams. This keeps it backwards compatible
 // between the two distros
-#ifdef ROS_DISTRO_HUMBLE
-MujocoSystemInterface::on_init(const hardware_interface::HardwareInfo& info)
+#if ROS_DISTRO_HUMBLE
+MujocoSystemInterface::on_init(const hardware_interface::HardwareInfo& params)
 #else
 MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterfaceParams& params)
 #endif
 {
-#ifdef ROS_DISTRO_HUMBLE
-  if (hardware_interface::SystemInterface::on_init(info) != hardware_interface::CallbackReturn::SUCCESS)
-#else
   if (hardware_interface::SystemInterface::on_init(params) != hardware_interface::CallbackReturn::SUCCESS)
-#endif
   {
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -1326,7 +1322,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 
   // portable lambda function to compute pid command using either function name for the correct distro
   auto pid_compute_command = [](auto& pid, const auto& error, const auto& period) -> double {
-#ifdef ROS_DISTRO_HUMBLE
+#if ROS_DISTRO_HUMBLE
     return pid->computeCommand(error, period);
 #else
     return pid->compute_command(error, period);
@@ -1533,17 +1529,30 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 
     // Initialize PID controllers for actuators that have them configured
     const auto initialize_position_pids = [&]() -> bool {
+// after humble has an additional argument in the PidROS constructor, and uses a different function to initialize from parameters
+#ifdef ROS_DISTRO_HUMBLE
+          actuator_data.pos_pid =
+              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.position." + actuator_data.joint_name, false);
+          actuator_data.pos_pid->initPid();
+#else
       actuator_data.pos_pid = std::make_shared<control_toolbox::PidROS>(
           mujoco_node_, "pid_gains.position." + actuator_data.joint_name, "", false);
       actuator_data.pos_pid->initialize_from_ros_parameters();
+#endif
       const auto gains = actuator_data.pos_pid->get_gains();
       return std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
     };
 
     const auto initialize_velocity_pids = [&]() -> bool {
+#ifdef ROS_DISTRO_HUMBLE
+          actuator_data.vel_pid =
+              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, false);
+          actuator_data.vel_pid->initPid();
+#else
       actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
           mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, "", false);
       actuator_data.vel_pid->initialize_from_ros_parameters();
+#endif
       const auto gains = actuator_data.vel_pid->get_gains();
       return std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
     };
@@ -2360,7 +2369,7 @@ void MujocoSystemInterface::publish_clock()
   rosgraph_msgs::msg::Clock sim_time_msg;
   sim_time_msg.clock = sim_time_ros;
 // fixing for different naming convention on humble vs everything else
-#ifdef ROS_DISTRO_HUMBLE
+#if ROS_DISTRO_HUMBLE
   clock_realtime_publisher_->tryPublish(sim_time_msg);
 #else
   clock_realtime_publisher_->try_publish(sim_time_msg);
