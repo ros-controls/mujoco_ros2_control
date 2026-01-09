@@ -43,7 +43,7 @@ jobs:
           image_tag=$(echo "$github_ref_name" | sed 's/\//-/g')
           echo "tag=${image_tag}" >> $GITHUB_OUTPUT
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           file: docker/Dockerfile
           tags: mujoco_ros2_control:${{ steps.set_tag.outputs.tag }}
