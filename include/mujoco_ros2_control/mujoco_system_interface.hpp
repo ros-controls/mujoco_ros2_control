@@ -54,7 +54,7 @@
 #include "transmission_interface/transmission_interface_exception.hpp"
 #include "transmission_interface/transmission_loader.hpp"
 
-#define ROS_DISTRO_HUMBLE HARDWARE_INTERFACE_VERSION_MAJOR < 3
+#define ROS_DISTRO_HUMBLE (HARDWARE_INTERFACE_VERSION_MAJOR < 3)
 
 // defining these for Humble, because they are defined elsewhere in future versions, and we use them in this file
 #if ROS_DISTRO_HUMBLE
