@@ -1531,9 +1531,9 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     const auto initialize_position_pids = [&]() -> bool {
 // after humble has an additional argument in the PidROS constructor, and uses a different function to initialize from parameters
 #ifdef ROS_DISTRO_HUMBLE
-          actuator_data.pos_pid =
-              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.position." + actuator_data.joint_name, false);
-          actuator_data.pos_pid->initPid();
+      actuator_data.pos_pid = std::make_shared<control_toolbox::PidROS>(
+          mujoco_node_, "pid_gains.position." + actuator_data.joint_name, false);
+      actuator_data.pos_pid->initPid();
 #else
       actuator_data.pos_pid = std::make_shared<control_toolbox::PidROS>(
           mujoco_node_, "pid_gains.position." + actuator_data.joint_name, "", false);
@@ -1545,9 +1545,9 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 
     const auto initialize_velocity_pids = [&]() -> bool {
 #ifdef ROS_DISTRO_HUMBLE
-          actuator_data.vel_pid =
-              std::make_shared<control_toolbox::PidROS>(mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, false);
-          actuator_data.vel_pid->initPid();
+      actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
+          mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, false);
+      actuator_data.vel_pid->initPid();
 #else
       actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
           mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, "", false);
@@ -1699,7 +1699,6 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
                                                   hardware_interface::HW_IF_VELOCITY, hardware_interface::HW_IF_EFFORT,
                                                   hardware_interface::HW_IF_TORQUE, hardware_interface::HW_IF_FORCE });
     joint_data.command_interfaces = command_interface_names;
-
 
     for (const auto& command_if : command_interface_names)
     {
