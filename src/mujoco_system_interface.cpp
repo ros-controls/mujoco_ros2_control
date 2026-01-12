@@ -489,7 +489,8 @@ ActuatorType getActuatorType(const mjModel* mj_model, int mujoco_actuator_id)
 }
 
 /**
- * @brief Get the MuJoCo actuator ID based on the actuator name.
+ * @brief Get the MuJoCo actuator ID based on a name. First this method looks for a joint that matches the passed name,
+ * and finds the actuator attached to it. If this doesn't exist, it will then look for the actuator with the passed name.
  * @param actuator_name The name of the actuator.
  * @param mj_model Pointer to the MuJoCo model.
  * @return The actuator ID if found, otherwise -1.
