@@ -86,19 +86,6 @@ std::string get_hardware_parameter_or(const hardware_interface::HardwareInfo& ha
   return default_value;
 }
 }  // namespace
-#if ROS_DISTRO_HUMBLE
-namespace ros2_control
-{
-template <typename T>
-void add_item(std::vector<T>& vector, const T& item)
-{
-  if (!has_item(vector, item))
-  {
-    vector.push_back(item);
-  }
-}
-}  // namespace ros2_control
-#endif
 namespace mujoco_ros2_control
 {
 template <typename T>
@@ -1574,6 +1561,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     };
 
     const auto initialize_velocity_pids = [&]() -> bool {
+// after humble has an additional argument in the PidROS constructor, and uses a different function to initialize from parameters
 #if ROS_DISTRO_HUMBLE
       actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
           mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, false);
