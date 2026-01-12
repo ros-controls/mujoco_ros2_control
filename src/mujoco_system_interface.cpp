@@ -1265,7 +1265,11 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // Publish actuator states
   if (actuator_state_realtime_publisher_)
   {
+#if ROS_DISTRO_HUMBLE
+    actuator_state_realtime_publisher_->tryPublish(actuator_state_msg_);
+#else
     actuator_state_realtime_publisher_->try_publish(actuator_state_msg_);
+#endif
   }
 
   actuator_state_to_joint_state();
@@ -1530,7 +1534,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     // Initialize PID controllers for actuators that have them configured
     const auto initialize_position_pids = [&]() -> bool {
 // after humble has an additional argument in the PidROS constructor, and uses a different function to initialize from parameters
-#ifdef ROS_DISTRO_HUMBLE
+#if ROS_DISTRO_HUMBLE
       actuator_data.pos_pid = std::make_shared<control_toolbox::PidROS>(
           mujoco_node_, "pid_gains.position." + actuator_data.joint_name, false);
       actuator_data.pos_pid->initPid();
@@ -1544,7 +1548,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     };
 
     const auto initialize_velocity_pids = [&]() -> bool {
-#ifdef ROS_DISTRO_HUMBLE
+#if ROS_DISTRO_HUMBLE
       actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
           mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, false);
       actuator_data.vel_pid->initPid();
@@ -1581,7 +1585,7 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
 {
   // portable lambda function to get pid gains using either function name for the correct distro
   auto get_pid_gains = [](auto& pid) -> control_toolbox::Pid::Gains {
-#ifdef ROS_DISTRO_HUMBLE
+#if ROS_DISTRO_HUMBLE
     return pid->getGains();
 #else
     return pid->get_gains();
@@ -1724,8 +1728,8 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
             actuator_it->is_position_pid_control_enabled = true;
 
 // just disabling for humble because the member variables are different. Could make a different one for humble if desired
-#ifndef ROS_DISTRO_HUMBLE
-            const auto gains = get_pid_gains(actuator_it->pos_pid.pos_pid);
+#if !ROS_DISTRO_HUMBLE
+            const auto gains = get_pid_gains(actuator_it->pos_pid);
             RCLCPP_INFO(get_logger(),
                         "Position control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
                         "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
@@ -1763,7 +1767,7 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
             actuator_it->is_velocity_control_enabled = false;
             actuator_it->is_velocity_pid_control_enabled = true;
 // just disabling for humble because the member variables are different. Could make a different one for humble if desired
-#ifndef ROS_DISTRO_HUMBLE
+#if !ROS_DISTRO_HUMBLE
             const auto gains = get_pid_gains(actuator_it->vel_pid);
             RCLCPP_INFO(get_logger(),
                         "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
