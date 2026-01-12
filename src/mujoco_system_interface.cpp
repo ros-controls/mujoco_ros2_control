@@ -858,7 +858,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
 
   // Pull joint and sensor information
-  register_joints(get_hardware_info());
+  register_urdf_joints(get_hardware_info());
   register_sensors(get_hardware_info());
   if (!register_transmissions(get_hardware_info()))
   {
@@ -1545,7 +1545,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
   return true;
 }
 
-void MujocoSystemInterface::register_joints(const hardware_interface::HardwareInfo& hardware_info)
+void MujocoSystemInterface::register_urdf_joints(const hardware_interface::HardwareInfo& hardware_info)
 {
   RCLCPP_INFO(get_logger(), "Registering joints...");
   urdf_joint_data_.resize(hardware_info.joints.size());

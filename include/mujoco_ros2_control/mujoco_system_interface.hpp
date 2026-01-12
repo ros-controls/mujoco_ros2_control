@@ -137,7 +137,7 @@ private:
    * actuator in the sim's mujoco data. The data wrappers will be used as control/state interfaces for
    * the HW interface.
    */
-  void register_joints(const hardware_interface::HardwareInfo& info);
+  void register_urdf_joints(const hardware_interface::HardwareInfo& info);
 
   /**
    * @brief Loads transmission information into the HW interface.
