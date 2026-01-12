@@ -548,12 +548,13 @@ std::string get_joint_actuator_name(const std::string& joint_name,
         {
           if (actuator.role == corresponding_actuator_role)
           {
-            RCLCPP_INFO(rclcpp::get_logger("mujoco_system"), "Mapped joint '%s' to actuator '%s' based on role '%s'",
-                        joint_name.c_str(), actuator.name.c_str(), corresponding_actuator_role.c_str());
+            RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
+                        "Mapped joint '%s' to actuator '%s' based on role '%s'", joint_name.c_str(),
+                        actuator.name.c_str(), corresponding_actuator_role.c_str());
             return actuator.name;
           }
         }
-        RCLCPP_WARN(rclcpp::get_logger("mujoco_system"),
+        RCLCPP_WARN(rclcpp::get_logger("MujocoSystemInterface"),
                     "No matching actuator found for joint '%s' with role '%s'. Using joint name as actuator name.",
                     joint_name.c_str(), joint.role.c_str());
         break;
@@ -1457,7 +1458,8 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       if (joint_name)
       {
         actuator_data.name = std::string(joint_name);
-        RCLCPP_INFO(get_logger(), "Registering actuator '%s' for joint '%s'", actuator_data.name.c_str(), joint_name);
+        RCLCPP_INFO(get_logger(), "Registering MuJoCo actuator '%s' for joint '%s'", actuator_data.name.c_str(),
+                    joint_name);
       }
       else
       {
