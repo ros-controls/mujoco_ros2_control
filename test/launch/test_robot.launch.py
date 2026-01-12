@@ -55,6 +55,9 @@ def launch_setup(context, *args, **kwargs):
             " ",
             "use_mjcf_from_topic:=",
             LaunchConfiguration("use_mjcf_from_topic"),
+            " ",
+            "use_transmissions:=",
+            LaunchConfiguration("test_transmissions"),
         ]
     )
 

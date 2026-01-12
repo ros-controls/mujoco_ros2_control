@@ -1781,30 +1781,6 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
       RCLCPP_FATAL(get_logger(), "Transmission '%s' has no joints or actuators defined", t_info.name.c_str());
       return false;
     }
-    // Check if all joints are present in the model as mujoco actuators, if so, do nothing
-    bool all_transmission_joints_found = true;
-    for (const auto& joint_info : t_info.joints)
-    {
-      RCLCPP_DEBUG(get_logger(), "Joint name: %s", joint_info.name.c_str());
-      if (get_actuator_id(joint_info.name, mj_model_) != -1)
-      {
-        RCLCPP_INFO(get_logger(), "Transmission joint '%s' matches the MuJoCo actuator", joint_info.name.c_str());
-        all_transmission_joints_found &= true;
-      }
-      else
-      {
-        RCLCPP_WARN(get_logger(), "Transmission joint '%s' not found in MuJoCo model", joint_info.name.c_str());
-        all_transmission_joints_found &= false;
-      }
-    }
-    if (all_transmission_joints_found)
-    {
-      RCLCPP_INFO(
-          get_logger(),
-          "All transmission joints for transmission '%s' found as MuJoCo actuators. No need to apply any transmission.",
-          t_info.name.c_str());
-      continue;
-    }
 
     // If the joints are not found as mujoco actuators, check the actuators of transmission
     bool all_transmission_actuators = true;
