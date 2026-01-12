@@ -1251,7 +1251,6 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     actuator_state.position_interface.state_ = mj_data_control_->qpos[actuator_state.mj_pos_adr];
     actuator_state.velocity_interface.state_ = mj_data_control_->qvel[actuator_state.mj_vel_adr];
     actuator_state.effort_interface.state_ = mj_data_control_->qfrc_actuator[actuator_state.mj_vel_adr];
-    actuator_state.copy_state_to_transmission();
     actuator_state_msg_.position.push_back(actuator_state.position_interface.state_);
     actuator_state_msg_.velocity.push_back(actuator_state.velocity_interface.state_);
     actuator_state_msg_.effort.push_back(actuator_state.effort_interface.state_);
@@ -1347,6 +1346,10 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 
 void MujocoSystemInterface::actuator_state_to_joint_state()
 {
+  // actuator: mujoco -> transmission
+  std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
+                [](auto& actuator_interface) { actuator_interface.copy_state_to_transmission(); });
+
   // transmission: actuator -> joint
   std::for_each(transmission_instances_.begin(), transmission_instances_.end(),
                 [](auto& transmission) { transmission->actuator_to_joint(); });
