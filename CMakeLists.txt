@@ -58,9 +58,9 @@ else()
   set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
   FetchContent_Declare(
     mujoco_download
-    URL https://github.com/google-deepmind/mujoco/releases/download/${MUJOCO_VERSION}/mujoco-${MUJOCO_VERSION}-linux-${CPU_ARCH}.tar.gz
     SOURCE_DIR ${MUJOCO_EXTRACT_DIR}
     DOWNLOAD_EXTRACT_TIMESTAMP True
+    URL https://github.com/google-deepmind/mujoco/releases/download/${MUJOCO_VERSION}/mujoco-${MUJOCO_VERSION}-linux-${CPU_ARCH}.tar.gz
   )
   FetchContent_MakeAvailable(mujoco_download)
 
@@ -203,6 +203,7 @@ install(
 install(PROGRAMS
   scripts/find_missing_inertias.py
   scripts/make_mjcf_from_robot_description.py
+  scripts/robot_description_to_mjcf.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 
