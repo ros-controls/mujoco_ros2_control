@@ -104,10 +104,20 @@ namespace mujoco_ros2_control
 template <typename T>
 void add_items(std::vector<T>& vector, const std::vector<T>& items)
 {
+#if ROS_DISTRO_HUMBLE
+  for (const auto& item : items)
+  {
+    if (std::find(vector.begin(), vector.end(), item) == vector.end())
+    {
+      vector.push_back(item);
+    }
+  }
+#else
   for (const auto& item : items)
   {
     ros2_control::add_item(vector, item);
   }
+#endif
 }
 namespace mj = ::mujoco;
 namespace mju = ::mujoco::sample_util;
