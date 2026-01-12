@@ -548,9 +548,9 @@ std::string get_joint_actuator_name(const std::string& joint_name,
         {
           if (actuator.role == corresponding_actuator_role)
           {
-            RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"),
-                        "Mapped joint '%s' to actuator '%s' based on role '%s'", joint_name.c_str(),
-                        actuator.name.c_str(), corresponding_actuator_role.c_str());
+            RCLCPP_DEBUG(rclcpp::get_logger("MujocoSystemInterface"),
+                         "Mapped joint '%s' to actuator '%s' based on role '%s'", joint_name.c_str(),
+                         actuator.name.c_str(), corresponding_actuator_role.c_str());
             return actuator.name;
           }
         }
@@ -1437,7 +1437,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 
   for (int i = 0; i < mj_model_->nu; i++)
   {
-    RCLCPP_INFO(get_logger(), "Registering MuJoCo actuator %d/%d", i + 1, mj_model_->nu);
+    RCLCPP_DEBUG(get_logger(), "Registering MuJoCo actuator %d/%d", i + 1, mj_model_->nu);
     MuJoCoActuatorData& actuator_data = mujoco_actuator_data_.at(i);
 
     // Get the name of the joint/tendon corresponding to the actuator ID
@@ -1539,7 +1539,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       actuator_data.has_vel_pid = initialize_velocity_pids();
       actuator_data.is_effort_control_enabled = true;
     }
-    RCLCPP_INFO(get_logger(), "Successfully registered actuator '%s'", act_name);
+    RCLCPP_DEBUG(get_logger(), "Successfully registered actuator '%s'", act_name);
   }
   return true;
 }
