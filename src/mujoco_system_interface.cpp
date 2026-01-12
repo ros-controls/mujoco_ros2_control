@@ -1553,12 +1553,13 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       actuator_data.pos_pid = std::make_shared<control_toolbox::PidROS>(
           mujoco_node_, "pid_gains.position." + actuator_data.joint_name, false);
       actuator_data.pos_pid->initPid();
+      const auto gains = actuator_data.pos_pid->getGains();
 #else
       actuator_data.pos_pid = std::make_shared<control_toolbox::PidROS>(
           mujoco_node_, "pid_gains.position." + actuator_data.joint_name, "", false);
       actuator_data.pos_pid->initialize_from_ros_parameters();
-#endif
       const auto gains = actuator_data.pos_pid->get_gains();
+#endif
       return std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
     };
 
@@ -1567,12 +1568,13 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
           mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, false);
       actuator_data.vel_pid->initPid();
+      const auto gains = actuator_data.pos_pid->getGains();
 #else
       actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
           mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, "", false);
       actuator_data.vel_pid->initialize_from_ros_parameters();
-#endif
       const auto gains = actuator_data.vel_pid->get_gains();
+#endif
       return std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
     };
 
