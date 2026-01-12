@@ -43,7 +43,9 @@
 #include <unordered_map>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#if !ROS_DISTRO_HUMBLE
 #include <hardware_interface/helpers.hpp>
+#endif
 #include <hardware_interface/lexical_casts.hpp>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -84,6 +86,19 @@ std::string get_hardware_parameter_or(const hardware_interface::HardwareInfo& ha
   return default_value;
 }
 }  // namespace
+#if ROS_DISTRO_HUMBLE
+namespace ros2_control
+{
+template <typename T>
+void add_item(std::vector<T>& vector, const T& item)
+{
+  if (!has_item(vector, item))
+  {
+    vector.push_back(item);
+  }
+}
+}  // namespace ros2_control
+#endif
 namespace mujoco_ros2_control
 {
 template <typename T>
