@@ -36,11 +36,12 @@ from controller_manager_msgs.srv import ListHardwareInterfaces
 
 
 # This function specifies the processes to be run for our test
-def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false"):
+def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false", test_transmissions="false"):
     # This is necessary to get unbuffered output from the process under test
     proc_env = os.environ.copy()
     proc_env["PYTHONUNBUFFERED"] = "1"
     os.environ["USE_MJCF_FROM_TOPIC"] = use_mjcf_from_topic
+    os.environ["TEST_TRANSMISSIONS"] = test_transmissions
 
     launch_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -49,7 +50,12 @@ def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false
                 "launch/test_robot.launch.py",
             )
         ),
-        launch_arguments={"headless": "true", "use_pid": use_pid, "use_mjcf_from_topic": use_mjcf_from_topic}.items(),
+        launch_arguments={
+            "headless": "true",
+            "use_pid": use_pid,
+            "use_mjcf_from_topic": use_mjcf_from_topic,
+            "test_transmissions": test_transmissions,
+        }.items(),
     )
 
     return LaunchDescription([launch_include, KeepAliveProc(), ReadyToTest()])
@@ -93,6 +99,12 @@ class TestFixture(unittest.TestCase):
             ],
         )
 
+    def test_check_if_mujoco_actuators_states_published(self):
+        if os.environ.get("TEST_TRANSMISSIONS") != "true":
+            check_if_js_published("/mujoco_actuators_states", ["joint1", "joint2"])
+        else:
+            check_if_js_published("/mujoco_actuators_states", ["actuator1", "actuator2"])
+
     def test_arm(self):
 
         # Check if the controllers are running
@@ -116,7 +128,7 @@ class TestFixture(unittest.TestCase):
         pub.publish(msg)
 
         # Allow some time for the message to be processed
-        time.sleep(2.0)
+        time.sleep(4.0)
 
         # Now, check that the joint states have been updated accordingly
         joint_state_topic = "/joint_states"
@@ -132,6 +144,36 @@ class TestFixture(unittest.TestCase):
         )
         self.assertAlmostEqual(
             msg.position[joint2_index], -0.5, delta=0.05, msg="joint2 did not reach the commanded position"
+        )
+
+        # MuJoCo actuator state
+        actuator_state_topic = "/mujoco_actuators_states"
+        wait_for_topics = WaitForTopics([(actuator_state_topic, JointState)], timeout=20.0)
+        assert wait_for_topics.wait(), f"Topic '{actuator_state_topic}' not found!"
+        msgs = wait_for_topics.received_messages(actuator_state_topic)
+        msg = msgs[0]
+        assert len(msg.name) >= 2, "MuJoCo actuator state message doesn't have 2 actuators"
+        if os.environ.get("TEST_TRANSMISSIONS") != "true":
+            actuator1_index = msg.name.index("joint1")
+            actuator2_index = msg.name.index("joint2")
+            actuator1_reduction = 1.0
+            actuator2_reduction = 1.0
+        else:
+            actuator1_index = msg.name.index("actuator1")
+            actuator2_index = msg.name.index("actuator2")
+            actuator1_reduction = 2.0
+            actuator2_reduction = 0.5
+        self.assertAlmostEqual(
+            msg.position[actuator1_index],
+            0.5 * actuator1_reduction,
+            delta=0.05,
+            msg="actuator1 did not reach the commanded position",
+        )
+        self.assertAlmostEqual(
+            msg.position[actuator2_index],
+            -0.5 * actuator2_reduction,
+            delta=0.05,
+            msg="actuator2 did not reach the commanded position",
         )
         wait_for_topics.shutdown()
 

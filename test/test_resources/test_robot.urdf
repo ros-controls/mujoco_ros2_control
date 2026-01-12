@@ -5,6 +5,7 @@
   <xacro:arg name="use_pid" default="false"/>
   <xacro:arg name="headless" default="false"/>
   <xacro:arg name="use_mjcf_from_topic" default="false"/>
+  <xacro:arg name="use_transmissions" default="false"/>
 
   <link name="world"/>
 
@@ -259,6 +260,21 @@
       <state_interface name="effort"/>
       <state_interface name="torque"/>
     </joint>
+
+    <xacro:if value="$(eval use_transmissions)">
+      <!-- When the transmissions is added to the ros2_control tag, the simulation tries to look
+      for the actuators in the parsed MJCF description. Inorder, to test this setup, we do it by
+      modifying the robot description contents in the test_robot.launch.py-->
+      <transmission name="joint1_trans">
+        <plugin>transmission_interface/SimpleTransmission</plugin>
+        <actuator name="actuator1" role="actuator1"/>
+        <joint name="joint1" role="joint1">
+          <mechanical_reduction>2.0</mechanical_reduction>
+          <offset>0.0</offset>
+        </joint>
+      </transmission>
+    </xacro:if>
+
     <joint name="joint2">
       <command_interface name="position"/>
       <xacro:if value="$(arg use_pid)">
@@ -273,6 +289,20 @@
       <state_interface name="effort"/>
       <state_interface name="torque"/>
     </joint>
+
+    <xacro:if value="$(eval use_transmissions)">
+      <!-- When the transmissions is added to the ros2_control tag, the simulation tries to look
+      for the actuators in the parsed MJCF description. Inorder, to test this setup, we do it by
+      modifying the robot description contents in the test_robot.launch.py-->
+      <transmission name="joint2_trans">
+        <plugin>transmission_interface/SimpleTransmission</plugin>
+        <actuator name="actuator2" role="actuator1"/>
+        <joint name="joint2" role="joint1">
+          <mechanical_reduction>0.5</mechanical_reduction>
+          <offset>0.0</offset>
+        </joint>
+      </transmission>
+    </xacro:if>
 
     <!-- For cameras, the sensor name _must_ match the camera name in the MJCF -->
     <sensor name="camera">

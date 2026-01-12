@@ -21,6 +21,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+#include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include "control_toolbox/pid_ros.hpp"
 
 #include <string>
@@ -50,27 +51,56 @@ enum class ActuatorType
 };
 
 /**
- * Wrapper for mujoco actuators and relevant ROS HW interface data.
+ * Data structure for each command/state interface.
  */
-struct JointState
+struct InterfaceData
 {
-  std::string name;
-  double position;
-  double velocity;
-  double effort;
+  explicit InterfaceData(const std::string& command_interface) : command_interface_(command_interface)
+  {
+  }
+
+  std::string command_interface_;
+  double command_ = std::numeric_limits<double>::quiet_NaN();
+  double state_ = std::numeric_limits<double>::quiet_NaN();
+
+  // this is the "sink" that will be part of the transmission Joint/Actuator handles
+  double transmission_passthrough_ = std::numeric_limits<double>::quiet_NaN();
+};
+
+/**
+ * Wrapper for mujoco actuators and relevant ROS HW interface data.
+ * @param joint_name Name of the MuJoCo joint handled by the actuator.
+ * @param position_interface Data for position command/state interface.
+ * @param velocity_interface Data for velocity command/state interface.
+ * @param effort_interface Data for effort command/state interface.
+ * @param pos_pid Pointer to position PID controller if configured.
+ * @param vel_pid Pointer to velocity PID controller if configured.
+ * @param actuator_type Type of the MuJoCo actuator.
+ * @param mj_joint_type MuJoCo joint type as per mjModel->jnt_type.
+ * @param mj_pos_adr MuJoCo position address in mjData->qpos.
+ * @param mj_vel_adr MuJoCo velocity address in mjData->qvel.
+ * @param mj_actuator_id MuJoCo actuator id as per mjModel->actuator_id.
+ * @param is_position_control_enabled Boolean flag indicating if position control is enabled.
+ * @param is_position_pid_control_enabled Boolean flag indicating if position PID control is enabled.
+ * @param is_velocity_pid_control_enabled Boolean flag indicating if velocity PID control is enabled.
+ * @param is_velocity_control_enabled Boolean flag indicating if velocity control is enabled.
+ * @param is_effort_control_enabled Boolean flag indicating if effort control is enabled.
+ * @param has_pos_pid Boolean flag indicating if a position PID controller is configured.
+ * @param has_vel_pid Boolean flag indicating if a velocity PID controller is configured.
+ */
+struct MuJoCoActuatorData
+{
+  std::string joint_name = "";
+  InterfaceData position_interface{ hardware_interface::HW_IF_POSITION };
+  InterfaceData velocity_interface{ hardware_interface::HW_IF_VELOCITY };
+  InterfaceData effort_interface{ hardware_interface::HW_IF_EFFORT };
   std::shared_ptr<control_toolbox::PidROS> pos_pid{ nullptr };
   std::shared_ptr<control_toolbox::PidROS> vel_pid{ nullptr };
   ActuatorType actuator_type{ ActuatorType::UNKNOWN };
-  double position_command;
-  double velocity_command;
-  double effort_command;
-  bool is_mimic{ false };
-  int mimicked_joint_index;
-  double mimic_multiplier;
-  int mj_joint_type;
-  int mj_pos_adr;
-  int mj_vel_adr;
-  int mj_actuator_id;
+  int mj_joint_type = -1;
+  int mj_pos_adr = -1;
+  int mj_vel_adr = -1;
+  int mj_actuator_id = -1;
 
   // Booleans record whether or not we should be writing commands to these interfaces
   // based on if they have been claimed.
@@ -81,6 +111,80 @@ struct JointState
   bool is_effort_control_enabled{ false };
   bool has_pos_pid{ false };
   bool has_vel_pid{ false };
+
+  void copy_state_to_transmission()
+  {
+    position_interface.transmission_passthrough_ = position_interface.state_;
+    velocity_interface.transmission_passthrough_ = velocity_interface.state_;
+    effort_interface.transmission_passthrough_ = effort_interface.state_;
+  }
+
+  void copy_command_from_transmission()
+  {
+    position_interface.command_ = position_interface.transmission_passthrough_;
+    velocity_interface.command_ = velocity_interface.transmission_passthrough_;
+    effort_interface.command_ = effort_interface.transmission_passthrough_;
+  }
+
+  void copy_command_to_state()
+  {
+    position_interface.state_ = position_interface.command_;
+    velocity_interface.state_ = velocity_interface.command_;
+    effort_interface.state_ = effort_interface.command_;
+  }
+};
+
+/**
+ * Structure for the URDF joint data.
+ * @param name Name of the joint.
+ * @param position_interface Data for position command/state interface.
+ * @param velocity_interface Data for velocity command/state interface.
+ * @param effort_interface Data for effort command/state interface.
+ * @param command_interfaces Vector of command interface names supported by the joint.
+ * @param is_mimic Boolean flag indicating if the joint is a mimic joint.
+ * @param mimicked_joint_index Index of the joint being mimicked.
+ * @param mimic_multiplier Multiplier for the mimic joint.
+ * @param is_position_control_enabled Boolean flag indicating if position control is enabled.
+ * @param is_velocity_control_enabled Boolean flag indicating if velocity control is enabled.
+ * @param is_effort_control_enabled Boolean flag indicating if effort control is enabled.
+ */
+struct URDFJointData
+{
+  std::string name = "";
+  InterfaceData position_interface{ hardware_interface::HW_IF_POSITION };
+  InterfaceData velocity_interface{ hardware_interface::HW_IF_VELOCITY };
+  InterfaceData effort_interface{ hardware_interface::HW_IF_EFFORT };
+
+  std::vector<std::string> command_interfaces = {};
+
+  bool is_mimic{ false };
+  int mimicked_joint_index;
+  double mimic_multiplier;
+
+  bool is_position_control_enabled{ false };
+  bool is_velocity_control_enabled{ false };
+  bool is_effort_control_enabled{ false };
+
+  void copy_state_from_transmission()
+  {
+    position_interface.state_ = position_interface.transmission_passthrough_;
+    velocity_interface.state_ = velocity_interface.transmission_passthrough_;
+    effort_interface.state_ = effort_interface.transmission_passthrough_;
+  }
+
+  void copy_command_to_transmission()
+  {
+    position_interface.transmission_passthrough_ = position_interface.command_;
+    velocity_interface.transmission_passthrough_ = velocity_interface.command_;
+    effort_interface.transmission_passthrough_ = effort_interface.command_;
+  }
+
+  void copy_state_to_command()
+  {
+    position_interface.command_ = position_interface.state_;
+    velocity_interface.command_ = velocity_interface.state_;
+    effort_interface.command_ = effort_interface.state_;
+  }
 };
 
 template <typename T>

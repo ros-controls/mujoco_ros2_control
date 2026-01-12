@@ -35,6 +35,7 @@
 #include <rclcpp_lifecycle/state.hpp>
 #include <realtime_tools/realtime_publisher.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 
 #include <mujoco/mujoco.h>
 
@@ -45,6 +46,12 @@
 #include "mujoco_ros2_control/data.hpp"
 #include "mujoco_ros2_control/mujoco_cameras.hpp"
 #include "mujoco_ros2_control/mujoco_lidar.hpp"
+
+#include <pluginlib/class_list_macros.hpp>
+#include <pluginlib/class_loader.hpp>
+#include "transmission_interface/transmission.hpp"
+#include "transmission_interface/transmission_interface_exception.hpp"
+#include "transmission_interface/transmission_loader.hpp"
 
 namespace mujoco_ros2_control
 {
@@ -76,6 +83,21 @@ public:
   hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
   /**
+   * @brief Converts actuator states to joint states.
+   *
+   * This method reads the current states of the actuators in the MuJoCo simulation and updates the corresponding joint
+   * states in the ROS 2 control interface either through transmissions or directly.
+   */
+  void actuator_state_to_joint_state();
+
+  /**
+   * @brief Converts joint commands to actuator commands.
+   *
+   * This method takes the command inputs for the joints from the ROS 2 control interface and translates them into
+   * appropriate commands for the actuators in the MuJoCo simulation, considering any loaded transmissions or directly.
+   */
+  void joint_command_to_actuator_command();
+  /**
    * @brief Returns a copy of the MuJoCo model.
    *
    * This method locks the simulation mutex to ensure thread safety.
@@ -101,13 +123,32 @@ public:
 
 private:
   /**
+   * @brief Loads actuator information from MuJoCo model into the SystemInterface.
+   *
+   * This function reads the actuator definitions from the MuJoCo model and initializes their corresponding
+   * state and command information of the actuator handles.
+   */
+  bool register_mujoco_actuators();
+
+  /**
    * @brief Loads actuator information into the HW interface.
    *
    * Will pull joint/actuator information from the provided HardwareInfo, and map it to the appropriate
    * actuator in the sim's mujoco data. The data wrappers will be used as control/state interfaces for
    * the HW interface.
    */
-  void register_joints(const hardware_interface::HardwareInfo& info);
+  void register_urdf_joints(const hardware_interface::HardwareInfo& info);
+
+  /**
+   * @brief Loads transmission information into the HW interface.
+   *
+   * Will pull transmission information from the provided HardwareInfo, and map it to the appropriate
+   * joints/actuators in the sim's mujoco data. This is primarily used to have cases where the URDF
+   * specifies the transmission ratios between joints and physical actuators.
+   */
+  bool register_transmissions(const hardware_interface::HardwareInfo& info);
+
+  bool initialize_initial_positions(const hardware_interface::HardwareInfo& info);
 
   /**
    * @brief Constructs all sensor data containers for the interface
@@ -226,6 +267,11 @@ private:
   std::shared_ptr<rclcpp::Publisher<rosgraph_msgs::msg::Clock>> clock_publisher_;
   realtime_tools::RealtimePublisher<rosgraph_msgs::msg::Clock>::SharedPtr clock_realtime_publisher_;
 
+  // Actuators state publisher
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::JointState>> actuator_state_publisher_;
+  realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>::SharedPtr actuator_state_realtime_publisher_;
+  sensor_msgs::msg::JointState actuator_state_msg_;
+
   // Containers for RGB-D cameras
   std::unique_ptr<MujocoCameras> cameras_;
 
@@ -243,10 +289,21 @@ private:
   std::unordered_map<std::string, hardware_interface::ComponentInfo> joint_hw_info_;
   std::unordered_map<std::string, hardware_interface::ComponentInfo> sensors_hw_info_;
 
-  // Data containers for the HW interface
-  std::vector<JointState> joint_states_;
+  // Data containers for the MuJoCo Actuators
+  std::vector<MuJoCoActuatorData> mujoco_actuator_data_;
+
+  // Data containers for the URDF joints
+  std::vector<URDFJointData> urdf_joint_data_;
+
+  // Transmission instances
+  std::unique_ptr<pluginlib::ClassLoader<transmission_interface::TransmissionLoader>> transmission_loader_ = nullptr;
+  std::vector<std::shared_ptr<transmission_interface::Transmission>> transmission_instances_;
+
   std::vector<FTSensorData> ft_sensor_data_;
   std::vector<IMUSensorData> imu_sensor_data_;
+
+  bool override_mujoco_actuator_positions_{ false };
+  bool override_urdf_joint_positions_{ false };
 };
 
 }  // namespace mujoco_ros2_control
