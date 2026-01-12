@@ -913,7 +913,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   actuator_state_msg_.name.clear();
   for (const auto& actuator : mujoco_actuator_data_)
   {
-    actuator_state_msg_.name.push_back(actuator.name);
+    actuator_state_msg_.name.push_back(actuator.joint_name);
   }
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -1151,9 +1151,10 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
 
     const auto actuator_name = get_joint_actuator_name(joint_name, get_hardware_info(), mj_model_);
 
-    auto actuator_it =
-        std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
-                     [&actuator_name](const MuJoCoActuatorData& actuator) { return actuator.name == actuator_name; });
+    auto actuator_it = std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
+                                    [&actuator_name](const MuJoCoActuatorData& actuator) {
+                                      return actuator.joint_name == actuator_name;
+                                    });
 
     if (actuator_it == mujoco_actuator_data_.end())
     {
@@ -1359,7 +1360,7 @@ void MujocoSystemInterface::actuator_state_to_joint_state()
   for (auto& joint : urdf_joint_data_)
   {
     std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
-      if (actuator_interface.name == joint.name)
+      if (actuator_interface.joint_name == joint.name)
       {
         joint.position_interface.state_ = actuator_interface.position_interface.state_;
         joint.velocity_interface.state_ = actuator_interface.velocity_interface.state_;
@@ -1388,7 +1389,7 @@ void MujocoSystemInterface::joint_command_to_actuator_command()
   for (auto& joint : urdf_joint_data_)
   {
     std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
-      if (actuator_interface.name == joint.name)
+      if (actuator_interface.joint_name == joint.name)
       {
         actuator_interface.position_interface.command_ = joint.position_interface.command_;
         actuator_interface.velocity_interface.command_ = joint.velocity_interface.command_;
@@ -1457,8 +1458,8 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       const char* joint_name = mj_id2name(mj_model_, mjOBJ_JOINT, target_id);
       if (joint_name)
       {
-        actuator_data.name = std::string(joint_name);
-        RCLCPP_INFO(get_logger(), "Registering MuJoCo actuator '%s' for joint '%s'", actuator_data.name.c_str(),
+        actuator_data.joint_name = std::string(joint_name);
+        RCLCPP_INFO(get_logger(), "Registering MuJoCo actuator '%s' for joint '%s'", actuator_data.joint_name.c_str(),
                     joint_name);
       }
       else
@@ -1472,7 +1473,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       const char* tendon_name = mj_id2name(mj_model_, mjOBJ_TENDON, target_id);
       if (tendon_name)
       {
-        actuator_data.name = std::string(tendon_name);
+        actuator_data.joint_name = std::string(tendon_name);
         // RCLCPP_INFO(get_logger(), "Registering actuator '%s' for tendon '%s'", act_name, tendon_name);
         RCLCPP_ERROR(get_logger(), "Tendon based are not currently supported!");
         return false;
@@ -1510,7 +1511,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     // Initialize PID controllers for actuators that have them configured
     const auto initialize_position_pids = [&]() -> bool {
       actuator_data.pos_pid = std::make_shared<control_toolbox::PidROS>(
-          mujoco_node_, "pid_gains.position." + actuator_data.name, "", false);
+          mujoco_node_, "pid_gains.position." + actuator_data.joint_name, "", false);
       actuator_data.pos_pid->initialize_from_ros_parameters();
       const auto gains = actuator_data.pos_pid->get_gains();
       return std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
@@ -1518,7 +1519,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 
     const auto initialize_velocity_pids = [&]() -> bool {
       actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
-          mujoco_node_, "pid_gains.velocity." + actuator_data.name, "", false);
+          mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, "", false);
       actuator_data.vel_pid->initialize_from_ros_parameters();
       const auto gains = actuator_data.vel_pid->get_gains();
       return std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
@@ -1554,9 +1555,10 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
     auto joint = hardware_info.joints.at(joint_index);
     const std::string actuator_name = get_joint_actuator_name(joint.name, hardware_info, mj_model_);
 
-    const auto actuator_it =
-        std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
-                     [&actuator_name](const MuJoCoActuatorData& actuator) { return actuator.name == actuator_name; });
+    const auto actuator_it = std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
+                                          [&actuator_name](const MuJoCoActuatorData& actuator) {
+                                            return actuator.joint_name == actuator_name;
+                                          });
     const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
     // This isn't a failure the joint just won't be controllable
     RCLCPP_WARN_EXPRESSION(get_logger(), !actuator_exists,
@@ -1898,7 +1900,7 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
                                                   hardware_interface::HW_IF_TORQUE, hardware_interface::HW_IF_FORCE };
 
       auto mujoco_actuator_it = std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
-                                             [&](const auto& ma) { return ma.name == actuator_info.name; });
+                                             [&](const auto& ma) { return ma.joint_name == actuator_info.name; });
       if (mujoco_actuator_it == mujoco_actuator_data_.end())
       {
         RCLCPP_FATAL(get_logger(), "Actuator '%s' not found in the MuJoCo actuator data", actuator_info.name.c_str());

@@ -55,12 +55,10 @@ enum class ActuatorType
  */
 struct InterfaceData
 {
-  explicit InterfaceData(const std::string& name, const std::string& command_interface)
-    : name_(name), command_interface_(command_interface)
+  explicit InterfaceData(const std::string& command_interface) : command_interface_(command_interface)
   {
   }
 
-  std::string name_;
   std::string command_interface_;
   double command_ = std::numeric_limits<double>::quiet_NaN();
   double state_ = std::numeric_limits<double>::quiet_NaN();
@@ -71,13 +69,31 @@ struct InterfaceData
 
 /**
  * Wrapper for mujoco actuators and relevant ROS HW interface data.
+ * @param joint_name Name of the MuJoCo joint handled by the actuator.
+ * @param position_interface Data for position command/state interface.
+ * @param velocity_interface Data for velocity command/state interface.
+ * @param effort_interface Data for effort command/state interface.
+ * @param pos_pid Pointer to position PID controller if configured.
+ * @param vel_pid Pointer to velocity PID controller if configured.
+ * @param actuator_type Type of the MuJoCo actuator.
+ * @param mj_joint_type MuJoCo joint type as per mjModel->jnt_type.
+ * @param mj_pos_adr MuJoCo position address in mjData->qpos.
+ * @param mj_vel_adr MuJoCo velocity address in mjData->qvel.
+ * @param mj_actuator_id MuJoCo actuator id as per mjModel->actuator_id.
+ * @param is_position_control_enabled Boolean flag indicating if position control is enabled.
+ * @param is_position_pid_control_enabled Boolean flag indicating if position PID control is enabled.
+ * @param is_velocity_pid_control_enabled Boolean flag indicating if velocity PID control is enabled.
+ * @param is_velocity_control_enabled Boolean flag indicating if velocity control is enabled.
+ * @param is_effort_control_enabled Boolean flag indicating if effort control is enabled.
+ * @param has_pos_pid Boolean flag indicating if a position PID controller is configured.
+ * @param has_vel_pid Boolean flag indicating if a velocity PID controller is configured.
  */
 struct MuJoCoActuatorData
 {
-  std::string name = "";
-  InterfaceData position_interface{ name, hardware_interface::HW_IF_POSITION };
-  InterfaceData velocity_interface{ name, hardware_interface::HW_IF_VELOCITY };
-  InterfaceData effort_interface{ name, hardware_interface::HW_IF_EFFORT };
+  std::string joint_name = "";
+  InterfaceData position_interface{ hardware_interface::HW_IF_POSITION };
+  InterfaceData velocity_interface{ hardware_interface::HW_IF_VELOCITY };
+  InterfaceData effort_interface{ hardware_interface::HW_IF_EFFORT };
   std::shared_ptr<control_toolbox::PidROS> pos_pid{ nullptr };
   std::shared_ptr<control_toolbox::PidROS> vel_pid{ nullptr };
   ActuatorType actuator_type{ ActuatorType::UNKNOWN };
@@ -120,13 +136,24 @@ struct MuJoCoActuatorData
 
 /**
  * Structure for the URDF joint data.
+ * @param name Name of the joint.
+ * @param position_interface Data for position command/state interface.
+ * @param velocity_interface Data for velocity command/state interface.
+ * @param effort_interface Data for effort command/state interface.
+ * @param command_interfaces Vector of command interface names supported by the joint.
+ * @param is_mimic Boolean flag indicating if the joint is a mimic joint.
+ * @param mimicked_joint_index Index of the joint being mimicked.
+ * @param mimic_multiplier Multiplier for the mimic joint.
+ * @param is_position_control_enabled Boolean flag indicating if position control is enabled.
+ * @param is_velocity_control_enabled Boolean flag indicating if velocity control is enabled.
+ * @param is_effort_control_enabled Boolean flag indicating if effort control is enabled.
  */
 struct URDFJointData
 {
   std::string name = "";
-  InterfaceData position_interface{ name, hardware_interface::HW_IF_POSITION };
-  InterfaceData velocity_interface{ name, hardware_interface::HW_IF_VELOCITY };
-  InterfaceData effort_interface{ name, hardware_interface::HW_IF_EFFORT };
+  InterfaceData position_interface{ hardware_interface::HW_IF_POSITION };
+  InterfaceData velocity_interface{ hardware_interface::HW_IF_VELOCITY };
+  InterfaceData effort_interface{ hardware_interface::HW_IF_EFFORT };
 
   std::vector<std::string> command_interfaces = {};
 
