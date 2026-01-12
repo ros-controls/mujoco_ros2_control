@@ -206,6 +206,7 @@ install(
 install(PROGRAMS
   scripts/find_missing_inertias.py
   scripts/make_mjcf_from_robot_description.py
+  scripts/robot_description_to_mjcf.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 

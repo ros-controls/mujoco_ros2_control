@@ -21,7 +21,7 @@ import os
 import tempfile
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, Shutdown
 from launch.substitutions import (
     Command,
     FindExecutable,
@@ -160,7 +160,7 @@ def launch_setup(context, *args, **kwargs):
 
     converter_node_no_pid = Node(
         package="mujoco_ros2_control",
-        executable="make_mjcf_from_robot_description.py",
+        executable="robot_description_to_mjcf.sh",
         output="both",
         emulate_tty=True,
         arguments=converter_arguments_no_pid,
@@ -169,7 +169,7 @@ def launch_setup(context, *args, **kwargs):
 
     converter_node_pid = Node(
         package="mujoco_ros2_control",
-        executable="make_mjcf_from_robot_description.py",
+        executable="robot_description_to_mjcf.sh",
         output="both",
         emulate_tty=True,
         arguments=converter_arguments_pid,
@@ -198,6 +198,7 @@ def launch_setup(context, *args, **kwargs):
             {"use_sim_time": True},
             controller_parameters,
         ],
+        on_exit=Shutdown(),
     )
 
     spawn_joint_state_broadcaster = Node(
