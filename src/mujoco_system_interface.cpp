@@ -1786,18 +1786,20 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
 
     // If the joints are not found as mujoco actuators, check the actuators of transmission
     bool all_transmission_actuators = true;
-    for (const auto& actuator_info : t_info.actuators)
+    for (const auto& tran_actuator_info : t_info.actuators)
     {
-      RCLCPP_DEBUG(get_logger(), "Actuator name: %s", actuator_info.name.c_str());
+      RCLCPP_DEBUG(get_logger(), "Actuator name: %s", tran_actuator_info.name.c_str());
 
-      if (get_actuator_id(actuator_info.name, mj_model_) != -1)
+      if (get_actuator_id(tran_actuator_info.name, mj_model_) != -1)
       {
-        RCLCPP_INFO(get_logger(), "Transmission actuator '%s' matches the MuJoCo actuator", actuator_info.name.c_str());
+        RCLCPP_INFO(get_logger(), "Transmission actuator '%s' matches the MuJoCo actuator",
+                    tran_actuator_info.name.c_str());
         all_transmission_actuators &= true;
       }
       else
       {
-        RCLCPP_WARN(get_logger(), "Transmission actuator '%s' not found in MuJoCo model", actuator_info.name.c_str());
+        RCLCPP_WARN(get_logger(), "Transmission actuator '%s' not found in MuJoCo model",
+                    tran_actuator_info.name.c_str());
         all_transmission_actuators &= false;
       }
     }
@@ -1853,10 +1855,10 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
 
     // Create the joint_handles vector for each joint in the transmission
     std::vector<transmission_interface::JointHandle> joint_handles;
-    RCLCPP_INFO(get_logger(), "Creating joint handles for transmission: %s", t_info.name.c_str());
+    RCLCPP_INFO(get_logger(), "Creating joint and actuator handles for transmission: %s", t_info.name.c_str());
     for (const auto& joint_info : t_info.joints)
     {
-      RCLCPP_INFO(get_logger(), "Creating joint handle for joint: %s", joint_info.name.c_str());
+      RCLCPP_INFO(get_logger(), "\tCreating joint handle for joint: %s", joint_info.name.c_str());
 
       std::vector<std::string> joint_hw_types = joint_info.state_interfaces;
       mujoco_ros2_control::add_items(joint_hw_types, joint_info.command_interfaces);
@@ -1893,17 +1895,19 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
 
     // Create the actuator_handles vector for each actuator in the transmission
     std::vector<transmission_interface::ActuatorHandle> actuator_handles;
-    for (const auto& actuator_info : t_info.actuators)
+    for (const auto& tran_actuator_info : t_info.actuators)
     {
+      RCLCPP_INFO(get_logger(), "\tCreating actuator handle for actuator: %s", tran_actuator_info.name.c_str());
       const std::vector<std::string> hw_types = { hardware_interface::HW_IF_POSITION,
                                                   hardware_interface::HW_IF_VELOCITY, hardware_interface::HW_IF_EFFORT,
                                                   hardware_interface::HW_IF_TORQUE, hardware_interface::HW_IF_FORCE };
 
       auto mujoco_actuator_it = std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
-                                             [&](const auto& ma) { return ma.joint_name == actuator_info.name; });
+                                             [&](const auto& ma) { return ma.joint_name == tran_actuator_info.name; });
       if (mujoco_actuator_it == mujoco_actuator_data_.end())
       {
-        RCLCPP_FATAL(get_logger(), "Actuator '%s' not found in the MuJoCo actuator data", actuator_info.name.c_str());
+        RCLCPP_FATAL(get_logger(), "Actuator '%s' not found in the MuJoCo actuator data",
+                     tran_actuator_info.name.c_str());
         return false;
       }
       for (const auto& hw_if : hw_types)
@@ -1922,7 +1926,7 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
         {
           passthrough = &(mujoco_actuator_it->effort_interface.transmission_passthrough_);
         }
-        transmission_interface::ActuatorHandle actuator_handle(actuator_info.name, hw_if, passthrough);
+        transmission_interface::ActuatorHandle actuator_handle(tran_actuator_info.name, hw_if, passthrough);
         actuator_handles.push_back(actuator_handle);
       }
     }
