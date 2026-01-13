@@ -1226,7 +1226,7 @@ void MujocoSystemInterface::register_joints(const hardware_interface::HardwareIn
     if (mujoco_joint_id == -1)
     {
       RCLCPP_ERROR_STREAM(get_logger(), "Failed to find joint in mujoco model, joint name: " << joint.name);
-      continue;
+      // continue;
     }
 
     // Try to locate the matching actuator id for the joint, if available
