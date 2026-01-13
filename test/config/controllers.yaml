@@ -20,4 +20,4 @@ position_controller:
 gripper_controller:
   ros__parameters:
     default: true
-    joint: gripper_joint
+    joint: gripper_left_finger_joint

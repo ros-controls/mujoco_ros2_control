@@ -232,15 +232,19 @@
           <actuator>
             <position name="joint1" joint="joint1" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
             <position name="joint2" joint="joint2" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
-            <position tendon="split" name="gripper_joint" kp="1000" dampratio="3.0" ctrlrange="0.0 0.045" />
+            <position tendon="split" name="gripper_left_finger_joint" kp="1000" dampratio="3.0" ctrlrange="-0.09 0.005" />
           </actuator>
 
           <tendon>
             <fixed name="split">
-              <joint joint="gripper_left_finger_joint" coef="-0.5"/>
-              <joint joint="gripper_right_finger_joint" coef="0.5"/>
+              <joint joint="gripper_left_finger_joint" coef="1.0"/>
+              <joint joint="gripper_right_finger_joint" coef="-1.0"/>
             </fixed>
           </tendon>
+
+          <equality>
+            <joint joint1="gripper_left_finger_joint" joint2="gripper_right_finger_joint" polycoef="0 -1 0 0 0" solimp="0.95 0.99 0.001" solref="0.005 1"/>
+          </equality>
 
           <sensor>
             <rangefinder name="lidar" site="rf" />
@@ -377,10 +381,10 @@
       <state_interface name="torque"/>
     </joint>
 
-    <joint name="gripper_joint">
+    <joint name="gripper_left_finger_joint">
       <command_interface name="position"/>
       <state_interface name="position">
-        <param name="initial_value">0.04</param>
+        <param name="initial_value">0.0</param>
       </state_interface>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
