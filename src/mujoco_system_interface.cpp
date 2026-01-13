@@ -1170,10 +1170,11 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
 
     const auto actuator_name = get_joint_actuator_name(joint_name, get_hardware_info(), mj_model_);
 
-    auto actuator_it = std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
-                                    [&actuator_name](const MuJoCoActuatorData& actuator) {
-                                      return actuator.joint_name == actuator_name;
-                                    });
+    auto actuator_it =
+        std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
+                     [&actuator_name, this](const MuJoCoActuatorData& actuator) {
+                       return mj_id2name(mj_model_, mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name;
+                     });
 
     if (actuator_it == mujoco_actuator_data_.end())
     {
@@ -1509,9 +1510,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       if (tendon_name)
       {
         actuator_data.joint_name = std::string(tendon_name);
-        // RCLCPP_INFO(get_logger(), "Registering actuator '%s' for tendon '%s'", act_name, tendon_name);
-        RCLCPP_ERROR(get_logger(), "Tendon based are not currently supported!");
-        return false;
+        RCLCPP_INFO(get_logger(), "Registering MuJoCo actuator '%s' for tendon '%s'", act_name, tendon_name);
       }
       else
       {
@@ -1614,11 +1613,11 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
   {
     auto joint = hardware_info.joints.at(joint_index);
     const std::string actuator_name = get_joint_actuator_name(joint.name, hardware_info, mj_model_);
-
-    const auto actuator_it = std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
-                                          [&actuator_name](const MuJoCoActuatorData& actuator) {
-                                            return actuator.joint_name == actuator_name;
-                                          });
+    const auto actuator_it =
+        std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
+                     [&actuator_name, this](const MuJoCoActuatorData& actuator) {
+                       return mj_id2name(mj_model_, mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name;
+                     });
     const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
     // This isn't a failure the joint just won't be controllable
     RCLCPP_WARN_EXPRESSION(get_logger(), !actuator_exists,
