@@ -43,12 +43,14 @@ def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false
     os.environ["USE_MJCF_FROM_TOPIC"] = use_mjcf_from_topic
     os.environ["TEST_TRANSMISSIONS"] = test_transmissions
 
-    # Setup the venv needed for the make_mjcf_from_robot_description node
-    os.system(
-        os.path.join(
-            get_package_share_directory("mujoco_ros2_control"), "scripts/robot_description_to_mjcf.sh --install-only"
+    if use_mjcf_from_topic == "true":
+        # Setup the venv needed for the make_mjcf_from_robot_description node
+        os.system(
+            os.path.join(
+                get_package_share_directory("mujoco_ros2_control"),
+                "scripts/robot_description_to_mjcf.sh --install-only",
+            )
         )
-    )
 
     launch_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
