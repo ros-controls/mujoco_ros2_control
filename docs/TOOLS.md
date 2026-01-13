@@ -16,7 +16,9 @@ The current tool that is available is `make_mjcf_from_robot_description`, which 
 ```bash
 ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py
 ```
+
 (or)
+
 ```bash
 ros2 run mujoco_ros2_control robot_description_to_mjcf.sh
 ```
@@ -58,7 +60,7 @@ A sample URDF and inputs file are provided in [test_robot.urdf](../test/test_res
 To convert the URDF, run the following from the repo root
 
 ```bash
-ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py -u test/test_resources/test_robot.urdf  -m test/test_resources/test_inputs.xml -o /tmp/output/
+ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py --scene resources/scene.xml --save_only -u test/test_resources/test_robot.urdf  -m test/test_resources/test_inputs.xml -o /tmp/output/
 ```
 
 The `/tmp/output/` directory will contain all necessary assets and MJCF files that can be copied into the relevant locations in a config package.
@@ -72,7 +74,6 @@ Of note, the test robot has a good chunk of supported functionality, and we reco
 
 > [!NOTE]
 > The `make_mjcf_from_robot_description.py` script requires `trimesh`, `mujoco`, and `obj2mjcf`. These must either be installed system-wide or available within a virtual environment that is sourced before running the command.
-
 
 ## Conversion of CLR
 
