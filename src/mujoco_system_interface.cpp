@@ -2209,6 +2209,18 @@ void MujocoSystemInterface::set_initial_pose()
   for (auto& actuator : mujoco_actuator_data_)
   {
     mj_data_->qpos[actuator.mj_pos_adr] = actuator.position_interface.state_;
+    if (actuator.is_position_control_enabled)
+    {
+      mj_data_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.state_;
+    }
+    else if (actuator.is_velocity_control_enabled)
+    {
+      mj_data_->ctrl[actuator.mj_actuator_id] = actuator.velocity_interface.state_;
+    }
+    else if (actuator.is_effort_control_enabled)
+    {
+      mj_data_->ctrl[actuator.mj_actuator_id] = actuator.effort_interface.state_;
+    }
   }
 
   // Copy into the control data for reads
