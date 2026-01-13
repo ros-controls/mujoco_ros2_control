@@ -8,8 +8,16 @@ controller_manager:
     position_controller:
       type: position_controllers/JointGroupPositionController
 
+    gripper_controller:
+      type: position_controllers/GripperActionController
+
 position_controller:
   ros__parameters:
     joints:
       - joint1
       - joint2
+
+gripper_controller:
+  ros__parameters:
+    default: true
+    joint: gripper_joint

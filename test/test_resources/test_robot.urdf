@@ -369,6 +369,16 @@
       <state_interface name="torque"/>
     </joint>
 
+    <joint name="gripper_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.04</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+      <state_interface name="torque"/>
+    </joint>
+
     <xacro:if value="$(eval use_transmissions)">
       <!-- When the transmissions is added to the ros2_control tag, the simulation tries to look
       for the actuators in the parsed MJCF description. Inorder, to test this setup, we do it by

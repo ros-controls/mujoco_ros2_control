@@ -223,11 +223,22 @@ def launch_setup(context, *args, **kwargs):
         output="both",
     )
 
+    spawn_gripper_controller = Node(
+        package="controller_manager",
+        executable="spawner",
+        name="spawn_position_controller",
+        arguments=[
+            "gripper_controller",
+        ],
+        output="both",
+    )
+
     return [
         robot_state_publisher_node,
         control_node,
         spawn_joint_state_broadcaster,
         spawn_position_controller,
+        spawn_gripper_controller,
         converter_node_pid,
         converter_node_no_pid,
     ]
