@@ -54,6 +54,8 @@ function check_dependencies() {
 }
 
 check_virtual_env
+#kill any running make_mjcf_from_robot_description.py processes
+pkill -f make_mjcf_from_robot_description.py || true
 check_dependencies
 
 # Get all the arguments of the bash script and then forward it to the make_mjcf_from_robot_description.py script
