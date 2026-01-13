@@ -27,9 +27,10 @@ from launch.substitutions import (
     FindExecutable,
     LaunchConfiguration,
     PathJoinSubstitution,
+    PythonExpression,
 )
 from launch_ros.actions import Node
-from launch.conditions import IfCondition, UnlessCondition
+from launch.conditions import IfCondition
 from launch_ros.parameter_descriptions import ParameterValue, ParameterFile
 from launch_ros.substitutions import FindPackageShare
 
@@ -164,7 +165,17 @@ def launch_setup(context, *args, **kwargs):
         output="both",
         emulate_tty=True,
         arguments=converter_arguments_no_pid,
-        condition=UnlessCondition(LaunchConfiguration("use_pid")),
+        condition=IfCondition(
+            PythonExpression(
+                [
+                    '"',
+                    LaunchConfiguration("use_pid"),
+                    '" == "false" and "',
+                    LaunchConfiguration("use_mjcf_from_topic"),
+                    '" == "true"',
+                ]
+            )
+        ),
     )
 
     converter_node_pid = Node(
@@ -173,7 +184,17 @@ def launch_setup(context, *args, **kwargs):
         output="both",
         emulate_tty=True,
         arguments=converter_arguments_pid,
-        condition=IfCondition(LaunchConfiguration("use_pid")),
+        condition=IfCondition(
+            PythonExpression(
+                [
+                    '"',
+                    LaunchConfiguration("use_pid"),
+                    '" == "true" and "',
+                    LaunchConfiguration("use_mjcf_from_topic"),
+                    '" == "true"',
+                ]
+            )
+        ),
     )
 
     controller_parameters = ParameterFile(
