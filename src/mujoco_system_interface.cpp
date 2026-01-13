@@ -1615,7 +1615,8 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
     const auto actuator_it =
         std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
                      [&actuator_name, this](const MuJoCoActuatorData& actuator) {
-                       return mj_id2name(mj_model_, mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name;
+                       return (mj_id2name(mj_model_, mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name) ||
+                              (actuator.joint_name == actuator_name);
                      });
     const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
     // This isn't a failure the joint just won't be controllable
