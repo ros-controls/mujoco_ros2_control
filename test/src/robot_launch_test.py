@@ -132,7 +132,11 @@ class TestFixture(unittest.TestCase):
 
         msg = Float64MultiArray()
         msg.data = [0.5, -0.5]
-        pub.publish(msg)
+        # This is needed to account for any missing message subscriptions
+        end_time = time.time() + 2
+        while time.time() < end_time:
+            pub.publish(msg)
+            time.sleep(0.1)
 
         # Allow some time for the message to be processed
         time.sleep(4.0)

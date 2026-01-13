@@ -213,6 +213,7 @@ install(PROGRAMS
 install(
   DIRECTORY resources scripts
   DESTINATION share/${PROJECT_NAME}
+  USE_SOURCE_PERMISSIONS
 )
 
 pluginlib_export_plugin_description_file(hardware_interface mujoco_system_interface_plugin.xml)
