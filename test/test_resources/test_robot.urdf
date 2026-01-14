@@ -82,6 +82,86 @@
     <origin rpy="0 0 0" xyz="1 0 0"/>
   </joint>
 
+  <link name="gripper_base">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="0.08 0.12 0.04"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.08 0.12 0.04"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="gripper_base_joint" type="fixed">
+    <parent link="ee_link"/>
+    <child link="gripper_base"/>
+    <origin rpy="0 1.5708 0" xyz="0.04 0 -0.02"/>
+  </joint>
+
+  <link name="gripper_left_finger">
+    <inertial>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.00001"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="0.02 0.01 0.1"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0.05"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.01 0.1"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0.05"/>
+    </collision>
+  </link>
+  <joint name="gripper_left_finger_joint" type="prismatic">
+    <axis xyz="0 1 0"/>
+    <parent link="gripper_base"/>
+    <child link="gripper_left_finger"/>
+    <origin rpy="0 0 0" xyz="0 0.05 0"/>
+    <limit lower="-0.045" upper="0.005" velocity="0.1" effort="50" />
+  </joint>
+
+  <link name="gripper_right_finger">
+    <inertial>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.00001"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="0.02 0.01 0.1"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0.05"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.05 0.1"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0.05"/>
+    </collision>
+  </link>
+  <joint name="gripper_right_finger_joint" type="prismatic">
+    <axis xyz="0 1 0"/>
+    <parent link="gripper_base"/>
+    <child link="gripper_right_finger"/>
+    <origin rpy="0 0 0" xyz="0 -0.05 0"/>
+    <limit lower="-0.005" upper="0.045" velocity="0.1" effort="50" />
+    <mimic joint="gripper_left_finger_joint" multiplier="-1" offset="0"/>
+  </joint>
+
   <link name="camera_link">
     <visual>
       <geometry>
@@ -131,7 +211,7 @@
     <origin rpy="0 0 -1.5708" xyz="1.0 2.0 0"/>
   </joint>
 
-  <!-- Inorder to test the model generation from tags within the URDF, we test that when both -->
+  <!-- To test the model generation from tags within the URDF, we test that when both -->
   <!-- `use_mjcf_from_topic` and `use_pid` args are set to true -->
   <xacro:if value="$(eval use_mjcf_from_topic)">
     <xacro:if value="$(eval use_pid)">
@@ -151,9 +231,21 @@
           </default>
 
           <actuator>
-            <motor name="joint1_motor" joint="joint1" gear="1"/>
-            <motor name="joint2_motor" joint="joint2" gear="1"/>
+            <position name="joint1" joint="joint1" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
+            <position name="joint2" joint="joint2" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
+            <position tendon="split" name="gripper_left_finger_joint" kp="1000" dampratio="3.0" ctrlrange="-0.09 0.005" />
           </actuator>
+
+          <tendon>
+            <fixed name="split">
+              <joint joint="gripper_left_finger_joint" coef="0.5"/>
+              <joint joint="gripper_right_finger_joint" coef="-0.5"/>
+            </fixed>
+          </tendon>
+
+          <equality>
+            <joint joint1="gripper_left_finger_joint" joint2="gripper_right_finger_joint" polycoef="0 -1 0 0 0" solimp="0.95 0.99 0.001" solref="0.005 1"/>
+          </equality>
 
           <sensor>
             <rangefinder name="lidar" site="rf" />
@@ -235,7 +327,7 @@
       <!-- <param name="override_start_position_file">$(find mujoco_ros2_control)/config/start_positions.xml</param> -->
 
       <!-- Override the slowdown settings in the Simulate App and run at 3x speed -->
-      <param name="sim_speed_factor">3.0</param>
+      <param name="sim_speed_factor">1.0</param>
 
       <!-- If set to true, will not launch the Simulate App window -->
       <param name="headless">$(arg headless)</param>
@@ -286,6 +378,16 @@
       <state_interface name="velocity"/>
 
        <!-- Effort and torque are semantically different but map to the same underlying data. -->
+      <state_interface name="effort"/>
+      <state_interface name="torque"/>
+    </joint>
+
+    <joint name="gripper_left_finger_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
       <state_interface name="effort"/>
       <state_interface name="torque"/>
     </joint>

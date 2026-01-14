@@ -165,7 +165,6 @@ target_link_libraries(mujoco_ros2_control
   ${sensor_msgs_TARGETS}
   mujoco::libsimulate
   controller_manager::controller_manager
-  controller_manager::controller_manager_parameters
   hardware_interface::hardware_interface
   hardware_interface::mock_components
   pluginlib::pluginlib
