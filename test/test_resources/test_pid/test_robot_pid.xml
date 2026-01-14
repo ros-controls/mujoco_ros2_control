@@ -61,7 +61,7 @@
   <actuator>
     <motor name="joint1_motor" joint="joint1" gear="1"/>
     <motor name="joint2_motor" joint="joint2" gear="1"/>
-    <position tendon="split" name="gripper_joint" kp="1000" dampratio="1.0"/>
+    <position tendon="split" name="gripper_left_finger_joint" kp="1000" dampratio="3.0" ctrlrange="-0.09 0.005"/>
   </actuator>
   <tendon>
     <fixed name="split">
@@ -69,6 +69,9 @@
       <joint joint="gripper_right_finger_joint" coef="-0.5"/>
     </fixed>
   </tendon>
+  <equality>
+    <joint joint1="gripper_left_finger_joint" joint2="gripper_right_finger_joint" polycoef="0 -1 0 0 0" solimp="0.95 0.99 0.001" solref="0.005 1"/>
+  </equality>
   <sensor>
     <rangefinder name="lidar" site="rf"/>
   </sensor>

@@ -159,6 +159,7 @@
     <child link="gripper_right_finger"/>
     <origin rpy="0 0 0" xyz="0 -0.05 0"/>
     <limit lower="-0.005" upper="0.045" velocity="0.1" effort="50" />
+    <mimic joint="gripper_left_finger_joint" multiplier="-1" offset="0"/>
   </joint>
 
   <link name="camera_link">
@@ -210,7 +211,7 @@
     <origin rpy="0 0 -1.5708" xyz="1.0 2.0 0"/>
   </joint>
 
-  <!-- Inorder to test the model generation from tags within the URDF, we test that when both -->
+  <!-- To test the model generation from tags within the URDF, we test that when both -->
   <!-- `use_mjcf_from_topic` and `use_pid` args are set to true -->
   <xacro:if value="$(eval use_mjcf_from_topic)">
     <xacro:if value="$(eval use_pid)">
@@ -237,8 +238,8 @@
 
           <tendon>
             <fixed name="split">
-              <joint joint="gripper_left_finger_joint" coef="1.0"/>
-              <joint joint="gripper_right_finger_joint" coef="-1.0"/>
+              <joint joint="gripper_left_finger_joint" coef="0.5"/>
+              <joint joint="gripper_right_finger_joint" coef="-0.5"/>
             </fixed>
           </tendon>
 

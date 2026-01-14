@@ -65,8 +65,8 @@
   </actuator>
   <tendon>
     <fixed name="split">
-      <joint joint="gripper_left_finger_joint" coef="1.0"/>
-      <joint joint="gripper_right_finger_joint" coef="-1.0"/>
+      <joint joint="gripper_left_finger_joint" coef="0.5"/>
+      <joint joint="gripper_right_finger_joint" coef="-0.5"/>
     </fixed>
   </tendon>
   <equality>
