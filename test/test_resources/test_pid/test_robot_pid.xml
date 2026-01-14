@@ -9,16 +9,16 @@
         <joint name="joint2" pos="0 0 0" axis="0 0 1" range="-3.14 3.14" actuatorfrcrange="-1000 1000"/>
         <body name="gripper_left_finger" pos="1.04 0.05 -0.02" quat="0.707105 0 0.707108 0">
           <inertial pos="0 0 0.05" mass="0.1" diaginertia="0.0001 0.0001 1e-05"/>
-          <joint name="gripper_left_finger_joint" pos="0 0 0" axis="0 1 0" type="slide" range="0 0.06" actuatorfrcrange="-50 50"/>
-          <geom size="0.01 0.01 0.05" pos="0 0 0.05" type="box" class="collision"/>
-          <geom size="0.01 0.01 0.05" pos="0 0 0.05" type="box" rgba="0.3 0.3 0.3 1" class="visual"/>
+          <joint name="gripper_left_finger_joint" pos="0 0 0" axis="0 1 0" type="slide" range="-0.045 0.005" actuatorfrcrange="-50 50"/>
+          <geom size="0.01 0.005 0.05" pos="0 0 0.05" type="box" class="collision"/>
+          <geom size="0.01 0.005 0.05" pos="0 0 0.05" type="box" class="visual"/>
           <site name="gripper_left_finger" pos="0 0 0" quat="1.0 0 0 0"/>
         </body>
         <body name="gripper_right_finger" pos="1.04 -0.05 -0.02" quat="0.707105 0 0.707108 0">
           <inertial pos="0 0 0.05" mass="0.1" diaginertia="0.0001 0.0001 1e-05"/>
-          <joint name="gripper_right_finger_joint" pos="0 0 0" axis="0 1 0" type="slide" range="-0.06 0" actuatorfrcrange="-50 50"/>
-          <geom size="0.01 0.01 0.05" pos="0 0 0.05" type="box" class="collision"/>
-          <geom size="0.01 0.01 0.05" pos="0 0 0.05" type="box" rgba="0.3 0.3 0.3 1" class="visual"/>
+          <joint name="gripper_right_finger_joint" pos="0 0 0" axis="0 1 0" type="slide" range="-0.005 0.045" actuatorfrcrange="-50 50"/>
+          <geom size="0.01 0.005 0.05" pos="0 0 0.05" type="box" class="collision"/>
+          <geom size="0.01 0.005 0.05" pos="0 0 0.05" type="box" class="visual"/>
           <site name="gripper_right_finger" pos="0 0 0" quat="1.0 0 0 0"/>
         </body>
         <geom size="0.5 0.05 0.05" pos="0.5 0 0" type="box" class="collision"/>
