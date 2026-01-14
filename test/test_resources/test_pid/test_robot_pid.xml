@@ -1,18 +1,35 @@
 <mujoco model="two_dof_robot">
-  <compiler angle="radian" meshdir="assets/"/>
+  <compiler angle="radian" meshdir="assets/" texturedir="assets/"/>
   <worldbody>
     <body name="upperarm">
       <inertial pos="0.5 0 0" quat="0.5 0.5 0.5 0.5" mass="27" diaginertia="0.225 0.225 0.0225"/>
       <joint name="joint1" pos="0 0 0" axis="0 0 1" range="-3.14 3.14" actuatorfrcrange="-1000 1000" frictionloss="1.0" damping="2.0"/>
       <body name="forearm" pos="1 0 0" gravcomp="1.0">
-        <inertial pos="0.5 0 0" quat="0.5 0.5 0.5 0.5" mass="27" diaginertia="0.225 0.225 0.0225"/>
+        <inertial pos="0.509818 0 -0.000363636" quat="0.49615 0.503821 0.503821 0.49615" mass="27.5" diaginertia="0.369345 0.36923 0.023615"/>
         <joint name="joint2" pos="0 0 0" axis="0 0 1" range="-3.14 3.14" actuatorfrcrange="-1000 1000"/>
+        <body name="gripper_left_finger" pos="1.04 0.05 -0.02" quat="0.707105 0 0.707108 0">
+          <inertial pos="0 0 0.05" mass="0.1" diaginertia="0.0001 0.0001 1e-05"/>
+          <joint name="gripper_left_finger_joint" pos="0 0 0" axis="0 1 0" type="slide" range="0 0.06" actuatorfrcrange="-50 50"/>
+          <geom size="0.01 0.01 0.05" pos="0 0 0.05" type="box" class="collision"/>
+          <geom size="0.01 0.01 0.05" pos="0 0 0.05" type="box" rgba="0.3 0.3 0.3 1" class="visual"/>
+          <site name="gripper_left_finger" pos="0 0 0" quat="1.0 0 0 0"/>
+        </body>
+        <body name="gripper_right_finger" pos="1.04 -0.05 -0.02" quat="0.707105 0 0.707108 0">
+          <inertial pos="0 0 0.05" mass="0.1" diaginertia="0.0001 0.0001 1e-05"/>
+          <joint name="gripper_right_finger_joint" pos="0 0 0" axis="0 1 0" type="slide" range="-0.06 0" actuatorfrcrange="-50 50"/>
+          <geom size="0.01 0.01 0.05" pos="0 0 0.05" type="box" class="collision"/>
+          <geom size="0.01 0.01 0.05" pos="0 0 0.05" type="box" rgba="0.3 0.3 0.3 1" class="visual"/>
+          <site name="gripper_right_finger" pos="0 0 0" quat="1.0 0 0 0"/>
+        </body>
         <geom size="0.5 0.05 0.05" pos="0.5 0 0" type="box" class="collision"/>
         <geom size="0.5 0.05 0.05" pos="0.5 0 0" type="box" rgba="0 0 1 1" class="visual"/>
+        <geom size="0.04 0.06 0.02" pos="1.04 0 -0.02" quat="0.707105 0 0.707108 0" type="box" class="collision"/>
+        <geom size="0.04 0.06 0.02" pos="1.04 0 -0.02" quat="0.707105 0 0.707108 0" type="box" class="visual"/>
         <geom size="0.05 0.05 0.05" pos="1.05 0 0.1" type="box" class="collision"/>
         <geom size="0.05 0.05 0.05" pos="1.05 0 0.1" type="box" rgba="0.2 0.2 0.2 1" class="visual"/>
         <site name="forearm" pos="0 0 0" quat="1.0 0 0 0"/>
         <site name="ee_link" pos="1.0 0 0" quat="1.0 0 0 0"/>
+        <site name="gripper_base" pos="1.04 0 -0.02" quat="0.7071054825112363 0 0.7071080798594737 0"/>
         <site name="camera_link" pos="1.05 0 0.1" quat="1.0 0 0 0"/>
         <site name="camera_color_frame" pos="1.0 0 0.1" quat="1.0 0 0 0"/>
         <site name="camera_color_optical_frame" pos="1.0 0 0.1" quat="-0.49999816339744824 0.4999999999966268 0.5000018366025517 -0.4999999999966268"/>
@@ -44,7 +61,17 @@
   <actuator>
     <motor name="joint1_motor" joint="joint1" gear="1"/>
     <motor name="joint2_motor" joint="joint2" gear="1"/>
+    <position tendon="split" name="gripper_left_finger_joint" kp="1000" dampratio="3.0" ctrlrange="-0.09 0.005"/>
   </actuator>
+  <tendon>
+    <fixed name="split">
+      <joint joint="gripper_left_finger_joint" coef="0.5"/>
+      <joint joint="gripper_right_finger_joint" coef="-0.5"/>
+    </fixed>
+  </tendon>
+  <equality>
+    <joint joint1="gripper_left_finger_joint" joint2="gripper_right_finger_joint" polycoef="0 -1 0 0 0" solimp="0.95 0.99 0.001" solref="0.005 1"/>
+  </equality>
   <sensor>
     <rangefinder name="lidar" site="rf"/>
   </sensor>

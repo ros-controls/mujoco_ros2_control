@@ -207,6 +207,35 @@ Could map to the following hardware interface:
 
 Switching actuator/control types on the fly is an [open issue](#13).
 
+### Grippers and Mimic Joints
+
+Many robot grippers include mimic joints, where control of a single actuator affects the state of many joints.
+There are many possible ways to handle this on the mujoco side of things, and cannot suggest which is optimal.
+
+In the current implementation drivers _require_ a motor type actuator for joint control and state information.
+In particular, tendons and other "non-standard" joint types in an MJCF are not directly controllable through the drivers.
+If mimic joints are required (for instance, parallel jaw mechanisms), we recommend combining tendon actutors with an equality constraint.
+
+For example, from the test robot:
+
+```xml
+  <actuator>
+    <position tendon="split" name="gripper_left_finger_joint" kp="1000" dampratio="3.0" ctrlrange="-0.09 0.005"/>
+  </actuator>
+  <tendon>
+    <fixed name="split">
+      <joint joint="gripper_left_finger_joint" coef="0.5"/>
+      <joint joint="gripper_right_finger_joint" coef="-0.5"/>
+    </fixed>
+  </tendon>
+  <equality>
+    <joint joint1="gripper_left_finger_joint" joint2="gripper_right_finger_joint" polycoef="0 -1 0 0 0" solimp="0.95 0.99 0.001" solref="0.005 1"/>
+  </equality>
+```
+
+Note that the tendon name _matches_ the controllable joint in the ros2_control configuration.
+This way, the drivers will only provide control and state information from that single joint, but the underlying simulation will ensure that the right finger's position matches the left's.
+
 ### Sensors
 
 The hardware interfaces supports force-torque sensors (FTS) and inertial measurement units (IMUs).

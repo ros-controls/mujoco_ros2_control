@@ -1484,7 +1484,9 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     // Get the name of the actuator
     const char* act_name = mj_id2name(mj_model_, mjOBJ_ACTUATOR, i);
     if (!act_name)
+    {
       act_name = "unnamed";
+    }
 
     if (trn_type == mjTRN_JOINT)
     {
@@ -1505,15 +1507,21 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     }
     else if (trn_type == mjTRN_TENDON)
     {
-      const char* tendon_name = mj_id2name(mj_model_, mjOBJ_TENDON, target_id);
-      if (tendon_name)
+      // For tendon actuators, look up a joint with the same name as the actuator!
+      // This is hacky but essentially what happened before the transmissions change, which was also hacky.
+      int joint_id = mj_name2id(mj_model_, mjOBJ_JOINT, act_name);
+      if (joint_id != -1)
       {
-        actuator_data.joint_name = std::string(tendon_name);
-        RCLCPP_INFO(get_logger(), "Registering MuJoCo actuator '%s' for tendon '%s'", act_name, tendon_name);
+        target_id = joint_id;
+        actuator_data.joint_name = std::string(act_name);
+        RCLCPP_INFO(get_logger(), "Registering MuJoCo tendon actuator '%s' using joint state", act_name);
       }
       else
       {
-        RCLCPP_ERROR(get_logger(), "Failed to find tendon name for actuator '%s'", act_name);
+        RCLCPP_ERROR(get_logger(),
+                     "Tendon actuator '%s' has no matching joint. Tendon actuators must be named the same as a joint "
+                     "that they will control.",
+                     act_name);
         return false;
       }
     }
@@ -1523,9 +1531,9 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       return false;
     }
     actuator_data.mj_actuator_id = i;
-    actuator_data.mj_pos_adr = mj_model_->jnt_qposadr[i];
-    actuator_data.mj_vel_adr = mj_model_->jnt_dofadr[i];
-    actuator_data.mj_joint_type = mj_model_->jnt_type[i];
+    actuator_data.mj_pos_adr = mj_model_->jnt_qposadr[target_id];
+    actuator_data.mj_vel_adr = mj_model_->jnt_dofadr[target_id];
+    actuator_data.mj_joint_type = mj_model_->jnt_type[target_id];
     actuator_data.actuator_type = getActuatorType(mj_model_, actuator_data.mj_actuator_id);
 
     // Set initial values if they are set in the info, or from override start position file
