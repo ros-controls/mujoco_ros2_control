@@ -130,6 +130,9 @@ class TestFixture(unittest.TestCase):
 
         # Allow some time for the message to be processed
         time.sleep(4.0)
+        if os.environ.get("TEST_TRANSMISSIONS") == "true":
+            # wait a bit more for the mujoco actuator states to be reach as they move double
+            time.sleep(2.0)
 
         # Now, check that the joint states have been updated accordingly
         joint_state_topic = "/joint_states"
