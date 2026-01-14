@@ -35,7 +35,7 @@ from launch_ros.parameter_descriptions import ParameterValue, ParameterFile
 from launch_ros.substitutions import FindPackageShare
 
 
-def process_transmission_files(robot_description_str, mujoco_model_path, pids_config_file):
+def process_transmission_files(robot_description_str, mujoco_model_path):
     """
     If used, will convert joints to actuators in the robot description for using transmission
     interfaces. Contents will be writted to a modified temp file.
@@ -67,23 +67,6 @@ def process_transmission_files(robot_description_str, mujoco_model_path, pids_co
     temp_scene_file.close()
 
     robot_description_str = robot_description_str.replace(mujoco_model_path, temp_scene_file.name)
-
-    # Process PIDs config if present
-    if pids_config_file:
-        with open(pids_config_file) as f:
-            pids_content = f.read()
-
-        # Replace joint1 and joint2 with actuator1 and actuator2
-        pids_content = pids_content.replace("joint1", "actuator1")
-        pids_content = pids_content.replace("joint2", "actuator2")
-
-        # Write to a temporary file
-        temp_pids = tempfile.NamedTemporaryFile(delete=False, suffix=".yaml", mode="w")
-        temp_pids.write(pids_content)
-        temp_pids.close()
-
-        # Update the robot_description_content to point to the new pids file
-        robot_description_str = robot_description_str.replace(pids_config_file, temp_pids.name)
 
     print("Modified scene file with transmissions at:", temp_scene_file.name)
     print(robot_description_str)
@@ -117,13 +100,9 @@ def launch_setup(context, *args, **kwargs):
     if LaunchConfiguration("test_transmissions").perform(context) == "true":
         if "mujoco_model" in robot_description_str:
             mujoco_model_path = robot_description_str.split('mujoco_model">')[1].split("</param>")[0].strip()
-            pids_config_file = None
-
-            if "pids_config_file" in robot_description_str:
-                pids_config_file = robot_description_str.split('pids_config_file">')[1].split("</param>")[0].strip()
 
             robot_description_str = process_transmission_files(
-                robot_description_str, mujoco_model_path, pids_config_file
+                robot_description_str, mujoco_model_path
             )
 
     robot_description = {"robot_description": ParameterValue(value=robot_description_str, value_type=str)}
