@@ -1518,7 +1518,10 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       }
       else
       {
-        RCLCPP_ERROR(get_logger(), "Tendon actuator '%s' has no matching joint", act_name);
+        RCLCPP_ERROR(get_logger(),
+                     "Tendon actuator '%s' has no matching joint. Tendon actuators must be named the same as a joint "
+                     "that they will control.",
+                     act_name);
         return false;
       }
     }
