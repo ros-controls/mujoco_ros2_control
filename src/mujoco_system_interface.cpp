@@ -1180,6 +1180,11 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
       RCLCPP_WARN(get_logger(), "Actuator %s not found in mujoco_actuator_data_", actuator_name.c_str());
       return;
     }
+    if (actuator_it->actuator_type == ActuatorType::PASSIVE)
+    {
+      RCLCPP_WARN(get_logger(), "Actuator %s is passive and cannot be controlled.", actuator_name.c_str());
+      return;
+    }
 
     if (enabled)
     {
@@ -1349,6 +1354,10 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   // TODO: Support command limits. For now those ranges can be limited in the mujoco actuators themselves.
   for (auto& actuator : mujoco_actuator_data_)
   {
+    if (actuator.actuator_type == ActuatorType::PASSIVE)
+    {
+      continue;
+    }
     if (actuator.is_position_control_enabled)
     {
       mj_data_control_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.command_;
@@ -1599,6 +1608,27 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     }
     RCLCPP_DEBUG(get_logger(), "Successfully registered actuator '%s'", act_name);
   }
+
+  // now look out for the mujoco joints that do not have any actuator associated with them
+  for (int jnt_id = 0; jnt_id < mj_model_->njnt; jnt_id++)
+  {
+    const auto actuator_it = std::find_if(mujoco_actuator_data_.cbegin(), mujoco_actuator_data_.cend(),
+                                          [&mj_model = mj_model_, jnt_id](const MuJoCoActuatorData& actuator) {
+                                            return actuator.mj_pos_adr == mj_model->jnt_qposadr[jnt_id];
+                                          });
+    if (actuator_it == mujoco_actuator_data_.cend())
+    {
+      // no actuator found for this joint, register a passive actuator
+      MuJoCoActuatorData passive_actuator;
+      passive_actuator.joint_name = std::string(mj_id2name(mj_model_, mjOBJ_JOINT, jnt_id));
+      passive_actuator.mj_actuator_id = -1;  // indicates no actuator
+      passive_actuator.mj_pos_adr = mj_model_->jnt_qposadr[jnt_id];
+      passive_actuator.mj_vel_adr = mj_model_->jnt_dofadr[jnt_id];
+      passive_actuator.mj_joint_type = mj_model_->jnt_type[jnt_id];
+      passive_actuator.actuator_type = ActuatorType::PASSIVE;
+      mujoco_actuator_data_.push_back(passive_actuator);
+    }
+  }
   return true;
 }
 
@@ -1623,8 +1653,9 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
     const auto actuator_it =
         std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
                      [&actuator_name, this](const MuJoCoActuatorData& actuator) {
-                       return (mj_id2name(mj_model_, mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name) ||
-                              (actuator.joint_name == actuator_name);
+                       return (actuator.actuator_type != ActuatorType::PASSIVE) &&
+                              ((mj_id2name(mj_model_, mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name) ||
+                               (actuator.joint_name == actuator_name));
                      });
     const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
     // This isn't a failure the joint just won't be controllable
@@ -1980,6 +2011,12 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
       if (mujoco_actuator_it == mujoco_actuator_data_.end())
       {
         RCLCPP_FATAL(get_logger(), "Actuator '%s' not found in the MuJoCo actuator data",
+                     tran_actuator_info.name.c_str());
+        return false;
+      }
+      if (mujoco_actuator_it->actuator_type == ActuatorType::PASSIVE)
+      {
+        RCLCPP_FATAL(get_logger(), "Actuator '%s' is passive and cannot be used in a transmission",
                      tran_actuator_info.name.c_str());
         return false;
       }
