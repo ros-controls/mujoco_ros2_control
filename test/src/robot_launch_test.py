@@ -96,14 +96,15 @@ class TestFixture(unittest.TestCase):
             [
                 "joint1",
                 "joint2",
+                "gripper_left_finger_joint",
             ],
         )
 
     def test_check_if_mujoco_actuators_states_published(self):
         if os.environ.get("TEST_TRANSMISSIONS") != "true":
-            check_if_js_published("/mujoco_actuators_states", ["joint1", "joint2"])
+            check_if_js_published("/mujoco_actuators_states", ["joint1", "joint2", "gripper_left_finger_joint"])
         else:
-            check_if_js_published("/mujoco_actuators_states", ["actuator1", "actuator2"])
+            check_if_js_published("/mujoco_actuators_states", ["actuator1", "actuator2", "gripper_left_finger_joint"])
 
     def test_arm(self):
 
@@ -223,10 +224,11 @@ class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
 
         # available state interfaces
         available_state_interfaces_names = [iface.name for iface in response.state_interfaces]
-        assert (
-            len(available_state_interfaces_names) == 8
-        ), f"Expected 8 state interfaces, got {len(available_state_interfaces_names)}"
         expected_state_interfaces = [
+            "gripper_left_finger_joint/position",
+            "gripper_left_finger_joint/velocity",
+            "gripper_left_finger_joint/effort",
+            "gripper_left_finger_joint/torque",
             "joint1/position",
             "joint1/velocity",
             "joint1/effort",
@@ -236,16 +238,21 @@ class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
             "joint2/effort",
             "joint2/torque",
         ]
+        assert len(available_state_interfaces_names) == len(
+            expected_state_interfaces
+        ), f"Expected {len(expected_state_interfaces)} state interfaces, got {len(available_state_interfaces_names)}"
         assert set(available_state_interfaces_names) == set(
             expected_state_interfaces
         ), f"State interfaces do not match expected. Got: {available_state_interfaces_names}"
 
         # available command interfaces
         available_command_interfaces_names = [iface.name for iface in response.command_interfaces]
-        assert (
-            len(available_command_interfaces_names) == 2
-        ), f"Expected 2 command interfaces, got {len(available_command_interfaces_names)}"
-        expected_command_interfaces = ["joint1/position", "joint2/position"]
+        expected_command_interfaces = ["joint1/position", "joint2/position", "gripper_left_finger_joint/position"]
+
+        assert len(available_command_interfaces_names) == len(expected_command_interfaces), (
+            f"Expected {len(expected_command_interfaces)} command interfaces, "
+            f"got {len(available_command_interfaces_names)}"
+        )
         assert set(available_command_interfaces_names) == set(
             expected_command_interfaces
         ), f"Command interfaces do not match expected. Got: {available_command_interfaces_names}"
