@@ -47,6 +47,7 @@ enum class ActuatorType
   MOTOR,
   POSITION,
   VELOCITY,
+  PASSIVE,
   CUSTOM
 };
 

@@ -1565,11 +1565,16 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
                                           });
     const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
     // This isn't a failure the joint just won't be controllable
-    RCLCPP_WARN_EXPRESSION(get_logger(), !actuator_exists,
+    
+    if (joint.command_interfaces.empty() && !actuator_exists)
+    {
+      RCLCPP_WARN_EXPRESSION(get_logger(), !actuator_exists,
                            "Failed to find actuator for joint : %s. This joint will be treated as a passive joint.",
                            joint.name.c_str());
-    RCLCPP_INFO_EXPRESSION(get_logger(), joint.command_interfaces.empty(), "Joint : %s is a passive joint",
+      RCLCPP_INFO_EXPRESSION(get_logger(), joint.command_interfaces.empty(), "Joint : %s is a passive joint",
                            joint.name.c_str());
+      actuator_it->actuator_type = ActuatorType::PASSIVE;
+    }
     if (!joint.command_interfaces.empty() && !actuator_exists)
     {
       RCLCPP_WARN(get_logger(),
@@ -1767,6 +1772,11 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
         !actuator_it->is_effort_control_enabled && !actuator_it->is_position_pid_control_enabled &&
         !actuator_it->is_velocity_pid_control_enabled)
     {
+      if (actuator_it->actuator_type == ActuatorType::PASSIVE)
+      {
+        RCLCPP_INFO(get_logger(), "Using MuJoCo passive actuator for the joint : '%s' (no command interfaces).", joint.name.c_str());
+        continue;
+      }
       throw std::runtime_error("Joint '" + joint.name + "' which uses actuator '" + actuator_name +
                                "' has an unsupported command interface for the specified MuJoCo actuator");
     }
