@@ -50,8 +50,8 @@ def process_transmission_files(robot_description_str, mujoco_model_path):
             include_content = f.read()
 
         # Replace joint1 and joint2 with actuator1 and actuator2
-        include_content = include_content.replace("joint1", "actuator1")
-        include_content = include_content.replace("joint2", "actuator2")
+        include_content = include_content.replace('"joint1"', '"actuator1"')
+        include_content = include_content.replace('"joint2"', '"actuator2"')
 
         # Copy to temp
         temp_include = tempfile.NamedTemporaryFile(delete=False, suffix=".xml", mode="w")
