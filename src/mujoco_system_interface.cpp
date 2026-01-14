@@ -1628,7 +1628,6 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
                      });
     const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
     // This isn't a failure the joint just won't be controllable
-
     RCLCPP_WARN_EXPRESSION(get_logger(), !actuator_exists,
                            "Failed to find actuator for joint : %s. This joint will be treated as a passive joint.",
                            joint.name.c_str());
