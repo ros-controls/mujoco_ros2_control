@@ -609,6 +609,23 @@ MujocoSystemInterface::MujocoSystemInterface() = default;
 
 MujocoSystemInterface::~MujocoSystemInterface()
 {
+  // If sim_ is created and running, clean shut it down
+  // We do this first to ensure that no other threads are accessing the model/data
+  if (sim_)
+  {
+    sim_->exitrequest.store(true);
+    sim_->run = false;
+
+    if (physics_thread_.joinable())
+    {
+      physics_thread_.join();
+    }
+    if (ui_thread_.joinable())
+    {
+      ui_thread_.join();
+    }
+  }
+
   // Stop camera rendering loop
   if (cameras_)
   {
@@ -632,22 +649,6 @@ MujocoSystemInterface::~MujocoSystemInterface()
   transmission_instances_.clear();
   mujoco_actuator_data_.clear();
   urdf_joint_data_.clear();
-
-  // If sim_ is created and running, clean shut it down
-  if (sim_)
-  {
-    sim_->exitrequest.store(true);
-    sim_->run = false;
-
-    if (physics_thread_.joinable())
-    {
-      physics_thread_.join();
-    }
-    if (ui_thread_.joinable())
-    {
-      ui_thread_.join();
-    }
-  }
 
   // Cleanup data and the model, if they haven't been
   if (mj_data_)
