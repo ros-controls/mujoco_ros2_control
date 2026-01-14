@@ -101,9 +101,7 @@ def launch_setup(context, *args, **kwargs):
         if "mujoco_model" in robot_description_str:
             mujoco_model_path = robot_description_str.split('mujoco_model">')[1].split("</param>")[0].strip()
 
-            robot_description_str = process_transmission_files(
-                robot_description_str, mujoco_model_path
-            )
+            robot_description_str = process_transmission_files(robot_description_str, mujoco_model_path)
 
     robot_description = {"robot_description": ParameterValue(value=robot_description_str, value_type=str)}
 
