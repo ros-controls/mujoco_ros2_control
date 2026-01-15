@@ -143,16 +143,10 @@ void MujocoCameras::init()
 
 void MujocoCameras::close()
 {
-  if (publish_images_)
+  publish_images_ = false;
+  if (rendering_thread_.joinable())
   {
-    publish_images_ = false;
-    if (rendering_thread_.joinable())
-    {
-      rendering_thread_.join();
-    }
-
-    mjv_freeScene(&mjv_scn_);
-    mjr_freeContext(&mjr_con_);
+    rendering_thread_.join();
   }
 }
 
@@ -197,6 +191,11 @@ void MujocoCameras::update_loop()
     update();
     rate.sleep();
   }
+
+  mjv_freeScene(&mjv_scn_);
+  mjr_freeContext(&mjr_con_);
+  mj_deleteData(mj_camera_data_);
+  glfwDestroyWindow(window);
 }
 
 void MujocoCameras::update()
