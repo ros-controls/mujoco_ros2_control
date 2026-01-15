@@ -11,6 +11,12 @@ target_link_libraries(test_plugin
   rclcpp::rclcpp
 )
 
+ament_add_gtest(test_contact_sensors test_contact_sensors.cpp)
+target_link_libraries(test_contact_sensors
+  mujoco_ros2_control
+  rclcpp::rclcpp
+)
+
 find_package(launch_testing_ament_cmake REQUIRED)
 
 add_launch_test(src/robot_launch_test.py

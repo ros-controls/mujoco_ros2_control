@@ -118,22 +118,25 @@ private:
 
   mjData* mj_data_;
   mjModel* mj_model_;
-  mjData* mj_camera_data_;
+  mjData* mj_camera_data_{ nullptr };
 
   // Image publishing rate
   double camera_publish_rate_;
 
-  // Rendering options for the cameras, currently hard coded to defaults
-  mjvOption mjv_opt_;
-  mjvScene mjv_scn_;
-  mjrContext mjr_con_;
+  // Rendering options for the cameras, currently hard coded to defaults.
+  // These must be safe to destroy even if rendering was never initialized.
+  mjvOption mjv_opt_{};
+  mjvScene mjv_scn_{};
+  mjrContext mjr_con_{};
 
   // Containers for camera data and ROS constructs
   std::vector<CameraData> cameras_;
 
   // Camera processing thread
   std::thread rendering_thread_;
-  std::atomic_bool publish_images_;
+  std::atomic_bool publish_images_{ false };
+  std::atomic_bool rendering_initialized_{ false };
+  std::atomic_bool glfw_initialized_{ false };
 };
 
 }  // namespace mujoco_ros2_control

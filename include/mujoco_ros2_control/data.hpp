@@ -215,4 +215,35 @@ struct IMUSensorData
   std::vector<double> linear_acceleration_covariance;
 };
 
+struct ContactSensorData
+{
+  enum class ConsumerMode
+  {
+    COLLISION,  // raw contact (minimal filtering)
+    GAIT        // debounced/hysteresis contact (stable for gait state estimation)
+  };
+
+  std::string name;
+  double contact_value;  // exported "contact" value (may be filtered depending on mode)
+  double raw_contact_value{ 0.0 };  // exported "contact_raw" value (always unfiltered)
+
+  std::string body1_name;  // First body name in MuJoCo model
+  std::string body2_name;  // Second body name in MuJoCo model
+  int body1_id;  // MuJoCo body ID for body1
+  int body2_id;  // MuJoCo body ID for body2
+
+  // Consumer configuration
+  ConsumerMode mode{ ConsumerMode::COLLISION };
+  int debounce_on_steps{ 1 };   // steps of raw contact required to switch to contact=1
+  int debounce_off_steps{ 1 };  // steps of raw no-contact required to switch to contact=0
+
+  // Consumer state
+  bool filtered_contact_state{ false };
+  int on_counter{ 0 };
+  int off_counter{ 0 };
+
+  // Debug (optional): print first matching contact geom pair when a match is found.
+  bool debug_contact_geoms{ false };
+};
+
 }  // namespace mujoco_ros2_control
