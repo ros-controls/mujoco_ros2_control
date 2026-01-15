@@ -240,7 +240,7 @@ class TestFixture(unittest.TestCase):
         )
         wait_for_topics.shutdown()
 
-        # Verify the same in the mujoco_actuaotrs_states topic
+        # Verify the same in the mujoco_actuators_states topic
         actuator_state_topic = "/mujoco_actuators_states"
         wait_for_topics = WaitForTopics([(actuator_state_topic, JointState)], timeout=20.0)
         assert wait_for_topics.wait(), f"Topic '{actuator_state_topic}' not found!"

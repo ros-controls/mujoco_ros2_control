@@ -1623,7 +1623,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
   if (override_mujoco_actuator_positions_)
   {
     RCLCPP_DEBUG(get_logger(),
-                 "Initializing acctuator position states from override start position file for %zu actuators.",
+                 "Initializing actuator position states from override start position file for %zu actuators.",
                  mujoco_actuator_data_.size());
 
     for (auto& actuator_data : mujoco_actuator_data_)
