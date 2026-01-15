@@ -609,6 +609,18 @@ MujocoSystemInterface::MujocoSystemInterface() = default;
 
 MujocoSystemInterface::~MujocoSystemInterface()
 {
+  // Stop camera rendering loop
+  if (cameras_)
+  {
+    cameras_->close();
+  }
+
+  // Stop lidar sensor loop
+  if (lidar_sensors_)
+  {
+    lidar_sensors_->close();
+  }
+
   // If sim_ is created and running, clean shut it down
   // We do this first to ensure that no other threads are accessing the model/data
   if (sim_)
@@ -624,18 +636,6 @@ MujocoSystemInterface::~MujocoSystemInterface()
     {
       ui_thread_.join();
     }
-  }
-
-  // Stop camera rendering loop
-  if (cameras_)
-  {
-    cameras_->close();
-  }
-
-  // Stop lidar sensor loop
-  if (lidar_sensors_)
-  {
-    lidar_sensors_->close();
   }
 
   // Stop ROS
