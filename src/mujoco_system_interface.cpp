@@ -723,6 +723,10 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       hardware_interface::parse_bool(get_hardware_parameter(get_hardware_info(), "headless").value_or("false"));
   RCLCPP_INFO_EXPRESSION(get_logger(), headless, "Running in HEADLESS mode.");
 
+  // Optional: disable camera/lidar threads (useful for CI/headless test environments).
+  const bool disable_rendering = hardware_interface::parse_bool(
+      get_hardware_parameter(get_hardware_info(), "disable_rendering").value_or("false"));
+
   // We essentially reconstruct the 'simulate.cc::main()' function here, and
   // launch a Simulate object with all necessary rendering process/options
   // attached.
@@ -887,18 +891,27 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   initialize_initial_positions(get_hardware_info());
   set_initial_pose();
 
-  // Ready cameras
-  RCLCPP_INFO(get_logger(), "Initializing cameras...");
-  cameras_ = std::make_unique<MujocoCameras>(mujoco_node_, sim_mutex_, mj_data_, mj_model_, camera_publish_rate);
-  cameras_->register_cameras(get_hardware_info());
-
-  // Configure Lidar sensors
-  RCLCPP_INFO(get_logger(), "Initializing lidar...");
-  lidar_sensors_ = std::make_unique<MujocoLidar>(mujoco_node_, sim_mutex_, mj_data_, mj_model_, lidar_publish_rate);
-  if (!lidar_sensors_->register_lidar(get_hardware_info()))
+  if (disable_rendering)
   {
-    RCLCPP_INFO(get_logger(), "Failed to initialize lidar, exiting...");
-    return hardware_interface::CallbackReturn::FAILURE;
+    RCLCPP_INFO(get_logger(), "Rendering disabled (cameras and lidar skipped)");
+    cameras_.reset();
+    lidar_sensors_.reset();
+  }
+  else
+  {
+    // Ready cameras
+    RCLCPP_INFO(get_logger(), "Initializing cameras...");
+    cameras_ = std::make_unique<MujocoCameras>(mujoco_node_, sim_mutex_, mj_data_, mj_model_, camera_publish_rate);
+    cameras_->register_cameras(get_hardware_info());
+
+    // Configure Lidar sensors
+    RCLCPP_INFO(get_logger(), "Initializing lidar...");
+    lidar_sensors_ = std::make_unique<MujocoLidar>(mujoco_node_, sim_mutex_, mj_data_, mj_model_, lidar_publish_rate);
+    if (!lidar_sensors_->register_lidar(get_hardware_info()))
+    {
+      RCLCPP_WARN(get_logger(), "Failed to initialize lidar, continuing without lidar");
+      lidar_sensors_.reset();
+    }
   }
 
   // Disable the rangefinder flag at startup so that we don't get the yellow lines.
@@ -1126,9 +1139,21 @@ hardware_interface::CallbackReturn MujocoSystemInterface::on_activate(const rclc
 {
   RCLCPP_INFO(get_logger(), "Activating MuJoCo hardware interface and starting Simulate threads...");
 
-  // Start camera and sensor rendering loops
-  cameras_->init();
-  lidar_sensors_->init();
+  // Start the simulation
+  {
+    const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+    sim_->run = true;
+  }
+
+  // Start camera and sensor rendering loops (if they exist)
+  if (cameras_)
+  {
+    cameras_->init();
+  }
+  if (lidar_sensors_)
+  {
+    lidar_sensors_->init();
+  }
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -1314,6 +1339,7 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.torque.data.y() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 1];
     data.torque.data.z() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 2];
   }
+
   return hardware_interface::return_type::OK;
 }
 
@@ -2374,7 +2400,6 @@ void MujocoSystemInterface::PhysicsLoop()
           {
             // Update the control's read buffers if the data has changed
             mj_copyData(mj_data_control_, mj_model_, mj_data_);
-
             sim_->AddToHistory();
           }
         }
