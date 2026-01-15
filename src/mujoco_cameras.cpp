@@ -130,12 +130,6 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
 
 void MujocoCameras::init()
 {
-  // Idempotent init: if a previous init started publishing, don't start again.
-  if (publish_images_.load())
-  {
-    return;
-  }
-
   // Start the rendering thread process
   if (!glfwInit())
   {
@@ -143,7 +137,6 @@ void MujocoCameras::init()
     publish_images_ = false;
     return;
   }
-  glfw_initialized_ = true;
   publish_images_ = true;
   rendering_thread_ = std::thread(&MujocoCameras::update_loop, this);
 }
@@ -156,11 +149,8 @@ void MujocoCameras::close()
     rendering_thread_.join();
   }
 
-  if (glfw_initialized_.load())
-  {
-    glfwTerminate();
-    glfw_initialized_ = false;
-  }
+  mjv_freeScene(&mjv_scn_);
+  mjr_freeContext(&mjr_con_);
 }
 
 void MujocoCameras::update_loop()
@@ -168,12 +158,6 @@ void MujocoCameras::update_loop()
   // We create an offscreen context specific to this process for managing camera rendering.
   glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
   GLFWwindow* window = glfwCreateWindow(1, 1, "", NULL, NULL);
-  if (window == nullptr)
-  {
-    RCLCPP_WARN(node_->get_logger(), "Failed to create GLFW window. Disabling camera publishing.");
-    publish_images_ = false;
-    return;
-  }
   glfwMakeContextCurrent(window);
 
   // Initialization of the context and data structures has to happen in the rendering thread
@@ -192,7 +176,6 @@ void MujocoCameras::update_loop()
   // create scene and context
   mjv_makeScene(mj_model_, &mjv_scn_, 2000);
   mjr_makeContext(mj_model_, &mjr_con_, mjFONTSCALE_150);
-  rendering_initialized_ = true;
 
   // Ensure the context will support the largest cameras
   int max_width = 1, max_height = 1;
@@ -211,24 +194,6 @@ void MujocoCameras::update_loop()
     update();
     rate.sleep();
   }
-
-  // IMPORTANT: Free MuJoCo rendering resources while a valid OpenGL context is current.
-  // mjr_freeContext() will call into OpenGL (e.g. glDeleteRenderbuffers), which can segfault if
-  // invoked from a thread without a current context.
-  if (rendering_initialized_.load())
-  {
-    mjv_freeScene(&mjv_scn_);
-    mjr_freeContext(&mjr_con_);
-    rendering_initialized_ = false;
-  }
-
-  if (mj_camera_data_ != nullptr)
-  {
-    mj_deleteData(mj_camera_data_);
-    mj_camera_data_ = nullptr;
-  }
-
-  glfwDestroyWindow(window);
 }
 
 void MujocoCameras::update()
