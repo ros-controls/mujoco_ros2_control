@@ -1433,7 +1433,7 @@ void MujocoSystemInterface::joint_command_to_actuator_command()
   for (auto& joint : urdf_joint_data_)
   {
     std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
-      if (actuator_interface.joint_name == joint.name)
+      if (actuator_interface.joint_name == joint.name && actuator_interface.actuator_type != ActuatorType::PASSIVE)
       {
         actuator_interface.position_interface.command_ = joint.position_interface.command_;
         actuator_interface.velocity_interface.command_ = joint.velocity_interface.command_;
