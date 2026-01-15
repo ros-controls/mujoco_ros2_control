@@ -9,7 +9,7 @@ controller_manager:
       type: position_controllers/JointGroupPositionController
 
     gripper_controller:
-      type: position_controllers/GripperActionController
+      type: position_controllers/JointGroupPositionController
 
 position_controller:
   ros__parameters:
@@ -19,5 +19,5 @@ position_controller:
 
 gripper_controller:
   ros__parameters:
-    default: true
-    joint: gripper_left_finger_joint
+    joints:
+      - gripper_left_finger_joint

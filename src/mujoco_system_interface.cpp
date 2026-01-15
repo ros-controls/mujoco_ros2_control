@@ -1180,6 +1180,11 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
       RCLCPP_WARN(get_logger(), "Actuator %s not found in mujoco_actuator_data_", actuator_name.c_str());
       return;
     }
+    if (actuator_it->actuator_type == ActuatorType::PASSIVE)
+    {
+      RCLCPP_WARN(get_logger(), "Actuator %s is passive and cannot be controlled.", actuator_name.c_str());
+      return;
+    }
 
     if (enabled)
     {
@@ -1349,6 +1354,10 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   // TODO: Support command limits. For now those ranges can be limited in the mujoco actuators themselves.
   for (auto& actuator : mujoco_actuator_data_)
   {
+    if (actuator.actuator_type == ActuatorType::PASSIVE)
+    {
+      continue;
+    }
     if (actuator.is_position_control_enabled)
     {
       mj_data_control_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.command_;
@@ -1424,7 +1433,7 @@ void MujocoSystemInterface::joint_command_to_actuator_command()
   for (auto& joint : urdf_joint_data_)
   {
     std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
-      if (actuator_interface.joint_name == joint.name)
+      if (actuator_interface.joint_name == joint.name && actuator_interface.actuator_type != ActuatorType::PASSIVE)
       {
         actuator_interface.position_interface.command_ = joint.position_interface.command_;
         actuator_interface.velocity_interface.command_ = joint.velocity_interface.command_;
@@ -1536,19 +1545,6 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     actuator_data.mj_joint_type = mj_model_->jnt_type[target_id];
     actuator_data.actuator_type = getActuatorType(mj_model_, actuator_data.mj_actuator_id);
 
-    // Set initial values if they are set in the info, or from override start position file
-    if (override_mujoco_actuator_positions_)
-    {
-      actuator_data.position_interface.state_ = mj_data_->qpos[actuator_data.mj_pos_adr];
-      actuator_data.velocity_interface.state_ = mj_data_->qvel[actuator_data.mj_vel_adr];
-      // We never set data for effort from an initial conditions file
-      actuator_data.effort_interface.state_ = 0.0;
-
-      actuator_data.position_interface.command_ = actuator_data.position_interface.state_;
-      actuator_data.velocity_interface.command_ = actuator_data.velocity_interface.state_;
-      actuator_data.effort_interface.command_ = actuator_data.effort_interface.state_;
-    }
-
     // Initialize PID controllers for actuators that have them configured
     const auto initialize_position_pids = [&]() -> bool {
 // after humble has an additional argument in the PidROS constructor, and uses a different function to initialize from parameters
@@ -1599,6 +1595,52 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     }
     RCLCPP_DEBUG(get_logger(), "Successfully registered actuator '%s'", act_name);
   }
+
+  // now look out for the mujoco joints that do not have any actuator associated with them
+  for (int jnt_id = 0; jnt_id < mj_model_->njnt; jnt_id++)
+  {
+    const auto actuator_it = std::find_if(mujoco_actuator_data_.cbegin(), mujoco_actuator_data_.cend(),
+                                          [&mj_model = mj_model_, jnt_id](const MuJoCoActuatorData& actuator) {
+                                            return actuator.mj_pos_adr == mj_model->jnt_qposadr[jnt_id];
+                                          });
+    if (actuator_it == mujoco_actuator_data_.cend() && mj_model_->jnt_type[jnt_id] != mjJNT_FREE)
+    {
+      // no actuator found for this joint, register a passive actuator
+      MuJoCoActuatorData passive_actuator;
+      passive_actuator.joint_name = std::string(mj_id2name(mj_model_, mjOBJ_JOINT, jnt_id));
+      RCLCPP_INFO(get_logger(), "MuJoCo joint '%s' has no associated actuator. Registering as a passive joint.",
+                  passive_actuator.joint_name.c_str());
+      passive_actuator.mj_actuator_id = -1;  // indicates no actuator
+      passive_actuator.mj_pos_adr = mj_model_->jnt_qposadr[jnt_id];
+      passive_actuator.mj_vel_adr = mj_model_->jnt_dofadr[jnt_id];
+      passive_actuator.mj_joint_type = mj_model_->jnt_type[jnt_id];
+      passive_actuator.actuator_type = ActuatorType::PASSIVE;
+      mujoco_actuator_data_.push_back(passive_actuator);
+    }
+  }
+
+  // Set initial values if they are set in the info, or from override start position file
+  if (override_mujoco_actuator_positions_)
+  {
+    RCLCPP_DEBUG(get_logger(),
+                 "Initializing actuator position states from override start position file for %zu actuators.",
+                 mujoco_actuator_data_.size());
+
+    for (auto& actuator_data : mujoco_actuator_data_)
+    {
+      actuator_data.position_interface.state_ = mj_data_->qpos[actuator_data.mj_pos_adr];
+      actuator_data.velocity_interface.state_ = mj_data_->qvel[actuator_data.mj_vel_adr];
+      // We never set data for effort from an initial conditions file
+      actuator_data.effort_interface.state_ = 0.0;
+
+      if (actuator_data.actuator_type != ActuatorType::PASSIVE)
+      {
+        actuator_data.position_interface.command_ = actuator_data.position_interface.state_;
+        actuator_data.velocity_interface.command_ = actuator_data.velocity_interface.state_;
+        actuator_data.effort_interface.command_ = actuator_data.effort_interface.state_;
+      }
+    }
+  }
   return true;
 }
 
@@ -1623,8 +1665,9 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
     const auto actuator_it =
         std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
                      [&actuator_name, this](const MuJoCoActuatorData& actuator) {
-                       return (mj_id2name(mj_model_, mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name) ||
-                              (actuator.joint_name == actuator_name);
+                       return (actuator.actuator_type != ActuatorType::PASSIVE) &&
+                              ((mj_id2name(mj_model_, mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name) ||
+                               (actuator.joint_name == actuator_name));
                      });
     const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
     // This isn't a failure the joint just won't be controllable
@@ -1983,6 +2026,12 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
                      tran_actuator_info.name.c_str());
         return false;
       }
+      if (mujoco_actuator_it->actuator_type == ActuatorType::PASSIVE)
+      {
+        RCLCPP_FATAL(get_logger(), "Actuator '%s' is passive and cannot be used in a transmission",
+                     tran_actuator_info.name.c_str());
+        return false;
+      }
       for (const auto& hw_if : hw_types)
       {
         double* passthrough = nullptr;
@@ -2042,7 +2091,20 @@ bool MujocoSystemInterface::initialize_initial_positions(const hardware_interfac
     std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
                   [](auto& actuator_interface) { actuator_interface.copy_command_to_state(); });
 
-    set_initial_pose();
+    // Copy the initial joint state to the actuator state for the passive joints
+    // If the actuator name and joint name is same (which is the case for non transmission joints), we need to copy
+    // the state from actuator to joint here as there is no transmission instance to do that.
+    for (auto& joint : urdf_joint_data_)
+    {
+      std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
+        if (actuator_interface.joint_name == joint.name && actuator_interface.actuator_type == ActuatorType::PASSIVE)
+        {
+          actuator_interface.position_interface.state_ = joint.position_interface.state_;
+          actuator_interface.velocity_interface.state_ = joint.velocity_interface.state_;
+          actuator_interface.effort_interface.state_ = joint.effort_interface.state_;
+        }
+      });
+    }
   }
   return true;
 }
