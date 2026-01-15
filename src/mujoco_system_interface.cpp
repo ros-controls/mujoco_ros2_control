@@ -1545,19 +1545,6 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     actuator_data.mj_joint_type = mj_model_->jnt_type[target_id];
     actuator_data.actuator_type = getActuatorType(mj_model_, actuator_data.mj_actuator_id);
 
-    // Set initial values if they are set in the info, or from override start position file
-    if (override_mujoco_actuator_positions_)
-    {
-      actuator_data.position_interface.state_ = mj_data_->qpos[actuator_data.mj_pos_adr];
-      actuator_data.velocity_interface.state_ = mj_data_->qvel[actuator_data.mj_vel_adr];
-      // We never set data for effort from an initial conditions file
-      actuator_data.effort_interface.state_ = 0.0;
-
-      actuator_data.position_interface.command_ = actuator_data.position_interface.state_;
-      actuator_data.velocity_interface.command_ = actuator_data.velocity_interface.state_;
-      actuator_data.effort_interface.command_ = actuator_data.effort_interface.state_;
-    }
-
     // Initialize PID controllers for actuators that have them configured
     const auto initialize_position_pids = [&]() -> bool {
 // after humble has an additional argument in the PidROS constructor, and uses a different function to initialize from parameters
@@ -1616,17 +1603,42 @@ bool MujocoSystemInterface::register_mujoco_actuators()
                                           [&mj_model = mj_model_, jnt_id](const MuJoCoActuatorData& actuator) {
                                             return actuator.mj_pos_adr == mj_model->jnt_qposadr[jnt_id];
                                           });
-    if (actuator_it == mujoco_actuator_data_.cend())
+    if (actuator_it == mujoco_actuator_data_.cend() && mj_model_->jnt_type[jnt_id] != mjJNT_FREE)
     {
       // no actuator found for this joint, register a passive actuator
       MuJoCoActuatorData passive_actuator;
       passive_actuator.joint_name = std::string(mj_id2name(mj_model_, mjOBJ_JOINT, jnt_id));
+      RCLCPP_INFO(get_logger(), "MuJoCo joint '%s' has no associated actuator. Registering as a passive joint.",
+                  passive_actuator.joint_name.c_str());
       passive_actuator.mj_actuator_id = -1;  // indicates no actuator
       passive_actuator.mj_pos_adr = mj_model_->jnt_qposadr[jnt_id];
       passive_actuator.mj_vel_adr = mj_model_->jnt_dofadr[jnt_id];
       passive_actuator.mj_joint_type = mj_model_->jnt_type[jnt_id];
       passive_actuator.actuator_type = ActuatorType::PASSIVE;
       mujoco_actuator_data_.push_back(passive_actuator);
+    }
+  }
+
+  // Set initial values if they are set in the info, or from override start position file
+  if (override_mujoco_actuator_positions_)
+  {
+    RCLCPP_DEBUG(get_logger(),
+                 "Initializing acctuator position states from override start position file for %zu actuators.",
+                 mujoco_actuator_data_.size());
+
+    for (auto& actuator_data : mujoco_actuator_data_)
+    {
+      actuator_data.position_interface.state_ = mj_data_->qpos[actuator_data.mj_pos_adr];
+      actuator_data.velocity_interface.state_ = mj_data_->qvel[actuator_data.mj_vel_adr];
+      // We never set data for effort from an initial conditions file
+      actuator_data.effort_interface.state_ = 0.0;
+
+      if (actuator_data.actuator_type != ActuatorType::PASSIVE)
+      {
+        actuator_data.position_interface.command_ = actuator_data.position_interface.state_;
+        actuator_data.velocity_interface.command_ = actuator_data.velocity_interface.state_;
+        actuator_data.effort_interface.command_ = actuator_data.effort_interface.state_;
+      }
     }
   }
   return true;
