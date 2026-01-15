@@ -169,6 +169,7 @@ int main(int argc, char ** argv)
         {
           try
           {
+            // `sleep_until` may throw if sim time stops (e.g., simulation shutdown).
             cm->get_clock()->sleep_until(current_time + period);
           }
           catch (const std::runtime_error & e)
