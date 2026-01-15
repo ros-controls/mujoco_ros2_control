@@ -2091,7 +2091,20 @@ bool MujocoSystemInterface::initialize_initial_positions(const hardware_interfac
     std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
                   [](auto& actuator_interface) { actuator_interface.copy_command_to_state(); });
 
-    set_initial_pose();
+    // Copy the initial joint state to the actuator state for the passive joints
+    // If the actuator name and joint name is same (which is the case for non transmission joints), we need to copy
+    // the state from actuator to joint here as there is no transmission instance to do that.
+    for (auto& joint : urdf_joint_data_)
+    {
+      std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
+        if (actuator_interface.joint_name == joint.name && actuator_interface.actuator_type == ActuatorType::PASSIVE)
+        {
+          actuator_interface.position_interface.state_ = joint.position_interface.state_;
+          actuator_interface.velocity_interface.state_ = joint.velocity_interface.state_;
+          actuator_interface.effort_interface.state_ = joint.effort_interface.state_;
+        }
+      });
+    }
   }
   return true;
 }
