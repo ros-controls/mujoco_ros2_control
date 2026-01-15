@@ -143,14 +143,17 @@ void MujocoCameras::init()
 
 void MujocoCameras::close()
 {
-  publish_images_ = false;
-  if (rendering_thread_.joinable())
+  if (publish_images_)
   {
-    rendering_thread_.join();
-  }
+    publish_images_ = false;
+    if (rendering_thread_.joinable())
+    {
+      rendering_thread_.join();
+    }
 
-  mjv_freeScene(&mjv_scn_);
-  mjr_freeContext(&mjr_con_);
+    mjv_freeScene(&mjv_scn_);
+    mjr_freeContext(&mjr_con_);
+  }
 }
 
 void MujocoCameras::update_loop()
