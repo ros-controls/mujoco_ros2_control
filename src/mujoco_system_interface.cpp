@@ -724,8 +724,8 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   RCLCPP_INFO_EXPRESSION(get_logger(), headless, "Running in HEADLESS mode.");
 
   // Optional: disable camera/lidar threads (useful for CI/headless test environments).
-  const bool disable_rendering =
-      hardware_interface::parse_bool(get_hardware_parameter(get_hardware_info(), "disable_rendering").value_or("false"));
+  const bool disable_rendering = hardware_interface::parse_bool(
+      get_hardware_parameter(get_hardware_info(), "disable_rendering").value_or("false"));
 
   // We essentially reconstruct the 'simulate.cc::main()' function here, and
   // launch a Simulate object with all necessary rendering process/options
@@ -1374,7 +1374,7 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   };
 
   auto raw_contact_between_bodies = [&](const mjData* data, int body1_id, int body2_id,
-                                       ContactMatchInfo* match_info) -> bool {
+                                        ContactMatchInfo* match_info) -> bool {
     if (!data || !mj_model_ || data->ncon <= 0 || data->ncon > mj_model_->nconmax)
     {
       return false;
@@ -1386,7 +1386,7 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
       const int geom1_body_id = mj_model_->geom_bodyid[contact.geom1];
       const int geom2_body_id = mj_model_->geom_bodyid[contact.geom2];
 
-      // Contact pair has no guranteed ordering so check both directions.
+      // Contact pair has no guaranteed ordering so check both directions.
       if ((geom1_body_id == body1_id && geom2_body_id == body2_id) ||
           (geom1_body_id == body2_id && geom2_body_id == body1_id))
       {
@@ -2310,9 +2310,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       // These should match body names in the MuJoCo model
       if (sensor.parameters.count("body1_name") == 0 || sensor.parameters.count("body2_name") == 0)
       {
-        RCLCPP_ERROR_STREAM(
-          get_logger(), "Contact sensor '" << sensor_name
-                                           << "' requires 'body1_name' and 'body2_name' parameters");
+        RCLCPP_ERROR_STREAM(get_logger(),
+                            "Contact sensor '" << sensor_name << "' requires 'body1_name' and 'body2_name' parameters");
         continue;
       }
 
@@ -2325,16 +2324,16 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
       if (body1_id == -1)
       {
-        RCLCPP_ERROR_STREAM(
-          get_logger(), "Failed to find body '" << sensor_data.body1_name << "' in MuJoCo model for contact sensor '"
-                                                << sensor_name << "'");
+        RCLCPP_ERROR_STREAM(get_logger(), "Failed to find body '" << sensor_data.body1_name
+                                                                  << "' in MuJoCo model for contact sensor '"
+                                                                  << sensor_name << "'");
         continue;
       }
       if (body2_id == -1)
       {
-        RCLCPP_ERROR_STREAM(
-          get_logger(), "Failed to find body '" << sensor_data.body2_name << "' in MuJoCo model for contact sensor '"
-                                                << sensor_name << "'");
+        RCLCPP_ERROR_STREAM(get_logger(), "Failed to find body '" << sensor_data.body2_name
+                                                                  << "' in MuJoCo model for contact sensor '"
+                                                                  << sensor_name << "'");
         continue;
       }
 
@@ -2383,7 +2382,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
         catch (const std::exception&)
         {
           RCLCPP_WARN_STREAM(get_logger(), "Contact sensor '" << sensor_name << "': invalid integer for '" << key
-                                                             << "': '" << sensor.parameters.at(key) << "'");
+                                                              << "': '" << sensor.parameters.at(key) << "'");
         }
       };
       try_parse_int_param("debounce_on_steps", sensor_data.debounce_on_steps);
@@ -2396,16 +2395,16 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
           return;
         }
         std::string v = sensor.parameters.at(key);
-        std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::transform(v.begin(), v.end(), v.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         out_value = (v == "1" || v == "true" || v == "yes" || v == "on");
       };
       parse_bool("debug_contact_geoms", sensor_data.debug_contact_geoms);
 
       contact_sensor_data_.push_back(sensor_data);
-      RCLCPP_INFO_STREAM(
-        get_logger(), "Registered contact sensor '" << sensor_name << "' checking contact between '"
-                                                    << sensor_data.body1_name << "' and '" << sensor_data.body2_name
-                                                    << "'");
+      RCLCPP_INFO_STREAM(get_logger(), "Registered contact sensor '" << sensor_name << "' checking contact between '"
+                                                                     << sensor_data.body1_name << "' and '"
+                                                                     << sensor_data.body2_name << "'");
     }
     else
     {
@@ -2643,14 +2642,13 @@ void MujocoSystemInterface::PhysicsLoop()
           {
             // Update the control's read buffers if the data has changed
             mj_copyData(mj_data_control_, mj_model_, mj_data_);
-            
+
             // Manually copy contact array as mj_copyData may not copy it reliably
             // Copy ncon and contact array, ensuring we don't exceed allocated size
             if (mj_data_->ncon > 0 && mj_data_->ncon <= mj_model_->nconmax)
             {
               mj_data_control_->ncon = mj_data_->ncon;
-              std::memcpy(mj_data_control_->contact, mj_data_->contact, 
-                         mj_data_->ncon * sizeof(mjContact));
+              std::memcpy(mj_data_control_->contact, mj_data_->contact, mj_data_->ncon * sizeof(mjContact));
             }
             else
             {
@@ -2658,10 +2656,9 @@ void MujocoSystemInterface::PhysicsLoop()
             }
 
             // Log floating base position for debugging (throttled to 1 Hz)
-            RCLCPP_INFO_THROTTLE(
-              get_logger(), *mujoco_node_->get_clock(), 1000,
-              "Floating base position: x=%.4f, y=%.4f, z=%.4f | time=%.2f",
-              mj_data_->qpos[0], mj_data_->qpos[1], mj_data_->qpos[2], mj_data_->time);
+            RCLCPP_INFO_THROTTLE(get_logger(), *mujoco_node_->get_clock(), 1000,
+                                 "Floating base position: x=%.4f, y=%.4f, z=%.4f | time=%.2f", mj_data_->qpos[0],
+                                 mj_data_->qpos[1], mj_data_->qpos[2], mj_data_->time);
 
             sim_->AddToHistory();
           }

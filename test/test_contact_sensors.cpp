@@ -19,13 +19,13 @@
 
 #include <gtest/gtest.h>
 #include <mujoco/mujoco.h>
-#include <mujoco_ros2_control/mujoco_system_interface.hpp>
-#include <hardware_interface/hardware_info.hpp>
-#include <rclcpp/rclcpp.hpp>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <hardware_interface/hardware_info.hpp>
+#include <mujoco_ros2_control/mujoco_system_interface.hpp>
+#include <rclcpp/rclcpp.hpp>
 #include <thread>
-#include <chrono>
 
 class ContactSensorTest : public ::testing::Test
 {
@@ -60,10 +60,10 @@ protected:
       interface_->on_deactivate(inactive_state);
       interface_.reset();
     }
-    
+
     // Clean up ROS
     rclcpp::shutdown();
-    
+
     // Clean up test file
     if (std::filesystem::exists(test_model_path_))
     {
@@ -79,26 +79,26 @@ protected:
     file << R"(<?xml version="1.0"?>
 <mujoco model="test_contact">
   <option timestep="0.002"/>
-  
+
   <size nconmax="100"/>
-  
+
   <worldbody>
     <!-- Floor as infinite plane directly in worldbody (static by default) -->
     <!-- Plane size: [half_x half_y spacing] where spacing is for rendering grid -->
-    <geom name="floor_geom" type="plane" size="0 0 1" 
+    <geom name="floor_geom" type="plane" size="0 0 1"
           contype="1" conaffinity="1"/>
-    
+
     <body name="box1" pos="0 0 0.1">
       <freejoint/>
       <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
-      <geom name="box1_geom" type="box" size="0.05 0.05 0.05" 
+      <geom name="box1_geom" type="box" size="0.05 0.05 0.05"
             contype="1" conaffinity="1" friction="0.6"/>
     </body>
-    
+
     <body name="box2" pos="0.2 0 0.1">
       <freejoint/>
       <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
-      <geom name="box2_geom" type="box" size="0.05 0.05 0.05" 
+      <geom name="box2_geom" type="box" size="0.05 0.05 0.05"
             contype="1" conaffinity="1" friction="0.6"/>
     </body>
   </worldbody>
@@ -114,7 +114,7 @@ protected:
     info.type = "system";
     info.hardware_parameters["mujoco_model"] = test_model_path_;
     info.hardware_parameters["meshdir"] = "";
-    info.hardware_parameters["headless"] = "true";  // Enable headless mode for CI compatibility
+    info.hardware_parameters["headless"] = "true";           // Enable headless mode for CI compatibility
     info.hardware_parameters["disable_rendering"] = "true";  // Disable cameras/lidar to avoid OpenGL issues in tests
 
     // Add contact sensors
@@ -238,7 +238,7 @@ TEST_F(ContactSensorTest, ContactDetectionWhenInContact)
   // Wait for boxes to fall and settle on floor
   // Boxes start at z=0.1, fall time ~0.14s + settling
   std::this_thread::sleep_for(std::chrono::seconds(1));
-  
+
   // Read contact values after simulation
   interface_->read(rclcpp::Time(), rclcpp::Duration::from_seconds(0.002));
 
@@ -291,7 +291,7 @@ TEST_F(ContactSensorTest, ContactDetectionWhenInContact)
   EXPECT_LE(box1_contact_value, 1.0) << "box1 contact value should be binary";
   EXPECT_GE(box2_contact_value, 0.0) << "box2 contact value should be valid";
   EXPECT_LE(box2_contact_value, 1.0) << "box2 contact value should be binary";
-  
+
   // Both boxes should be in contact with floor after settling
   EXPECT_EQ(box1_contact_value, 1.0) << "box1 should be in contact with floor after settling";
   EXPECT_EQ(box2_contact_value, 1.0) << "box2 should be in contact with floor after settling";
@@ -380,7 +380,7 @@ TEST_F(ContactSensorTest, ContactValueRange)
 
   // Contact value should be either 0.0 (no contact) or 1.0 (contact)
   EXPECT_TRUE(box1_contact_value == 0.0 || box1_contact_value == 1.0)
-    << "Contact value should be binary (0.0 or 1.0), got " << box1_contact_value;
+      << "Contact value should be binary (0.0 or 1.0), got " << box1_contact_value;
 }
 
 TEST_F(ContactSensorTest, InvalidBodyNameHandling)
@@ -413,9 +413,8 @@ TEST_F(ContactSensorTest, InvalidBodyNameHandling)
   // Should handle invalid body name gracefully (either skip or error)
   auto result = bad_interface->on_init(params);
   // Should either succeed (skipping bad sensor) or fail gracefully
-  EXPECT_TRUE(
-    result == hardware_interface::CallbackReturn::SUCCESS ||
-    result == hardware_interface::CallbackReturn::ERROR);
+  EXPECT_TRUE(result == hardware_interface::CallbackReturn::SUCCESS ||
+              result == hardware_interface::CallbackReturn::ERROR);
 }
 
 int main(int argc, char** argv)
@@ -424,4 +423,3 @@ int main(int argc, char** argv)
   int result = RUN_ALL_TESTS();
   return result;
 }
-
