@@ -1604,7 +1604,8 @@ bool MujocoSystemInterface::register_mujoco_actuators()
                                           [&mj_model = mj_model_, jnt_id](const MuJoCoActuatorData& actuator) {
                                             return actuator.mj_pos_adr == mj_model->jnt_qposadr[jnt_id];
                                           });
-    if (actuator_it == mujoco_actuator_data_.cend() && mj_model_->jnt_type[jnt_id] != mjJNT_FREE)
+    if (actuator_it == mujoco_actuator_data_.cend() && mj_model_->jnt_type[jnt_id] != mjJNT_FREE &&
+        mj_model_->jnt_type[jnt_id] != mjJNT_BALL)
     {
       // no actuator found for this joint, register a passive actuator
       MuJoCoActuatorData passive_actuator;
