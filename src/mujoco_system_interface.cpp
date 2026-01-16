@@ -2280,7 +2280,13 @@ void MujocoSystemInterface::set_initial_pose()
 {
   for (auto& actuator : mujoco_actuator_data_)
   {
-    mj_data_->qpos[actuator.mj_pos_adr] = actuator.position_interface.state_;
+    // Check if the actuator data is finite before setting it. This check is needed if the MuJoCo model has more passive
+    // joints, than those exported/used in ros2_control, then the state_ variables will be left as NaN. So, better to
+    // leave it to the MuJoCo model's default initial position.
+    if (std::isfinite(actuator.position_interface.state_))
+    {
+      mj_data_->qpos[actuator.mj_pos_adr] = actuator.position_interface.state_;
+    }
     if (actuator.is_position_control_enabled)
     {
       mj_data_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.state_;
