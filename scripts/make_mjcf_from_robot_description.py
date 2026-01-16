@@ -307,7 +307,9 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                     # make a material for the rgba values and export it
                     mtl_modifier = f"m{mtl_num}"
                     mtl_name = "mtl_" + mtl_modifier
-                    material = trimesh.visual.material.SimpleMaterial(name=mtl_name, diffuse=rgba)  # RGBA
+                    material = trimesh.visual.material.SimpleMaterial(
+                        name=mtl_name, diffuse=rgba, glossiness=1000, specular=[0.2, 0.2, 0.2]
+                    )  # RGBA
                     mesh.visual = trimesh.visual.TextureVisuals(material=material)
 
                     # increment material number
@@ -1605,6 +1607,10 @@ def main(args=None):
         output_filepath = os.path.join(temp_dir.name, "")
     else:
         raise ValueError("You must specify at least one of the following options: " "--publish_topic or --save_only.")
+
+    # Check if outputpath exists; if not, create it
+    if not os.path.exists(output_filepath):
+        os.makedirs(output_filepath, exist_ok=True)
 
     # Use provided MuJoCo input or scene XML files if given; otherwise use the URDF.
     mujoco_inputs_file = parsed_args.mujoco_inputs or urdf_path
