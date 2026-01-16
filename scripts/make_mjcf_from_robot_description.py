@@ -1606,6 +1606,10 @@ def main(args=None):
     else:
         raise ValueError("You must specify at least one of the following options: " "--publish_topic or --save_only.")
 
+    # Check if outputpath exists; if not, create it
+    if not os.path.exists(output_filepath):
+        os.makedirs(output_filepath, exist_ok=True)
+
     # Use provided MuJoCo input or scene XML files if given; otherwise use the URDF.
     mujoco_inputs_file = parsed_args.mujoco_inputs or urdf_path
     mujoco_scene_file = parsed_args.scene or urdf_path
