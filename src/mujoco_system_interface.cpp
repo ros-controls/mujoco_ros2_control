@@ -1683,7 +1683,8 @@ bool MujocoSystemInterface::register_mujoco_actuators()
                                           [&mj_model = mj_model_, jnt_id](const MuJoCoActuatorData& actuator) {
                                             return actuator.mj_pos_adr == mj_model->jnt_qposadr[jnt_id];
                                           });
-    if (actuator_it == mujoco_actuator_data_.cend() && mj_model_->jnt_type[jnt_id] != mjJNT_FREE)
+    if (actuator_it == mujoco_actuator_data_.cend() && mj_model_->jnt_type[jnt_id] != mjJNT_FREE &&
+        mj_model_->jnt_type[jnt_id] != mjJNT_BALL)
     {
       // no actuator found for this joint, register a passive actuator
       MuJoCoActuatorData passive_actuator;
@@ -2358,7 +2359,20 @@ void MujocoSystemInterface::set_initial_pose()
 {
   for (auto& actuator : mujoco_actuator_data_)
   {
-    mj_data_->qpos[actuator.mj_pos_adr] = actuator.position_interface.state_;
+    // Check if the actuator data is finite before setting it. This check is needed if the MuJoCo model has more passive
+    // joints, than those exported/used in ros2_control, then the state_ variables will be left as NaN. So, better to
+    // leave it to the MuJoCo model's default initial position.
+    if (std::isfinite(actuator.position_interface.state_))
+    {
+      mj_data_->qpos[actuator.mj_pos_adr] = actuator.position_interface.state_;
+    }
+    else
+    {
+      RCLCPP_WARN_EXPRESSION(
+          get_logger(), actuator.actuator_type != ActuatorType::PASSIVE,
+          "Actuator '%s' position state is not finite. Leaving it to the MuJoCo model's default initial position.",
+          actuator.joint_name.c_str());
+    }
     if (actuator.is_position_control_enabled)
     {
       mj_data_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.state_;
