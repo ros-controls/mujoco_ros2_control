@@ -25,6 +25,7 @@
 #include <thread>
 #include <vector>
 
+#include <hardware_interface/version.h>
 #include <hardware_interface/handle.hpp>
 #include <hardware_interface/hardware_info.hpp>
 #include <hardware_interface/system_interface.hpp>
@@ -53,6 +54,19 @@
 #include "transmission_interface/transmission_interface_exception.hpp"
 #include "transmission_interface/transmission_loader.hpp"
 
+#define ROS_DISTRO_HUMBLE (HARDWARE_INTERFACE_VERSION_MAJOR < 3)
+
+// defining these for Humble, because they are defined elsewhere in future versions, and we use them in this file
+#if ROS_DISTRO_HUMBLE
+namespace hardware_interface
+{
+/// Constant defining torque interface name
+constexpr char HW_IF_TORQUE[] = "torque";
+/// Constant defining force interface name
+constexpr char HW_IF_FORCE[] = "force";
+}  // namespace hardware_interface
+#endif
+
 namespace mujoco_ros2_control
 {
 class MujocoSystemInterface : public hardware_interface::SystemInterface
@@ -69,7 +83,13 @@ public:
   ~MujocoSystemInterface() override;
 
   hardware_interface::CallbackReturn
+// Jazzy introduces a new HarwareComponentInterfaceParams object which doesn't exist in humble. This adds
+// compatibility by switching to the old interface, which behaves similarly
+#if ROS_DISTRO_HUMBLE
+  on_init(const hardware_interface::HardwareInfo& info) override;
+#else
   on_init(const hardware_interface::HardwareComponentInterfaceParams& params) override;
+#endif
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
 
@@ -82,6 +102,13 @@ public:
   hardware_interface::return_type read(const rclcpp::Time& time, const rclcpp::Duration& period) override;
   hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
+// In humble this method doesn't exist, so we just add it back in with the implementation
+#if ROS_DISTRO_HUMBLE
+  const hardware_interface::HardwareInfo& get_hardware_info() const
+  {
+    return info_;
+  }
+#endif
   /**
    * @brief Converts actuator states to joint states.
    *

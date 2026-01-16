@@ -27,6 +27,7 @@
   <test_depend>joint_state_broadcaster</test_depend>
   <test_depend>robot_state_publisher</test_depend>
   <test_depend>position_controllers</test_depend>
+  <test_depend>gripper_controllers</test_depend>
   <test_depend>rviz2</test_depend>
   <test_depend>urdfdom</test_depend>
   <test_depend>urdfdom_py</test_depend>

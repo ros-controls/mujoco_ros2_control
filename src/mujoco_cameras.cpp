@@ -148,9 +148,6 @@ void MujocoCameras::close()
   {
     rendering_thread_.join();
   }
-
-  mjv_freeScene(&mjv_scn_);
-  mjr_freeContext(&mjr_con_);
 }
 
 void MujocoCameras::update_loop()
@@ -194,6 +191,11 @@ void MujocoCameras::update_loop()
     update();
     rate.sleep();
   }
+
+  mjv_freeScene(&mjv_scn_);
+  mjr_freeContext(&mjr_con_);
+  mj_deleteData(mj_camera_data_);
+  glfwDestroyWindow(window);
 }
 
 void MujocoCameras::update()

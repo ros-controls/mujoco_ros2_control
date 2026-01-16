@@ -105,19 +105,27 @@ class TestFixture(unittest.TestCase):
             [
                 "joint1",
                 "joint2",
+                "gripper_left_finger_joint",
+                "gripper_right_finger_joint",
             ],
         )
 
     def test_check_if_mujoco_actuators_states_published(self):
         if os.environ.get("TEST_TRANSMISSIONS") != "true":
-            check_if_js_published("/mujoco_actuators_states", ["joint1", "joint2"])
+            check_if_js_published(
+                "/mujoco_actuators_states",
+                ["joint1", "joint2", "gripper_left_finger_joint", "gripper_right_finger_joint"],
+            )
         else:
-            check_if_js_published("/mujoco_actuators_states", ["actuator1", "actuator2"])
+            check_if_js_published(
+                "/mujoco_actuators_states",
+                ["actuator1", "actuator2", "gripper_left_finger_joint", "gripper_right_finger_joint"],
+            )
 
     def test_arm(self):
 
         # Check if the controllers are running
-        cnames = ["position_controller", "joint_state_broadcaster"]
+        cnames = ["gripper_controller", "position_controller", "joint_state_broadcaster"]
         check_controllers_running(self.node, cnames)
 
         # Create a publisher to send commands to the position controller
@@ -142,6 +150,9 @@ class TestFixture(unittest.TestCase):
 
         # Allow some time for the message to be processed
         time.sleep(4.0)
+        if os.environ.get("TEST_TRANSMISSIONS") == "true":
+            # wait a bit more for the mujoco actuator states to be reach as they move double
+            time.sleep(2.0)
 
         # Now, check that the joint states have been updated accordingly
         joint_state_topic = "/joint_states"
@@ -187,6 +198,82 @@ class TestFixture(unittest.TestCase):
             -0.5 * actuator2_reduction,
             delta=0.05,
             msg="actuator2 did not reach the commanded position",
+        )
+        wait_for_topics.shutdown()
+
+    def test_gripper(self):
+
+        # Check if the controllers are running
+        cnames = ["gripper_controller", "position_controller", "joint_state_broadcaster"]
+        check_controllers_running(self.node, cnames)
+
+        # Create a publisher to send commands to the gripper controller
+        pub = self.node.create_publisher(Float64MultiArray, "/gripper_controller/commands", 10)
+
+        # Wait for subscriber to connect
+        end_time = time.time() + 10
+        while time.time() < end_time:
+            if pub.get_subscription_count() > 0:
+                break
+            time.sleep(0.1)
+
+        self.assertGreater(pub.get_subscription_count(), 0, "Controller did not subscribe to commands")
+
+        msg = Float64MultiArray()
+        msg.data = [-0.04]  # Close gripper
+        end_time = time.time() + 1.0
+        while time.time() < end_time:
+            pub.publish(msg)
+            time.sleep(0.1)
+
+        # Allow some time for the message to be processed
+        time.sleep(4.0)
+
+        # Now, check that the joint states have been updated accordingly
+        joint_state_topic = "/joint_states"
+        wait_for_topics = WaitForTopics([(joint_state_topic, JointState)], timeout=20.0)
+        assert wait_for_topics.wait(), f"Topic '{joint_state_topic}' not found!"
+        msgs = wait_for_topics.received_messages(joint_state_topic)
+        msg = msgs[0]
+        assert "gripper_left_finger_joint" in msg.name, "gripper_left_finger_joint not found in joint states"
+        assert "gripper_right_finger_joint" in msg.name, "gripper_right_finger_joint not found in joint states"
+        left_index = msg.name.index("gripper_left_finger_joint")
+        right_index = msg.name.index("gripper_right_finger_joint")
+        self.assertAlmostEqual(
+            msg.position[left_index],
+            -0.04,
+            delta=0.005,
+            msg="gripper_left_finger_joint did not reach commanded position",
+        )
+        self.assertAlmostEqual(
+            msg.position[right_index],
+            0.04,
+            delta=0.005,
+            msg="gripper_right_finger_joint did not reach commanded position",
+        )
+        wait_for_topics.shutdown()
+
+        # Verify the same in the mujoco_actuators_states topic
+        actuator_state_topic = "/mujoco_actuators_states"
+        wait_for_topics = WaitForTopics([(actuator_state_topic, JointState)], timeout=20.0)
+        assert wait_for_topics.wait(), f"Topic '{actuator_state_topic}' not found!"
+        msgs = wait_for_topics.received_messages(actuator_state_topic)
+        msg = msgs[0]
+        assert "gripper_left_finger_joint" in msg.name, "gripper_left_finger_joint not found in actuator states"
+        assert "gripper_right_finger_joint" in msg.name, "gripper_right_finger_joint not found in actuator states"
+        left_index = msg.name.index("gripper_left_finger_joint")
+        right_index = msg.name.index("gripper_right_finger_joint")
+        self.assertAlmostEqual(
+            msg.position[left_index],
+            -0.04,
+            delta=0.005,
+            msg="gripper_left_finger_joint did not reach commanded position",
+        )
+        self.assertAlmostEqual(
+            msg.position[right_index],
+            0.04,
+            delta=0.005,
+            msg="gripper_right_finger_joint did not reach commanded position",
         )
         wait_for_topics.shutdown()
 
@@ -236,10 +323,15 @@ class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
 
         # available state interfaces
         available_state_interfaces_names = [iface.name for iface in response.state_interfaces]
-        assert (
-            len(available_state_interfaces_names) == 8
-        ), f"Expected 8 state interfaces, got {len(available_state_interfaces_names)}"
         expected_state_interfaces = [
+            "gripper_left_finger_joint/position",
+            "gripper_left_finger_joint/velocity",
+            "gripper_left_finger_joint/effort",
+            "gripper_left_finger_joint/force",
+            "gripper_right_finger_joint/position",
+            "gripper_right_finger_joint/velocity",
+            "gripper_right_finger_joint/effort",
+            "gripper_right_finger_joint/force",
             "joint1/position",
             "joint1/velocity",
             "joint1/effort",
@@ -249,16 +341,21 @@ class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
             "joint2/effort",
             "joint2/torque",
         ]
+        assert len(available_state_interfaces_names) == len(
+            expected_state_interfaces
+        ), f"Expected {len(expected_state_interfaces)} state interfaces, got {len(available_state_interfaces_names)}"
         assert set(available_state_interfaces_names) == set(
             expected_state_interfaces
         ), f"State interfaces do not match expected. Got: {available_state_interfaces_names}"
 
         # available command interfaces
         available_command_interfaces_names = [iface.name for iface in response.command_interfaces]
-        assert (
-            len(available_command_interfaces_names) == 2
-        ), f"Expected 2 command interfaces, got {len(available_command_interfaces_names)}"
-        expected_command_interfaces = ["joint1/position", "joint2/position"]
+        expected_command_interfaces = ["joint1/position", "joint2/position", "gripper_left_finger_joint/position"]
+
+        assert len(available_command_interfaces_names) == len(expected_command_interfaces), (
+            f"Expected {len(expected_command_interfaces)} command interfaces, "
+            f"got {len(available_command_interfaces_names)}"
+        )
         assert set(available_command_interfaces_names) == set(
             expected_command_interfaces
         ), f"Command interfaces do not match expected. Got: {available_command_interfaces_names}"
