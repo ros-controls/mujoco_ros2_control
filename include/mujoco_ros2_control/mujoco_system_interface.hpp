@@ -30,6 +30,7 @@
 #include <hardware_interface/hardware_info.hpp>
 #include <hardware_interface/system_interface.hpp>
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/macros.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp>
@@ -37,7 +38,6 @@
 #include <realtime_tools/realtime_publisher.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
-#include <nav_msgs/msg/odometry.hpp>
 
 #include <mujoco/mujoco.h>
 
@@ -296,13 +296,14 @@ private:
   realtime_tools::RealtimePublisher<rosgraph_msgs::msg::Clock>::SharedPtr clock_realtime_publisher_;
 
   // Actuators state publisher
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::JointState>> actuator_state_publisher_;
-  realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>::SharedPtr actuator_state_realtime_publisher_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::JointState>> actuator_state_publisher_ = nullptr;
+  realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>::SharedPtr actuator_state_realtime_publisher_ =
+      nullptr;
   sensor_msgs::msg::JointState actuator_state_msg_;
 
   // Odometry publisher
-  std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::Odometry>> odometry_publisher_;
-  realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>::SharedPtr odometry_realtime_publisher_;
+  std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::Odometry>> odometry_publisher_ = nullptr;
+  realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>::SharedPtr odometry_realtime_publisher_ = nullptr;
   nav_msgs::msg::Odometry odometry_msg_;
 
   // Free joint data

@@ -870,13 +870,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   actuator_state_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(actuator_state_publisher_);
 
-  // Odometry publisher
-  std::string odom_topic_name =
-      get_hardware_parameter_or(get_hardware_info(), "odometry_topic", "/odom");
-  odometry_publisher_ = mujoco_node_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
-  odometry_realtime_publisher_ =
-      std::make_shared<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>>(odometry_publisher_);
-
   // Register all MuJoCo actuators
   if (!register_mujoco_actuators())
   {
@@ -892,9 +885,29 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       free_joint_id_ = i;
       free_joint_qpos_adr_ = mj_model_->jnt_qposadr[i];
       free_joint_qvel_adr_ = mj_model_->jnt_dofadr[i];
-      RCLCPP_INFO(get_logger(), "Found free joint with ID %d", free_joint_id_);
       break;  // Assume only one free joint for the robot base
     }
+  }
+
+  if (free_joint_id_ != -1)
+  {
+    // Odometry publisher
+    std::string odom_topic_name =
+        get_hardware_parameter_or(get_hardware_info(), "odometry_topic", "/simulator/floating_base_state");
+    odometry_publisher_ = mujoco_node_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
+    odometry_realtime_publisher_ =
+        std::make_shared<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>>(odometry_publisher_);
+
+    odometry_msg_.header.frame_id = "odom";  // TODO: Make configurable
+    // Set child frame as the root link of the robot as the body attached to the free joint
+    odometry_msg_.child_frame_id =
+        std::string(mj_id2name(mj_model_, mjtObj::mjOBJ_BODY, mj_model_->jnt_bodyid[free_joint_id_]));
+
+    RCLCPP_INFO(
+        get_logger(),
+        "Publishing floating base odometry using the free joint : '%s' attached to the body '%s' on topic: '%s'",
+        mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, free_joint_id_), odometry_msg_.child_frame_id.c_str(),
+        odom_topic_name.c_str());
   }
 
   // Pull joint and sensor information
@@ -1345,8 +1358,6 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   if (free_joint_id_ != -1 && odometry_realtime_publisher_)
   {
     odometry_msg_.header.stamp = time;
-    odometry_msg_.header.frame_id = "odom";       // TODO: Make configurable
-    odometry_msg_.child_frame_id = "base_link";   // TODO: Make configurable
 
     // Position
     odometry_msg_.pose.pose.position.x = mj_data_control_->qpos[free_joint_qpos_adr_];
