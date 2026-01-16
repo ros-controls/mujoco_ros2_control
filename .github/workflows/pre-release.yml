@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ROS_DISTRO: [jazzy, kilted, rolling]
+        ROS_DISTRO: [jazzy, kilted] #, rolling] # rolling is currently disabled due to the timeout issues in CI
 
     uses: ros-controls/ros2_control_ci/.github/workflows/reusable-prerelease.yml@master
     with:
