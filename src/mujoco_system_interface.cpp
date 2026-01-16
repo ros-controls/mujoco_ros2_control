@@ -878,12 +878,12 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
 
   // Check for free joint
-  std::string floating_base_joint_name =
-      get_hardware_parameter_or(get_hardware_info(), "floating_base_joint_name", "floating_base_joint");
+  std::string odom_free_joint_name =
+      get_hardware_parameter_or(get_hardware_info(), "odom_free_joint_name", "floating_base_joint");
   for (int i = 0; i < mj_model_->njnt; ++i)
   {
     const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
-    if (floating_base_joint_name == joint_name)
+    if (odom_free_joint_name == joint_name)
     {
       if (mj_model_->jnt_type[i] == mjJNT_FREE)
       {
@@ -893,8 +893,9 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       }
       else
       {
-        RCLCPP_FATAL(get_logger(), "Unable to use joint '%s' as floating base joint since it is not a free joint.",
-                     floating_base_joint_name.c_str());
+        RCLCPP_FATAL(get_logger(),
+                     "Unable to use joint '%s' to publish the floating base state since it is not a free joint.",
+                     odom_free_joint_name.c_str());
         return hardware_interface::CallbackReturn::FAILURE;
       }
     }
@@ -904,7 +905,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   {
     // Odometry publisher
     std::string odom_topic_name =
-        get_hardware_parameter_or(get_hardware_info(), "floating_base_state_topic", "/simulator/floating_base_state");
+        get_hardware_parameter_or(get_hardware_info(), "odom_topic", "/simulator/floating_base_state");
     floating_base_publisher_ = mujoco_node_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
     floating_base_realtime_publisher_ =
         std::make_shared<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>>(floating_base_publisher_);
