@@ -2366,6 +2366,13 @@ void MujocoSystemInterface::set_initial_pose()
     {
       mj_data_->qpos[actuator.mj_pos_adr] = actuator.position_interface.state_;
     }
+    else
+    {
+      RCLCPP_WARN_EXPRESSION(
+          get_logger(), actuator.actuator_type != ActuatorType::PASSIVE,
+          "Actuator '%s' position state is not finite. Leaving it to the MuJoCo model's default initial position.",
+          actuator.joint_name.c_str());
+    }
     if (actuator.is_position_control_enabled)
     {
       mj_data_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.state_;
