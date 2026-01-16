@@ -37,6 +37,7 @@
 #include <realtime_tools/realtime_publisher.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 
 #include <mujoco/mujoco.h>
 
@@ -298,6 +299,16 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::JointState>> actuator_state_publisher_;
   realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>::SharedPtr actuator_state_realtime_publisher_;
   sensor_msgs::msg::JointState actuator_state_msg_;
+
+  // Odometry publisher
+  std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::Odometry>> odometry_publisher_;
+  realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>::SharedPtr odometry_realtime_publisher_;
+  nav_msgs::msg::Odometry odometry_msg_;
+
+  // Free joint data
+  int free_joint_id_ = -1;
+  int free_joint_qpos_adr_ = -1;
+  int free_joint_qvel_adr_ = -1;
 
   // Containers for RGB-D cameras
   std::unique_ptr<MujocoCameras> cameras_;

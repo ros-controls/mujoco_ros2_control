@@ -870,11 +870,31 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   actuator_state_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(actuator_state_publisher_);
 
+  // Odometry publisher
+  std::string odom_topic_name =
+      get_hardware_parameter_or(get_hardware_info(), "odometry_topic", "/odom");
+  odometry_publisher_ = mujoco_node_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
+  odometry_realtime_publisher_ =
+      std::make_shared<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>>(odometry_publisher_);
+
   // Register all MuJoCo actuators
   if (!register_mujoco_actuators())
   {
     RCLCPP_FATAL(get_logger(), "Failed to register MuJoCo actuators, exiting...");
     return hardware_interface::CallbackReturn::FAILURE;
+  }
+
+  // Check for free joint
+  for (int i = 0; i < mj_model_->njnt; ++i)
+  {
+    if (mj_model_->jnt_type[i] == mjJNT_FREE)
+    {
+      free_joint_id_ = i;
+      free_joint_qpos_adr_ = mj_model_->jnt_qposadr[i];
+      free_joint_qvel_adr_ = mj_model_->jnt_dofadr[i];
+      RCLCPP_INFO(get_logger(), "Found free joint with ID %d", free_joint_id_);
+      break;  // Assume only one free joint for the robot base
+    }
   }
 
   // Pull joint and sensor information
@@ -1320,6 +1340,42 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.torque.data.y() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 1];
     data.torque.data.z() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 2];
   }
+
+  // Publish Odometry
+  if (free_joint_id_ != -1 && odometry_realtime_publisher_)
+  {
+    odometry_msg_.header.stamp = time;
+    odometry_msg_.header.frame_id = "odom";       // TODO: Make configurable
+    odometry_msg_.child_frame_id = "base_link";   // TODO: Make configurable
+
+    // Position
+    odometry_msg_.pose.pose.position.x = mj_data_control_->qpos[free_joint_qpos_adr_];
+    odometry_msg_.pose.pose.position.y = mj_data_control_->qpos[free_joint_qpos_adr_ + 1];
+    odometry_msg_.pose.pose.position.z = mj_data_control_->qpos[free_joint_qpos_adr_ + 2];
+
+    // Orientation (MuJoCo is w, x, y, z)
+    odometry_msg_.pose.pose.orientation.w = mj_data_control_->qpos[free_joint_qpos_adr_ + 3];
+    odometry_msg_.pose.pose.orientation.x = mj_data_control_->qpos[free_joint_qpos_adr_ + 4];
+    odometry_msg_.pose.pose.orientation.y = mj_data_control_->qpos[free_joint_qpos_adr_ + 5];
+    odometry_msg_.pose.pose.orientation.z = mj_data_control_->qpos[free_joint_qpos_adr_ + 6];
+
+    // Linear Velocity
+    odometry_msg_.twist.twist.linear.x = mj_data_control_->qvel[free_joint_qvel_adr_];
+    odometry_msg_.twist.twist.linear.y = mj_data_control_->qvel[free_joint_qvel_adr_ + 1];
+    odometry_msg_.twist.twist.linear.z = mj_data_control_->qvel[free_joint_qvel_adr_ + 2];
+
+    // Angular Velocity
+    odometry_msg_.twist.twist.angular.x = mj_data_control_->qvel[free_joint_qvel_adr_ + 3];
+    odometry_msg_.twist.twist.angular.y = mj_data_control_->qvel[free_joint_qvel_adr_ + 4];
+    odometry_msg_.twist.twist.angular.z = mj_data_control_->qvel[free_joint_qvel_adr_ + 5];
+
+#if ROS_DISTRO_HUMBLE
+    odometry_realtime_publisher_->tryPublish(odometry_msg_);
+#else
+    odometry_realtime_publisher_->try_publish(odometry_msg_);
+#endif
+  }
+
   return hardware_interface::return_type::OK;
 }
 
