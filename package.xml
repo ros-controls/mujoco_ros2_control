@@ -12,6 +12,7 @@
 
   <depend>controller_manager</depend>
   <depend>hardware_interface</depend>
+  <depend>nav_msgs</depend>
   <depend>libglfw3-dev</depend>
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>
