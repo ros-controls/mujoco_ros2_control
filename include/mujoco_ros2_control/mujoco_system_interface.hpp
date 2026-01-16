@@ -301,10 +301,10 @@ private:
       nullptr;
   sensor_msgs::msg::JointState actuator_state_msg_;
 
-  // Odometry publisher
-  std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::Odometry>> odometry_publisher_ = nullptr;
-  realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>::SharedPtr odometry_realtime_publisher_ = nullptr;
-  nav_msgs::msg::Odometry odometry_msg_;
+  // Floating base state publisher
+  std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::Odometry>> floating_base_publisher_ = nullptr;
+  realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>::SharedPtr floating_base_realtime_publisher_ = nullptr;
+  nav_msgs::msg::Odometry floating_base_msg_;
 
   // Free joint data
   int free_joint_id_ = -1;

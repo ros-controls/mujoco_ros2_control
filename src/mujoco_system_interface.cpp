@@ -878,14 +878,25 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
 
   // Check for free joint
+  std::string floating_base_joint_name =
+      get_hardware_parameter_or(get_hardware_info(), "floating_base_joint_name", "floating_base_joint");
   for (int i = 0; i < mj_model_->njnt; ++i)
   {
-    if (mj_model_->jnt_type[i] == mjJNT_FREE)
+    const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
+    if (floating_base_joint_name == joint_name)
     {
-      free_joint_id_ = i;
-      free_joint_qpos_adr_ = mj_model_->jnt_qposadr[i];
-      free_joint_qvel_adr_ = mj_model_->jnt_dofadr[i];
-      break;  // Assume only one free joint for the robot base
+      if (mj_model_->jnt_type[i] == mjJNT_FREE)
+      {
+        free_joint_id_ = i;
+        free_joint_qpos_adr_ = mj_model_->jnt_qposadr[i];
+        free_joint_qvel_adr_ = mj_model_->jnt_dofadr[i];
+      }
+      else
+      {
+        RCLCPP_FATAL(get_logger(), "Unable to use joint '%s' as floating base joint since it is not a free joint.",
+                     floating_base_joint_name.c_str());
+        return hardware_interface::CallbackReturn::FAILURE;
+      }
     }
   }
 
@@ -893,20 +904,20 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   {
     // Odometry publisher
     std::string odom_topic_name =
-        get_hardware_parameter_or(get_hardware_info(), "odometry_topic", "/simulator/floating_base_state");
-    odometry_publisher_ = mujoco_node_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
-    odometry_realtime_publisher_ =
-        std::make_shared<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>>(odometry_publisher_);
+        get_hardware_parameter_or(get_hardware_info(), "floating_base_state_topic", "/simulator/floating_base_state");
+    floating_base_publisher_ = mujoco_node_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
+    floating_base_realtime_publisher_ =
+        std::make_shared<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>>(floating_base_publisher_);
 
-    odometry_msg_.header.frame_id = "odom";  // TODO: Make configurable
+    floating_base_msg_.header.frame_id = "odom";  // TODO: Make configurable
     // Set child frame as the root link of the robot as the body attached to the free joint
-    odometry_msg_.child_frame_id =
+    floating_base_msg_.child_frame_id =
         std::string(mj_id2name(mj_model_, mjtObj::mjOBJ_BODY, mj_model_->jnt_bodyid[free_joint_id_]));
 
     RCLCPP_INFO(
         get_logger(),
         "Publishing floating base odometry using the free joint : '%s' attached to the body '%s' on topic: '%s'",
-        mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, free_joint_id_), odometry_msg_.child_frame_id.c_str(),
+        mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, free_joint_id_), floating_base_msg_.child_frame_id.c_str(),
         odom_topic_name.c_str());
   }
 
@@ -1355,35 +1366,35 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   }
 
   // Publish Odometry
-  if (free_joint_id_ != -1 && odometry_realtime_publisher_)
+  if (free_joint_id_ != -1 && floating_base_realtime_publisher_)
   {
-    odometry_msg_.header.stamp = time;
+    floating_base_msg_.header.stamp = time;
 
     // Position
-    odometry_msg_.pose.pose.position.x = mj_data_control_->qpos[free_joint_qpos_adr_];
-    odometry_msg_.pose.pose.position.y = mj_data_control_->qpos[free_joint_qpos_adr_ + 1];
-    odometry_msg_.pose.pose.position.z = mj_data_control_->qpos[free_joint_qpos_adr_ + 2];
+    floating_base_msg_.pose.pose.position.x = mj_data_control_->qpos[free_joint_qpos_adr_];
+    floating_base_msg_.pose.pose.position.y = mj_data_control_->qpos[free_joint_qpos_adr_ + 1];
+    floating_base_msg_.pose.pose.position.z = mj_data_control_->qpos[free_joint_qpos_adr_ + 2];
 
     // Orientation (MuJoCo is w, x, y, z)
-    odometry_msg_.pose.pose.orientation.w = mj_data_control_->qpos[free_joint_qpos_adr_ + 3];
-    odometry_msg_.pose.pose.orientation.x = mj_data_control_->qpos[free_joint_qpos_adr_ + 4];
-    odometry_msg_.pose.pose.orientation.y = mj_data_control_->qpos[free_joint_qpos_adr_ + 5];
-    odometry_msg_.pose.pose.orientation.z = mj_data_control_->qpos[free_joint_qpos_adr_ + 6];
+    floating_base_msg_.pose.pose.orientation.w = mj_data_control_->qpos[free_joint_qpos_adr_ + 3];
+    floating_base_msg_.pose.pose.orientation.x = mj_data_control_->qpos[free_joint_qpos_adr_ + 4];
+    floating_base_msg_.pose.pose.orientation.y = mj_data_control_->qpos[free_joint_qpos_adr_ + 5];
+    floating_base_msg_.pose.pose.orientation.z = mj_data_control_->qpos[free_joint_qpos_adr_ + 6];
 
     // Linear Velocity
-    odometry_msg_.twist.twist.linear.x = mj_data_control_->qvel[free_joint_qvel_adr_];
-    odometry_msg_.twist.twist.linear.y = mj_data_control_->qvel[free_joint_qvel_adr_ + 1];
-    odometry_msg_.twist.twist.linear.z = mj_data_control_->qvel[free_joint_qvel_adr_ + 2];
+    floating_base_msg_.twist.twist.linear.x = mj_data_control_->qvel[free_joint_qvel_adr_];
+    floating_base_msg_.twist.twist.linear.y = mj_data_control_->qvel[free_joint_qvel_adr_ + 1];
+    floating_base_msg_.twist.twist.linear.z = mj_data_control_->qvel[free_joint_qvel_adr_ + 2];
 
     // Angular Velocity
-    odometry_msg_.twist.twist.angular.x = mj_data_control_->qvel[free_joint_qvel_adr_ + 3];
-    odometry_msg_.twist.twist.angular.y = mj_data_control_->qvel[free_joint_qvel_adr_ + 4];
-    odometry_msg_.twist.twist.angular.z = mj_data_control_->qvel[free_joint_qvel_adr_ + 5];
+    floating_base_msg_.twist.twist.angular.x = mj_data_control_->qvel[free_joint_qvel_adr_ + 3];
+    floating_base_msg_.twist.twist.angular.y = mj_data_control_->qvel[free_joint_qvel_adr_ + 4];
+    floating_base_msg_.twist.twist.angular.z = mj_data_control_->qvel[free_joint_qvel_adr_ + 5];
 
 #if ROS_DISTRO_HUMBLE
-    odometry_realtime_publisher_->tryPublish(odometry_msg_);
+    floating_base_realtime_publisher_->tryPublish(floating_base_msg_);
 #else
-    odometry_realtime_publisher_->try_publish(odometry_msg_);
+    floating_base_realtime_publisher_->try_publish(floating_base_msg_);
 #endif
   }
 
