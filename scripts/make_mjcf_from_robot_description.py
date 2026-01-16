@@ -307,7 +307,7 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                     # make a material for the rgba values and export it
                     mtl_modifier = f"m{mtl_num}"
                     mtl_name = "mtl_" + mtl_modifier
-                    material = trimesh.visual.material.SimpleMaterial(name=mtl_name, diffuse=rgba)  # RGBA
+                    material = trimesh.visual.material.SimpleMaterial(name=mtl_name, diffuse=rgba, glossiness=1000, specular=[0.2, 0.2, 0.2])  # RGBA
                     mesh.visual = trimesh.visual.TextureVisuals(material=material)
 
                     # increment material number
