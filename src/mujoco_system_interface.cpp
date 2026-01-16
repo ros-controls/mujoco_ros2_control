@@ -877,6 +877,51 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     return hardware_interface::CallbackReturn::FAILURE;
   }
 
+  // Check for free joint
+  std::string odom_free_joint_name =
+      get_hardware_parameter_or(get_hardware_info(), "odom_free_joint_name", "floating_base_joint");
+  for (int i = 0; i < mj_model_->njnt; ++i)
+  {
+    const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
+    if (odom_free_joint_name == joint_name)
+    {
+      if (mj_model_->jnt_type[i] == mjJNT_FREE)
+      {
+        free_joint_id_ = i;
+        free_joint_qpos_adr_ = mj_model_->jnt_qposadr[i];
+        free_joint_qvel_adr_ = mj_model_->jnt_dofadr[i];
+      }
+      else
+      {
+        RCLCPP_FATAL(get_logger(),
+                     "Unable to use joint '%s' to publish the floating base state since it is not a free joint.",
+                     odom_free_joint_name.c_str());
+        return hardware_interface::CallbackReturn::FAILURE;
+      }
+    }
+  }
+
+  if (free_joint_id_ != -1)
+  {
+    // Odometry publisher
+    std::string odom_topic_name =
+        get_hardware_parameter_or(get_hardware_info(), "odom_topic", "/simulator/floating_base_state");
+    floating_base_publisher_ = mujoco_node_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
+    floating_base_realtime_publisher_ =
+        std::make_shared<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>>(floating_base_publisher_);
+
+    floating_base_msg_.header.frame_id = "odom";  // TODO: Make configurable
+    // Set child frame as the root link of the robot as the body attached to the free joint
+    floating_base_msg_.child_frame_id =
+        std::string(mj_id2name(mj_model_, mjtObj::mjOBJ_BODY, mj_model_->jnt_bodyid[free_joint_id_]));
+
+    RCLCPP_INFO(
+        get_logger(),
+        "Publishing floating base odometry using the free joint : '%s' attached to the body '%s' on topic: '%s'",
+        mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, free_joint_id_), floating_base_msg_.child_frame_id.c_str(),
+        odom_topic_name.c_str());
+  }
+
   // Pull joint and sensor information
   register_urdf_joints(get_hardware_info());
   register_sensors(get_hardware_info());
@@ -1320,6 +1365,40 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.torque.data.y() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 1];
     data.torque.data.z() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 2];
   }
+
+  // Publish Odometry
+  if (free_joint_id_ != -1 && floating_base_realtime_publisher_)
+  {
+    floating_base_msg_.header.stamp = time;
+
+    // Position
+    floating_base_msg_.pose.pose.position.x = mj_data_control_->qpos[free_joint_qpos_adr_];
+    floating_base_msg_.pose.pose.position.y = mj_data_control_->qpos[free_joint_qpos_adr_ + 1];
+    floating_base_msg_.pose.pose.position.z = mj_data_control_->qpos[free_joint_qpos_adr_ + 2];
+
+    // Orientation (MuJoCo is w, x, y, z)
+    floating_base_msg_.pose.pose.orientation.w = mj_data_control_->qpos[free_joint_qpos_adr_ + 3];
+    floating_base_msg_.pose.pose.orientation.x = mj_data_control_->qpos[free_joint_qpos_adr_ + 4];
+    floating_base_msg_.pose.pose.orientation.y = mj_data_control_->qpos[free_joint_qpos_adr_ + 5];
+    floating_base_msg_.pose.pose.orientation.z = mj_data_control_->qpos[free_joint_qpos_adr_ + 6];
+
+    // Linear Velocity
+    floating_base_msg_.twist.twist.linear.x = mj_data_control_->qvel[free_joint_qvel_adr_];
+    floating_base_msg_.twist.twist.linear.y = mj_data_control_->qvel[free_joint_qvel_adr_ + 1];
+    floating_base_msg_.twist.twist.linear.z = mj_data_control_->qvel[free_joint_qvel_adr_ + 2];
+
+    // Angular Velocity
+    floating_base_msg_.twist.twist.angular.x = mj_data_control_->qvel[free_joint_qvel_adr_ + 3];
+    floating_base_msg_.twist.twist.angular.y = mj_data_control_->qvel[free_joint_qvel_adr_ + 4];
+    floating_base_msg_.twist.twist.angular.z = mj_data_control_->qvel[free_joint_qvel_adr_ + 5];
+
+#if ROS_DISTRO_HUMBLE
+    floating_base_realtime_publisher_->tryPublish(floating_base_msg_);
+#else
+    floating_base_realtime_publisher_->try_publish(floating_base_msg_);
+#endif
+  }
+
   return hardware_interface::return_type::OK;
 }
 
@@ -1604,7 +1683,8 @@ bool MujocoSystemInterface::register_mujoco_actuators()
                                           [&mj_model = mj_model_, jnt_id](const MuJoCoActuatorData& actuator) {
                                             return actuator.mj_pos_adr == mj_model->jnt_qposadr[jnt_id];
                                           });
-    if (actuator_it == mujoco_actuator_data_.cend() && mj_model_->jnt_type[jnt_id] != mjJNT_FREE)
+    if (actuator_it == mujoco_actuator_data_.cend() && mj_model_->jnt_type[jnt_id] != mjJNT_FREE &&
+        mj_model_->jnt_type[jnt_id] != mjJNT_BALL)
     {
       // no actuator found for this joint, register a passive actuator
       MuJoCoActuatorData passive_actuator;
@@ -2279,7 +2359,20 @@ void MujocoSystemInterface::set_initial_pose()
 {
   for (auto& actuator : mujoco_actuator_data_)
   {
-    mj_data_->qpos[actuator.mj_pos_adr] = actuator.position_interface.state_;
+    // Check if the actuator data is finite before setting it. This check is needed if the MuJoCo model has more passive
+    // joints, than those exported/used in ros2_control, then the state_ variables will be left as NaN. So, better to
+    // leave it to the MuJoCo model's default initial position.
+    if (std::isfinite(actuator.position_interface.state_))
+    {
+      mj_data_->qpos[actuator.mj_pos_adr] = actuator.position_interface.state_;
+    }
+    else
+    {
+      RCLCPP_WARN_EXPRESSION(
+          get_logger(), actuator.actuator_type != ActuatorType::PASSIVE,
+          "Actuator '%s' position state is not finite. Leaving it to the MuJoCo model's default initial position.",
+          actuator.joint_name.c_str());
+    }
     if (actuator.is_position_control_enabled)
     {
       mj_data_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.state_;
