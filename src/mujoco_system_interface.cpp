@@ -1728,13 +1728,9 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 void MujocoSystemInterface::register_urdf_joints(const hardware_interface::HardwareInfo& hardware_info)
 {
   // portable lambda function to get pid gains using either function name for the correct distro
-  auto get_pid_gains = [](auto& pid) -> control_toolbox::Pid::Gains {
-#if ROS_DISTRO_HUMBLE
-    return pid->getGains();
-#else
-    return pid->get_gains();
+#if !ROS_DISTRO_HUMBLE
+  auto get_pid_gains = [](auto& pid) -> control_toolbox::Pid::Gains { return pid->get_gains(); };
 #endif
-  };
 
   RCLCPP_INFO(get_logger(), "Registering joints...");
   urdf_joint_data_.resize(hardware_info.joints.size());
