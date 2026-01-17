@@ -84,11 +84,11 @@ int main(int argc, char ** argv)
     [cm, thread_priority, use_sim_time, manage_overruns]()
     {
       // portable function that gets now from the cm on humble or later appropriately
-      auto get_cm_now = [](const auto& cm) -> rclcpp::Time {
+      auto get_cm_now = [](const auto& ctrl_mgr) -> rclcpp::Time {
 #if HARDWARE_INTERFACE_VERSION_MAJOR < 3
-        return cm->now();
+        return ctrl_mgr->now();
 #else
-        return cm->get_trigger_clock()->now();
+        return ctrl_mgr->get_trigger_clock()->now();
 #endif
       };
 

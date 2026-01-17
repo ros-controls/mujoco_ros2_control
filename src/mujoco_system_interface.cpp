@@ -224,7 +224,7 @@ std::string getExecutableDir()
   constexpr char kPathSep = '/';
   const char* path = "/proc/self/exe";
 
-  std::string realpath = [&]() -> std::string {
+  std::string real_path = [&]() -> std::string {
     std::unique_ptr<char[]> realpath(nullptr);
     std::uint32_t buf_size = 128;
     bool success = false;
@@ -263,16 +263,16 @@ std::string getExecutableDir()
     return realpath.get();
   }();
 
-  if (realpath.empty())
+  if (real_path.empty())
   {
     return "";
   }
 
-  for (std::size_t i = realpath.size() - 1; i > 0; --i)
+  for (std::size_t i = real_path.size() - 1; i > 0; --i)
   {
-    if (realpath.c_str()[i] == kPathSep)
+    if (real_path.c_str()[i] == kPathSep)
     {
-      return realpath.substr(0, i);
+      return real_path.substr(0, i);
     }
   }
 
@@ -361,7 +361,7 @@ mjModel* loadModelFromFile(const char* file, mj::Simulate& sim)
     // remove trailing newline character from loadError
     if (loadError[0])
     {
-      int error_length = mju::strlen_arr(loadError);
+      auto error_length = mju::strlen_arr(loadError);
       if (loadError[error_length - 1] == '\n')
       {
         loadError[error_length - 1] = '\0';
@@ -1422,11 +1422,11 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   joint_command_to_actuator_command();
 
   // portable lambda function to compute pid command using either function name for the correct distro
-  auto pid_compute_command = [](auto& pid, const auto& error, const auto& period) -> double {
+  auto pid_compute_command = [](auto& pid, const auto& error, const auto& period_t) -> double {
 #if ROS_DISTRO_HUMBLE
-    return pid->computeCommand(error, period);
+    return pid->computeCommand(error, period_t);
 #else
-    return pid->compute_command(error, period);
+    return pid->compute_command(error, period_t);
 #endif
   };
 
@@ -1728,13 +1728,9 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 void MujocoSystemInterface::register_urdf_joints(const hardware_interface::HardwareInfo& hardware_info)
 {
   // portable lambda function to get pid gains using either function name for the correct distro
-  auto get_pid_gains = [](auto& pid) -> control_toolbox::Pid::Gains {
-#if ROS_DISTRO_HUMBLE
-    return pid->getGains();
-#else
-    return pid->get_gains();
+#if !ROS_DISTRO_HUMBLE
+  auto get_pid_gains = [](auto& pid) -> control_toolbox::Pid::Gains { return pid->get_gains(); };
 #endif
-  };
 
   RCLCPP_INFO(get_logger(), "Registering joints...");
   urdf_joint_data_.resize(hardware_info.joints.size());
@@ -2429,7 +2425,7 @@ void MujocoSystemInterface::PhysicsLoop()
 
           // elapsed CPU and simulation time since last sync
           const auto elapsedCPU = startCPU - syncCPU;
-          double elapsedSim = mj_data_->time - syncSim;
+          auto elapsedSim = mj_data_->time - syncSim;
 
           // Ordinarily the speed factor for the simulation is pulled from the sim UI. However, this is
           // overridable by setting the "sim_speed_factor" parameter in the hardware info.
@@ -2484,7 +2480,8 @@ void MujocoSystemInterface::PhysicsLoop()
               // measure slowdown before first step
               if (!measured && elapsedSim)
               {
-                sim_->measured_slowdown = std::chrono::duration<double>(elapsedCPU).count() / elapsedSim;
+                sim_->measured_slowdown =
+                    static_cast<float>(std::chrono::duration<double>(elapsedCPU).count() / elapsedSim);
                 measured = true;
               }
 // inject noise
