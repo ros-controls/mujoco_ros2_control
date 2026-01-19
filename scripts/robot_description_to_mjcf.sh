@@ -58,5 +58,10 @@ check_virtual_env
 pkill -f make_mjcf_from_robot_description.py || true
 check_dependencies
 
+# check if the user just wants to install the dependencies or run the script
+if [[ "$*" == *"--install-only"* ]]; then
+    exit 0
+fi
+
 # Get all the arguments of the bash script and then forward it to the make_mjcf_from_robot_description.py script
 exec python3 "$(dirname "$0")/make_mjcf_from_robot_description.py" "$@"

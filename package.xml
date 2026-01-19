@@ -10,20 +10,24 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <depend>backward_ros</depend>
+  <depend>control_toolbox</depend>
   <depend>controller_manager</depend>
   <depend>hardware_interface</depend>
+  <depend>nav_msgs</depend>
   <depend>libglfw3-dev</depend>
   <depend>pluginlib</depend>
-  <depend>rclcpp</depend>
+  <depend>python3-pykdl</depend>
   <depend>rclcpp_lifecycle</depend>
+  <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
-  <depend>control_toolbox</depend>
   <depend>transmission_interface</depend>
-  <depend>backward_ros</depend>
 
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
   <test_depend>joint_state_broadcaster</test_depend>
+  <test_depend>robot_state_publisher</test_depend>
   <test_depend>position_controllers</test_depend>
-  <test_depend>gripper_controllers</test_depend>
   <test_depend>rviz2</test_depend>
   <test_depend>urdfdom</test_depend>
   <test_depend>urdfdom_py</test_depend>

@@ -101,6 +101,13 @@ Just specify the plugin and point to a valid MJCF on launch:
         By default, it is set to false
       -->
       <param name="headless">false</param>
+
+      <!--
+        The optional parameters to choose the name of the floating base joint and the topic name to publish the
+        odometry of the robot. The provided joint needs to be a valid MuJoCo free joint.
+      -->
+      <param name="odom_free_joint_name">floating_base_joint</param>
+      <param name="odom_topic">/simulator/floating_base_state</param>
     </hardware>
   ...
 ```

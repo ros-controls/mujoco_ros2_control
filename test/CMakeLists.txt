@@ -33,6 +33,6 @@ add_launch_test(src/robot_launch_transmission_test.py
   TIMEOUT 50
 )
 
-add_launch_test(src/robot_launch_tranmission_pid_test.py
+add_launch_test(src/robot_launch_transmission_pid_test.py
   TIMEOUT 50
 )
