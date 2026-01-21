@@ -159,7 +159,7 @@ struct URDFJointData
   std::vector<std::string> command_interfaces = {};
 
   bool is_mimic{ false };
-  int mimicked_joint_index;
+  long int mimicked_joint_index;
   double mimic_multiplier;
 
   bool is_position_control_enabled{ false };
