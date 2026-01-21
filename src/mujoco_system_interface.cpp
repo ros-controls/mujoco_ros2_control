@@ -2422,8 +2422,6 @@ void MujocoSystemInterface::PhysicsLoop()
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
-    // We only publish the /clock if the simulation was advanced to avoid duplicate timestamps
-    bool publish_clock_now = false;
     {
       // lock the sim mutex during the update
       const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
@@ -2516,8 +2514,8 @@ void MujocoSystemInterface::PhysicsLoop()
               // call mj_step
               mj_step(mj_model_, mj_data_);
 
-              // Publish clock only after each successful step
-              publish_clock_now = true;
+              // Publish clock after each successful step
+              publish_clock();
 
               const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
               if (message)
@@ -2562,12 +2560,6 @@ void MujocoSystemInterface::PhysicsLoop()
         }
       }
     }  // release std::lock_guard<std::mutex>
-
-    // Publish the clock
-    if (mj_model_ && publish_clock_now)
-    {
-      publish_clock();
-    }
   }
 }
 
