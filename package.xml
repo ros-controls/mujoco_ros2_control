@@ -19,6 +19,7 @@
   <depend>libglfw3-dev</depend>
   <depend>pluginlib</depend>
   <depend>python3-pykdl</depend>
+  <depend>python3-venv</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
