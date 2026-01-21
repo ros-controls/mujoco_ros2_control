@@ -100,11 +100,11 @@ std::optional<LidarData> get_lidar_data(const hardware_interface::HardwareInfo& 
   // Configure the static parameters of the laserscan message
   lidar_sensor.laser_scan_msg.header.frame_id = lidar_sensor.frame_name;
   lidar_sensor.laser_scan_msg.time_increment = 0.0;  // Does this matter?
-  lidar_sensor.laser_scan_msg.angle_min = lidar_sensor.min_angle;
-  lidar_sensor.laser_scan_msg.angle_max = lidar_sensor.max_angle;
-  lidar_sensor.laser_scan_msg.angle_increment = lidar_sensor.angle_increment;
-  lidar_sensor.laser_scan_msg.range_min = lidar_sensor.range_min;
-  lidar_sensor.laser_scan_msg.range_max = lidar_sensor.range_max;
+  lidar_sensor.laser_scan_msg.angle_min = static_cast<float>(lidar_sensor.min_angle);
+  lidar_sensor.laser_scan_msg.angle_max = static_cast<float>(lidar_sensor.max_angle);
+  lidar_sensor.laser_scan_msg.angle_increment = static_cast<float>(lidar_sensor.angle_increment);
+  lidar_sensor.laser_scan_msg.range_min = static_cast<float>(lidar_sensor.range_min);
+  lidar_sensor.laser_scan_msg.range_max = static_cast<float>(lidar_sensor.range_max);
   lidar_sensor.laser_scan_msg.ranges.resize(lidar_sensor.num_rangefinders);
   lidar_sensor.laser_scan_msg.intensities.resize(0);
 
@@ -172,7 +172,7 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
       lidar.scan_pub = node_->create_publisher<sensor_msgs::msg::LaserScan>(lidar.laserscan_topic, 1);
 
       // We may someday want to compute this on the fly, but since everything is fixed this should be fine for now.
-      lidar.laser_scan_msg.scan_time = 1.0 / lidar_publish_rate_;
+      lidar.laser_scan_msg.scan_time = 1.0f / static_cast<float>(lidar_publish_rate_);
 
       // Note that we have added the sensor
       RCLCPP_INFO_STREAM(node_->get_logger(), "Adding lidar sensor: " << lidar.name << ", idx: " << idx);
@@ -260,7 +260,7 @@ void MujocoLidar::update()
     {
       const auto& i = lidar.sensor_indexes[idx];
       auto range = mj_lidar_data_[i];
-      lidar.laser_scan_msg.ranges[idx] = range;
+      lidar.laser_scan_msg.ranges[idx] = static_cast<float>(range);
       RCLCPP_DEBUG_STREAM(node_->get_logger(), "  sensor_indexes[" << idx << "] = " << lidar.sensor_indexes[idx]
                                                                    << " - " << mj_lidar_data_[i]);
     }
