@@ -8,6 +8,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(controller_manager REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(glfw3 REQUIRED)
@@ -164,6 +165,7 @@ set_target_properties(mujoco_ros2_control PROPERTIES
 target_link_libraries(mujoco_ros2_control
   ${MUJOCO_LIB}
   ${sensor_msgs_TARGETS}
+  ament_index_cpp::ament_index_cpp
   mujoco::libsimulate
   controller_manager::controller_manager
   hardware_interface::hardware_interface

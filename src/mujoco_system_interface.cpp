@@ -758,17 +758,22 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
                                             /* is_passive = */ false);
 
       // Add ros2 control icon for the taskbar
-      std::string icon_location =
-          ament_index_cpp::get_package_share_directory("mujoco_ros2_control") + "/resources/mujoco_logo.png";
+      std::filesystem::path mujoco_ros2_control_pkg_path;
+      ament_index_cpp::get_package_share_directory(
+        "mujoco_ros2_control",
+        mujoco_ros2_control_pkg_path);
+      std::filesystem::path icon_location = mujoco_ros2_control_pkg_path /
+        "resources" / "mujoco_logo.png";
       std::vector<unsigned char> image;
       unsigned width, height;
-      unsigned error = lodepng::decode(image, width, height, icon_location);
+      unsigned error = lodepng::decode(image, width, height, icon_location.string());
 
       // Only process the icon if we successfully loaded it. Otherwise, just proceed without
       if (error)
       {
         RCLCPP_WARN_STREAM(get_logger(), "LodePNG error " << error << ": " << lodepng_error_text(error)
-                                                          << ". Icon file not loaded: " << icon_location);
+                                                          << ". Icon file not loaded: "
+                                                          << icon_location.string());
       }
       else
       {
