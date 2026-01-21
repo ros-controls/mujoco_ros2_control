@@ -951,6 +951,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // We can still turn this on manually if desired.
   sim_->opt.flags[mjVIS_RANGEFINDER] = false;
 
+#if !ROS_DISTRO_HUMBLE
   // Verify the update rate
   const mjtNum desired_timestep = 1.0 / static_cast<double>(get_hardware_info().rw_rate);
   const bool under_sampled = mj_model_->opt.timestep > desired_timestep;
@@ -962,6 +963,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       "update rate.",
       static_cast<unsigned long>(1.0 / mj_model_->opt.timestep), mj_model_->opt.timestep,
       static_cast<unsigned long>(get_hardware_info().rw_rate));
+#endif
 
   // When the interface is activated, we start the physics engine.
   physics_thread_ = std::thread([this, headless]() {
