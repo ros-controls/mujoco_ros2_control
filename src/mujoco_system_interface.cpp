@@ -2466,6 +2466,9 @@ void MujocoSystemInterface::PhysicsLoop()
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
 
+            // Publish clock after each successful step
+            publish_clock();
+
             const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
             if (message)
             {
