@@ -871,14 +871,19 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(actuator_state_publisher_);
 
   // We explicitly check to make sure that all joints have names, otherwise stuff down the line won't work
+  bool all_joints_with_names = true;
   for (int i = 0; i < mj_model_->njnt; ++i)
   {
     const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
     if (!joint_name)
     {
       RCLCPP_FATAL(get_logger(), "Joint %d does not have a name. All joints must have names.", i);
-      return hardware_interface::CallbackReturn::FAILURE;
+      all_joints_with_names = false;
     }
+  }
+  if (!all_joints_with_names)
+  {
+    return hardware_interface::CallbackReturn::FAILURE;
   }
 
   // Register all MuJoCo actuators
