@@ -901,7 +901,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   {
     const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
 
-    // first check that the joint name exists, then do comparison
     if (odom_free_joint_name == joint_name)
     {
       if (mj_model_->jnt_type[i] == mjJNT_FREE)
