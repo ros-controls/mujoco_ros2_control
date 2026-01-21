@@ -14,7 +14,7 @@ This interface has only been tested against ROS 2 jazzy and MuJoCo `3.4.0`.
 It should also be compatible with kilted and rolling, but we do not actively maintain those.
 We assume all required ROS dependencies have been installed either manually or with `rosdep`.
 
-For configuring MuJoCo, the included [CMakeLists.txt](./CMakeLists.txt) will download and install the tarfile automatically.
+For configuring MuJoCo, the included [CMakeLists.txt](./mujoco_ros2_control/CMakeLists.txt) will download and install the tarfile automatically.
 As long as users have a good network connection there should not be an issue.
 
 However, a local install of MuJoCo can be used to build the application by setting the following environment variables,
@@ -36,7 +36,7 @@ As such, users are required to convert any existing robot description files to a
 This includes adding actuators, sensors, and cameras as needed to the MJCF XML.
 
 We have built a *highly experimental tool to automate URDF conversion.
-For more information refer to the [documentation](./docs/TOOLS.md).
+For more information refer to the [documentation](./mujoco_ros2_control/docs/TOOLS.md).
 
 ## Hardware Interface Setup
 
@@ -112,7 +112,7 @@ Just specify the plugin and point to a valid MJCF on launch:
   ...
 ```
 
-Due to compatibility issues, we use a [slightly modified ROS 2 control node](./src/mujoco_ros2_control_node.cpp).
+Due to compatibility issues, we use a [slightly modified ROS 2 control node](./mujoco_ros2_control/src/mujoco_ros2_control_node.cpp).
 It is the same executable and parameters as the upstream, but requires updating the launchfile:
 
 ```python
@@ -407,7 +407,7 @@ The lidar sensor is then configurable through ROS 2 control xacro with:
 
 ## Test Robot System
 
-While examples are limited, we maintain a functional example 2-dof robot system in the [test examples](./test/test_resources/test_robot.urdf) space.
+While examples are limited, we maintain a functional example 2-dof robot system in the [test examples](./mujoco_ros2_control/test/test_resources/test_robot.urdf) space.
 We generally recommend looking there for examples and recommended workflows.
 
 For now, built the drivers with testing enabled, then the test robot system can be launched with:
@@ -436,4 +436,4 @@ ros2 topic pub /position_controller/commands std_msgs/msg/Float64MultiArray "dat
 
 ## Development
 
-More information is provided in the [developers guide](./docs/DEVELOPMENT.md) document.
+More information is provided in the [developers guide](./mujoco_ros2_control/docs/DEVELOPMENT.md) document.
