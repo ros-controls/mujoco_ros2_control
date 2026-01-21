@@ -870,6 +870,23 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   actuator_state_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(actuator_state_publisher_);
 
+  // We explicitly check to make sure that all joints have names, otherwise stuff down the line won't work
+  int num_joints_without_name = 0;
+  for (int i = 0; i < mj_model_->njnt; ++i)
+  {
+    const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
+    if (!joint_name)
+    {
+      num_joints_without_name++;
+    }
+  }
+  if (num_joints_without_name)
+  {
+    RCLCPP_FATAL(get_logger(), "%d joints in the mjcf don't have names. All joints must have names.",
+                 num_joints_without_name);
+    return hardware_interface::CallbackReturn::FAILURE;
+  }
+
   // Register all MuJoCo actuators
   if (!register_mujoco_actuators())
   {
@@ -883,6 +900,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   for (int i = 0; i < mj_model_->njnt; ++i)
   {
     const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
+
     if (odom_free_joint_name == joint_name)
     {
       if (mj_model_->jnt_type[i] == mjJNT_FREE)
