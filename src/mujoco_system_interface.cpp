@@ -2426,6 +2426,7 @@ void MujocoSystemInterface::PhysicsLoop()
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
+    // We only publish the /clock if the simulation was advanced to avoid duplicate timestamps
     bool publish_clock_now = false;
     {
       // lock the sim mutex during the update
