@@ -261,7 +261,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydocstyle-6.3.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyflakes-3.4.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/pygraphviz-1.14-py312hcdbcef4_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyparsing-3.3.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pytest-9.0.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pytest-cov-7.0.0-pyhcf101f3_1.conda
@@ -421,15 +420,12 @@ environments:
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros-core-0.11.0-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros-environment-4.2.1-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros-workspace-1.0.3-np2py312h2ed9cc7_14.conda
-      - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2-control-4.42.1-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2-control-cmake-0.3.0-np2py312h2ed9cc7_14.conda
-      - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2-control-test-assets-4.42.1-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2action-0.32.7-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2bag-0.26.9-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2cli-0.32.7-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2cli-common-extensions-0.3.1-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2component-0.32.7-np2py312h2ed9cc7_14.conda
-      - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2controlcli-4.42.1-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2doctor-0.32.7-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2interface-0.32.7-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2launch-0.26.10-np2py312h2ed9cc7_14.conda
@@ -602,6 +598,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/4c/ad/2a7c1ab8eb30387b9b14728ffa1d221c9c3d3979d2da96dcf96c87004fe1/obj2mjcf-0.0.25-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/11/8f/48d0b77ab2200374c66d344459b8958c86693be99526450e7aee714e03e4/pillow-12.1.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/de/e4/1ba6f44e491c4eece978685230dde56b14d51a0365bc1b774ddaa94d14cd/pyopengl-3.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d1/fe/66d73b76d378ba8cc2fe605920c0c75092e3a65ae746e1e767d9d020a75a/scipy-1.17.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/33/d1/8bb87d21e9aeb323cc03034f5eaf2c8f69841e40e4853c2627edf8111ed3/termcolor-3.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/67/86/eef272685bc6c15a8f79178aa8c6e07d956f0f91d97fab5a4d8af707b21b/tyro-1.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/93/6b/3fcfd8589d0e319f5fb56f105acbe791198fd36bb54469a91fbe49d828c4/xacro-2.1.1-py3-none-any.whl
@@ -857,7 +854,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydocstyle-6.3.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyflakes-3.4.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.2-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pygraphviz-1.14-py312h9c35e9e_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyparsing-3.3.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pytest-9.0.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pytest-cov-7.0.0-pyhcf101f3_1.conda
@@ -1017,15 +1013,12 @@ environments:
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros-core-0.11.0-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros-environment-4.2.1-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros-workspace-1.0.3-np2py312h61f2ce4_14.conda
-      - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2-control-4.42.1-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2-control-cmake-0.3.0-np2py312h61f2ce4_14.conda
-      - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2-control-test-assets-4.42.1-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2action-0.32.7-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2bag-0.26.9-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2cli-0.32.7-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2cli-common-extensions-0.3.1-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2component-0.32.7-np2py312h61f2ce4_14.conda
-      - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2controlcli-4.42.1-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2doctor-0.32.7-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2interface-0.32.7-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2launch-0.26.10-np2py312h61f2ce4_14.conda
@@ -1198,6 +1191,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/4c/ad/2a7c1ab8eb30387b9b14728ffa1d221c9c3d3979d2da96dcf96c87004fe1/obj2mjcf-0.0.25-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0a/ea/f200a4c36d836100e7bc738fc48cd963d3ba6372ebc8298a889e0cfc3359/pillow-12.1.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/de/e4/1ba6f44e491c4eece978685230dde56b14d51a0365bc1b774ddaa94d14cd/pyopengl-3.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/4a/69/7c347e857224fcaf32a34a05183b9d8a7aca25f8f2d10b8a698b8388561a/scipy-1.17.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/33/d1/8bb87d21e9aeb323cc03034f5eaf2c8f69841e40e4853c2627edf8111ed3/termcolor-3.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/67/86/eef272685bc6c15a8f79178aa8c6e07d956f0f91d97fab5a4d8af707b21b/tyro-1.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/93/6b/3fcfd8589d0e319f5fb56f105acbe791198fd36bb54469a91fbe49d828c4/xacro-2.1.1-py3-none-any.whl
@@ -7381,36 +7375,6 @@ packages:
   - pkg:pypi/pygments?source=hash-mapping
   size: 889287
   timestamp: 1750615908735
-- conda: https://conda.anaconda.org/conda-forge/linux-64/pygraphviz-1.14-py312hcdbcef4_3.conda
-  sha256: 8637238af2d7f46fb532fdbd0468ccaca22ea92fc70912d2cae45b7cc6eb26e9
-  md5: 1f7333772f14e05d3156e891535b43c3
-  depends:
-  - __glibc >=2.17,<3.0.a0
-  - graphviz >=14.1.0,<15.0a0
-  - libgcc >=14
-  - python >=3.12,<3.13.0a0
-  - python_abi 3.12.* *_cp312
-  license: BSD-3-Clause
-  license_family: BSD
-  purls:
-  - pkg:pypi/pygraphviz?source=hash-mapping
-  size: 146648
-  timestamp: 1768734950935
-- conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pygraphviz-1.14-py312h9c35e9e_3.conda
-  sha256: 761ab604a3747cc03cd8af79961fd0a94a4ca64c438f2c24520d9b0a32e06370
-  md5: 8f8d3be17552e746343f48288d41c98f
-  depends:
-  - graphviz >=14.1.0,<15.0a0
-  - libgcc >=14
-  - python >=3.12,<3.13.0a0
-  - python >=3.12,<3.13.0a0 *_cpython
-  - python_abi 3.12.* *_cp312
-  license: BSD-3-Clause
-  license_family: BSD
-  purls:
-  - pkg:pypi/pygraphviz?source=hash-mapping
-  size: 148133
-  timestamp: 1768734995833
 - pypi: https://files.pythonhosted.org/packages/de/e4/1ba6f44e491c4eece978685230dde56b14d51a0365bc1b774ddaa94d14cd/pyopengl-3.1.10-py3-none-any.whl
   name: pyopengl
   version: 3.1.10
@@ -13812,54 +13776,6 @@ packages:
   license: Apache-2.0
   size: 35475
   timestamp: 1768942678031
-- conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2-control-4.42.1-np2py312h2ed9cc7_14.conda
-  sha256: 7b1c663a79bbeda3455e1ea84b9873d93ef6f1303cafaa110f2b75c292293546
-  md5: fb486a369aa67cdb3006ab40ffe56073
-  depends:
-  - python
-  - ros-jazzy-controller-interface
-  - ros-jazzy-controller-manager
-  - ros-jazzy-controller-manager-msgs
-  - ros-jazzy-hardware-interface
-  - ros-jazzy-joint-limits
-  - ros-jazzy-ros-workspace
-  - ros-jazzy-ros2-control-test-assets
-  - ros-jazzy-ros2controlcli
-  - ros-jazzy-transmission-interface
-  - ros2-distro-mutex 0.13.* jazzy_*
-  - libstdcxx >=14
-  - libgcc >=14
-  - __glibc >=2.17,<3.0.a0
-  - libgcc >=14
-  - numpy >=1.23,<3
-  - python_abi 3.12.* *_cp312
-  - ros2-distro-mutex >=0.13.0,<0.14.0a0
-  license: Apache-2.0
-  size: 22540
-  timestamp: 1768982070559
-- conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2-control-4.42.1-np2py312h61f2ce4_14.conda
-  sha256: a34ace6511985c5131b59863cd46556b66b343466f651c0cf128c4a54b9f140d
-  md5: a30f7cf6e3b787c9751f7b739f238f59
-  depends:
-  - python
-  - ros-jazzy-controller-interface
-  - ros-jazzy-controller-manager
-  - ros-jazzy-controller-manager-msgs
-  - ros-jazzy-hardware-interface
-  - ros-jazzy-joint-limits
-  - ros-jazzy-ros-workspace
-  - ros-jazzy-ros2-control-test-assets
-  - ros-jazzy-ros2controlcli
-  - ros-jazzy-transmission-interface
-  - ros2-distro-mutex 0.13.* jazzy_*
-  - libstdcxx >=14
-  - libgcc >=14
-  - python_abi 3.12.* *_cp312
-  - numpy >=1.23,<3
-  - ros2-distro-mutex >=0.13.0,<0.14.0a0
-  license: Apache-2.0
-  size: 22560
-  timestamp: 1768950049703
 - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2-control-cmake-0.3.0-np2py312h2ed9cc7_14.conda
   sha256: 735c31be03b587b35794ff4002c1d0013cd5cd5f748e1bba8744063ffae2562c
   md5: f494f1c5884cf89ef2b4ac6fc279f455
@@ -13893,38 +13809,6 @@ packages:
   license: Apache-2.0
   size: 29148
   timestamp: 1768943978657
-- conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2-control-test-assets-4.42.1-np2py312h2ed9cc7_14.conda
-  sha256: 6901f1614549e730692afe32a98e38fa8c2bda8b3cea63d14cce774745efb2d0
-  md5: ba07084560edf22f7a75b3815b9e707e
-  depends:
-  - python
-  - ros-jazzy-ros-workspace
-  - ros2-distro-mutex 0.13.* jazzy_*
-  - libgcc >=14
-  - libstdcxx >=14
-  - libgcc >=14
-  - __glibc >=2.17,<3.0.a0
-  - numpy >=1.23,<3
-  - python_abi 3.12.* *_cp312
-  - ros2-distro-mutex >=0.13.0,<0.14.0a0
-  license: Apache-2.0
-  size: 31418
-  timestamp: 1768974392895
-- conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2-control-test-assets-4.42.1-np2py312h61f2ce4_14.conda
-  sha256: 1a7601bbf1f6cf329327a39b5b943fcfed5c0d6d372d4ff72edda58a06ee501f
-  md5: 93bbc57533e01b4927d10b33bb73fe5e
-  depends:
-  - python
-  - ros-jazzy-ros-workspace
-  - ros2-distro-mutex 0.13.* jazzy_*
-  - libstdcxx >=14
-  - libgcc >=14
-  - ros2-distro-mutex >=0.13.0,<0.14.0a0
-  - python_abi 3.12.* *_cp312
-  - numpy >=1.23,<3
-  license: Apache-2.0
-  size: 31340
-  timestamp: 1768943354469
 - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2action-0.32.7-np2py312h2ed9cc7_14.conda
   sha256: 74f3bfac8edbe66cdcef9c250915358acf92166015f514dccfacd171f79a613e
   md5: 726695d6b6deddec938ac5c214d3fab5
@@ -14173,59 +14057,6 @@ packages:
   license: Apache-2.0
   size: 38249
   timestamp: 1768948640796
-- conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2controlcli-4.42.1-np2py312h2ed9cc7_14.conda
-  sha256: 92087d1f5c72cea767b6677516e744e241a4a51bca46c389ca14abc6ee4bb0df
-  md5: 16f24f2ed9da01da816ac28a28e744cf
-  depends:
-  - graphviz
-  - pygraphviz
-  - python
-  - ros-jazzy-controller-manager
-  - ros-jazzy-controller-manager-msgs
-  - ros-jazzy-rcl-interfaces
-  - ros-jazzy-rclpy
-  - ros-jazzy-ros-workspace
-  - ros-jazzy-ros2cli
-  - ros-jazzy-ros2node
-  - ros-jazzy-ros2param
-  - ros-jazzy-rosidl-runtime-py
-  - ros2-distro-mutex 0.13.* jazzy_*
-  - libgcc >=14
-  - libstdcxx >=14
-  - libgcc >=14
-  - __glibc >=2.17,<3.0.a0
-  - python_abi 3.12.* *_cp312
-  - ros2-distro-mutex >=0.13.0,<0.14.0a0
-  - numpy >=1.23,<3
-  license: Apache-2.0
-  size: 78544
-  timestamp: 1768981695633
-- conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-ros2controlcli-4.42.1-np2py312h61f2ce4_14.conda
-  sha256: 32e72001ca9b2596b436b618dae67e5d1a5f1a6ffc054684ba500210d375ab9b
-  md5: 8241da7ceeb64873706219323385f314
-  depends:
-  - graphviz
-  - pygraphviz
-  - python
-  - ros-jazzy-controller-manager
-  - ros-jazzy-controller-manager-msgs
-  - ros-jazzy-rcl-interfaces
-  - ros-jazzy-rclpy
-  - ros-jazzy-ros-workspace
-  - ros-jazzy-ros2cli
-  - ros-jazzy-ros2node
-  - ros-jazzy-ros2param
-  - ros-jazzy-rosidl-runtime-py
-  - ros2-distro-mutex 0.13.* jazzy_*
-  - libgcc >=14
-  - libstdcxx >=14
-  - libgcc >=14
-  - ros2-distro-mutex >=0.13.0,<0.14.0a0
-  - python_abi 3.12.* *_cp312
-  - numpy >=1.23,<3
-  license: Apache-2.0
-  size: 78091
-  timestamp: 1768949734220
 - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-ros2doctor-0.32.7-np2py312h2ed9cc7_14.conda
   sha256: 0f045edab2401b62f061b57a1aa40a3965bb4735c4c5ccb4d70d4fdb4513a6d9
   md5: c2ff63f58f9f6f3d8aff63563202a6c6
@@ -18679,6 +18510,94 @@ packages:
   purls: []
   size: 6111847
   timestamp: 1760129858494
+- pypi: https://files.pythonhosted.org/packages/4a/69/7c347e857224fcaf32a34a05183b9d8a7aca25f8f2d10b8a698b8388561a/scipy-1.17.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl
+  name: scipy
+  version: 1.17.0
+  sha256: 5194c445d0a1c7a6c1a4a4681b6b7c71baad98ff66d96b949097e7513c9d6742
+  requires_dist:
+  - numpy>=1.26.4,<2.7
+  - pytest>=8.0.0 ; extra == 'test'
+  - pytest-cov ; extra == 'test'
+  - pytest-timeout ; extra == 'test'
+  - pytest-xdist ; extra == 'test'
+  - asv ; extra == 'test'
+  - mpmath ; extra == 'test'
+  - gmpy2 ; extra == 'test'
+  - threadpoolctl ; extra == 'test'
+  - scikit-umfpack ; extra == 'test'
+  - pooch ; extra == 'test'
+  - hypothesis>=6.30 ; extra == 'test'
+  - array-api-strict>=2.3.1 ; extra == 'test'
+  - cython ; extra == 'test'
+  - meson ; extra == 'test'
+  - ninja ; sys_platform != 'emscripten' and extra == 'test'
+  - sphinx>=5.0.0,<8.2.0 ; extra == 'doc'
+  - intersphinx-registry ; extra == 'doc'
+  - pydata-sphinx-theme>=0.15.2 ; extra == 'doc'
+  - sphinx-copybutton ; extra == 'doc'
+  - sphinx-design>=0.4.0 ; extra == 'doc'
+  - matplotlib>=3.5 ; extra == 'doc'
+  - numpydoc ; extra == 'doc'
+  - jupytext ; extra == 'doc'
+  - myst-nb>=1.2.0 ; extra == 'doc'
+  - pooch ; extra == 'doc'
+  - jupyterlite-sphinx>=0.19.1 ; extra == 'doc'
+  - jupyterlite-pyodide-kernel ; extra == 'doc'
+  - linkify-it-py ; extra == 'doc'
+  - tabulate ; extra == 'doc'
+  - click<8.3.0 ; extra == 'dev'
+  - spin ; extra == 'dev'
+  - mypy==1.10.0 ; extra == 'dev'
+  - typing-extensions ; extra == 'dev'
+  - types-psutil ; extra == 'dev'
+  - pycodestyle ; extra == 'dev'
+  - ruff>=0.12.0 ; extra == 'dev'
+  - cython-lint>=0.12.2 ; extra == 'dev'
+  requires_python: '>=3.11'
+- pypi: https://files.pythonhosted.org/packages/d1/fe/66d73b76d378ba8cc2fe605920c0c75092e3a65ae746e1e767d9d020a75a/scipy-1.17.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+  name: scipy
+  version: 1.17.0
+  sha256: 9eeb9b5f5997f75507814ed9d298ab23f62cf79f5a3ef90031b1ee2506abdb5b
+  requires_dist:
+  - numpy>=1.26.4,<2.7
+  - pytest>=8.0.0 ; extra == 'test'
+  - pytest-cov ; extra == 'test'
+  - pytest-timeout ; extra == 'test'
+  - pytest-xdist ; extra == 'test'
+  - asv ; extra == 'test'
+  - mpmath ; extra == 'test'
+  - gmpy2 ; extra == 'test'
+  - threadpoolctl ; extra == 'test'
+  - scikit-umfpack ; extra == 'test'
+  - pooch ; extra == 'test'
+  - hypothesis>=6.30 ; extra == 'test'
+  - array-api-strict>=2.3.1 ; extra == 'test'
+  - cython ; extra == 'test'
+  - meson ; extra == 'test'
+  - ninja ; sys_platform != 'emscripten' and extra == 'test'
+  - sphinx>=5.0.0,<8.2.0 ; extra == 'doc'
+  - intersphinx-registry ; extra == 'doc'
+  - pydata-sphinx-theme>=0.15.2 ; extra == 'doc'
+  - sphinx-copybutton ; extra == 'doc'
+  - sphinx-design>=0.4.0 ; extra == 'doc'
+  - matplotlib>=3.5 ; extra == 'doc'
+  - numpydoc ; extra == 'doc'
+  - jupytext ; extra == 'doc'
+  - myst-nb>=1.2.0 ; extra == 'doc'
+  - pooch ; extra == 'doc'
+  - jupyterlite-sphinx>=0.19.1 ; extra == 'doc'
+  - jupyterlite-pyodide-kernel ; extra == 'doc'
+  - linkify-it-py ; extra == 'doc'
+  - tabulate ; extra == 'doc'
+  - click<8.3.0 ; extra == 'dev'
+  - spin ; extra == 'dev'
+  - mypy==1.10.0 ; extra == 'dev'
+  - typing-extensions ; extra == 'dev'
+  - types-psutil ; extra == 'dev'
+  - pycodestyle ; extra == 'dev'
+  - ruff>=0.12.0 ; extra == 'dev'
+  - cython-lint>=0.12.2 ; extra == 'dev'
+  requires_python: '>=3.11'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/sdformat14-14.8.0-h5bb51b8_2.conda
   sha256: ee7c5db752b71cd03442eee21673f20748a30d57651db98fa2acbee1caa037ef
   md5: 4559b2fc2081cddbc0a6b0764664e825
