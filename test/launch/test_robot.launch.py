@@ -157,6 +157,7 @@ def launch_setup(context, *args, **kwargs):
         Node(
             package="mujoco_ros2_control",
             executable="ros2_control_node",
+            emulate_tty=True,
             output="both",
             parameters=[
                 {"use_sim_time": True},

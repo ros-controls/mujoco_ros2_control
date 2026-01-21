@@ -951,6 +951,20 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // We can still turn this on manually if desired.
   sim_->opt.flags[mjVIS_RANGEFINDER] = false;
 
+#if !ROS_DISTRO_HUMBLE
+  // Verify the update rate
+  const mjtNum desired_timestep = 1.0 / static_cast<double>(get_hardware_info().rw_rate);
+  const bool under_sampled = mj_model_->opt.timestep > desired_timestep;
+  RCLCPP_WARN_EXPRESSION(
+      get_logger(), under_sampled,
+      "MuJoCo simulator frequency %lu Hz (timestep %.6f sec) is smaller than the controller manager's update rate %lu "
+      "Hz. The simulation may be under-sampled and this means that there will be some discrepancies in the rate at "
+      "which controllers update cycles run. Either increase the MuJoCo timestep or decrease the controller manager's "
+      "update rate.",
+      static_cast<unsigned long>(1.0 / mj_model_->opt.timestep), mj_model_->opt.timestep,
+      static_cast<unsigned long>(get_hardware_info().rw_rate));
+#endif
+
   // When the interface is activated, we start the physics engine.
   physics_thread_ = std::thread([this, headless]() {
     // Load the simulation and do an initial forward pass
@@ -2452,6 +2466,9 @@ void MujocoSystemInterface::PhysicsLoop()
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
 
+            // Publish clock after each successful step
+            publish_clock();
+
             const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
             if (message)
             {
@@ -2500,6 +2517,9 @@ void MujocoSystemInterface::PhysicsLoop()
               // call mj_step
               mj_step(mj_model_, mj_data_);
 
+              // Publish clock after each successful step
+              publish_clock();
+
               const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
               if (message)
               {
@@ -2543,9 +2563,6 @@ void MujocoSystemInterface::PhysicsLoop()
         }
       }
     }  // release std::lock_guard<std::mutex>
-
-    // Publish the clock
-    publish_clock();
   }
 }
 
