@@ -347,7 +347,6 @@ environments:
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-geometry-msgs-5.3.6-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-geometry2-0.36.18-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-gmock-vendor-1.14.9000-np2py312h2ed9cc7_14.conda
-      - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-gripper-controllers-4.36.0-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-gtest-vendor-1.14.9000-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-gz-cmake-vendor-0.0.10-np2py312h2ed9cc7_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-gz-math-vendor-0.0.8-np2py312h2ed9cc7_14.conda
@@ -943,7 +942,6 @@ environments:
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-geometry-msgs-5.3.6-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-geometry2-0.36.18-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-gmock-vendor-1.14.9000-np2py312h61f2ce4_14.conda
-      - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-gripper-controllers-4.36.0-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-gtest-vendor-1.14.9000-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-gz-cmake-vendor-0.0.10-np2py312h61f2ce4_14.conda
       - conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-gz-math-vendor-0.0.8-np2py312h61f2ce4_14.conda
@@ -10594,57 +10592,6 @@ packages:
   license: BSD-3-Clause
   size: 122496
   timestamp: 1768942861398
-- conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-gripper-controllers-4.36.0-np2py312h2ed9cc7_14.conda
-  sha256: 3d746249edda1441147043bf9fd83681441209067ba2b0dc636943198258642d
-  md5: 77da34416ff26a7dadf4d54990db0920
-  depends:
-  - python
-  - ros-jazzy-backward-ros
-  - ros-jazzy-control-msgs
-  - ros-jazzy-control-toolbox
-  - ros-jazzy-controller-interface
-  - ros-jazzy-generate-parameter-library
-  - ros-jazzy-hardware-interface
-  - ros-jazzy-pluginlib
-  - ros-jazzy-rclcpp
-  - ros-jazzy-rclcpp-action
-  - ros-jazzy-realtime-tools
-  - ros-jazzy-ros-workspace
-  - ros2-distro-mutex 0.13.* jazzy_*
-  - libstdcxx >=14
-  - libgcc >=14
-  - __glibc >=2.17,<3.0.a0
-  - ros2-distro-mutex >=0.13.0,<0.14.0a0
-  - python_abi 3.12.* *_cp312
-  - numpy >=1.23,<3
-  license: Apache-2.0
-  size: 157725
-  timestamp: 1768981531638
-- conda: https://prefix.dev/robostack-jazzy/linux-aarch64/ros-jazzy-gripper-controllers-4.36.0-np2py312h61f2ce4_14.conda
-  sha256: 7b3c7bcae37283b7aa93e5a4950a282b3e35efe7b1d3ed9c1eca50848b29910f
-  md5: b1a3bdf749846d37db1a55bba56f7f29
-  depends:
-  - python
-  - ros-jazzy-backward-ros
-  - ros-jazzy-control-msgs
-  - ros-jazzy-control-toolbox
-  - ros-jazzy-controller-interface
-  - ros-jazzy-generate-parameter-library
-  - ros-jazzy-hardware-interface
-  - ros-jazzy-pluginlib
-  - ros-jazzy-rclcpp
-  - ros-jazzy-rclcpp-action
-  - ros-jazzy-realtime-tools
-  - ros-jazzy-ros-workspace
-  - ros2-distro-mutex 0.13.* jazzy_*
-  - libstdcxx >=14
-  - libgcc >=14
-  - numpy >=1.23,<3
-  - python_abi 3.12.* *_cp312
-  - ros2-distro-mutex >=0.13.0,<0.14.0a0
-  license: Apache-2.0
-  size: 154275
-  timestamp: 1768949587896
 - conda: https://prefix.dev/robostack-jazzy/linux-64/ros-jazzy-gtest-vendor-1.14.9000-np2py312h2ed9cc7_14.conda
   sha256: 2f85954cfa7f6412fa66bd8b8eeef7a26153773155c30ff5281f9db20f7009b5
   md5: 6d62ac403f26154961e0efcf164bf02a
