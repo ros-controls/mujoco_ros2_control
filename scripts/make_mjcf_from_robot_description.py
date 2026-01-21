@@ -259,6 +259,39 @@ def rename_material_textures(dir_path, modifier):
         path.rename(new_path)
 
 
+def extract_rgba(visual):
+    """
+    Extracts the rgba values for a trimesh object. This apparently is pretty tricky because the materials can
+    come in a number of forms. This is basically chat gpt's best guess of how to do this, but seems to work
+    for my cases.
+
+    :param visual: visual component of a trimesh scene
+    """
+    # 1) Material base color
+    mat = getattr(visual, "material", None)
+    if mat is not None:
+        # PBR
+        if isinstance(mat, trimesh.visual.material.PBRMaterial) and mat.baseColorFactor is not None:
+            return np.array(mat.baseColorFactor)
+
+        # Simple / Phong
+        if hasattr(mat, "diffuse") and mat.diffuse is not None:
+            rgb = np.array(mat.diffuse)
+            alpha = getattr(mat, "alpha", 1.0)
+            return np.concatenate([rgb, [alpha]])
+
+    # 2) Per-vertex colors
+    if visual.kind == "vertex" and visual.vertex_colors is not None:
+        vc = visual.vertex_colors
+        if vc.shape[1] == 4:
+            return vc[0] / 255.0
+        else:
+            return np.append(vc[0] / 255.0, 1.0)
+
+    # 3) I don't think this should ever happen, but just in case
+    return np.array([0.7, 0.7, 0.7, 1.0])
+
+
 def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, decompose_dict):
     # keep track of files we have already processed so we don't do it again
     converted_filenames = []
@@ -307,7 +340,9 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                     # make a material for the rgba values and export it
                     mtl_modifier = f"m{mtl_num}"
                     mtl_name = "mtl_" + mtl_modifier
-                    material = trimesh.visual.material.SimpleMaterial(name=mtl_name, diffuse=rgba)  # RGBA
+                    material = trimesh.visual.material.SimpleMaterial(
+                        name=mtl_name, diffuse=rgba, glossiness=1000, specular=[0.2, 0.2, 0.2]
+                    )  # RGBA
                     mesh.visual = trimesh.visual.TextureVisuals(material=material)
 
                     # increment material number
@@ -356,6 +391,21 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
 
                 # Load scene using trimesh
                 scene = trimesh.load(temp_filepath, force=trimesh.scene)
+
+                # The default glossiness was way too high, so here we iterate over each visual
+                # element, assign default glossiness and specular but keep the rgba values
+                for geom in scene.geometry.values():
+                    visual = geom.visual
+                    rgba = extract_rgba(visual)
+
+                    new_mat = trimesh.visual.material.SimpleMaterial(
+                        diffuse=rgba[:3],
+                        alpha=rgba[3],
+                        glossiness=1000,
+                        specular=[0.2, 0.2, 0.2],
+                    )
+
+                    visual.material = new_mat
 
                 # give the material a unique name so that it can be properly referenced
                 mtl_modifier = f"m{mtl_num}"
@@ -1605,6 +1655,10 @@ def main(args=None):
         output_filepath = os.path.join(temp_dir.name, "")
     else:
         raise ValueError("You must specify at least one of the following options: " "--publish_topic or --save_only.")
+
+    # Check if outputpath exists; if not, create it
+    if not os.path.exists(output_filepath):
+        os.makedirs(output_filepath, exist_ok=True)
 
     # Use provided MuJoCo input or scene XML files if given; otherwise use the URDF.
     mujoco_inputs_file = parsed_args.mujoco_inputs or urdf_path
