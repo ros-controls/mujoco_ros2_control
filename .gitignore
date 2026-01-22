@@ -14,5 +14,4 @@ install/*
 log/*
 
 # Cloned mujoco src
-mujoco/*
 mujoco_ros2_control/mujoco/*
