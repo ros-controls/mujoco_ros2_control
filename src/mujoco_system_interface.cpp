@@ -758,8 +758,16 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
                                             /* is_passive = */ false);
 
       // Add ros2 control icon for the taskbar
-      std::string icon_location =
+      std::string icon_location;
+#if AMENT_INDEX_CPP_VERSION_GTE(1, 13, 0)
+      std::filesystem::path mujoco_ros2_control_pkg_path;
+      ament_index_cpp::get_package_share_directory("mujoco_ros2_control", mujoco_ros2_control_pkg_path);
+      std::filesystem::path icon_location_path = mujoco_ros2_control_pkg_path / "resources" / "mujoco_logo.png";
+      icon_location = icon_location_path.string();
+#else
+      icon_location =
           ament_index_cpp::get_package_share_directory("mujoco_ros2_control") + "/resources/mujoco_logo.png";
+#endif
       std::vector<unsigned char> image;
       unsigned width, height;
       unsigned error = lodepng::decode(image, width, height, icon_location);
