@@ -45,6 +45,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
+          context: .
           file: docker/Dockerfile
           tags: mujoco_ros2_control:${{ steps.set_tag.outputs.tag }}
           target: mujoco_ros
