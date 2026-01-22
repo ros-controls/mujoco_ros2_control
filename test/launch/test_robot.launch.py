@@ -153,14 +153,17 @@ def launch_setup(context, *args, **kwargs):
         )
     )
 
+    parameters_file = PathJoinSubstitution([pkg_share, "config", "controllers.yaml"])
+
     nodes.append(
         Node(
             package="mujoco_ros2_control",
             executable="ros2_control_node",
+            emulate_tty=True,
             output="both",
             parameters=[
                 {"use_sim_time": True},
-                ParameterFile(PathJoinSubstitution([pkg_share, "config", "controllers.yaml"])),
+                ParameterFile(parameters_file),
             ],
             remappings=(
                 [("~/robot_description", "/robot_description")] if os.environ.get("ROS_DISTRO") == "humble" else []
@@ -176,7 +179,7 @@ def launch_setup(context, *args, **kwargs):
             Node(
                 package="controller_manager",
                 executable="spawner",
-                arguments=[controller],
+                arguments=[controller, "--param-file", parameters_file],
                 output="both",
             )
         )

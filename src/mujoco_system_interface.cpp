@@ -224,7 +224,7 @@ std::string getExecutableDir()
   constexpr char kPathSep = '/';
   const char* path = "/proc/self/exe";
 
-  std::string realpath = [&]() -> std::string {
+  std::string real_path = [&]() -> std::string {
     std::unique_ptr<char[]> realpath(nullptr);
     std::uint32_t buf_size = 128;
     bool success = false;
@@ -263,16 +263,16 @@ std::string getExecutableDir()
     return realpath.get();
   }();
 
-  if (realpath.empty())
+  if (real_path.empty())
   {
     return "";
   }
 
-  for (std::size_t i = realpath.size() - 1; i > 0; --i)
+  for (std::size_t i = real_path.size() - 1; i > 0; --i)
   {
-    if (realpath.c_str()[i] == kPathSep)
+    if (real_path.c_str()[i] == kPathSep)
     {
-      return realpath.substr(0, i);
+      return real_path.substr(0, i);
     }
   }
 
@@ -361,7 +361,7 @@ mjModel* loadModelFromFile(const char* file, mj::Simulate& sim)
     // remove trailing newline character from loadError
     if (loadError[0])
     {
-      int error_length = mju::strlen_arr(loadError);
+      auto error_length = mju::strlen_arr(loadError);
       if (loadError[error_length - 1] == '\n')
       {
         loadError[error_length - 1] = '\0';
@@ -870,6 +870,23 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   actuator_state_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(actuator_state_publisher_);
 
+  // We explicitly check to make sure that all joints have names, otherwise stuff down the line won't work
+  int num_joints_without_name = 0;
+  for (int i = 0; i < mj_model_->njnt; ++i)
+  {
+    const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
+    if (!joint_name)
+    {
+      num_joints_without_name++;
+    }
+  }
+  if (num_joints_without_name)
+  {
+    RCLCPP_FATAL(get_logger(), "%d joints in the mjcf don't have names. All joints must have names.",
+                 num_joints_without_name);
+    return hardware_interface::CallbackReturn::FAILURE;
+  }
+
   // Register all MuJoCo actuators
   if (!register_mujoco_actuators())
   {
@@ -883,6 +900,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   for (int i = 0; i < mj_model_->njnt; ++i)
   {
     const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
+
     if (odom_free_joint_name == joint_name)
     {
       if (mj_model_->jnt_type[i] == mjJNT_FREE)
@@ -950,6 +968,20 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // Disable the rangefinder flag at startup so that we don't get the yellow lines.
   // We can still turn this on manually if desired.
   sim_->opt.flags[mjVIS_RANGEFINDER] = false;
+
+#if !ROS_DISTRO_HUMBLE
+  // Verify the update rate
+  const mjtNum desired_timestep = 1.0 / static_cast<double>(get_hardware_info().rw_rate);
+  const bool under_sampled = mj_model_->opt.timestep > desired_timestep;
+  RCLCPP_WARN_EXPRESSION(
+      get_logger(), under_sampled,
+      "MuJoCo simulator frequency %lu Hz (timestep %.6f sec) is smaller than the controller manager's update rate %lu "
+      "Hz. The simulation may be under-sampled and this means that there will be some discrepancies in the rate at "
+      "which controllers update cycles run. Either increase the MuJoCo timestep or decrease the controller manager's "
+      "update rate.",
+      static_cast<unsigned long>(1.0 / mj_model_->opt.timestep), mj_model_->opt.timestep,
+      static_cast<unsigned long>(get_hardware_info().rw_rate));
+#endif
 
   // When the interface is activated, we start the physics engine.
   physics_thread_ = std::thread([this, headless]() {
@@ -1422,11 +1454,11 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   joint_command_to_actuator_command();
 
   // portable lambda function to compute pid command using either function name for the correct distro
-  auto pid_compute_command = [](auto& pid, const auto& error, const auto& period) -> double {
+  auto pid_compute_command = [](auto& pid, const auto& error, const auto& period_t) -> double {
 #if ROS_DISTRO_HUMBLE
-    return pid->computeCommand(error, period);
+    return pid->computeCommand(error, period_t);
 #else
-    return pid->compute_command(error, period);
+    return pid->compute_command(error, period_t);
 #endif
   };
 
@@ -1728,13 +1760,9 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 void MujocoSystemInterface::register_urdf_joints(const hardware_interface::HardwareInfo& hardware_info)
 {
   // portable lambda function to get pid gains using either function name for the correct distro
-  auto get_pid_gains = [](auto& pid) -> control_toolbox::Pid::Gains {
-#if ROS_DISTRO_HUMBLE
-    return pid->getGains();
-#else
-    return pid->get_gains();
+#if !ROS_DISTRO_HUMBLE
+  auto get_pid_gains = [](auto& pid) -> control_toolbox::Pid::Gains { return pid->get_gains(); };
 #endif
-  };
 
   RCLCPP_INFO(get_logger(), "Registering joints...");
   urdf_joint_data_.resize(hardware_info.joints.size());
@@ -2429,7 +2457,7 @@ void MujocoSystemInterface::PhysicsLoop()
 
           // elapsed CPU and simulation time since last sync
           const auto elapsedCPU = startCPU - syncCPU;
-          double elapsedSim = mj_data_->time - syncSim;
+          auto elapsedSim = mj_data_->time - syncSim;
 
           // Ordinarily the speed factor for the simulation is pulled from the sim UI. However, this is
           // overridable by setting the "sim_speed_factor" parameter in the hardware info.
@@ -2455,6 +2483,9 @@ void MujocoSystemInterface::PhysicsLoop()
             mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, mj_model_->nu);
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
+
+            // Publish clock after each successful step
+            publish_clock();
 
             const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
             if (message)
@@ -2484,7 +2515,8 @@ void MujocoSystemInterface::PhysicsLoop()
               // measure slowdown before first step
               if (!measured && elapsedSim)
               {
-                sim_->measured_slowdown = std::chrono::duration<double>(elapsedCPU).count() / elapsedSim;
+                sim_->measured_slowdown =
+                    static_cast<float>(std::chrono::duration<double>(elapsedCPU).count() / elapsedSim);
                 measured = true;
               }
 // inject noise
@@ -2502,6 +2534,9 @@ void MujocoSystemInterface::PhysicsLoop()
               mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, mj_model_->nu);
               // call mj_step
               mj_step(mj_model_, mj_data_);
+
+              // Publish clock after each successful step
+              publish_clock();
 
               const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
               if (message)
@@ -2546,9 +2581,6 @@ void MujocoSystemInterface::PhysicsLoop()
         }
       }
     }  // release std::lock_guard<std::mutex>
-
-    // Publish the clock
-    publish_clock();
   }
 }
 
