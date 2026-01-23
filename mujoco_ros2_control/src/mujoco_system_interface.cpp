@@ -842,7 +842,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
 
   const std::string mujoco_model_topic =
       get_hardware_parameter_or(get_hardware_info(), "mujoco_model_topic", "/mujoco_robot_description");
-  mj_model_ = LoadModel(model_path_.c_str(), mujoco_model_topic, *sim_, mujoco_node_);
+  mj_model_ = LoadModel(model_path_.c_str(), mujoco_model_topic, *sim_, get_node());
   if (!mj_model_)
   {
     RCLCPP_FATAL(get_logger(), "Mujoco failed to load the model");
@@ -861,12 +861,12 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
 
   // Time publisher will be pushed from the physics_thread_
-  clock_publisher_ = mujoco_node_->create_publisher<rosgraph_msgs::msg::Clock>("/clock", 1);
+  clock_publisher_ = get_node()->create_publisher<rosgraph_msgs::msg::Clock>("/clock", 1);
   clock_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<rosgraph_msgs::msg::Clock>>(clock_publisher_);
 
   actuator_state_publisher_ =
-      mujoco_node_->create_publisher<sensor_msgs::msg::JointState>("/mujoco_actuators_states", 100);
+      get_node()->create_publisher<sensor_msgs::msg::JointState>("/mujoco_actuators_states", 100);
   actuator_state_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(actuator_state_publisher_);
 
@@ -924,7 +924,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     // Odometry publisher
     std::string odom_topic_name =
         get_hardware_parameter_or(get_hardware_info(), "odom_topic", "/simulator/floating_base_state");
-    floating_base_publisher_ = mujoco_node_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
+    floating_base_publisher_ = get_node()->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
     floating_base_realtime_publisher_ =
         std::make_shared<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>>(floating_base_publisher_);
 
@@ -951,14 +951,28 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   initialize_initial_positions(get_hardware_info());
   set_initial_pose();
 
+  // Store initial state for reset_world service
+  {
+    const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+    initial_qpos_.assign(mj_data_->qpos, mj_data_->qpos + mj_model_->nq);
+    initial_qvel_.assign(mj_data_->qvel, mj_data_->qvel + mj_model_->nv);
+    initial_ctrl_.assign(mj_data_->ctrl, mj_data_->ctrl + mj_model_->nu);
+  }
+
+  // Create reset_world service
+  reset_world_service_ = get_node()->create_service<std_srvs::srv::Empty>(
+      "~/reset_world",
+      std::bind(&MujocoSystemInterface::reset_world_callback, this, std::placeholders::_1, std::placeholders::_2));
+  RCLCPP_INFO(get_logger(), "Created reset_world service at: %s/reset_world", get_node()->get_fully_qualified_name());
+
   // Ready cameras
   RCLCPP_INFO(get_logger(), "Initializing cameras...");
-  cameras_ = std::make_unique<MujocoCameras>(mujoco_node_, sim_mutex_, mj_data_, mj_model_, camera_publish_rate);
+  cameras_ = std::make_unique<MujocoCameras>(get_node(), sim_mutex_, mj_data_, mj_model_, camera_publish_rate);
   cameras_->register_cameras(get_hardware_info());
 
   // Configure Lidar sensors
   RCLCPP_INFO(get_logger(), "Initializing lidar...");
-  lidar_sensors_ = std::make_unique<MujocoLidar>(mujoco_node_, sim_mutex_, mj_data_, mj_model_, lidar_publish_rate);
+  lidar_sensors_ = std::make_unique<MujocoLidar>(get_node(), sim_mutex_, mj_data_, mj_model_, lidar_publish_rate);
   if (!lidar_sensors_->register_lidar(get_hardware_info()))
   {
     RCLCPP_INFO(get_logger(), "Failed to initialize lidar, exiting...");
@@ -1662,12 +1676,12 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 // after humble has an additional argument in the PidROS constructor, and uses a different function to initialize from parameters
 #if ROS_DISTRO_HUMBLE
       actuator_data.pos_pid = std::make_shared<control_toolbox::PidROS>(
-          mujoco_node_, "pid_gains.position." + actuator_data.joint_name, false);
+          get_node(), "pid_gains.position." + actuator_data.joint_name, false);
       actuator_data.pos_pid->initPid();
       const auto gains = actuator_data.pos_pid->getGains();
 #else
       actuator_data.pos_pid = std::make_shared<control_toolbox::PidROS>(
-          mujoco_node_, "pid_gains.position." + actuator_data.joint_name, "", false);
+          get_node(), "pid_gains.position." + actuator_data.joint_name, "", false);
       actuator_data.pos_pid->initialize_from_ros_parameters();
       const auto gains = actuator_data.pos_pid->get_gains();
 #endif
@@ -1678,12 +1692,12 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 // after humble has an additional argument in the PidROS constructor, and uses a different function to initialize from parameters
 #if ROS_DISTRO_HUMBLE
       actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
-          mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, false);
+          get_node(), "pid_gains.velocity." + actuator_data.joint_name, false);
       actuator_data.vel_pid->initPid();
       const auto gains = actuator_data.pos_pid->getGains();
 #else
       actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
-          mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, "", false);
+          get_node(), "pid_gains.velocity." + actuator_data.joint_name, "", false);
       actuator_data.vel_pid->initialize_from_ros_parameters();
       const auto gains = actuator_data.vel_pid->get_gains();
 #endif

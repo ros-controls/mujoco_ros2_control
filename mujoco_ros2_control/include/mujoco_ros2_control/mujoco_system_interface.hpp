@@ -38,6 +38,7 @@
 #include <realtime_tools/realtime_publisher.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <std_srvs/srv/empty.hpp>
 
 #include <mujoco/mujoco.h>
 
@@ -110,6 +111,16 @@ public:
     return info_;
   }
 #endif
+
+  /// Get the node of the MuJoCoSystemInterface.
+  /**
+   * \return node of the MuJoCoSystemInterface.
+   */
+  rclcpp::Node::SharedPtr get_node() const
+  {
+    return mujoco_node_;
+  }
+
   /**
    * @brief Converts actuator states to joint states.
    *
@@ -244,6 +255,15 @@ private:
   void set_initial_pose();
 
   /**
+   * @brief Service callback for reset_world service.
+   *
+   * This method resets all joints to their initial positions and velocities,
+   * and resets all free bodies (objects) to their spawned positions.
+   */
+  void reset_world_callback(const std::shared_ptr<std_srvs::srv::Empty::Request> request,
+                            std::shared_ptr<std_srvs::srv::Empty::Response> response);
+
+  /**
    * @brief Spins the physics simulation for the Simulate Application
    */
   void PhysicsLoop();
@@ -343,6 +363,14 @@ private:
 
   bool override_mujoco_actuator_positions_{ false };
   bool override_urdf_joint_positions_{ false };
+
+  // Reset world service
+  rclcpp::Service<std_srvs::srv::Empty>::SharedPtr reset_world_service_;
+
+  // Storage for initial state (used for reset_world)
+  std::vector<mjtNum> initial_qpos_;
+  std::vector<mjtNum> initial_qvel_;
+  std::vector<mjtNum> initial_ctrl_;
 };
 
 }  // namespace mujoco_ros2_control
