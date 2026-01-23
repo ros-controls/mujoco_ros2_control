@@ -30,9 +30,10 @@ import pytest
 import rclpy
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from rosgraph_msgs.msg import Clock
+from std_srvs.srv import Empty
 from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState, Image, CameraInfo
-from controller_manager_msgs.srv import ListHardwareInterfaces
+from controller_manager_msgs.srv import ListHardwareInterfaces, SwitchController
 
 
 # This function specifies the processes to be run for our test
@@ -90,6 +91,29 @@ class TestFixture(unittest.TestCase):
 
     def tearDown(self):
         self.node.destroy_node()
+
+    def verify_arm_joint_states(self, expected_positions, delta=0.05, verify_efforts=True):
+        joint_state_topic = "/joint_states"
+        wait_for_topics = WaitForTopics([(joint_state_topic, JointState)], timeout=20.0)
+        assert wait_for_topics.wait(), f"Topic '{joint_state_topic}' not found!"
+        msgs = wait_for_topics.received_messages(joint_state_topic)
+        msg = msgs[0]
+        assert len(msg.name) >= len(expected_positions), "Joint states message doesn't have enough joints"
+        for joint_name, expected_position in expected_positions.items():
+            joint_index = msg.name.index(joint_name)
+            self.assertAlmostEqual(
+                msg.position[joint_index],
+                expected_position,
+                delta=delta,
+                msg=f"{joint_name} did not reach the commanded position",
+            )
+        if verify_efforts:
+            # make sure the efforts field is non-zero (indicating PID/ effort reporting is working)
+            self.assertTrue(
+                any(abs(effort) > 1e-6 for effort in msg.effort),
+                "Effort field is zero, PID/Effort reporting may not be working",
+            )
+        wait_for_topics.shutdown()
 
     def test_node_start(self, proc_output):
         check_node_running(self.node, "robot_state_publisher")
@@ -155,25 +179,7 @@ class TestFixture(unittest.TestCase):
             time.sleep(2.0)
 
         # Now, check that the joint states have been updated accordingly
-        joint_state_topic = "/joint_states"
-        wait_for_topics = WaitForTopics([(joint_state_topic, JointState)], timeout=20.0)
-        assert wait_for_topics.wait(), f"Topic '{joint_state_topic}' not found!"
-        msgs = wait_for_topics.received_messages(joint_state_topic)
-        msg = msgs[0]
-        assert len(msg.name) >= 2, "Joint states message doesn't have 2 joints"
-        joint1_index = msg.name.index("joint1")
-        joint2_index = msg.name.index("joint2")
-        self.assertAlmostEqual(
-            msg.position[joint1_index], 0.5, delta=0.05, msg="joint1 did not reach the commanded position"
-        )
-        self.assertAlmostEqual(
-            msg.position[joint2_index], -0.5, delta=0.05, msg="joint2 did not reach the commanded position"
-        )
-        # make sure the efforts field is non-zero (indicating PID/ effort reporting is working)
-        self.assertTrue(
-            any(abs(effort) > 1e-6 for effort in msg.effort),
-            "Effort field is zero, PID/Effort reporting may not be working",
-        )
+        self.verify_arm_joint_states({"joint1": 0.5, "joint2": -0.5}, delta=0.05)
 
         # MuJoCo actuator state
         actuator_state_topic = "/mujoco_actuators_states"
@@ -240,28 +246,9 @@ class TestFixture(unittest.TestCase):
         time.sleep(4.0)
 
         # Now, check that the joint states have been updated accordingly
-        joint_state_topic = "/joint_states"
-        wait_for_topics = WaitForTopics([(joint_state_topic, JointState)], timeout=20.0)
-        assert wait_for_topics.wait(), f"Topic '{joint_state_topic}' not found!"
-        msgs = wait_for_topics.received_messages(joint_state_topic)
-        msg = msgs[0]
-        assert "gripper_left_finger_joint" in msg.name, "gripper_left_finger_joint not found in joint states"
-        assert "gripper_right_finger_joint" in msg.name, "gripper_right_finger_joint not found in joint states"
-        left_index = msg.name.index("gripper_left_finger_joint")
-        right_index = msg.name.index("gripper_right_finger_joint")
-        self.assertAlmostEqual(
-            msg.position[left_index],
-            -0.04,
-            delta=0.005,
-            msg="gripper_left_finger_joint did not reach commanded position",
+        self.verify_arm_joint_states(
+            {"gripper_left_finger_joint": -0.04, "gripper_right_finger_joint": 0.04}, delta=0.005
         )
-        self.assertAlmostEqual(
-            msg.position[right_index],
-            0.04,
-            delta=0.005,
-            msg="gripper_right_finger_joint did not reach commanded position",
-        )
-        wait_for_topics.shutdown()
 
         # Verify the same in the mujoco_actuators_states topic
         actuator_state_topic = "/mujoco_actuators_states"
@@ -300,6 +287,116 @@ class TestFixture(unittest.TestCase):
         assert wait_for_topics.topics_not_received() == set(), "Some topics were not received!"
         assert wait_for_topics.topics_received() == {t[0] for t in topic_list}, "Not all topics were received!"
         wait_for_topics.shutdown()
+
+    def test_reset_world_service(self):
+        """Test that the reset_world service resets robot to initial position."""
+        # Check if controllers are running
+        cnames = ["gripper_controller", "position_controller", "joint_state_broadcaster"]
+        check_controllers_running(self.node, cnames)
+
+        # Create a publisher to send commands
+        pub = self.node.create_publisher(Float64MultiArray, "/position_controller/commands", 10)
+
+        # Wait for subscriber to connect
+        end_time = time.time() + 10
+        while time.time() < end_time:
+            if pub.get_subscription_count() > 0:
+                break
+            time.sleep(0.1)
+        self.assertGreater(pub.get_subscription_count(), 0, "Controller did not subscribe to commands")
+
+        # Send a command to move the joints to a different position
+        msg = Float64MultiArray()
+        msg.data = [-0.5, 0.5]
+
+        # Publish commands
+        end_time = time.time() + 2
+        while time.time() < end_time:
+            pub.publish(msg)
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+
+        # Allow time for robot to move
+        time.sleep(3.0)
+        if os.environ.get("TEST_TRANSMISSIONS") == "true":
+            # wait a bit more for the mujoco actuator states to be reach as they move double
+            time.sleep(3.0)
+
+        # Wait for the joint states
+        self.verify_arm_joint_states({"joint1": -0.5, "joint2": 0.5}, delta=0.05)
+
+        # Deactivate the position controller before reset
+        switch_client = self.node.create_client(SwitchController, "/controller_manager/switch_controller")
+        if not switch_client.wait_for_service(timeout_sec=10.0):
+            self.fail("switch_controller service not available")
+
+        # Deactivate position_controller
+        switch_request = SwitchController.Request()
+        switch_request.deactivate_controllers = ["position_controller"]
+        switch_request.strictness = SwitchController.Request.BEST_EFFORT
+        future = switch_client.call_async(switch_request)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        self.assertTrue(future.result().ok, "Failed to deactivate position_controller")
+        self.node.get_logger().info("position_controller deactivated")
+
+        # Record clock time before reset
+        clock_topic = "/clock"
+        wait_for_clock = WaitForTopics([(clock_topic, Clock)], timeout=20.0)
+        assert wait_for_clock.wait(), f"Topic '{clock_topic}' not found!"
+        clock_msgs = wait_for_clock.received_messages(clock_topic)
+        clock_before_reset = clock_msgs[-1]
+
+        self.node.get_logger().info(f"Clock before reset: {clock_before_reset}")
+
+        # Now call the reset_world service
+        reset_client = self.node.create_client(Empty, "/mujoco_node/reset_world")
+
+        # Wait for service to be available
+        if not reset_client.wait_for_service(timeout_sec=10.0):
+            self.fail("reset_world service not available")
+
+        # Call the reset service
+        request = Empty.Request()
+        future = reset_client.call_async(request)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+
+        if future.result() is None:
+            self.fail("reset_world service call failed")
+
+        self.node.get_logger().info("reset_world service called successfully")
+
+        # Verify clock was NOT reset (should still be greater than before reset)
+        rclpy.spin_once(self.node, timeout_sec=0.1)
+        clock_msgs_after_reset = wait_for_clock.received_messages(clock_topic)
+        clock_after_reset = clock_msgs_after_reset[-1]
+        time_pre_reset = clock_before_reset.clock.sec + clock_before_reset.clock.nanosec * 1e-9
+        time_post_reset = clock_after_reset.clock.sec + clock_after_reset.clock.nanosec * 1e-9
+        self.assertGreaterEqual(
+            time_post_reset,
+            time_pre_reset,
+            f"Clock was reset! Before: {clock_before_reset}, After: {clock_after_reset}",
+        )
+        self.node.get_logger().info("Clock continuity verified - clock was NOT reset")
+
+        time.sleep(1.0)  # Allow some time after reset
+        self.verify_arm_joint_states({"joint1": -0.0, "joint2": 0.0}, delta=0.05, verify_efforts=False)
+
+        # # Reactivate the position controller
+        switch_request = SwitchController.Request()
+        switch_request.activate_controllers = ["position_controller"]
+        switch_request.strictness = SwitchController.Request.BEST_EFFORT
+        future = switch_client.call_async(switch_request)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        self.assertTrue(future.result().ok, "Failed to reactivate position_controller")
+        self.node.get_logger().info("position_controller reactivated")
+
+        # # Send the command again to verify controller still works after reset
+        end_time = time.time() + 2
+        while time.time() < end_time:
+            pub.publish(msg)
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+        time.sleep(3.0)
+
+        self.verify_arm_joint_states({"joint1": -0.5, "joint2": 0.5}, delta=0.05)
 
 
 class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
