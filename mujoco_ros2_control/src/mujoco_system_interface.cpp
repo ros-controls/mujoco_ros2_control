@@ -2433,13 +2433,12 @@ void MujocoSystemInterface::set_initial_pose()
   mj_copyData(mj_data_control_, mj_model_, mj_data_);
 }
 
-void MujocoSystemInterface::reset_world_callback(const std::shared_ptr<std_srvs::srv::Empty::Request> /*request*/,
-                                                 std::shared_ptr<std_srvs::srv::Empty::Response> /*response*/)
+void MujocoSystemInterface::reset_simulation_state()
 {
-  RCLCPP_INFO(get_logger(), "Reset world service called.....");
-  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  /// @note This method assumes sim_mutex_ is already held by the caller
 
-  /// @note We shouldn't reset simulation time (mj_data_->time) to preserve the ROS clock continuity
+  // Save the simulation time to preserve ROS clock continuity
+  const mjtNum saved_time = mj_data_->time;
 
   // Reset all positions, velocities and controls to initial state
   std::copy(initial_qpos_.begin(), initial_qpos_.end(), mj_data_->qpos);
@@ -2461,6 +2460,9 @@ void MujocoSystemInterface::reset_world_callback(const std::shared_ptr<std_srvs:
   // Reset applied forces
   std::fill(mj_data_->qfrc_applied, mj_data_->qfrc_applied + mj_model_->nv, 0.0);
   std::fill(mj_data_->xfrc_applied, mj_data_->xfrc_applied + 6 * mj_model_->nbody, 0.0);
+
+  // Restore simulation time to preserve ROS clock continuity
+  mj_data_->time = saved_time;
 
   // Run forward dynamics to update derived quantities
   mj_forward(mj_model_, mj_data_);
@@ -2500,6 +2502,15 @@ void MujocoSystemInterface::reset_world_callback(const std::shared_ptr<std_srvs:
     joint.velocity_interface.command_ = 0.0;
     joint.effort_interface.command_ = 0.0;
   }
+}
+
+void MujocoSystemInterface::reset_world_callback(const std::shared_ptr<std_srvs::srv::Empty::Request> /*request*/,
+                                                 std::shared_ptr<std_srvs::srv::Empty::Response> /*response*/)
+{
+  RCLCPP_INFO(get_logger(), "Reset world service called.....");
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+
+  reset_simulation_state();
 
   RCLCPP_INFO(get_logger(), "Successfully reset the mujoco world to the initial state.");
 }
@@ -2510,6 +2521,9 @@ void MujocoSystemInterface::PhysicsLoop()
   // cpu-sim synchronization point
   std::chrono::time_point<mj::Simulate::Clock> syncCPU;
   mjtNum syncSim = 0;
+
+  // Track previous simulation time to detect UI-triggered resets
+  mjtNum prevSimTime = 0;
 
   // run until asked to exit
   while (!sim_->exitrequest.load())
@@ -2528,6 +2542,32 @@ void MujocoSystemInterface::PhysicsLoop()
     {
       // lock the sim mutex during the update
       const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+
+      // Detect if a reset occurred via the UI (Sync() processed pending_.reset)
+      // This is detected by simulation time jumping backwards to near-zero
+      // The render loop's Sync() calls mj_resetData() which resets time to 0
+      if (mj_model_ && mj_data_ && prevSimTime > 0.1 && mj_data_->time < 0.01)
+      {
+        RCLCPP_DEBUG(get_logger(), "UI reset detected (time jumped from %.3f to %.3f), applying initial state...",
+                     prevSimTime, mj_data_->time);
+
+        // Restore simulation time before reset_simulation_state saves it
+        mj_data_->time = prevSimTime;
+
+        // Apply initial state using common method
+        reset_simulation_state();
+
+        // Force speed_changed to re-sync timing
+        sim_->speed_changed = true;
+
+        RCLCPP_INFO(get_logger(), "Successfully applied initial state after UI reset.");
+      }
+
+      // Update previous simulation time for next iteration
+      if (mj_data_)
+      {
+        prevSimTime = mj_data_->time;
+      }
 
       // run only if model is present
       if (mj_model_)

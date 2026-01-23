@@ -245,6 +245,18 @@ private:
   void set_initial_pose();
 
   /**
+   * @brief Resets the simulation state to the initial configuration.
+   *
+   * This method resets all joints to their initial positions and velocities,
+   * resets all free bodies (objects) to their spawned positions, and updates
+   * all actuator and joint command/state interfaces.
+   *
+   * @note This method assumes the sim_mutex_ is already held by the caller.
+   * @note Simulation time (mj_data_->time) is preserved to maintain ROS clock continuity.
+   */
+  void reset_simulation_state();
+
+  /**
    * @brief Service callback for reset_world service.
    *
    * This method resets all joints to their initial positions and velocities,
