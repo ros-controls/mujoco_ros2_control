@@ -395,6 +395,9 @@ class TestFixture(unittest.TestCase):
             pub.publish(msg)
             rclpy.spin_once(self.node, timeout_sec=0.1)
         time.sleep(3.0)
+        if os.environ.get("TEST_TRANSMISSIONS") == "true":
+            # wait a bit more for the mujoco actuator states to be reach as they move double
+            time.sleep(4.0)
 
         self.verify_arm_joint_states({"joint1": -0.5, "joint2": 0.5}, delta=0.05)
 
