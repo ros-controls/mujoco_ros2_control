@@ -2477,6 +2477,16 @@ void MujocoSystemInterface::reset_simulation_state()
     actuator.velocity_interface.state_ = mj_data_->qvel[actuator.mj_vel_adr];
     actuator.effort_interface.state_ = 0.0;
 
+    // Reset PID internal state
+    if (actuator.pos_pid)
+    {
+      actuator.pos_pid->reset();
+    }
+    if (actuator.vel_pid)
+    {
+      actuator.vel_pid->reset();
+    }
+
     if (actuator.actuator_type != ActuatorType::PASSIVE)
     {
       // Set command to initial position to maintain position control at reset position
