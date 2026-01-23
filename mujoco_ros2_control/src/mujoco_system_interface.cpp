@@ -2436,7 +2436,72 @@ void MujocoSystemInterface::set_initial_pose()
 void MujocoSystemInterface::reset_world_callback(const std::shared_ptr<std_srvs::srv::Empty::Request> /*request*/,
                                                  std::shared_ptr<std_srvs::srv::Empty::Response> /*response*/)
 {
-  RCLCPP_INFO(get_logger(), "World reset to initial state");
+  RCLCPP_INFO(get_logger(), "Reset world service called.....");
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+
+  /// @note We shouldn't reset simulation time (mj_data_->time) to preserve the ROS clock continuity
+
+  // Reset all positions, velocities and controls to initial state
+  std::copy(initial_qpos_.begin(), initial_qpos_.end(), mj_data_->qpos);
+  std::copy(initial_qvel_.begin(), initial_qvel_.end(), mj_data_->qvel);
+  std::copy(initial_ctrl_.begin(), initial_ctrl_.end(), mj_data_->ctrl);
+
+  // Reset actuator activations (for muscles and similar)
+  std::fill(mj_data_->act, mj_data_->act + mj_model_->na, 0.0);
+
+  // Reset warmstart accelerations
+  std::fill(mj_data_->qacc_warmstart, mj_data_->qacc_warmstart + mj_model_->nv, 0.0);
+
+  // Reset sensor data
+  std::fill(mj_data_->sensordata, mj_data_->sensordata + mj_model_->nsensordata, 0.0);
+
+  // Reset actuator forces
+  std::fill(mj_data_->actuator_force, mj_data_->actuator_force + mj_model_->nu, 0.0);
+
+  // Reset applied forces
+  std::fill(mj_data_->qfrc_applied, mj_data_->qfrc_applied + mj_model_->nv, 0.0);
+  std::fill(mj_data_->xfrc_applied, mj_data_->xfrc_applied + 6 * mj_model_->nbody, 0.0);
+
+  // Run forward dynamics to update derived quantities
+  mj_forward(mj_model_, mj_data_);
+
+  // Copy to control data for reads - this ensures the physics loop uses the reset state
+  mj_copyData(mj_data_control_, mj_model_, mj_data_);
+
+  // Reset command interfaces to initial position commands
+  for (auto& actuator : mujoco_actuator_data_)
+  {
+    actuator.position_interface.state_ = mj_data_->qpos[actuator.mj_pos_adr];
+    actuator.velocity_interface.state_ = mj_data_->qvel[actuator.mj_vel_adr];
+    actuator.effort_interface.state_ = 0.0;
+
+    if (actuator.actuator_type != ActuatorType::PASSIVE)
+    {
+      // Set command to initial position to maintain position control at reset position
+      actuator.position_interface.command_ = actuator.position_interface.state_;
+      actuator.velocity_interface.command_ = 0.0;
+      actuator.effort_interface.command_ = 0.0;
+
+      // Also update the ctrl buffer in mj_data_control_ which is used by the physics loop
+      if (actuator.is_position_control_enabled && actuator.mj_actuator_id >= 0)
+      {
+        mj_data_control_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.state_;
+      }
+    }
+  }
+
+  // Update URDF joint states from actuator states
+  actuator_state_to_joint_state();
+
+  // Set joint commands to current state (maintaining position control)
+  for (auto& joint : urdf_joint_data_)
+  {
+    joint.position_interface.command_ = joint.position_interface.state_;
+    joint.velocity_interface.command_ = 0.0;
+    joint.effort_interface.command_ = 0.0;
+  }
+
+  RCLCPP_INFO(get_logger(), "Successfully reset the mujoco world to the initial state.");
 }
 
 // simulate in background thread (while rendering in main thread)
