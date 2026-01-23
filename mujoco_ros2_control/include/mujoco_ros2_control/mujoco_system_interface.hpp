@@ -111,16 +111,6 @@ public:
     return info_;
   }
 #endif
-
-  /// Get the node of the MuJoCoSystemInterface.
-  /**
-   * \return node of the MuJoCoSystemInterface.
-   */
-  rclcpp::Node::SharedPtr get_node() const
-  {
-    return mujoco_node_;
-  }
-
   /**
    * @brief Converts actuator states to joint states.
    *
@@ -276,6 +266,12 @@ private:
   void publish_clock();
 
   rclcpp::Logger get_logger() const;
+
+  /// Get the node of the MuJoCoSystemInterface.
+  /**
+   * \return node of the MuJoCoSystemInterface.
+   */
+  rclcpp::Node::SharedPtr get_node() const;
 
   // System information
   std::string model_path_;

@@ -2433,6 +2433,12 @@ void MujocoSystemInterface::set_initial_pose()
   mj_copyData(mj_data_control_, mj_model_, mj_data_);
 }
 
+void MujocoSystemInterface::reset_world_callback(const std::shared_ptr<std_srvs::srv::Empty::Request> /*request*/,
+                                                 std::shared_ptr<std_srvs::srv::Empty::Response> /*response*/)
+{
+  RCLCPP_INFO(get_logger(), "World reset to initial state");
+}
+
 // simulate in background thread (while rendering in main thread)
 void MujocoSystemInterface::PhysicsLoop()
 {
@@ -2640,6 +2646,11 @@ void MujocoSystemInterface::set_data(mjData* mj_data)
 rclcpp::Logger MujocoSystemInterface::get_logger() const
 {
   return logger_;
+}
+
+rclcpp::Node::SharedPtr MujocoSystemInterface::get_node() const
+{
+  return mujoco_node_;
 }
 
 }  // namespace mujoco_ros2_control

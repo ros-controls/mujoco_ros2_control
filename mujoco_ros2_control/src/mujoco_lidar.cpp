@@ -111,7 +111,7 @@ std::optional<LidarData> get_lidar_data(const hardware_interface::HardwareInfo& 
   return lidar_sensor;
 }
 
-MujocoLidar::MujocoLidar(rclcpp::Node::SharedPtr& node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
+MujocoLidar::MujocoLidar(rclcpp::Node::SharedPtr node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
                          mjModel* mujoco_model, double lidar_publish_rate)
   : node_(node)
   , sim_mutex_(sim_mutex)
