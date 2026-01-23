@@ -2180,8 +2180,21 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
   return true;
 }
 
-bool MujocoSystemInterface::initialize_initial_positions(const hardware_interface::HardwareInfo& /*hardware_info*/)
+bool MujocoSystemInterface::initialize_initial_positions(const hardware_interface::HardwareInfo& hardware_info)
 {
+  if (!override_mujoco_actuator_positions_ && !override_urdf_joint_positions_)
+  {
+    const std::string key_frame_name = get_hardware_parameter_or(hardware_info, "initial_key_frame", "");
+    if (!key_frame_name.empty())
+    {
+      RCLCPP_INFO(get_logger(), "Applying initial key frame: %s", key_frame_name.c_str());
+      override_mujoco_actuator_positions_ = apply_key_frame(key_frame_name);
+      if (!override_mujoco_actuator_positions_)
+      {
+        RCLCPP_ERROR(get_logger(), "Failed to apply initial key frame: %s", key_frame_name.c_str());
+      }
+    }
+  }
   if (override_mujoco_actuator_positions_)
   {
     // Transforms the actuators' state to the joint state interfaces
@@ -2215,6 +2228,24 @@ bool MujocoSystemInterface::initialize_initial_positions(const hardware_interfac
       });
     }
   }
+  return true;
+}
+
+bool MujocoSystemInterface::apply_key_frame(const std::string& key_frame_name)
+{
+  int key_frame_id = mj_name2id(mj_model_, mjOBJ_KEY, key_frame_name.c_str());
+  if (key_frame_id == -1)
+  {
+    RCLCPP_ERROR(get_logger(), "Failed to find key frame : '%s' in the mujoco model!", key_frame_name.c_str());
+    return false;
+  }
+
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+
+  const auto prev_sim_time = mj_data_->time;
+  mj_resetDataKeyframe(mj_model_, mj_data_, key_frame_id);
+  mj_data_->time = prev_sim_time;
+
   return true;
 }
 
