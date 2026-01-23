@@ -169,6 +169,11 @@ class TestFixture(unittest.TestCase):
         self.assertAlmostEqual(
             msg.position[joint2_index], -0.5, delta=0.05, msg="joint2 did not reach the commanded position"
         )
+        # make sure the efforts field is non-zero (indicating PID/ effort reporting is working)
+        self.assertTrue(
+            any(abs(effort) > 1e-6 for effort in msg.effort),
+            "Effort field is zero, PID/Effort reporting may not be working",
+        )
 
         # MuJoCo actuator state
         actuator_state_topic = "/mujoco_actuators_states"
@@ -198,6 +203,11 @@ class TestFixture(unittest.TestCase):
             -0.5 * actuator2_reduction,
             delta=0.05,
             msg="actuator2 did not reach the commanded position",
+        )
+        # make sure the efforts field is non-zero (indicating PID/ effort reporting is working)
+        self.assertTrue(
+            any(abs(effort) > 1e-6 for effort in msg.effort),
+            "Effort field is zero, PID/Effort reporting may not be working",
         )
         wait_for_topics.shutdown()
 
