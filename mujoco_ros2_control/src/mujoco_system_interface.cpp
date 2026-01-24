@@ -1732,17 +1732,17 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     }
   }
 
-  // Override initial positions with a key frame if specified
+  // Override initial positions with a keyframe if specified
   if (!override_mujoco_actuator_positions_)
   {
-    const std::string key_frame_name = get_hardware_parameter_or(get_hardware_info(), "initial_keyframe", "");
-    if (!key_frame_name.empty())
+    const std::string keyframe_name = get_hardware_parameter_or(get_hardware_info(), "initial_keyframe", "");
+    if (!keyframe_name.empty())
     {
-      RCLCPP_INFO(get_logger(), "Applying initial key frame: %s", key_frame_name.c_str());
-      override_mujoco_actuator_positions_ = apply_key_frame(key_frame_name);
+      RCLCPP_INFO(get_logger(), "Applying initial keyframe: '%s'", keyframe_name.c_str());
+      override_mujoco_actuator_positions_ = apply_keyframe(keyframe_name);
       if (!override_mujoco_actuator_positions_)
       {
-        RCLCPP_ERROR(get_logger(), "Failed to apply initial key frame: %s", key_frame_name.c_str());
+        RCLCPP_ERROR(get_logger(), "Failed to apply initial keyframe: '%s'", keyframe_name.c_str());
       }
     }
   }
@@ -2233,19 +2233,19 @@ bool MujocoSystemInterface::initialize_initial_positions(const hardware_interfac
   return true;
 }
 
-bool MujocoSystemInterface::apply_key_frame(const std::string& key_frame_name)
+bool MujocoSystemInterface::apply_keyframe(const std::string& keyframe_name)
 {
-  int key_frame_id = mj_name2id(mj_model_, mjOBJ_KEY, key_frame_name.c_str());
-  if (key_frame_id == -1)
+  int keyframe_id = mj_name2id(mj_model_, mjOBJ_KEY, keyframe_name.c_str());
+  if (keyframe_id == -1)
   {
-    RCLCPP_ERROR(get_logger(), "Failed to find key frame : '%s' in the mujoco model!", key_frame_name.c_str());
+    RCLCPP_ERROR(get_logger(), "Failed to find keyframe : '%s' in the mujoco model!", keyframe_name.c_str());
     return false;
   }
 
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
 
   const auto prev_sim_time = mj_data_->time;
-  mj_resetDataKeyframe(mj_model_, mj_data_, key_frame_id);
+  mj_resetDataKeyframe(mj_model_, mj_data_, keyframe_id);
   mj_data_->time = prev_sim_time;
 
   return true;

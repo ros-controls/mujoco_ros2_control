@@ -179,14 +179,14 @@ private:
   bool initialize_initial_positions(const hardware_interface::HardwareInfo& info);
 
   /**
-   * @brief Applies a key frame to the simulation.
+   * @brief Applies a keyframe to the simulation.
    *
-   * This method sets the simulation state to the specified key frame defined in the MuJoCo model.
-   * @param key_frame_name Name of the key frame to apply.
+   * This method sets the simulation state to the specified keyframe defined in the MuJoCo model.
+   * @param key_frame_name Name of the keyframe to apply.
    *
-   * @return true if the key frame was applied successfully, false otherwise.
+   * @return true if the keyframe was applied successfully, false otherwise.
    */
-  bool apply_key_frame(const std::string& key_frame_name);
+  bool apply_keyframe(const std::string& keyframe_name);
 
   /**
    * @brief Constructs all sensor data containers for the interface
