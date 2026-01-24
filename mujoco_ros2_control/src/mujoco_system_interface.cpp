@@ -1732,6 +1732,21 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     }
   }
 
+  // Override initial positions with a key frame if specified
+  if (!override_mujoco_actuator_positions_)
+  {
+    const std::string key_frame_name = get_hardware_parameter_or(get_hardware_info(), "initial_keyframe", "");
+    if (!key_frame_name.empty())
+    {
+      RCLCPP_INFO(get_logger(), "Applying initial key frame: %s", key_frame_name.c_str());
+      override_mujoco_actuator_positions_ = apply_key_frame(key_frame_name);
+      if (!override_mujoco_actuator_positions_)
+      {
+        RCLCPP_ERROR(get_logger(), "Failed to apply initial key frame: %s", key_frame_name.c_str());
+      }
+    }
+  }
+
   // Set initial values if they are set in the info, or from override start position file
   if (override_mujoco_actuator_positions_)
   {
@@ -2182,19 +2197,6 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
 
 bool MujocoSystemInterface::initialize_initial_positions(const hardware_interface::HardwareInfo& hardware_info)
 {
-  if (!override_mujoco_actuator_positions_ && !override_urdf_joint_positions_)
-  {
-    const std::string key_frame_name = get_hardware_parameter_or(hardware_info, "initial_key_frame", "");
-    if (!key_frame_name.empty())
-    {
-      RCLCPP_INFO(get_logger(), "Applying initial key frame: %s", key_frame_name.c_str());
-      override_mujoco_actuator_positions_ = apply_key_frame(key_frame_name);
-      if (!override_mujoco_actuator_positions_)
-      {
-        RCLCPP_ERROR(get_logger(), "Failed to apply initial key frame: %s", key_frame_name.c_str());
-      }
-    }
-  }
   if (override_mujoco_actuator_positions_)
   {
     // Transforms the actuators' state to the joint state interfaces
