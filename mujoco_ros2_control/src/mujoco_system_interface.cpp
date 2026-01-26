@@ -842,7 +842,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
 
   const std::string mujoco_model_topic =
       get_hardware_parameter_or(get_hardware_info(), "mujoco_model_topic", "/mujoco_robot_description");
-  mj_model_ = LoadModel(model_path_.c_str(), mujoco_model_topic, *sim_, mujoco_node_);
+  mj_model_ = LoadModel(model_path_.c_str(), mujoco_model_topic, *sim_, get_node());
   if (!mj_model_)
   {
     RCLCPP_FATAL(get_logger(), "Mujoco failed to load the model");
@@ -861,12 +861,12 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
 
   // Time publisher will be pushed from the physics_thread_
-  clock_publisher_ = mujoco_node_->create_publisher<rosgraph_msgs::msg::Clock>("/clock", 1);
+  clock_publisher_ = get_node()->create_publisher<rosgraph_msgs::msg::Clock>("/clock", 1);
   clock_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<rosgraph_msgs::msg::Clock>>(clock_publisher_);
 
   actuator_state_publisher_ =
-      mujoco_node_->create_publisher<sensor_msgs::msg::JointState>("/mujoco_actuators_states", 100);
+      get_node()->create_publisher<sensor_msgs::msg::JointState>("/mujoco_actuators_states", 100);
   actuator_state_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(actuator_state_publisher_);
 
@@ -924,7 +924,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     // Odometry publisher
     std::string odom_topic_name =
         get_hardware_parameter_or(get_hardware_info(), "odom_topic", "/simulator/floating_base_state");
-    floating_base_publisher_ = mujoco_node_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
+    floating_base_publisher_ = get_node()->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
     floating_base_realtime_publisher_ =
         std::make_shared<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>>(floating_base_publisher_);
 
@@ -951,14 +951,28 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   initialize_initial_positions(get_hardware_info());
   set_initial_pose();
 
+  // Store initial state for reset_world service
+  {
+    const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+    initial_qpos_.assign(mj_data_->qpos, mj_data_->qpos + mj_model_->nq);
+    initial_qvel_.assign(mj_data_->qvel, mj_data_->qvel + mj_model_->nv);
+    initial_ctrl_.assign(mj_data_->ctrl, mj_data_->ctrl + mj_model_->nu);
+  }
+
+  // Create reset_world service
+  reset_world_service_ = get_node()->create_service<std_srvs::srv::Empty>(
+      "~/reset_world",
+      std::bind(&MujocoSystemInterface::reset_world_callback, this, std::placeholders::_1, std::placeholders::_2));
+  RCLCPP_INFO(get_logger(), "Created reset_world service at: %s/reset_world", get_node()->get_fully_qualified_name());
+
   // Ready cameras
   RCLCPP_INFO(get_logger(), "Initializing cameras...");
-  cameras_ = std::make_unique<MujocoCameras>(mujoco_node_, sim_mutex_, mj_data_, mj_model_, camera_publish_rate);
+  cameras_ = std::make_unique<MujocoCameras>(get_node(), sim_mutex_, mj_data_, mj_model_, camera_publish_rate);
   cameras_->register_cameras(get_hardware_info());
 
   // Configure Lidar sensors
   RCLCPP_INFO(get_logger(), "Initializing lidar...");
-  lidar_sensors_ = std::make_unique<MujocoLidar>(mujoco_node_, sim_mutex_, mj_data_, mj_model_, lidar_publish_rate);
+  lidar_sensors_ = std::make_unique<MujocoLidar>(get_node(), sim_mutex_, mj_data_, mj_model_, lidar_publish_rate);
   if (!lidar_sensors_->register_lidar(get_hardware_info()))
   {
     RCLCPP_INFO(get_logger(), "Failed to initialize lidar, exiting...");
@@ -1662,12 +1676,12 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 // after humble has an additional argument in the PidROS constructor, and uses a different function to initialize from parameters
 #if ROS_DISTRO_HUMBLE
       actuator_data.pos_pid = std::make_shared<control_toolbox::PidROS>(
-          mujoco_node_, "pid_gains.position." + actuator_data.joint_name, false);
+          get_node(), "pid_gains.position." + actuator_data.joint_name, false);
       actuator_data.pos_pid->initPid();
       const auto gains = actuator_data.pos_pid->getGains();
 #else
       actuator_data.pos_pid = std::make_shared<control_toolbox::PidROS>(
-          mujoco_node_, "pid_gains.position." + actuator_data.joint_name, "", false);
+          get_node(), "pid_gains.position." + actuator_data.joint_name, "", false);
       actuator_data.pos_pid->initialize_from_ros_parameters();
       const auto gains = actuator_data.pos_pid->get_gains();
 #endif
@@ -1678,12 +1692,12 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 // after humble has an additional argument in the PidROS constructor, and uses a different function to initialize from parameters
 #if ROS_DISTRO_HUMBLE
       actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
-          mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, false);
+          get_node(), "pid_gains.velocity." + actuator_data.joint_name, false);
       actuator_data.vel_pid->initPid();
       const auto gains = actuator_data.pos_pid->getGains();
 #else
       actuator_data.vel_pid = std::make_shared<control_toolbox::PidROS>(
-          mujoco_node_, "pid_gains.velocity." + actuator_data.joint_name, "", false);
+          get_node(), "pid_gains.velocity." + actuator_data.joint_name, "", false);
       actuator_data.vel_pid->initialize_from_ros_parameters();
       const auto gains = actuator_data.vel_pid->get_gains();
 #endif
@@ -2419,12 +2433,107 @@ void MujocoSystemInterface::set_initial_pose()
   mj_copyData(mj_data_control_, mj_model_, mj_data_);
 }
 
+void MujocoSystemInterface::reset_simulation_state()
+{
+  /// @note This method assumes sim_mutex_ is already held by the caller
+
+  // Save the simulation time to preserve ROS clock continuity
+  const mjtNum saved_time = mj_data_->time;
+
+  // Reset all positions, velocities and controls to initial state
+  std::copy(initial_qpos_.begin(), initial_qpos_.end(), mj_data_->qpos);
+  std::copy(initial_qvel_.begin(), initial_qvel_.end(), mj_data_->qvel);
+  std::copy(initial_ctrl_.begin(), initial_ctrl_.end(), mj_data_->ctrl);
+
+  // Reset actuator activations (for muscles and similar)
+  std::fill(mj_data_->act, mj_data_->act + mj_model_->na, 0.0);
+
+  // Reset warmstart accelerations
+  std::fill(mj_data_->qacc_warmstart, mj_data_->qacc_warmstart + mj_model_->nv, 0.0);
+
+  // Reset sensor data
+  std::fill(mj_data_->sensordata, mj_data_->sensordata + mj_model_->nsensordata, 0.0);
+
+  // Reset actuator forces
+  std::fill(mj_data_->actuator_force, mj_data_->actuator_force + mj_model_->nu, 0.0);
+
+  // Reset applied forces
+  std::fill(mj_data_->qfrc_applied, mj_data_->qfrc_applied + mj_model_->nv, 0.0);
+  std::fill(mj_data_->xfrc_applied, mj_data_->xfrc_applied + 6 * mj_model_->nbody, 0.0);
+
+  // Restore simulation time to preserve ROS clock continuity
+  mj_data_->time = saved_time;
+
+  // Run forward dynamics to update derived quantities
+  mj_forward(mj_model_, mj_data_);
+
+  // Copy to control data for reads - this ensures the physics loop uses the reset state
+  mj_copyData(mj_data_control_, mj_model_, mj_data_);
+
+  // Reset command interfaces to initial position commands
+  for (auto& actuator : mujoco_actuator_data_)
+  {
+    actuator.position_interface.state_ = mj_data_->qpos[actuator.mj_pos_adr];
+    actuator.velocity_interface.state_ = mj_data_->qvel[actuator.mj_vel_adr];
+    actuator.effort_interface.state_ = 0.0;
+
+    // Reset PID internal state
+    if (actuator.pos_pid)
+    {
+      actuator.pos_pid->reset();
+    }
+    if (actuator.vel_pid)
+    {
+      actuator.vel_pid->reset();
+    }
+
+    if (actuator.actuator_type != ActuatorType::PASSIVE)
+    {
+      // Set command to initial position to maintain position control at reset position
+      actuator.position_interface.command_ = actuator.position_interface.state_;
+      actuator.velocity_interface.command_ = 0.0;
+      actuator.effort_interface.command_ = 0.0;
+
+      // Also update the ctrl buffer in mj_data_control_ which is used by the physics loop
+      if (actuator.is_position_control_enabled && actuator.mj_actuator_id >= 0)
+      {
+        mj_data_control_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.state_;
+      }
+    }
+  }
+
+  // Update URDF joint states from actuator states
+  actuator_state_to_joint_state();
+
+  // Set joint commands to current state (maintaining position control)
+  for (auto& joint : urdf_joint_data_)
+  {
+    joint.position_interface.command_ = joint.position_interface.state_;
+    joint.velocity_interface.command_ = 0.0;
+    joint.effort_interface.command_ = 0.0;
+  }
+}
+
+void MujocoSystemInterface::reset_world_callback(const std::shared_ptr<std_srvs::srv::Empty::Request> /*request*/,
+                                                 std::shared_ptr<std_srvs::srv::Empty::Response> /*response*/)
+{
+  RCLCPP_INFO(get_logger(), "Reset world service called.....");
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+
+  reset_simulation_state();
+
+  RCLCPP_INFO(get_logger(), "Successfully reset the mujoco world to the initial state.");
+}
+
 // simulate in background thread (while rendering in main thread)
 void MujocoSystemInterface::PhysicsLoop()
 {
   // cpu-sim synchronization point
   std::chrono::time_point<mj::Simulate::Clock> syncCPU;
   mjtNum syncSim = 0;
+
+  // Track previous simulation time to detect UI-triggered resets
+  mjtNum prevSimTime = 0;
 
   // run until asked to exit
   while (!sim_->exitrequest.load())
@@ -2443,6 +2552,26 @@ void MujocoSystemInterface::PhysicsLoop()
     {
       // lock the sim mutex during the update
       const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+
+      // Detect if a reset occurred via the UI (Sync() processed pending_.reset)
+      // This is detected by simulation time jumping backwards to near-zero
+      // The render loop's Sync() calls mj_resetData() which resets time to 0
+      if (mj_model_ && mj_data_ && prevSimTime > 0.1 && mj_data_->time < 0.01)
+      {
+        RCLCPP_DEBUG(get_logger(), "UI reset detected (time jumped from %.3f to %.3f), applying initial state...",
+                     prevSimTime, mj_data_->time);
+
+        // Restore simulation time before reset_simulation_state saves it
+        mj_data_->time = prevSimTime;
+
+        // Apply initial state using common method
+        reset_simulation_state();
+
+        // Force speed_changed to re-sync timing
+        sim_->speed_changed = true;
+
+        RCLCPP_INFO(get_logger(), "Successfully applied initial state after UI reset.");
+      }
 
       // run only if model is present
       if (mj_model_)
@@ -2579,6 +2708,12 @@ void MujocoSystemInterface::PhysicsLoop()
           mj_forward(mj_model_, mj_data_);
           sim_->speed_changed = true;
         }
+
+        // Update previous simulation time for next iteration
+        if (mj_data_)
+        {
+          prevSimTime = mj_data_->time;
+        }
       }
     }  // release std::lock_guard<std::mutex>
   }
@@ -2626,6 +2761,11 @@ void MujocoSystemInterface::set_data(mjData* mj_data)
 rclcpp::Logger MujocoSystemInterface::get_logger() const
 {
   return logger_;
+}
+
+rclcpp::Node::SharedPtr MujocoSystemInterface::get_node() const
+{
+  return mujoco_node_;
 }
 
 }  // namespace mujoco_ros2_control

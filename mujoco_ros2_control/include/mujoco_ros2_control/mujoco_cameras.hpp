@@ -79,7 +79,7 @@ public:
    * @param mujoco_model Mujoco model for the simulation
    * @param camera_publish_rate The rate to publish all camera images, for now all images are published at the same rate.
    */
-  explicit MujocoCameras(rclcpp::Node::SharedPtr& node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
+  explicit MujocoCameras(rclcpp::Node::SharedPtr node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
                          mjModel* mujoco_model, double camera_publish_rate);
 
   /**
