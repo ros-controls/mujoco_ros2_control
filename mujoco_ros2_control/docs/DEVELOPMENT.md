@@ -34,7 +34,7 @@ colcon build
 
 # And source and launch the test application
 source install/setup.bash
-ros2 launch mujoco_ros2_control test_robot.launch.py
+ros2 launch mujoco_ros2_control_tests test_robot.launch.py
 ```
 
 For more information on pixi and ROS refer to the documentation or this excellent [blog post](https://jafarabdi.github.io/blog/2025/ros2-pixi-dev/).
@@ -68,10 +68,10 @@ For example, launch the included test scene with,
 
 ```bash
 # Evaluate using the included mujoco simulate application
-${MUJOCO_DIR}/bin/simulate ${ROS_WS}/src/mujoco_ros2_control/test/test_resources/scene.xml
+${MUJOCO_DIR}/bin/simulate ${ROS_WS}/src/mujoco_ros2_control_tests/test/test_resources/scene.xml
 
 # Or launch the test ROS control interface
-ros2 launch mujoco_ros2_control test_robot.launch.py
+ros2 launch mujoco_ros2_control_tests test_robot.launch.py
 ```
 
 > [!NOTE]

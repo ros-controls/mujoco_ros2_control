@@ -433,20 +433,20 @@ regardless of whether their interfaces are exposed via `ros2_control`.
 
 ## Test Robot System
 
-While examples are limited, we maintain a functional example 2-dof robot system in the [test examples](./mujoco_ros2_control/test/test_resources/test_robot.urdf) space.
+While examples are limited, we maintain a functional example 2-dof robot system in the [test examples](./mujoco_ros2_control_tests/test_resources/test_robot.urdf) space.
 We generally recommend looking there for examples and recommended workflows.
 
 For now, built the drivers with testing enabled, then the test robot system can be launched with:
 
 ```bash
 # Brings up the hardware drivers and mujoco interface, along with a single position controller
-ros2 launch mujoco_ros2_control test_robot.launch.py
+ros2 launch mujoco_ros2_control_tests test_robot.launch.py
 
 # Or optionally include the PID controller as mentioned above
-ros2 launch mujoco_ros2_control test_robot.launch.py use_pid:=true
+ros2 launch mujoco_ros2_control_tests test_robot.launch.py use_pid:=true
 
 # Launch an rviz2 window with the provided configuration
-rviz2 -d $(ros2 pkg prefix --share mujoco_ros2_control)/config/test_robot.rviz
+rviz2 -d $(ros2 pkg prefix --share mujoco_ros2_control_tests)/config/test_robot.rviz
 ```
 
 From there, command joints to move with,

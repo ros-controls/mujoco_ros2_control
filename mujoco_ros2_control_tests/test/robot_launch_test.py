@@ -56,7 +56,7 @@ def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false
     launch_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
-                get_package_share_directory("mujoco_ros2_control"),
+                get_package_share_directory("mujoco_ros2_control_tests"),
                 "launch/test_robot.launch.py",
             )
         ),
