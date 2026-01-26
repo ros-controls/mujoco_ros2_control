@@ -2573,12 +2573,6 @@ void MujocoSystemInterface::PhysicsLoop()
         RCLCPP_INFO(get_logger(), "Successfully applied initial state after UI reset.");
       }
 
-      // Update previous simulation time for next iteration
-      if (mj_data_)
-      {
-        prevSimTime = mj_data_->time;
-      }
-
       // run only if model is present
       if (mj_model_)
       {
@@ -2713,6 +2707,12 @@ void MujocoSystemInterface::PhysicsLoop()
           // run mj_forward, to update rendering and joint sliders
           mj_forward(mj_model_, mj_data_);
           sim_->speed_changed = true;
+        }
+
+        // Update previous simulation time for next iteration
+        if (mj_data_)
+        {
+          prevSimTime = mj_data_->time;
         }
       }
     }  // release std::lock_guard<std::mutex>
