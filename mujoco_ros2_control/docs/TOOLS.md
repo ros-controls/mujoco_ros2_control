@@ -55,12 +55,12 @@ options:
   --scene SCENE         Optionally pass an existing xml for the scene
 ```
 
-A sample URDF and inputs file are provided in [test_robot.urdf](../test/test_resources/test_robot.urdf) and [test_inputs.xml](../test/test_resources/test_inputs.xml).
+A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_tests/test/test_resources/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_tests/test/test_resources/test_inputs.xml).
 
 To convert the URDF, run the following from the repo root
 
 ```bash
-ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py --scene resources/scene.xml --save_only -u test/test_resources/test_robot.urdf  -m test/test_resources/test_inputs.xml -o /tmp/output/
+ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py --scene resources/scene.xml --save_only -u mujoco_ros2_control_tests/test/test_resources/test_robot.urdf  -m mujoco_ros2_control_tests/test/test_resources/test_inputs.xml -o /tmp/output/
 ```
 
 The `/tmp/output/` directory will contain all necessary assets and MJCF files that can be copied into the relevant locations in a config package.
