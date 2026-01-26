@@ -413,6 +413,24 @@ The lidar sensor is then configurable through ROS 2 control xacro with:
   </ros2_control>
 ```
 
+## Simulation - Topics and Services
+
+### Topics
+
+* `/mujoco_actuators_states` (`sensor_msgs/msg/JointState`): Provides information on all internal MuJoCo joints,
+regardless of whether their interfaces are exposed via `ros2_control`.
+* `/clock` (`rosgraph_msgs/msg/Clock`): Contains the internal physics clock tracked by each MuJoCo simulation step.
+
+### Services
+
+* `~/reset_world` (`std_srvs/srv/Empty`): Resets the simulation to the robot's initial spawning state.
+
+> [!IMPORTANT]
+> If controllers are active during the service call, the robot may reset to the initial state and then immediately
+> snap back to its previous commanded position. To avoid this, it is recommended to deactivate any active joint
+> controllers before calling this service.
+
+
 ## Test Robot System
 
 While examples are limited, we maintain a functional example 2-dof robot system in the [test examples](./mujoco_ros2_control/test/test_resources/test_robot.urdf) space.

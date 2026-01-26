@@ -27,7 +27,7 @@ using namespace std::chrono_literals;
 namespace mujoco_ros2_control
 {
 
-MujocoCameras::MujocoCameras(rclcpp::Node::SharedPtr& node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
+MujocoCameras::MujocoCameras(rclcpp::Node::SharedPtr node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
                              mjModel* mujoco_model, double camera_publish_rate)
   : node_(node)
   , sim_mutex_(sim_mutex)
