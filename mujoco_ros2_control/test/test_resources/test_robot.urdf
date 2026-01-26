@@ -329,6 +329,9 @@
       <!-- Override the slowdown settings in the Simulate App and run at 3x speed -->
       <param name="sim_speed_factor">1.0</param>
 
+      <!-- Uncomment to start the simulation at a specific keyframe defined in the MJCF -->
+      <!-- <param name="initial_keyframe">start_90</param> -->
+
       <!-- If set to true, will not launch the Simulate App window -->
       <param name="headless">$(arg headless)</param>
 
