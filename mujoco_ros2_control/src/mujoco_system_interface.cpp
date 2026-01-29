@@ -1757,6 +1757,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       if (!override_mujoco_actuator_positions_)
       {
         RCLCPP_ERROR(get_logger(), "Failed to apply initial keyframe: '%s'", keyframe_name.c_str());
+        return false;
       }
     }
   }
