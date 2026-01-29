@@ -68,6 +68,14 @@ Just specify the plugin and point to a valid MJCF on launch:
       <param name="sim_speed_factor">5.0</param>
 
       <!--
+        Optional parameter to use a particular keyframe already present in the parsed MJCF configuration.
+        If the key frame is present, it applies it to the mujoco state. If not, it continues with the default one.
+        This parameter will have no affect, if the `override_start_position_file` parameter is also set.
+        The simulation will instead use the frame from the parsed file.
+      -->
+      <param name="initial_key_frame">optional_frame</param>
+
+      <!--
         Optional parameter to use the keyframe from a provided file as the starting configuration. This is mutually exclusive with
         the initial_value that can be used for state interfaces. This is intended to provide an alternative method to load an entire
         mujoco model state from a configuration that was saved by clicking 'Copy state' in the simulate window, and pasted into a

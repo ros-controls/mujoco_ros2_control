@@ -75,4 +75,7 @@
   <sensor>
     <rangefinder name="lidar" site="rf"/>
   </sensor>
+  <keyframe>
+    <key name="start_90" time="422.274" qpos="1.57 -1.57 -0.02 0.02" qvel="0 0 0 0" ctrl="1.57 -1.57 -0.02"/>
+  </keyframe>
 </mujoco>
