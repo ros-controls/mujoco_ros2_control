@@ -223,4 +223,8 @@ install(
 
 pluginlib_export_plugin_description_file(hardware_interface mujoco_system_interface_plugin.xml)
 
+if(BUILD_TESTING)
+  add_subdirectory(test)
+endif()
+
 ament_package()
