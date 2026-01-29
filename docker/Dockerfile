@@ -20,9 +20,12 @@ ARG CPU_ARCH=x86_64
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Configure base dependencies
+# NOTE: A dist-update is required due to recently broken rolling images.
+# https://openrobotics.zulipchat.com/#narrow/channel/526029-ROS-PMC-.28Restricted-posting.29/topic/2026-01-22.20Rolling.20Docker.20image.20out-of-date/near/569502119
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
+    apt-get dist-upgrade -y && \
     apt-get install -y \
       gdb \
       libglfw3-dev \

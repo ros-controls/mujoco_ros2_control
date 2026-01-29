@@ -400,6 +400,7 @@ class TestFixture(unittest.TestCase):
             time.sleep(4.0)
 
         self.verify_arm_joint_states({"joint1": -0.5, "joint2": 0.5}, delta=0.05)
+        wait_for_clock.shutdown()
 
 
 class TestFixtureHardwareInterfacesCheck(unittest.TestCase):

@@ -29,9 +29,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        # TODO: Re-enable CI on rolling after the image is fixed:
-        # https://openrobotics.zulipchat.com/#narrow/channel/526029-ROS-PMC-.28Restricted-posting.29/topic/2026-01-22.20Rolling.20Docker.20image.20out-of-date/near/569502119
-        ros_distro: [humble, jazzy, kilted]
+        ros_distro: [humble, jazzy, kilted, rolling]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
