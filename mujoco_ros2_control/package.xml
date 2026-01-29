@@ -25,6 +25,8 @@
   <depend>std_srvs</depend>
   <depend>transmission_interface</depend>
 
+  <test_depend>ament_cmake_gtest</test_depend>
+
   <exec_depend>python3-venv</exec_depend>
   <exec_depend>python3-pip</exec_depend>
 
