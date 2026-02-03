@@ -44,7 +44,7 @@ DECOMPOSED_PATH_NAME = "decomposed"
 COMPOSED_PATH_NAME = "full"
 
 
-def add_mujoco_info(raw_xml, output_filepath, publish_topic):
+def add_mujoco_info(raw_xml, output_filepath, publish_topic, no_fuse=False):
     dom = minidom.parseString(raw_xml)
 
     mujoco_element = dom.createElement("mujoco")
@@ -60,6 +60,10 @@ def add_mujoco_info(raw_xml, output_filepath, publish_topic):
     compiler_element.setAttribute("balanceinertia", "true")
     compiler_element.setAttribute("discardvisual", "false")
     compiler_element.setAttribute("strippath", "false")
+
+    if no_fuse:
+        # Prevents merging of static bodies (like the fixed root link)
+        compiler_element.setAttribute("fusestatic", "false")
 
     mujoco_element.appendChild(compiler_element)
 
@@ -1608,6 +1612,11 @@ def main(args=None):
         help="Adds a free joint before the root link of the robot in the urdf before conversion",
     )
     parser.add_argument(
+        "--no-fuse",
+        action="store_true",
+        help="Prevents MuJoCo from merging static bodies (useful for fixed-base robots to preserve the root link)",
+    )
+    parser.add_argument(
         "-a",
         "--asset_dir",
         required=False,
@@ -1692,7 +1701,7 @@ def main(args=None):
     print(f"Using destination directory: {output_filepath}")
 
     # Add required mujoco tags to the starting URDF
-    xml_data = add_mujoco_info(urdf, output_filepath, parsed_args.publish_topic)
+    xml_data = add_mujoco_info(urdf, output_filepath, parsed_args.publish_topic, parsed_args.no_fuse)
 
     # get rid of collision data, assuming the visual data is much better resolution.
     # not sure if this is the best move...
