@@ -990,28 +990,35 @@ def add_free_joint(dom, urdf, joint_name="floating_base_joint"):
         print("Not adding a free joint because world is the URDF root")
         return
 
-    # Find all joint elements
-    joints = dom.getElementsByTagName("joint")
-
-    succesfully_fixed = False
-
+    # Try to find the virtual_base_joint (standard behavior with fuse=True)
     # Locate the one with name="virtual_base_joint" of type="free"
+    joints = dom.getElementsByTagName("joint")
     for joint in joints:
         if joint.getAttribute("name") == "virtual_base_joint" and joint.getAttribute("type") == "free":
             # Create the new freejoint element
             new_joint = dom.createElement("freejoint")
             new_joint.setAttribute("name", joint_name)
-
             # Replace the old joint with the new one
             joint.parentNode.replaceChild(new_joint, joint)
-            succesfully_fixed = True
-            break
+            return dom
 
-    if not succesfully_fixed:
-        raise ValueError("Did not find a joint of name virtual_base_joint and type free. What did you just do????")
+    # Fallback: If no virtual joint found (likely because --no-fuse is on),
+    #    find the root body and insert the freejoint directly.
+    bodies = dom.getElementsByTagName("body")
+    for body in bodies:
+        if body.getAttribute("name") == root_link:
+            print(f"Adding free joint directly to root body: {root_link}")
+            new_joint = dom.createElement("freejoint")
+            new_joint.setAttribute("name", joint_name)
+            
+            # Insert at the top of the body
+            if body.hasChildNodes():
+                body.insertBefore(new_joint, body.firstChild)
+            else:
+                body.appendChild(new_joint)
+            return dom
 
-    return dom
-
+    raise ValueError("Did not find virtual_base_joint nor a body matching the URDF root to add a free joint.")
 
 def add_links_as_sites(urdf, dom, add_free_joint):
     """
@@ -1695,7 +1702,9 @@ def main(args=None):
             raise ValueError("Output folder must be different from (or not inside) the assets folder")
 
     # Add a free joint to the urdf
-    if request_add_free_joint:
+    # Only add the virtual link structure if we allow fusing. 
+    # If no-fuse is on, we skip this and add the freejoint directly in add_free_joint.
+    if request_add_free_joint and not parsed_args.no_fuse:
         urdf = add_urdf_free_joint(urdf)
 
     print(f"Using destination directory: {output_filepath}")
