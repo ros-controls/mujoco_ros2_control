@@ -15,7 +15,7 @@ find_package(nav_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
-find_package(std_srvs REQUIRED)
+find_package(mujoco_ros2_control_msgs REQUIRED)
 find_package(Threads REQUIRED)
 find_package(transmission_interface REQUIRED)
 find_package(backward_ros REQUIRED)
@@ -177,7 +177,7 @@ target_link_libraries(mujoco_ros2_control
   control_toolbox::control_toolbox
   ${nav_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
-  ${std_srvs_TARGETS}
+  ${mujoco_ros2_control_msgs_TARGETS}
   transmission_interface::transmission_interface
   Eigen3::Eigen
   Threads::Threads

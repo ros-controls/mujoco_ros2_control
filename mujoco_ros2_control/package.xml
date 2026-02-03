@@ -22,7 +22,7 @@
   <depend>rclcpp_lifecycle</depend>
   <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
-  <depend>std_srvs</depend>
+  <depend>mujoco_ros2_control_msgs</depend>
   <depend>transmission_interface</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>

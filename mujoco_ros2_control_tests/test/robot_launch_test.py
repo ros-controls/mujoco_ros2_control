@@ -30,7 +30,7 @@ import pytest
 import rclpy
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from rosgraph_msgs.msg import Clock
-from std_srvs.srv import Empty
+from mujoco_ros2_control_msgs.srv import ResetWorld
 from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState, Image, CameraInfo
 from controller_manager_msgs.srv import ListHardwareInterfaces, SwitchController
@@ -348,14 +348,14 @@ class TestFixture(unittest.TestCase):
         self.node.get_logger().info(f"Clock before reset: {clock_before_reset}")
 
         # Now call the reset_world service
-        reset_client = self.node.create_client(Empty, "/mujoco_node/reset_world")
+        reset_client = self.node.create_client(ResetWorld, "/mujoco_node/reset_world")
 
         # Wait for service to be available
         if not reset_client.wait_for_service(timeout_sec=10.0):
             self.fail("reset_world service not available")
 
         # Call the reset service
-        request = Empty.Request()
+        request = ResetWorld.Request()
         future = reset_client.call_async(request)
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
 
