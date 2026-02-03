@@ -73,7 +73,7 @@ Just specify the plugin and point to a valid MJCF on launch:
         This parameter will have no affect, if the `override_start_position_file` parameter is also set.
         The simulation will instead use the frame from the parsed file.
       -->
-      <param name="initial_key_frame">optional_frame</param>
+      <param name="initial_keyframe">optional_frame</param>
 
       <!--
         Optional parameter to use the keyframe from a provided file as the starting configuration. This is mutually exclusive with
