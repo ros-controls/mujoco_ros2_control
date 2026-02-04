@@ -17,6 +17,9 @@ if(BUILD_TESTING)
 
   find_package(launch_testing_ament_cmake REQUIRED)
 
+  # It is unclear why, but ctest in github action runners doesn't seem to correctly inherit
+  # the PYTHONPATH from `install/setup.bash`. So we provide the exact path to ensure these are
+  # locatable in CI.
   set(test_pythonpath "$ENV{PYTHONPATH}")
   file(TO_CMAKE_PATH "${test_pythonpath}" test_pythonpath)
 
