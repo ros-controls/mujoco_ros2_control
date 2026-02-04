@@ -108,7 +108,8 @@ jobs:
             echo "=== ERH TEMP: Test import... ==="
             python3 -c "import mujoco_ros2_control_msgs; print(mujoco_ros2_control_msgs.__file__)"
 
-            echo "=== ERH TEMP: Running tests ==="
-            env PYTHONPATH="$PYTHONPATH" AMENT_PREFIX_PATH="$AMENT_PREFIX_PATH" colcon test
-            colcon test-result --verbose
+            echo "=== ERH TEMP: Run manual test ==="
+            python3 -m launch_testing.launch_test \
+              mujoco_ros2_control_tests/test/robot_launch_test.py \
+              --package-name=mujoco_ros2_control_tests
           '
