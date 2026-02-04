@@ -92,6 +92,4 @@ jobs:
       - name: Build and test
         run: |
           pixi run setup-colcon
-          pixi run build
-          pixi run test
-          pixi run test-result
+          pixi run -- bash -c 'colcon build && source install/setup.bash && colcon test && colcon test-result --verbose'
