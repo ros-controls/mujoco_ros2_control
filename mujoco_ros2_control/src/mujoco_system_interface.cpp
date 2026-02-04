@@ -2576,8 +2576,8 @@ void MujocoSystemInterface::reset_world_callback(
 
   reset_simulation_state(fill_initial_state);
   response->success = true;
-  response->message =
-      "Successfully reset the mujoco world to the " + (fill_initial_state ? "initial" : "keyframe") + " state.";
+  const std::string keyframe_str = fill_initial_state ? "initial" : ("'" + request->keyframe + "'");
+  response->message = "Successfully reset the mujoco world to the " + keyframe_str + " state.";
 
   RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
 }
