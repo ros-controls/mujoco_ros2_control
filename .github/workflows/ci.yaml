@@ -109,6 +109,6 @@ jobs:
             python3 -c "import mujoco_ros2_control_msgs; print(mujoco_ros2_control_msgs.__file__)"
 
             echo "=== ERH TEMP: Running tests ==="
-            colcon test
+            env PYTHONPATH="$PYTHONPATH" AMENT_PREFIX_PATH="$AMENT_PREFIX_PATH" colcon test
             colcon test-result --verbose
           '
