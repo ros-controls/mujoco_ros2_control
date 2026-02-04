@@ -109,7 +109,6 @@ jobs:
             python3 -c "import mujoco_ros2_control_msgs; print(mujoco_ros2_control_msgs.__file__)"
 
             echo "=== ERH TEMP: Run manual test ==="
-            python3 -m launch_testing.launch_test \
-              mujoco_ros2_control_tests/test/robot_launch_test.py \
-              --package-name=mujoco_ros2_control_tests
+            colcon test --event-handlers console_direct+
+            colcon test-result --verbose
           '
