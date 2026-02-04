@@ -92,4 +92,23 @@ jobs:
       - name: Build and test
         run: |
           pixi run setup-colcon
-          pixi run -- bash -c 'colcon build && source install/setup.bash && colcon test && colcon test-result --verbose'
+          pixi run -- bash -c '
+            colcon build
+
+            echo "=== ERH TEMP: Before sourcing ==="
+            echo "PYTHONPATH=$PYTHONPATH"
+            echo "AMENT_PREFIX_PATH=$AMENT_PREFIX_PATH"
+
+            source install/setup.bash
+
+            echo "=== ERH TEMP: After sourcing ==="
+            echo "PYTHONPATH=$PYTHONPATH"
+            echo "AMENT_PREFIX_PATH=$AMENT_PREFIX_PATH"
+
+            echo "=== ERH TEMP: Test import... ==="
+            python3 -c "import mujoco_ros2_control_msgs; print(mujoco_ros2_control_msgs.__file__)"
+
+            echo "=== ERH TEMP: Running tests ==="
+            colcon test
+            colcon test-result --verbose
+          '
