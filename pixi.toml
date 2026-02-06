@@ -30,8 +30,8 @@ build = "colcon build"
 clean = "rm -rf build install log"
 
 # Test tasks
-test = { cmd = "bash -c 'source install/setup.bash && colcon test'" }
-test-result = { cmd = "bash -c 'source install/setup.bash && colcon test-result --verbose'" }
+test = "colcon test"
+test-result = "colcon test-result --verbose"
 
 [dependencies]
 python = ">=3.11,<3.13"
