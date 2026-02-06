@@ -74,8 +74,20 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-      - name: Cache build directories and sccache
-        uses: actions/cache@v5
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.pixi
+          push: false
+          load: true
+          tags: mujoco_ros2_control_pixi:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Cache sccache
+        uses: actions/cache@v4
         with:
           path: |
             ${{ env.SCCACHE_DIR }}
@@ -83,15 +95,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-sccache-main
             ${{ runner.os }}-sccache-
-      - uses: prefix-dev/setup-pixi@v0.9.4
-        with:
-          cache: true
-          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-          frozen: true
-          manifest-path: pixi.toml
-      - name: Build and test
+      # Run pixi jobs, and ensure the cache is world readable.
+      - name: Build and test in container
         run: |
-          pixi run setup-colcon
-          pixi run build
-          pixi run test
-          pixi run test-result
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -v ${{ github.workspace }}/.sccache:/workspace/.sccache \
+            -w /workspace \
+            -e SCCACHE_DIR=/workspace/.sccache \
+            mujoco_ros2_control_pixi:ci \
+            bash -c "
+              pixi run setup-colcon && \
+              pixi run build && \
+              pixi run test && \
+              pixi run test-result && \
+              chmod -R a+rwX /workspace/.sccache
+            "
