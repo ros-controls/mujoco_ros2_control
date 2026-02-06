@@ -11,7 +11,7 @@ if(BUILD_TESTING)
   find_package(rclcpp REQUIRED)
 
   install(
-    DIRECTORY launch config test_resources
+    DIRECTORY launch
     DESTINATION share/${PROJECT_NAME}
   )
 

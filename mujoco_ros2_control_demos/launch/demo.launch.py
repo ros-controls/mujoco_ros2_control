@@ -75,14 +75,14 @@ def process_transmission_files(robot_description_str, mujoco_model_path):
 
 def launch_setup(context, *args, **kwargs):
 
-    pkg_share = FindPackageShare("mujoco_ros2_control_tests")
+    pkg_share = FindPackageShare("mujoco_ros2_control_demos")
 
     # Build robot description
     robot_description_content = Command(
         [
             PathJoinSubstitution([FindExecutable(name="xacro")]),
             " ",
-            PathJoinSubstitution([FindPackageShare("mujoco_ros2_control_tests"), "test_resources", "test_robot.urdf"]),
+            PathJoinSubstitution([FindPackageShare("mujoco_ros2_control_demos"), "demo_resources", "test_robot.urdf"]),
             " use_pid:=",
             LaunchConfiguration("use_pid"),
             " headless:=",
@@ -119,9 +119,9 @@ def launch_setup(context, *args, **kwargs):
                     "--robot_description",
                     robot_description_str,
                     "--m",
-                    PathJoinSubstitution([pkg_share, "test_resources", "test_inputs.xml"]),
+                    PathJoinSubstitution([pkg_share, "demo_resources", "test_inputs.xml"]),
                     "--scene",
-                    PathJoinSubstitution([pkg_share, "test_resources", "scene_info.xml"]),
+                    PathJoinSubstitution([pkg_share, "demo_resources", "scene_info.xml"]),
                     "--publish_topic",
                     "/mujoco_robot_description",
                 ],
