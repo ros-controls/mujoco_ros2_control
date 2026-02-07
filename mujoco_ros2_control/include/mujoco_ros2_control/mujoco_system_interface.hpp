@@ -150,6 +150,9 @@ public:
    */
   void set_data(mjData* mj_data);
 
+protected:
+  rclcpp::Logger get_logger() const;
+
 private:
   /**
    * @brief Loads actuator information from MuJoCo model into the SystemInterface.
@@ -286,8 +289,6 @@ private:
    * This enables pausing and restarting of the simulation through the application window.
    */
   void publish_clock();
-
-  rclcpp::Logger get_logger() const;
 
   /// Get the node of the MuJoCoSystemInterface.
   /**
