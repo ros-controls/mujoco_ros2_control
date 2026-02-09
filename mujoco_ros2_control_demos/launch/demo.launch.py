@@ -17,195 +17,92 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import os
-import tempfile
+"""
+Main Demo Launcher
+
+This launch file provides a unified interface to launch different demo configurations.
+Based on the arguments provided, it delegates to the appropriate specialized launch file:
+
+- 01_basic_robot.launch.py: Basic robot with position control (default)
+- 02_mjcf_generation.launch.py: Runtime MJCF generation from URDF
+- 03_pid_control.launch.py: PID-based control for velocity/effort modes
+- 04_transmissions.launch.py: Transmission interface demo
+
+Usage:
+    # Basic robot demo (default)
+    ros2 launch mujoco_ros2_control_demos demo.launch.py
+
+    # PID control demo
+    ros2 launch mujoco_ros2_control_demos demo.launch.py use_pid:=true
+
+    # MJCF generation demo
+    ros2 launch mujoco_ros2_control_demos demo.launch.py use_mjcf_from_topic:=true
+
+    # Transmissions demo
+    ros2 launch mujoco_ros2_control_demos demo.launch.py test_transmissions:=true
+"""
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction, Shutdown
-from launch.substitutions import (
-    Command,
-    FindExecutable,
-    LaunchConfiguration,
-    PathJoinSubstitution,
-)
-from launch_ros.actions import Node
-from launch.conditions import IfCondition
-from launch.substitutions import AndSubstitution, NotSubstitution
-from launch_ros.parameter_descriptions import ParameterValue, ParameterFile
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 
 
-def process_transmission_files(robot_description_str, mujoco_model_path):
-    """
-    If used, will convert joints to actuators in the robot description for using transmission
-    interfaces. Contents will be writted to a modified temp file.
-    """
-    with open(mujoco_model_path) as f:
-        scene_content = f.read()
-
-    if '<include file="' in scene_content:
-        include_file = scene_content.split('<include file="')[1].split('"/>')[0].strip()
-        include_path = os.path.join(os.path.dirname(mujoco_model_path), include_file)
-        with open(include_path) as f:
-            include_content = f.read()
-
-        # Replace joint1 and joint2 with actuator1 and actuator2
-        include_content = include_content.replace('"joint1"', '"actuator1"')
-        include_content = include_content.replace('"joint2"', '"actuator2"')
-
-        # Copy to temp
-        temp_include = tempfile.NamedTemporaryFile(delete=False, suffix=".xml", mode="w")
-        temp_include.write(include_content)
-        temp_include.close()
-
-        # Replace include file path in scene_content
-        scene_content = scene_content.replace(include_file, temp_include.name)
-
-    # Write to a temporary file
-    temp_scene_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xml", mode="w")
-    temp_scene_file.write(scene_content)
-    temp_scene_file.close()
-
-    robot_description_str = robot_description_str.replace(mujoco_model_path, temp_scene_file.name)
-
-    print("Modified scene file with transmissions at:", temp_scene_file.name)
-    print(robot_description_str)
-    return robot_description_str
-
-
 def launch_setup(context, *args, **kwargs):
-
     pkg_share = FindPackageShare("mujoco_ros2_control_demos")
 
-    # Build robot description
-    robot_description_content = Command(
-        [
-            PathJoinSubstitution([FindExecutable(name="xacro")]),
-            " ",
-            PathJoinSubstitution([FindPackageShare("mujoco_ros2_control_demos"), "demo_resources", "test_robot.urdf"]),
-            " use_pid:=",
-            LaunchConfiguration("use_pid"),
-            " headless:=",
-            LaunchConfiguration("headless"),
-            " use_mjcf_from_topic:=",
-            LaunchConfiguration("use_mjcf_from_topic"),
-            " use_transmissions:=",
-            LaunchConfiguration("test_transmissions"),
-        ]
-    )
+    # Get argument values
+    use_pid = LaunchConfiguration("use_pid").perform(context) == "true"
+    use_mjcf_from_topic = LaunchConfiguration("use_mjcf_from_topic").perform(context) == "true"
+    test_transmissions = LaunchConfiguration("test_transmissions").perform(context) == "true"
+    headless = LaunchConfiguration("headless").perform(context)
 
-    robot_description_str = robot_description_content.perform(context)
+    # Determine which launch file to use based on arguments
+    if test_transmissions:
+        launch_file = "04_transmissions.launch.py"
+        launch_args = {"headless": headless, "use_pid": "true" if use_pid else "false"}
+    elif use_mjcf_from_topic:
+        launch_file = "02_mjcf_generation.launch.py"
+        launch_args = {"headless": headless, "use_urdf_inputs": "true" if use_pid else "false"}
+    elif use_pid:
+        launch_file = "03_pid_control.launch.py"
+        launch_args = {"headless": headless}
+    else:
+        launch_file = "01_basic_robot.launch.py"
+        launch_args = {"headless": headless}
 
-    # Process transmissions if needed
-    if LaunchConfiguration("test_transmissions").perform(context) == "true":
-        if "mujoco_model" in robot_description_str:
-            mujoco_model_path = robot_description_str.split('mujoco_model">')[1].split("</param>")[0].strip()
-
-            robot_description_str = process_transmission_files(robot_description_str, mujoco_model_path)
-
-    robot_description = {"robot_description": ParameterValue(value=robot_description_str, value_type=str)}
-
-    nodes = []
-
-    # Conditionally launch the conversion node depending on PID usage
-    nodes.extend(
-        [
-            Node(
-                package="mujoco_ros2_control",
-                executable="robot_description_to_mjcf.sh",
-                output="both",
-                emulate_tty=True,
-                arguments=[
-                    "--robot_description",
-                    robot_description_str,
-                    "--m",
-                    PathJoinSubstitution([pkg_share, "demo_resources", "test_inputs.xml"]),
-                    "--scene",
-                    PathJoinSubstitution([pkg_share, "demo_resources", "scene_info.xml"]),
-                    "--publish_topic",
-                    "/mujoco_robot_description",
-                ],
-                condition=IfCondition(
-                    AndSubstitution(
-                        LaunchConfiguration("use_mjcf_from_topic"), NotSubstitution(LaunchConfiguration("use_pid"))
-                    )
-                ),
-            ),
-            Node(
-                package="mujoco_ros2_control",
-                executable="robot_description_to_mjcf.sh",
-                output="both",
-                emulate_tty=True,
-                arguments=["--publish_topic", "/mujoco_robot_description"],
-                condition=IfCondition(
-                    AndSubstitution(LaunchConfiguration("use_mjcf_from_topic"), LaunchConfiguration("use_pid"))
-                ),
-            ),
-        ]
-    )
-
-    nodes.append(
-        Node(
-            package="robot_state_publisher",
-            executable="robot_state_publisher",
-            output="both",
-            parameters=[robot_description, {"use_sim_time": True}],
+    return [
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution([pkg_share, "launch", launch_file])),
+            launch_arguments=launch_args.items(),
         )
-    )
-
-    parameters_file = PathJoinSubstitution([pkg_share, "config", "controllers.yaml"])
-
-    nodes.append(
-        Node(
-            package="mujoco_ros2_control",
-            executable="ros2_control_node",
-            emulate_tty=True,
-            output="both",
-            parameters=[
-                {"use_sim_time": True},
-                ParameterFile(parameters_file),
-            ],
-            remappings=(
-                [("~/robot_description", "/robot_description")] if os.environ.get("ROS_DISTRO") == "humble" else []
-            ),
-            on_exit=Shutdown(),
-        )
-    )
-
-    # Add controller spawners
-    controllers_to_spawn = ["joint_state_broadcaster", "position_controller", "gripper_controller"]
-    for controller in controllers_to_spawn:
-        nodes.append(
-            Node(
-                package="controller_manager",
-                executable="spawner",
-                arguments=[controller, "--param-file", parameters_file],
-                output="both",
-            )
-        )
-
-    return nodes
+    ]
 
 
 def generate_launch_description():
-
-    # Refer https://github.com/ros-controls/mujoco_ros2_control?tab=readme-ov-file#joints
     use_pid = DeclareLaunchArgument(
-        "use_pid", default_value="false", description="If we should use PID control to enable other control modes"
+        "use_pid",
+        default_value="false",
+        description="If true, uses PID control (03_pid_control.launch.py)",
     )
 
-    headless = DeclareLaunchArgument("headless", default_value="false", description="Run in headless mode")
+    headless = DeclareLaunchArgument(
+        "headless",
+        default_value="false",
+        description="Run simulation without visualization window",
+    )
 
     use_mjcf_from_topic = DeclareLaunchArgument(
         "use_mjcf_from_topic",
         default_value="false",
-        description="When set to true, the MJCF is generated at runtime from URDF",
+        description="If true, generates MJCF at runtime (02_mjcf_generation.launch.py)",
     )
 
     test_transmissions = DeclareLaunchArgument(
         "test_transmissions",
         default_value="false",
-        description="When set to true, a transmission is added to the robot model for testing purposes",
+        description="If true, uses transmissions demo (04_transmissions.launch.py)",
     )
 
     return LaunchDescription(
