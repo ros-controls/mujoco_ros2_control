@@ -36,36 +36,29 @@ def generate_launch_description():
 
     # Declare arguments
     use_pid = DeclareLaunchArgument(
-        "use_pid",
-        default_value="false",
-        description="If we should use PID control to enable other control modes"
+        "use_pid", default_value="false", description="If we should use PID control to enable other control modes"
     )
 
     headless = DeclareLaunchArgument(
-        "headless",
-        default_value="true",
-        description="Run in headless mode (default true for tests)"
+        "headless", default_value="true", description="Run in headless mode (default true for tests)"
     )
 
     use_mjcf_from_topic = DeclareLaunchArgument(
         "use_mjcf_from_topic",
         default_value="false",
-        description="When set to true, the MJCF is generated at runtime from URDF"
+        description="When set to true, the MJCF is generated at runtime from URDF",
     )
 
     test_transmissions = DeclareLaunchArgument(
         "test_transmissions",
         default_value="false",
-        description="When set to true, a transmission is added to the robot model for testing purposes"
+        description="When set to true, a transmission is added to the robot model for testing purposes",
     )
 
     # Include the demo launch file
     demo_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory("mujoco_ros2_control_demos"),
-                "launch/demo.launch.py"
-            )
+            os.path.join(get_package_share_directory("mujoco_ros2_control_demos"), "launch/demo.launch.py")
         ),
         launch_arguments={
             "use_pid": LaunchConfiguration("use_pid"),
@@ -75,10 +68,12 @@ def generate_launch_description():
         }.items(),
     )
 
-    return LaunchDescription([
-        use_pid,
-        headless,
-        use_mjcf_from_topic,
-        test_transmissions,
-        demo_launch,
-    ])
+    return LaunchDescription(
+        [
+            use_pid,
+            headless,
+            use_mjcf_from_topic,
+            test_transmissions,
+            demo_launch,
+        ]
+    )
