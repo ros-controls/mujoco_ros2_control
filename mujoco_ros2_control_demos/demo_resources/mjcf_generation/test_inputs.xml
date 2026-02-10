@@ -1,0 +1,61 @@
+<mujoco_inputs>
+
+  <!-- The contents of `raw_inputs` will be copied and pasted directly into the MJCF -->
+  <raw_inputs>
+    <option integrator="implicitfast"/>
+
+    <default>
+      <default class="visual">
+        <geom group="2" type="mesh" contype="0" conaffinity="0"/>
+      </default>
+      <default class="collision">
+        <geom group="3" type="mesh"/>
+      </default>
+    </default>
+
+    <actuator>
+      <position name="joint1" joint="joint1" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
+      <position name="joint2" joint="joint2" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
+      <position tendon="split" name="gripper_left_finger_joint" kp="1000" dampratio="3.0" ctrlrange="-0.09 0.005" />
+    </actuator>
+
+    <tendon>
+      <fixed name="split">
+        <joint joint="gripper_left_finger_joint" coef="0.5"/>
+        <joint joint="gripper_right_finger_joint" coef="-0.5"/>
+      </fixed>
+    </tendon>
+
+    <equality>
+      <joint joint1="gripper_left_finger_joint" joint2="gripper_right_finger_joint" polycoef="0 -1 0 0 0" solimp="0.95 0.99 0.001" solref="0.005 1"/>
+    </equality>
+
+    <sensor>
+      <rangefinder name="lidar" site="rf" />
+    </sensor>
+  </raw_inputs>
+
+  <!-- Specific inputs that require processing from the conversion script-->
+  <processed_inputs>
+    <!-- Specifying decompose_mesh will set the `decompose` flag when using obj2mjcf -->
+    <decompose_mesh mesh_name="shoulder_link" threshold="0.05"/>
+
+    <!-- The camera with the specified values will be added at the specified site name. -->
+    <!-- The position and quaterinion will be filled in by the converter -->
+    <camera site="camera_color_optical_frame" name="camera" fovy="58" mode="fixed" resolution="640 480"/>
+
+    <!-- Adds a lidar tag below a site tag to support a lidar sensor. -->
+    <!-- In the URDF, we assume that that the sensor frame has the Z-axis pointed directly up in the sensor -->
+    <!-- frame. This tag will create rangefinders in the MJCF between min_angle and max_angle at each -->
+    <!-- angle_increment rotated about the replicate frame's Y axis. The hardware intercface then combines -->
+    <!-- them into a single LaserScan message. -->
+    <lidar ref_site="lidar_sensor_frame" sensor_name="rf" min_angle="-0.3" max_angle="0.3" angle_increment="0.025" />
+
+    <!-- The element with the type and name as listed below will be modified with the remaining attributes -->
+    <!-- If the attribute already existed, it will be overwritten -->
+    <!-- Note that the type and name elements are required -->
+    <modify_element type="joint" name="joint1" frictionloss="1.0" damping="2.0"/>
+    <modify_element type="body" name="forearm" gravcomp="1.0"/>
+
+  </processed_inputs>
+</mujoco_inputs>
