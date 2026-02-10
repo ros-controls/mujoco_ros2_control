@@ -55,7 +55,7 @@ ros-jazzy-control-toolbox = "*"
 ros-jazzy-hardware-interface = "*"
 ros-jazzy-transmission-interface = "*"
 ros-jazzy-joint-state-broadcaster = "*"
-ros-jazzy-mujoco-vendor = "*"
+# mujoco_vendor not available on pixi - MuJoCo provided via pypi mujoco package instead
 ros-jazzy-position-controllers = "*"
 ros-jazzy-robot-state-publisher = "*"
 ros-jazzy-ros2-control-cmake = "*"
