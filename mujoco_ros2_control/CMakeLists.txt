@@ -20,28 +20,43 @@ find_package(Threads REQUIRED)
 find_package(transmission_interface REQUIRED)
 find_package(backward_ros REQUIRED)
 
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-# Attempt to find an install of mujoco, either the library itself, from the environment, or
-# as a last resort download the required tar file manually and unzip it into the workspace.
-find_package(mujoco QUIET)
-if(mujoco_FOUND)
-  message(STATUS "Mujoco build from source has been found")
+# Attempt to link MuJoCo via the vendor package, if available
+find_package(mujoco_vendor QUIET)
+if(mujoco_vendor_FOUND)
   set(MUJOCO_LIB mujoco::mujoco)
-  set(MUJOCO_INCLUDE_DIR ${MUJOCO_INCLUDE_DIR})
+  set(MUJOCO_INCLUDE_DIR ${mujoco_vendor_INCLUDE_DIRS})
   set(MUJOCO_SIMULATE_DIR ${MUJOCO_INCLUDE_DIR}/../simulate)
-elseif(DEFINED ENV{MUJOCO_INSTALL_DIR})
-  message(STATUS "Mujoco build from source has not been found. Attempting to find the binary in $ENV{MUJOCO_INSTALL_DIR} instead.")
-  set(MUJOCO_DIR $ENV{MUJOCO_INSTALL_DIR})
-  find_library(MUJOCO_LIB mujoco HINTS $ENV{MUJOCO_DIR}/lib)
-  if(NOT MUJOCO_LIB)
-    message(FATAL_ERROR "Failed to find binary in $ENV{MUJOCO_DIR}")
-  endif()
-  set(MUJOCO_INCLUDE_DIR $ENV{MUJOCO_DIR}/include)
-  set(MUJOCO_SIMULATE_DIR $ENV{MUJOCO_DIR}/simulate)
+  set(MUJOCO_FOUND TRUE)
 else()
-  include(FetchContent)
+  set(MUJOCO_FOUND FALSE)
+endif()
 
+# If vendor not found, try user-specified locations (MUJOCO_DIR or MUJOCO_INSTALL_DIR)
+if(NOT MUJOCO_FOUND AND DEFINED ENV{MUJOCO_DIR})
+  find_library(MUJOCO_LIB_ENV mujoco HINTS $ENV{MUJOCO_DIR}/lib NO_DEFAULT_PATH)
+  if(MUJOCO_LIB_ENV)
+    message(STATUS "Using MuJoCo from MUJOCO_DIR: $ENV{MUJOCO_DIR}")
+    set(MUJOCO_LIB ${MUJOCO_LIB_ENV})
+    set(MUJOCO_INCLUDE_DIR $ENV{MUJOCO_DIR}/include)
+    set(MUJOCO_SIMULATE_DIR $ENV{MUJOCO_DIR}/simulate)
+    set(MUJOCO_FOUND TRUE)
+  endif()
+endif()
+
+if(NOT MUJOCO_FOUND AND DEFINED ENV{MUJOCO_INSTALL_DIR})
+  find_library(MUJOCO_LIB_INSTALL mujoco HINTS $ENV{MUJOCO_INSTALL_DIR}/lib NO_DEFAULT_PATH)
+  if(MUJOCO_LIB_INSTALL)
+    message(STATUS "Using MuJoCo from MUJOCO_INSTALL_DIR: $ENV{MUJOCO_INSTALL_DIR}")
+    set(MUJOCO_LIB ${MUJOCO_LIB_INSTALL})
+    set(MUJOCO_INCLUDE_DIR $ENV{MUJOCO_INSTALL_DIR}/include)
+    set(MUJOCO_SIMULATE_DIR $ENV{MUJOCO_INSTALL_DIR}/simulate)
+    set(MUJOCO_FOUND TRUE)
+  endif()
+endif()
+
+# Fallback: download the required tarfile and install it manually
+if(NOT MUJOCO_FOUND)
+  include(FetchContent)
   # Detect architecture
   set(MUJOCO_VERSION "3.4.0")
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
@@ -85,6 +100,9 @@ else()
     FILES_MATCHING PATTERN "libmujoco.so*"
   )
 endif()
+
+
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Fetch lodepng dependency.
 if(NOT TARGET lodepng)

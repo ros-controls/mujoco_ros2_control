@@ -17,6 +17,8 @@
   <depend>hardware_interface</depend>
   <depend>nav_msgs</depend>
   <depend>libglfw3-dev</depend>
+  <!-- mujoco_vendor is optional - MuJoCo can also be provided via MUJOCO_INSTALL_DIR env or auto-download -->
+  <depend>mujoco_vendor</depend>
   <depend>pluginlib</depend>
   <depend>python3-pykdl</depend>
   <depend>rclcpp_lifecycle</depend>
