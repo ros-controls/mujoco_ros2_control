@@ -33,17 +33,12 @@ if(mujoco_vendor_FOUND)
   set(MUJOCO_INSTALL_INCLUDE_DIR ${MUJOCO_INCLUDE_DIR})
   set(MUJOCO_INSTALL_SIMULATE_DIR ${MUJOCO_SIMULATE_DIR})
   set(MUJOCO_EXPORT_TARGETS "")
-  # The vendor package builds MuJoCo with -flto=auto. Targets that compile
-  # MuJoCo source and link against libmujoco.so must match, otherwise GCC
-  # produces broken code at the LTO/non-LTO boundary.
-  set(MUJOCO_LTO_FLAGS -flto=auto)
 else()
   # Otherwise we fallback to downloading the required version on the fly, but this requires
   # an active internet connection! This should only be necessary for environments that do
   # not have the vendor package available (like pixi, currently).
   list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
   include(DownloadMujoco)
-  set(MUJOCO_LTO_FLAGS "")
 endif()
 
 # Fetch lodepng dependency.
@@ -89,7 +84,7 @@ target_sources(
 )
 target_include_directories(platform_ui_adapter PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
 target_link_libraries(platform_ui_adapter PRIVATE ${MUJOCO_LIB} glfw)
-target_compile_options(platform_ui_adapter PRIVATE ${MUJOCO_LTO_FLAGS} ${MUJOCO_SILENCE_COMPILER_WARNINGS})
+target_compile_options(platform_ui_adapter PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 add_library(mujoco::platform_ui_adapter ALIAS platform_ui_adapter)
 
 add_library(libsimulate STATIC $<TARGET_OBJECTS:platform_ui_adapter>)
@@ -105,8 +100,7 @@ target_sources(
 )
 target_include_directories(libsimulate PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
 target_link_libraries(libsimulate PRIVATE lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
-target_compile_options(libsimulate PRIVATE ${MUJOCO_LTO_FLAGS} ${MUJOCO_SILENCE_COMPILER_WARNINGS})
-target_link_options(libsimulate PRIVATE ${MUJOCO_LTO_FLAGS})
+target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 
 # We set these after creating the targets to avoid propagating them to other third-party targets
 set_compiler_options()
@@ -125,6 +119,8 @@ set_target_properties(mujoco_ros2_control PROPERTIES
 # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
 # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
 # Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
+# TODO: Remove this after the following is resolved and the next ROS sync
+# https://github.com/pal-robotics/mujoco_vendor/issues/2
 target_link_options(mujoco_ros2_control PUBLIC
   "LINKER:--push-state,--no-as-needed"
   "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
@@ -151,8 +147,6 @@ PRIVATE
   lodepng
   glfw
 )
-target_compile_options(mujoco_ros2_control PRIVATE ${MUJOCO_LTO_FLAGS})
-target_link_options(mujoco_ros2_control PRIVATE ${MUJOCO_LTO_FLAGS})
 target_include_directories(mujoco_ros2_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
