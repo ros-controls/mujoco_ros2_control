@@ -119,46 +119,39 @@ protected:
   std::shared_ptr<mujoco_ros2_control::MujocoSystemInterface> interface_;
 };
 
-TEST_F(HeadlessInitTest, NodeCreation)
-{
-  rclcpp::NodeOptions node_options;
-  auto test_node = std::make_shared<rclcpp::Node>("test_node", node_options);
-  ASSERT_NE(test_node, nullptr);
-}
-
 TEST_F(HeadlessInitTest, HeadlessInitialization)
 {
-  //   // Test that MujocoSystemInterface can be initialized in headless mode
-  // #if ROS_DISTRO_HUMBLE
-  //   auto result = interface_->on_init(hardware_info_);
-  // #else
-  //   hardware_interface::HardwareComponentInterfaceParams params;
-  //   params.hardware_info = hardware_info_;
-  //   auto result = interface_->on_init(params);
-  // #endif
-  //   ASSERT_EQ(result, hardware_interface::CallbackReturn::SUCCESS);
+  // Test that MujocoSystemInterface can be initialized in headless mode
+#if ROS_DISTRO_HUMBLE
+  auto result = interface_->on_init(hardware_info_);
+#else
+  hardware_interface::HardwareComponentInterfaceParams params;
+  params.hardware_info = hardware_info_;
+  auto result = interface_->on_init(params);
+#endif
+  ASSERT_EQ(result, hardware_interface::CallbackReturn::SUCCESS);
 
-  //   // Check that the data and model are available, meaning initializing was successful.
-  //   auto start = std::chrono::steady_clock::now();
-  //   auto timeout = std::chrono::seconds(1);
-  //   mjModel* test_model = nullptr;
-  //   mjData* test_data = nullptr;
-  //   while (std::chrono::steady_clock::now() - start < timeout)
-  //   {
-  //     interface_->get_model(test_model);
-  //     interface_->get_data(test_data);
-  //     if (test_model != nullptr && test_data != nullptr)
-  //     {
-  //       break;
-  //     }
-  //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  //   }
-  //   ASSERT_NE(test_model, nullptr) << "Model failed to initialize within timeout";
-  //   ASSERT_NE(test_data, nullptr) << "Model failed to initialize within timeout";
+  // Check that the data and model are available, meaning initializing was successful.
+  auto start = std::chrono::steady_clock::now();
+  auto timeout = std::chrono::seconds(1);
+  mjModel* test_model = nullptr;
+  mjData* test_data = nullptr;
+  while (std::chrono::steady_clock::now() - start < timeout)
+  {
+    interface_->get_model(test_model);
+    interface_->get_data(test_data);
+    if (test_model != nullptr && test_data != nullptr)
+    {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  ASSERT_NE(test_model, nullptr) << "Model failed to initialize within timeout";
+  ASSERT_NE(test_data, nullptr) << "Model failed to initialize within timeout";
 
-  //   // Test that we can export state interfaces without crashing
-  //   auto state_interfaces = interface_->export_state_interfaces();
-  //   EXPECT_GE(state_interfaces.size(), 0);
+  // Test that we can export state interfaces without crashing
+  auto state_interfaces = interface_->export_state_interfaces();
+  EXPECT_GE(state_interfaces.size(), 0);
 }
 
 int main(int argc, char** argv)
