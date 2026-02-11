@@ -39,7 +39,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       tmux \
       wget \
       xterm \
-      vim
+      vim \
+      libegl1 \
+      libgbm1
+
+# Enable software rendering with LLVMpipe for headless environments (CI, Docker without GPU)
+ENV LIBGL_ALWAYS_SOFTWARE=1
+ENV GALLIUM_DRIVER=llvmpipe
 
 # Install extra python dependencies
 ENV PIP_BREAK_SYSTEM_PACKAGES=1

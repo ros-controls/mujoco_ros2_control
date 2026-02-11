@@ -8,10 +8,17 @@ RUN apt-get update && apt-get install -y \
     git \
     build-essential \
     ca-certificates \
+    libegl1 \
+    libgbm1 \
+    libgl1-mesa-dri \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://pixi.sh/install.sh | bash
 ENV PATH="/root/.pixi/bin:${PATH}"
+
+# Enable software rendering with LLVMpipe for headless environments (CI, Docker without GPU)
+ENV LIBGL_ALWAYS_SOFTWARE=1
+ENV GALLIUM_DRIVER=llvmpipe
 
 WORKDIR /workspace
 
