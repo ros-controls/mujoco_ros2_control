@@ -10,6 +10,7 @@ find_package(controller_manager REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(fmt REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(OpenGL REQUIRED COMPONENTS EGL)
 find_package(control_toolbox REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -183,6 +184,8 @@ PRIVATE
   Threads::Threads
   lodepng
   glfw
+  OpenGL::EGL
+  OpenGL::OpenGL
 )
 # Note: the transmissions_interface must NOT be statically linked against the library, only headers
 # should be used. Otherwise it will be loaded by the linker at process startup and its
