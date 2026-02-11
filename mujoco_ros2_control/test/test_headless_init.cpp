@@ -23,8 +23,8 @@
 
 #include <hardware_interface/version.h>
 #include <hardware_interface/hardware_info.hpp>
-#include <rclcpp/rclcpp.hpp>
 #include <mujoco_ros2_control/mujoco_system_interface.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 #define ROS_DISTRO_HUMBLE (HARDWARE_INTERFACE_VERSION_MAJOR < 3)
 
@@ -108,9 +108,8 @@ protected:
     info.type = "system";
     info.hardware_parameters["mujoco_model"] = test_model_path_;
     info.hardware_parameters["meshdir"] = "";
-    info.hardware_parameters["headless"] = "true";  // Enable headless mode for CI compatibility
-    info.hardware_parameters["disable_rendering"] =
-      "true";  // Disable cameras/lidar to avoid OpenGL issues in tests
+    info.hardware_parameters["headless"] = "true";           // Enable headless mode for CI compatibility
+    info.hardware_parameters["disable_rendering"] = "true";  // Disable cameras/lidar to avoid OpenGL issues in tests
 
     return info;
   }
@@ -123,8 +122,6 @@ protected:
 TEST_F(HeadlessInitTest, HeadlessInitialization)
 {
   // Test that MujocoSystemInterface can be initialized in headless mode
-  // This test reproduces the segfault that occurs after "Running in HEADLESS mode"
-  // Initialize the interface
 #if ROS_DISTRO_HUMBLE
   auto result = interface_->on_init(hardware_info_);
 #else
@@ -134,15 +131,30 @@ TEST_F(HeadlessInitTest, HeadlessInitialization)
 #endif
   ASSERT_EQ(result, hardware_interface::CallbackReturn::SUCCESS);
 
-  // Give a small delay to ensure initialization completes
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  // Check that the data and model are available, meaning initializing was successful.
+  auto start = std::chrono::steady_clock::now();
+  auto timeout = std::chrono::seconds(1);
+  mjModel* test_model = nullptr;
+  mjData* test_data = nullptr;
+  while (std::chrono::steady_clock::now() - start < timeout)
+  {
+    interface_->get_model(test_model);
+    interface_->get_data(test_data);
+    if (test_model != nullptr && test_data != nullptr)
+    {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  ASSERT_NE(test_model, nullptr) << "Model failed to initialize within timeout";
+  ASSERT_NE(test_data, nullptr) << "Model failed to initialize within timeout";
 
   // Test that we can export state interfaces without crashing
   auto state_interfaces = interface_->export_state_interfaces();
   EXPECT_GE(state_interfaces.size(), 0);
 }
 
-int main(int argc, char ** argv)
+int main(int argc, char** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
   int result = RUN_ALL_TESTS();
