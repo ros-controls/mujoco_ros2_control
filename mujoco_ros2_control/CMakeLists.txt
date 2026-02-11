@@ -19,6 +19,8 @@ find_package(mujoco_ros2_control_msgs REQUIRED)
 find_package(Threads REQUIRED)
 find_package(transmission_interface REQUIRED)
 find_package(backward_ros REQUIRED)
+find_package(tinyxml2_vendor QUIET)
+find_package(TinyXML2 REQUIRED)
 
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
@@ -119,6 +121,14 @@ add_library(mujoco_ros2_control SHARED
 # Ensure MuJoCo library can be found at runtime regardless of how it was installed above
 set_target_properties(mujoco_ros2_control PROPERTIES
   INSTALL_RPATH "\$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
+)
+# MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
+# used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
+# Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
+target_link_options(mujoco_ros2_control PUBLIC
+  "LINKER:--push-state,--no-as-needed"
+  "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+  "LINKER:--pop-state"
 )
 target_link_libraries(mujoco_ros2_control
 PUBLIC
