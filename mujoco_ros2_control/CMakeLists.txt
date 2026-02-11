@@ -5,30 +5,20 @@ project(mujoco_ros2_control)
 find_package(ros2_control_cmake REQUIRED)
 
 # find dependencies
-# ROS2 package dependencies (matching package.xml)
-set(THIS_PACKAGE_INCLUDE_DEPENDS
-  backward_ros
-  control_toolbox
-  controller_manager
-  hardware_interface
-  nav_msgs
-  pluginlib
-  rclcpp
-  rclcpp_lifecycle
-  sensor_msgs
-  mujoco_ros2_control_msgs
-  transmission_interface
-)
-
 find_package(ament_cmake REQUIRED)
-foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
-  find_package(${Dependency} REQUIRED)
-endforeach()
-
-# Non-ROS2 dependencies
+find_package(controller_manager REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(control_toolbox REQUIRED)
+find_package(hardware_interface REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(pluginlib REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
+find_package(mujoco_ros2_control_msgs REQUIRED)
 find_package(Threads REQUIRED)
+find_package(transmission_interface REQUIRED)
+find_package(backward_ros REQUIRED)
 
 # Attempt to link MuJoCo via the vendor package, if available
 find_package(mujoco_vendor QUIET)
@@ -102,43 +92,13 @@ if(NOT MUJOCO_FOUND)
 
   set(MUJOCO_INCLUDE_DIR ${MUJOCO_DIR}/include)
   set(MUJOCO_SIMULATE_DIR ${MUJOCO_DIR}/simulate)
-  set(MUJOCO_NEEDS_INSTALL TRUE)
-  # Set install paths for use in generator expressions ($<INSTALL_INTERFACE:...>)
-  set(MUJOCO_INSTALL_INCLUDE_DIR "${CMAKE_INSTALL_PREFIX}/include/mujoco")
-  set(MUJOCO_INSTALL_SIMULATE_DIR "${CMAKE_INSTALL_PREFIX}/include/mujoco_simulate")
-endif()
 
-# Install libmujoco.so and headers when using local MuJoCo (not system-installed)
-if(MUJOCO_NEEDS_INSTALL)
   message(STATUS "Installing ${MUJOCO_LIB} to the install directory...")
   install(
     DIRECTORY ${MUJOCO_DIR}/lib/
     DESTINATION lib
     FILES_MATCHING PATTERN "libmujoco.so*"
   )
-  # Install mujoco headers so they're available when exporting targets
-  install(
-    DIRECTORY ${MUJOCO_INCLUDE_DIR}/
-    DESTINATION include/mujoco
-  )
-  install(
-    DIRECTORY ${MUJOCO_SIMULATE_DIR}/
-    DESTINATION include/mujoco_simulate
-  )
-
-  # Create INTERFACE library wrapper for libmujoco.so to avoid build-time paths in exports
-  # Use generator expressions: build-time uses source location, install-time uses install location
-  if(NOT TARGET mujoco_bundled)
-    add_library(mujoco_bundled INTERFACE)
-    # At build time, link to source location; at install time, link to install location
-    # This prevents the build-time path from appearing in exported targets
-    target_link_libraries(mujoco_bundled INTERFACE
-      $<BUILD_INTERFACE:${MUJOCO_LIB}>
-      $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/lib/libmujoco.so>
-    )
-    # Use this target instead of file path for linking
-    set(MUJOCO_LIB mujoco_bundled)
-  endif()
 endif()
 
 
@@ -163,11 +123,12 @@ if(NOT TARGET lodepng)
     set_target_properties(lodepng PROPERTIES POSITION_INDEPENDENT_CODE ON)
     target_compile_options(lodepng PRIVATE ${MUJOCO_MACOS_COMPILE_OPTIONS})
     target_link_options(lodepng PRIVATE ${MUJOCO_MACOS_LINK_OPTIONS})
+    # Use generator expressions to support both build and install contexts
     target_include_directories(lodepng PUBLIC
       $<BUILD_INTERFACE:${lodepng_SOURCE_DIR}>
       $<INSTALL_INTERFACE:include>
     )
-    # Install lodepng header
+    # Install lodepng header for export
     install(FILES ${lodepng_SOURCE_DIR}/lodepng.h
       DESTINATION include
     )
@@ -189,17 +150,14 @@ set_target_properties(platform_ui_adapter PROPERTIES
 )
 target_sources(
   platform_ui_adapter
-  PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.h ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.h ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.h
+  PUBLIC ${MUJOCO_SIMULATE_DIR}/glfw_adapter.h ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.h ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.h
   PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.cc ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.cc ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.cc
 )
 target_include_directories(
-  platform_ui_adapter PUBLIC
-    $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>
-    $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
-    $<INSTALL_INTERFACE:${MUJOCO_INSTALL_SIMULATE_DIR}>
-    $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
+  platform_ui_adapter PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR}
+                             $<TARGET_PROPERTY:glfw,INTERFACE_INCLUDE_DIRECTORIES>
 )
-target_link_libraries(platform_ui_adapter PRIVATE ${MUJOCO_LIB} PUBLIC glfw)
+target_link_libraries(platform_ui_adapter PUBLIC ${MUJOCO_LIB})
 target_compile_options(platform_ui_adapter PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 add_library(mujoco::platform_ui_adapter ALIAS platform_ui_adapter)
 
@@ -211,15 +169,12 @@ set_target_properties(libsimulate PROPERTIES
 )
 target_sources(
   libsimulate
-  PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.h ${MUJOCO_SIMULATE_DIR}/simulate.cc ${MUJOCO_SIMULATE_DIR}/array_safety.h
+  PUBLIC ${MUJOCO_SIMULATE_DIR}/simulate.h
+  PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.cc ${MUJOCO_SIMULATE_DIR}/array_safety.h
 )
-target_include_directories(libsimulate PUBLIC
-  $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>
-  $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
-  $<INSTALL_INTERFACE:${MUJOCO_INSTALL_SIMULATE_DIR}>
-  $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
-)
-target_link_libraries(libsimulate PUBLIC lodepng mujoco::platform_ui_adapter PRIVATE ${MUJOCO_LIB})
+target_include_directories(libsimulate PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
+# lodepng is PRIVATE to avoid export requirement (internal dependency only)
+target_link_libraries(libsimulate PUBLIC mujoco::platform_ui_adapter ${MUJOCO_LIB} PRIVATE lodepng)
 target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 
 # We set these after creating the targets to avoid propagating them to other third-party targets
@@ -232,18 +187,12 @@ add_library(mujoco_ros2_control SHARED
     src/mujoco_cameras.cpp
     src/mujoco_lidar.cpp
 )
-# Set INSTALL_RPATH to $ORIGIN so libmujoco.so can be found in the same lib/ directory
-# This is necessary because libmujoco.so is a manually installed external library
-# (not a CMake target), so ament may not automatically set RPATH for it
+# Set RPATH to help locate shared libraries at runtime
 set_target_properties(mujoco_ros2_control PROPERTIES
-  INSTALL_RPATH "\$ORIGIN"
+  INSTALL_RPATH "\$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
 )
-# Link MuJoCo library as PRIVATE - this is an internal dependency that consumers don't need
-# Note: PRIVATE linking doesn't prevent build-time paths from appearing in exported targets,
-# but it's correct for encapsulation (consumers don't need direct access to libmujoco.so)
-# The library will be found at runtime via $ORIGIN RPATH since both are in lib/
+# lodepng and MUJOCO_LIB are PRIVATE (internal implementation details, consumers don't link to them directly)
 target_link_libraries(mujoco_ros2_control
-  PRIVATE ${MUJOCO_LIB}
   PUBLIC
     ${sensor_msgs_TARGETS}
     mujoco::libsimulate
@@ -260,8 +209,10 @@ target_link_libraries(mujoco_ros2_control
     transmission_interface::transmission_interface
     Eigen3::Eigen
     Threads::Threads
-    lodepng
     glfw
+  PRIVATE
+    ${MUJOCO_LIB}
+    lodepng
 )
 target_include_directories(mujoco_ros2_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -269,21 +220,16 @@ target_include_directories(mujoco_ros2_control PUBLIC
 )
 # Mark these as system packages to prevent compiler warnings
 target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
-  $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
-  $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>
-  $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
-  $<INSTALL_INTERFACE:${MUJOCO_INSTALL_SIMULATE_DIR}>
+  ${MUJOCO_INCLUDE_DIR}
+  ${MUJOCO_SIMULATE_DIR}
 )
-# Export targets - include mujoco_bundled if it exists (for MUJOCO_NEEDS_INSTALL case)
+# Export targets (lodepng included because libsimulate requires it for export)
 set(TARGETS_TO_EXPORT
   mujoco_ros2_control
   libsimulate
   lodepng
   platform_ui_adapter
 )
-if(TARGET mujoco_bundled)
-  list(APPEND TARGETS_TO_EXPORT mujoco_bundled)
-endif()
 install(TARGETS ${TARGETS_TO_EXPORT}
   EXPORT export_${PROJECT_NAME}
   LIBRARY DESTINATION lib
@@ -328,5 +274,24 @@ endif()
 
 ## EXPORTS
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
+ament_export_dependencies(
+  ament_cmake
+  controller_manager
+  Eigen3
+  glfw3
+  control_toolbox
+  hardware_interface
+  nav_msgs
+  pluginlib
+  rclcpp
+  rclcpp_lifecycle
+  sensor_msgs
+  mujoco_ros2_control_msgs
+  Threads
+  transmission_interface
+  backward_ros
+)
+if(mujoco_vendor_FOUND)
+  ament_export_dependencies(mujoco_vendor)
+endif()
 ament_package()
