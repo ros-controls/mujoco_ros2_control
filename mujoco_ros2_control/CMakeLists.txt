@@ -137,11 +137,14 @@ PRIVATE
 )
 target_include_directories(mujoco_ros2_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
-  $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>
   $<INSTALL_INTERFACE:include>
   $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
   $<INSTALL_INTERFACE:${MUJOCO_INSTALL_SIMULATE_DIR}>
+)
+# Mark Mujoco source as system to avoid compiler warnings
+target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
+  $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
+  $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>
 )
 
 # Export mujoco alongside the interface to provide access to data.
