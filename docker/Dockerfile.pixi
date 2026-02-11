@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y \
     libegl1 \
     libgbm1 \
     libgl1-mesa-dri \
+    libosmesa6 \
+    libosmesa6-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://pixi.sh/install.sh | bash

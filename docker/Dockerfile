@@ -41,7 +41,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       xterm \
       vim \
       libegl1 \
-      libgbm1
+      libgbm1 \
+      libosmesa6 \
+      libosmesa6-dev
 
 # Enable software rendering with LLVMpipe for headless environments (CI, Docker without GPU)
 ENV LIBGL_ALWAYS_SOFTWARE=1

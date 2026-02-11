@@ -38,6 +38,10 @@ MujocoCameras::MujocoCameras(rclcpp::Node::SharedPtr node, std::recursive_mutex*
   , egl_context_(EGL_NO_CONTEXT)
   , egl_surface_(EGL_NO_SURFACE)
   , use_egl_(false)
+#ifdef OSMESA_AVAILABLE
+  , osmesa_context_(nullptr)
+  , use_osmesa_(false)
+#endif
 {
 }
 
@@ -279,11 +283,29 @@ void MujocoCameras::update_loop()
     // Initialize EGL for headless rendering
     if (!init_egl_context())
     {
+#ifdef OSMESA_AVAILABLE
+      RCLCPP_WARN(node_->get_logger(), "Failed to initialize EGL context. Trying OSMesa for software rendering.");
+      use_egl_ = false;
+      use_osmesa_ = true;
+      if (!init_osmesa_context())
+      {
+        RCLCPP_ERROR(node_->get_logger(), "Failed to initialize OSMesa context. Disabling camera publishing.");
+        publish_images_ = false;
+        return;
+      }
+#else
       RCLCPP_ERROR(node_->get_logger(), "Failed to initialize EGL context. Disabling camera publishing.");
       publish_images_ = false;
       return;
+#endif
     }
   }
+#ifdef OSMESA_AVAILABLE
+  else if (use_osmesa_)
+  {
+    // Already handled above or set directly
+  }
+#endif
   else
   {
     // Use GLFW for offscreen context (display available)
@@ -298,8 +320,15 @@ void MujocoCameras::update_loop()
     glfwMakeContextCurrent(window);
   }
 
+  // Determine rendering backend name for logging
+#ifdef OSMESA_AVAILABLE
+  const char* backend = use_egl_ ? "EGL" : (use_osmesa_ ? "OSMesa" : "GLFW");
+#else
+  const char* backend = use_egl_ ? "EGL" : "GLFW";
+#endif
+
   // Initialization of the context and data structures has to happen in the rendering thread
-  RCLCPP_INFO(node_->get_logger(), "Initializing rendering for cameras (using %s)", use_egl_ ? "EGL" : "GLFW");
+  RCLCPP_INFO(node_->get_logger(), "Initializing rendering for cameras (using %s)", backend);
   mjv_defaultOption(&mjv_opt_);
   mjv_defaultScene(&mjv_scn_);
   mjr_defaultContext(&mjr_con_);
@@ -341,6 +370,12 @@ void MujocoCameras::update_loop()
   {
     cleanup_egl_context();
   }
+#ifdef OSMESA_AVAILABLE
+  else if (use_osmesa_)
+  {
+    cleanup_osmesa_context();
+  }
+#endif
   else if (window)
   {
     glfwDestroyWindow(window);
@@ -414,5 +449,52 @@ void MujocoCameras::update()
     camera.camera_info_pub->publish(camera.camera_info);
   }
 }
+
+#ifdef OSMESA_AVAILABLE
+bool MujocoCameras::init_osmesa_context()
+{
+  // Determine buffer size - use a reasonable default that will be resized later
+  int width = 1;
+  int height = 1;
+  for (const auto& cam : cameras_)
+  {
+    width = std::max(width, static_cast<int>(cam.width));
+    height = std::max(height, static_cast<int>(cam.height));
+  }
+
+  // Allocate color buffer for OSMesa (RGBA)
+  osmesa_buffer_.resize(width * height * 4);
+
+  // Create OSMesa context with 24-bit depth buffer
+  osmesa_context_ = OSMesaCreateContextExt(OSMESA_RGBA, 24, 0, 0, nullptr);
+  if (!osmesa_context_)
+  {
+    RCLCPP_ERROR(node_->get_logger(), "OSMesa: Failed to create context");
+    return false;
+  }
+
+  // Make the context current with our buffer
+  if (!OSMesaMakeCurrent(osmesa_context_, osmesa_buffer_.data(), GL_UNSIGNED_BYTE, width, height))
+  {
+    RCLCPP_ERROR(node_->get_logger(), "OSMesa: Failed to make context current");
+    OSMesaDestroyContext(osmesa_context_);
+    osmesa_context_ = nullptr;
+    return false;
+  }
+
+  RCLCPP_INFO(node_->get_logger(), "OSMesa: Successfully initialized software OpenGL context (%dx%d)", width, height);
+  return true;
+}
+
+void MujocoCameras::cleanup_osmesa_context()
+{
+  if (osmesa_context_)
+  {
+    OSMesaDestroyContext(osmesa_context_);
+    osmesa_context_ = nullptr;
+  }
+  osmesa_buffer_.clear();
+}
+#endif
 
 }  // namespace mujoco_ros2_control
