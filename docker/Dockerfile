@@ -35,7 +35,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       tmux \
       wget \
       xterm \
-      vim
+      vim \
+      libegl1 \
+      libgbm1
+
+# Enable software rendering with LLVMpipe for headless environments (CI, Docker without GPU)
+ENV LIBGL_ALWAYS_SOFTWARE=1
+ENV GALLIUM_DRIVER=llvmpipe
 
 # Setup a ROS workspace
 ENV ROS_WS="/opt/mujoco/ws"
