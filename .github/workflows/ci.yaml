@@ -61,9 +61,18 @@ jobs:
       - name: Run tests
         run: |
           docker run --rm \
+          -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
           ${{ steps.meta.outputs.tags }} \
           bash -c '
             source /opt/mujoco/ws/install/setup.bash && \
+            echo "=== LD_LIBRARY_PATH ===" && \
+            echo $LD_LIBRARY_PATH | tr ":" "\n" && \
+            echo "=== libmujoco location ===" && \
+            find / -name "libmujoco.so*" 2>/dev/null && \
+            echo "=== ldd test binary ===" && \
+            ldd /opt/mujoco/ws/build/mujoco_ros2_control/test/test_headless_init && \
+            echo "=== Check for duplicate symbols ===" && \
+            LD_DEBUG=libs /opt/mujoco/ws/build/mujoco_ros2_control/test/test_headless_init 2>&1 | head -200
             gdb -batch \
               -ex "run" \
               -ex "bt full" \
