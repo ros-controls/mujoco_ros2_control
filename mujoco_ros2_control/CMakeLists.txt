@@ -23,21 +23,21 @@ find_package(backward_ros REQUIRED)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Attempt to link MuJoCo via the vendor package, if available
-find_package(mujoco_vendor QUIET)
-if(mujoco_vendor_FOUND)
-  set(MUJOCO_LIB mujoco::mujoco)
-  set(MUJOCO_INCLUDE_DIR ${mujoco_vendor_INCLUDE_DIRS})
-  set(MUJOCO_SIMULATE_DIR ${MUJOCO_INCLUDE_DIR}/../simulate)
-  set(MUJOCO_INSTALL_INCLUDE_DIR ${MUJOCO_INCLUDE_DIR})
-  set(MUJOCO_INSTALL_SIMULATE_DIR ${MUJOCO_SIMULATE_DIR})
-  set(MUJOCO_EXPORT_TARGETS "")
-else()
+# find_package(mujoco_vendor QUIET)
+# if(mujoco_vendor_FOUND)
+#   set(MUJOCO_LIB mujoco::mujoco)
+#   set(MUJOCO_INCLUDE_DIR ${mujoco_vendor_INCLUDE_DIRS})
+#   set(MUJOCO_SIMULATE_DIR ${MUJOCO_INCLUDE_DIR}/../simulate)
+#   set(MUJOCO_INSTALL_INCLUDE_DIR ${MUJOCO_INCLUDE_DIR})
+#   set(MUJOCO_INSTALL_SIMULATE_DIR ${MUJOCO_SIMULATE_DIR})
+#   set(MUJOCO_EXPORT_TARGETS "")
+# else()
   # Otherwise we fallback to downloading the required version on the fly, but this requires
   # an active internet connection! This should only be necessary for environments that do
   # not have the vendor package available (like pixi, currently).
   list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
   include(DownloadMujoco)
-endif()
+# endif()
 
 # Fetch lodepng dependency.
 if(NOT TARGET lodepng)
