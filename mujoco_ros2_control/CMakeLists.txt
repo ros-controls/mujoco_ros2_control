@@ -159,7 +159,7 @@ PRIVATE
   OpenGL::OpenGL
 )
 if(OSMESA_FOUND)
-  target_link_libraries(mujoco_ros2_control ${OSMESA_LIBRARY})
+  target_link_libraries(mujoco_ros2_control PRIVATE ${OSMESA_LIBRARY})
   target_include_directories(mujoco_ros2_control PRIVATE ${OSMESA_INCLUDE_DIR})
   target_compile_definitions(mujoco_ros2_control PRIVATE OSMESA_AVAILABLE)
 endif()
