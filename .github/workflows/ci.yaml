@@ -29,8 +29,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        ros_distro: [jazzy]
-        # ros_distro: [humble, jazzy, kilted, rolling]
+        ros_distro: [humble, jazzy, kilted, rolling]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -61,16 +60,11 @@ jobs:
       - name: Run tests
         run: |
           docker run --rm \
-          ${{ steps.meta.outputs.tags }} \
-          bash -c '
-            source /opt/mujoco/ws/install/setup.bash && \
-            gdb -batch \
-              -ex "run" \
-              -ex "bt full" \
-              -ex "info registers" \
-              -ex "quit" \
-              --args /opt/mujoco/ws/build/mujoco_ros2_control/test/test_headless_init
-          '
+            ${{ steps.meta.outputs.tags }} \
+            bash -c "
+              colcon test &&
+              colcon test-result --verbose
+            "
 
   pixi_jazzy_build_and_test:
     timeout-minutes: 15
