@@ -729,9 +729,11 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // attached.
 
   // scan for libraries in the plugin directory to load additional plugins
+  RCLCPP_INFO(get_logger(), "Scanning plugin libraries.");
   scanPluginLibraries();
 
   // Retain scope
+  RCLCPP_INFO(get_logger(), "Configuring defaults.");
   mjv_defaultCamera(&cam_);
   mjv_defaultOption(&opt_);
   mjv_defaultPerturb(&pert_);
@@ -740,6 +742,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // the executing thread, but we require the simulation to be available on
   // init. So we spawn the sim in the rendering thread prior to proceeding with
   // initialization.
+  RCLCPP_INFO(get_logger(), "Initializing simulation.");
   auto sim_ready = std::make_shared<std::promise<void>>();
   std::future<void> sim_ready_future = sim_ready->get_future();
 
@@ -747,6 +750,8 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   {
     sim_ = std::make_unique<mj::Simulate>(std::make_unique<HeadlessAdapter>(), &cam_, &opt_, &pert_,
                                           /* is_passive = */ false);
+
+    RCLCPP_INFO(get_logger(), "Simulation constructed.");
     // Notify sim that we are ready
     sim_ready->set_value();
   }
@@ -796,6 +801,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     });
   }
 
+  RCLCPP_INFO(get_logger(), "Waiting for simulation.");
   if (sim_ready_future.wait_for(2s) == std::future_status::timeout)
   {
     RCLCPP_FATAL(get_logger(), "Timed out waiting to start simulation rendering!");
