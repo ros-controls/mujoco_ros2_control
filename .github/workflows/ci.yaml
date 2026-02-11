@@ -61,10 +61,11 @@ jobs:
         run: |
           docker run --rm \
             ${{ steps.meta.outputs.tags }} \
-            bash -c "
+            bash -c '
+              gdb -batch -ex "run" -ex "bt full" -ex "quit" --args /opt/mujoco/ws/build/mujoco_ros2_control/test/test_headless_init &&
               colcon test &&
               colcon test-result --verbose
-            "
+            '
 
   pixi_jazzy_build_and_test:
     timeout-minutes: 15
