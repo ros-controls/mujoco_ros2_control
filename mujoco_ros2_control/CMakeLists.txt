@@ -19,6 +19,8 @@ find_package(mujoco_ros2_control_msgs REQUIRED)
 find_package(Threads REQUIRED)
 find_package(transmission_interface REQUIRED)
 find_package(backward_ros REQUIRED)
+find_package(tinyxml2_vendor QUIET)
+find_package(TinyXML2 REQUIRED)
 
 # Attempt to link MuJoCo via the vendor package, if available
 find_package(mujoco_vendor QUIET)
@@ -26,83 +28,17 @@ if(mujoco_vendor_FOUND)
   set(MUJOCO_LIB mujoco::mujoco)
   set(MUJOCO_INCLUDE_DIR ${mujoco_vendor_INCLUDE_DIRS})
   set(MUJOCO_SIMULATE_DIR ${MUJOCO_INCLUDE_DIR}/../simulate)
-  set(MUJOCO_FOUND TRUE)
+  set(MUJOCO_INSTALL_INCLUDE_DIR ${MUJOCO_INCLUDE_DIR})
+  set(MUJOCO_INSTALL_SIMULATE_DIR ${MUJOCO_SIMULATE_DIR})
+  set(MUJOCO_EXPORT_TARGETS "")
 else()
-  set(MUJOCO_FOUND FALSE)
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+  # Otherwise we fallback to downloading the required version on the fly, but this requires
+  # an active internet connection! This should only be necessary for environments that do
+  # not have the vendor package available (like pixi, currently).
+  list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+  include(DownloadMujoco)
 endif()
-
-# If vendor not found, try user-specified locations (MUJOCO_DIR or MUJOCO_INSTALL_DIR)
-if(NOT MUJOCO_FOUND AND DEFINED ENV{MUJOCO_DIR})
-  find_library(MUJOCO_LIB_ENV mujoco HINTS $ENV{MUJOCO_DIR}/lib NO_DEFAULT_PATH)
-  if(MUJOCO_LIB_ENV)
-    message(STATUS "Using MuJoCo from MUJOCO_DIR: $ENV{MUJOCO_DIR}")
-    set(MUJOCO_LIB ${MUJOCO_LIB_ENV})
-    set(MUJOCO_INCLUDE_DIR $ENV{MUJOCO_DIR}/include)
-    set(MUJOCO_SIMULATE_DIR $ENV{MUJOCO_DIR}/simulate)
-    set(MUJOCO_FOUND TRUE)
-  endif()
-endif()
-
-if(NOT MUJOCO_FOUND AND DEFINED ENV{MUJOCO_INSTALL_DIR})
-  find_library(MUJOCO_LIB_INSTALL mujoco HINTS $ENV{MUJOCO_INSTALL_DIR}/lib NO_DEFAULT_PATH)
-  if(MUJOCO_LIB_INSTALL)
-    message(STATUS "Using MuJoCo from MUJOCO_INSTALL_DIR: $ENV{MUJOCO_INSTALL_DIR}")
-    set(MUJOCO_LIB ${MUJOCO_LIB_INSTALL})
-    set(MUJOCO_INCLUDE_DIR $ENV{MUJOCO_INSTALL_DIR}/include)
-    set(MUJOCO_SIMULATE_DIR $ENV{MUJOCO_INSTALL_DIR}/simulate)
-    set(MUJOCO_FOUND TRUE)
-  endif()
-endif()
-
-# Fallback: download the required tarfile and install it manually
-if(NOT MUJOCO_FOUND)
-  include(FetchContent)
-  # Detect architecture
-  set(MUJOCO_VERSION "3.4.0")
-  if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-    set(CPU_ARCH "x86_64")
-  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
-    set(CPU_ARCH "aarch64")
-  else()
-    message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
-  endif()
-
-  message(STATUS "No MuJoCo installation found. Downloading MuJoCo ${MUJOCO_VERSION} for ${CPU_ARCH}.")
-
-  # Download the archive and put it next to the source directory
-  set(MUJOCO_DOWNLOAD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mujoco)
-  set(MUJOCO_EXTRACT_DIR ${MUJOCO_DOWNLOAD_DIR}/mujoco-${MUJOCO_VERSION})
-  set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
-  FetchContent_Declare(
-    mujoco_download
-    SOURCE_DIR ${MUJOCO_EXTRACT_DIR}
-    DOWNLOAD_EXTRACT_TIMESTAMP True
-    URL https://github.com/google-deepmind/mujoco/releases/download/${MUJOCO_VERSION}/mujoco-${MUJOCO_VERSION}-linux-${CPU_ARCH}.tar.gz
-  )
-  FetchContent_MakeAvailable(mujoco_download)
-
-  set(MUJOCO_DIR ${MUJOCO_EXTRACT_DIR})
-  message(STATUS "MuJoCo downloaded to: ${MUJOCO_DIR}")
-
-  # Find the library in the downloaded location
-  find_library(MUJOCO_LIB mujoco HINTS ${MUJOCO_DIR}/lib NO_DEFAULT_PATH)
-  if(NOT MUJOCO_LIB)
-    message(FATAL_ERROR "Failed to find MuJoCo library in ${MUJOCO_DIR}/lib")
-  endif()
-
-  set(MUJOCO_INCLUDE_DIR ${MUJOCO_DIR}/include)
-  set(MUJOCO_SIMULATE_DIR ${MUJOCO_DIR}/simulate)
-
-  message(STATUS "Installing ${MUJOCO_LIB} to the install directory...")
-  install(
-    DIRECTORY ${MUJOCO_DIR}/lib/
-    DESTINATION lib
-    FILES_MATCHING PATTERN "libmujoco.so*"
-  )
-endif()
-
-
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Fetch lodepng dependency.
 if(NOT TARGET lodepng)
@@ -142,14 +78,11 @@ set_target_properties(platform_ui_adapter PROPERTIES
 )
 target_sources(
   platform_ui_adapter
-  PUBLIC ${MUJOCO_SIMULATE_DIR}/glfw_adapter.h ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.h ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.h
+  PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.h ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.h ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.h
   PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.cc ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.cc ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.cc
 )
-target_include_directories(
-  platform_ui_adapter PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR}
-                             $<TARGET_PROPERTY:glfw,INTERFACE_INCLUDE_DIRECTORIES>
-)
-target_link_libraries(platform_ui_adapter PUBLIC ${MUJOCO_LIB})
+target_include_directories(platform_ui_adapter PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
+target_link_libraries(platform_ui_adapter PRIVATE ${MUJOCO_LIB} glfw)
 target_compile_options(platform_ui_adapter PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 add_library(mujoco::platform_ui_adapter ALIAS platform_ui_adapter)
 
@@ -161,11 +94,11 @@ set_target_properties(libsimulate PROPERTIES
 )
 target_sources(
   libsimulate
-  PUBLIC ${MUJOCO_SIMULATE_DIR}/simulate.h
+  PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.h
   PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.cc ${MUJOCO_SIMULATE_DIR}/array_safety.h
 )
 target_include_directories(libsimulate PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
-target_link_libraries(libsimulate PUBLIC lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
+target_link_libraries(libsimulate PRIVATE lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
 target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 
 # We set these after creating the targets to avoid propagating them to other third-party targets
@@ -182,22 +115,31 @@ add_library(mujoco_ros2_control SHARED
 set_target_properties(mujoco_ros2_control PROPERTIES
   INSTALL_RPATH "\$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
 )
+# MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
+# used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
+# Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
+# TODO: Remove this after the following is resolved and the next ROS sync
+# https://github.com/pal-robotics/mujoco_vendor/issues/2
+target_link_options(mujoco_ros2_control PUBLIC
+  "LINKER:--push-state,--no-as-needed"
+  "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+  "LINKER:--pop-state"
+)
 target_link_libraries(mujoco_ros2_control
-  ${MUJOCO_LIB}
-  ${sensor_msgs_TARGETS}
-  mujoco::libsimulate
-  controller_manager::controller_manager
+PUBLIC
   hardware_interface::hardware_interface
-  hardware_interface::mock_components
-  pluginlib::pluginlib
   rclcpp::rclcpp
   rclcpp_lifecycle::rclcpp_lifecycle
-  control_toolbox::control_toolbox
   ${nav_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
   transmission_interface::transmission_interface
+  pluginlib::pluginlib
+  ${MUJOCO_LIB}
+  control_toolbox::control_toolbox
   Eigen3::Eigen
+PRIVATE
+  mujoco::libsimulate
   Threads::Threads
   lodepng
   glfw
@@ -205,15 +147,29 @@ target_link_libraries(mujoco_ros2_control
 target_include_directories(mujoco_ros2_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
+  $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
+  $<INSTALL_INTERFACE:${MUJOCO_INSTALL_SIMULATE_DIR}>
 )
-# Mark these as system packages to prevent compiler warnings
+# Mark Mujoco source as system to avoid compiler warnings
 target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
-  ${MUJOCO_INCLUDE_DIR}
-  ${MUJOCO_SIMULATE_DIR}
+  $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
+  $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>
 )
-install(TARGETS mujoco_ros2_control
-  LIBRARY DESTINATION lib/${PROJECT_NAME}
+
+# Export mujoco alongside the interface to provide access to data.
+install(TARGETS mujoco_ros2_control ${MUJOCO_EXPORT_TARGETS}
+  EXPORT export_${PROJECT_NAME}
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
 )
+
+# Install runtime deps
+install(TARGETS libsimulate lodepng
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
+install(DIRECTORY include/ DESTINATION include)
 
 # Install the ROS 2 control node
 add_executable(ros2_control_node src/mujoco_ros2_control_node.cpp)
@@ -245,4 +201,5 @@ if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
 
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_package()

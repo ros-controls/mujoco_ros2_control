@@ -18,18 +18,6 @@ For configuring MuJoCo, the included [CMakeLists.txt](./mujoco_ros2_control/CMak
 If it is not found, will download and install the tarfile automatically.
 As long as users have a good network connection there should not be an issue.
 
-However, a local install of MuJoCo can be used to build the application by setting the following environment variables,
-
-```bash
-# The tested version
-MUJOCO_VERSION=3.4.0
-
-# Wherever it was installed and extracted on your machine
-MUJOCO_INSTALL_DIR=/opt/mujoco/mujoco-3.4.0
-```
-If neither is available, the script will automatically download and install the MuJoCo tarfile.
-As long as users have a stable network connection, this process should complete without issues.
-
 From there the library can be compiled with `colcon build ...`, as normal.
 
 ## URDF Model Conversion

@@ -729,6 +729,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // attached.
 
   // scan for libraries in the plugin directory to load additional plugins
+  RCLCPP_INFO(get_logger(), "Scanning plugin libraries...");
   scanPluginLibraries();
 
   // Retain scope
@@ -740,6 +741,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // the executing thread, but we require the simulation to be available on
   // init. So we spawn the sim in the rendering thread prior to proceeding with
   // initialization.
+  RCLCPP_INFO(get_logger(), "Initializing simulation...");
   auto sim_ready = std::make_shared<std::promise<void>>();
   std::future<void> sim_ready_future = sim_ready->get_future();
 
@@ -747,6 +749,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   {
     sim_ = std::make_unique<mj::Simulate>(std::make_unique<HeadlessAdapter>(), &cam_, &opt_, &pert_,
                                           /* is_passive = */ false);
+
     // Notify sim that we are ready
     sim_ready->set_value();
   }
@@ -801,6 +804,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     RCLCPP_FATAL(get_logger(), "Timed out waiting to start simulation rendering!");
     return hardware_interface::CallbackReturn::ERROR;
   }
+  RCLCPP_INFO(get_logger(), "Sim ready, continuing initialization...");
 
   // We maintain a pointer to the mutex so that we can lock from here, too.
   // Is this a terrible idea? Maybe, but it lets us use their libraries as is...
@@ -835,13 +839,16 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     node_options_arguments.push_back(pids_config_file.value());
     node_options.arguments(node_options_arguments);
   }
+  RCLCPP_INFO(get_logger(), "Constructing node and executor...");
   executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>();
   mujoco_node_ = std::make_shared<rclcpp::Node>("mujoco_node", node_options);
   executor_->add_node(mujoco_node_);
   executor_thread_ = std::thread([this]() { executor_->spin(); });
+  RCLCPP_INFO(get_logger(), "Executor thread started.");
 
   const std::string mujoco_model_topic =
       get_hardware_parameter_or(get_hardware_info(), "mujoco_model_topic", "/mujoco_robot_description");
+  RCLCPP_INFO(get_logger(), "Loading model...");
   mj_model_ = LoadModel(model_path_.c_str(), mujoco_model_topic, *sim_, get_node());
   if (!mj_model_)
   {
@@ -861,6 +868,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
 
   // Time publisher will be pushed from the physics_thread_
+  RCLCPP_INFO(get_logger(), "Constructing publishers.");
   clock_publisher_ = get_node()->create_publisher<rosgraph_msgs::msg::Clock>("/clock", 1);
   clock_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<rosgraph_msgs::msg::Clock>>(clock_publisher_);
@@ -888,6 +896,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
 
   // Register all MuJoCo actuators
+  RCLCPP_INFO(get_logger(), "Registering actuators.");
   if (!register_mujoco_actuators())
   {
     RCLCPP_FATAL(get_logger(), "Failed to register MuJoCo actuators, exiting...");
@@ -941,6 +950,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
 
   // Pull joint and sensor information
+  RCLCPP_INFO(get_logger(), "Registering joints and sensors.");
   register_urdf_joints(get_hardware_info());
   register_sensors(get_hardware_info());
   if (!register_transmissions(get_hardware_info()))
@@ -1027,6 +1037,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     actuator_state_msg_.name.push_back(actuator.joint_name);
   }
 
+  RCLCPP_INFO(get_logger(), "on_init complete.");
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
