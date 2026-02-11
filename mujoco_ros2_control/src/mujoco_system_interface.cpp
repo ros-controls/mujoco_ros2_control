@@ -845,9 +845,13 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
   RCLCPP_INFO(get_logger(), "Constructing node and executor.");
   executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>();
+  RCLCPP_INFO(get_logger(), "Creating node.");
   mujoco_node_ = std::make_shared<rclcpp::Node>("mujoco_node", node_options);
+  RCLCPP_INFO(get_logger(), "Adding node to executor.");
   executor_->add_node(mujoco_node_);
+  RCLCPP_INFO(get_logger(), "Starting executor thread.");
   executor_thread_ = std::thread([this]() { executor_->spin(); });
+  RCLCPP_INFO(get_logger(), "Executor thread started.");
 
   const std::string mujoco_model_topic =
       get_hardware_parameter_or(get_hardware_info(), "mujoco_model_topic", "/mujoco_robot_description");

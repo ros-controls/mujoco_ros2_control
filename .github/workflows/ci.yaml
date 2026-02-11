@@ -61,16 +61,10 @@ jobs:
       - name: Run tests
         run: |
           docker run --rm \
-          --cap-add=SYS_PTRACE \
-          --security-opt seccomp=unconfined \
-          --ulimit stack=134217728:134217728 \
           ${{ steps.meta.outputs.tags }} \
           bash -c '
-            ulimit -s && \
-            cat /proc/self/maps | grep stack && \
             source /opt/mujoco/ws/install/setup.bash && \
             gdb -batch \
-              -ex "set print thread-events off" \
               -ex "run" \
               -ex "bt full" \
               -ex "info registers" \
