@@ -32,12 +32,12 @@ if(mujoco_vendor_FOUND)
   set(MUJOCO_INSTALL_SIMULATE_DIR ${MUJOCO_SIMULATE_DIR})
   set(MUJOCO_EXPORT_TARGETS "")
 else()
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
   # Otherwise we fallback to downloading the required version on the fly, but this requires
   # an active internet connection! This should only be necessary for environments that do
   # not have the vendor package available (like pixi, currently).
   list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
   include(DownloadMujoco)
-  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 endif()
 
 # Fetch lodepng dependency.
