@@ -41,7 +41,7 @@ set(MUJOCO_SIMULATE_DIR ${MUJOCO_DIR}/simulate)
 set(MUJOCO_FOUND TRUE)
 unset(_mujoco_lib CACHE)
 
-# Create wrapper target for proper exports
+# Create wrapper target for proper exports, and alias it to be the same as the vendor package.
 add_library(mujoco_wrapper INTERFACE)
 target_link_libraries(mujoco_wrapper INTERFACE
   $<BUILD_INTERFACE:${MUJOCO_LIB_PATH}>
@@ -51,7 +51,8 @@ target_include_directories(mujoco_wrapper INTERFACE
   $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
   $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
 )
-set(MUJOCO_LIB mujoco_wrapper)
+add_library(mujoco::mujoco ALIAS mujoco_wrapper)
+set(MUJOCO_LIB mujoco::mujoco)
 set(MUJOCO_EXPORT_TARGETS mujoco_wrapper)
 
 install(DIRECTORY ${MUJOCO_DIR}/lib/ DESTINATION lib FILES_MATCHING PATTERN "libmujoco.so*")

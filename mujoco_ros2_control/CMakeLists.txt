@@ -58,11 +58,7 @@ if(NOT TARGET lodepng)
     set_target_properties(lodepng PROPERTIES POSITION_INDEPENDENT_CODE ON)
     target_compile_options(lodepng PRIVATE ${MUJOCO_MACOS_COMPILE_OPTIONS})
     target_link_options(lodepng PRIVATE ${MUJOCO_MACOS_LINK_OPTIONS})
-    target_include_directories(lodepng PUBLIC
-      $<BUILD_INTERFACE:${lodepng_SOURCE_DIR}>
-      $<INSTALL_INTERFACE:include>
-    )
-    install(FILES ${lodepng_SOURCE_DIR}/lodepng.h DESTINATION include)
+    target_include_directories(lodepng PUBLIC ${lodepng_SOURCE_DIR})
   endif()
 endif()
 
@@ -84,13 +80,8 @@ target_sources(
   PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.h ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.h ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.h
   PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.cc ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.cc ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.cc
 )
-target_include_directories(platform_ui_adapter PUBLIC
-  $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>
-  $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
-  $<INSTALL_INTERFACE:${MUJOCO_INSTALL_SIMULATE_DIR}>
-  $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
-)
-target_link_libraries(platform_ui_adapter PUBLIC ${MUJOCO_LIB} glfw)
+target_include_directories(platform_ui_adapter PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
+target_link_libraries(platform_ui_adapter PRIVATE ${MUJOCO_LIB} glfw)
 target_compile_options(platform_ui_adapter PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 add_library(mujoco::platform_ui_adapter ALIAS platform_ui_adapter)
 
@@ -105,13 +96,8 @@ target_sources(
   PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.h
   PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.cc ${MUJOCO_SIMULATE_DIR}/array_safety.h
 )
-target_include_directories(libsimulate PUBLIC
-  $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>
-  $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
-  $<INSTALL_INTERFACE:${MUJOCO_INSTALL_SIMULATE_DIR}>
-  $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
-)
-target_link_libraries(libsimulate PUBLIC lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
+target_include_directories(libsimulate PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
+target_link_libraries(libsimulate PRIVATE lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
 target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 
 # We set these after creating the targets to avoid propagating them to other third-party targets
@@ -129,20 +115,21 @@ set_target_properties(mujoco_ros2_control PROPERTIES
   INSTALL_RPATH "\$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
 )
 target_link_libraries(mujoco_ros2_control
-  ${MUJOCO_LIB}
-  ${sensor_msgs_TARGETS}
-  mujoco::libsimulate
-  controller_manager::controller_manager
+PUBLIC
   hardware_interface::hardware_interface
-  hardware_interface::mock_components
-  pluginlib::pluginlib
   rclcpp::rclcpp
   rclcpp_lifecycle::rclcpp_lifecycle
-  control_toolbox::control_toolbox
   ${nav_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
   transmission_interface::transmission_interface
+  pluginlib::pluginlib
+  ${MUJOCO_LIB}
+PRIVATE
+  mujoco::libsimulate
+  controller_manager::controller_manager
+  hardware_interface::mock_components
+  control_toolbox::control_toolbox
   Eigen3::Eigen
   Threads::Threads
   lodepng
@@ -150,29 +137,26 @@ target_link_libraries(mujoco_ros2_control
 )
 target_include_directories(mujoco_ros2_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-# Mark these as system packages to prevent compiler warnings
-target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
   $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
   $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>
+  $<INSTALL_INTERFACE:include>
   $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
   $<INSTALL_INTERFACE:${MUJOCO_INSTALL_SIMULATE_DIR}>
 )
 
-# Collect and export targets
-set(EXPORT_TARGETS mujoco_ros2_control libsimulate platform_ui_adapter lodepng)
-if(MUJOCO_EXPORT_TARGETS)
-  list(APPEND EXPORT_TARGETS ${MUJOCO_EXPORT_TARGETS})
-endif()
-
-install(TARGETS ${EXPORT_TARGETS}
+# Export mujoco alongside the interface to provide access to data.
+install(TARGETS mujoco_ros2_control ${MUJOCO_EXPORT_TARGETS}
   EXPORT export_${PROJECT_NAME}
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
 )
 
+# Install runtime deps
+install(TARGETS libsimulate lodepng
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
 install(DIRECTORY include/ DESTINATION include)
 
 # Install the ROS 2 control node
