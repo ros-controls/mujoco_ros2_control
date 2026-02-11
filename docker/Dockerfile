@@ -41,27 +41,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       xterm \
       vim
 
-# Install extra python dependencies
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    pip install --ignore-installed mujoco obj2mjcf
-
-# There's no build for arm64 on linux, so just ignore failures here if that's the case
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    pip install bpy==4.0.0 --extra-index-url https://download.blender.org/pypi/ || true
-
-# Configure and install MuJoCo
-ENV MUJOCO_VERSION=${MUJOCO_VERSION}
-ENV MUJOCO_DIR="/opt/mujoco/mujoco-${MUJOCO_VERSION}"
-ENV MUJOCO_INSTALL_DIR=${MUJOCO_DIR}
-RUN mkdir -p ${MUJOCO_DIR}
-
-RUN wget https://github.com/google-deepmind/mujoco/releases/download/${MUJOCO_VERSION}/mujoco-${MUJOCO_VERSION}-linux-${CPU_ARCH}.tar.gz
-RUN mkdir -p /home/mujoco
-RUN tar -xzf "mujoco-${MUJOCO_VERSION}-linux-${CPU_ARCH}.tar.gz" -C $(dirname "${MUJOCO_DIR}")
-
 # Setup a ROS workspace
 ENV ROS_WS="/opt/mujoco/ws"
 RUN mkdir -p ${ROS_WS}/src/mujoco_ros2_control
