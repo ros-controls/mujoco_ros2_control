@@ -9,6 +9,7 @@ find_package(ament_cmake REQUIRED)
 find_package(controller_manager REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(OpenGL REQUIRED COMPONENTS EGL)
 find_package(control_toolbox REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -201,6 +202,8 @@ target_link_libraries(mujoco_ros2_control
   Threads::Threads
   lodepng
   glfw
+  OpenGL::EGL
+  OpenGL::OpenGL
 )
 target_include_directories(mujoco_ros2_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

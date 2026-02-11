@@ -34,6 +34,10 @@ MujocoCameras::MujocoCameras(rclcpp::Node::SharedPtr node, std::recursive_mutex*
   , mj_data_(mujoco_data)
   , mj_model_(mujoco_model)
   , camera_publish_rate_(camera_publish_rate)
+  , egl_display_(EGL_NO_DISPLAY)
+  , egl_context_(EGL_NO_CONTEXT)
+  , egl_surface_(EGL_NO_SURFACE)
+  , use_egl_(false)
 {
 }
 
@@ -131,14 +135,20 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
 void MujocoCameras::init()
 {
   // Start the rendering thread process
-  if (!glfwInit())
+  // Try GLFW first, fall back to EGL for headless environments
+  if (glfwInit())
   {
-    RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Disabling camera publishing.");
-    publish_images_ = false;
-    return;
+    use_egl_ = false;
+    publish_images_ = true;
+    rendering_thread_ = std::thread(&MujocoCameras::update_loop, this);
   }
-  publish_images_ = true;
-  rendering_thread_ = std::thread(&MujocoCameras::update_loop, this);
+  else
+  {
+    RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Attempting EGL for headless rendering.");
+    use_egl_ = true;
+    publish_images_ = true;
+    rendering_thread_ = std::thread(&MujocoCameras::update_loop, this);
+  }
 }
 
 void MujocoCameras::close()
@@ -150,15 +160,146 @@ void MujocoCameras::close()
   }
 }
 
+bool MujocoCameras::init_egl_context()
+{
+  // Get EGL display
+  egl_display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+  if (egl_display_ == EGL_NO_DISPLAY)
+  {
+    RCLCPP_ERROR(node_->get_logger(), "EGL: Failed to get display");
+    return false;
+  }
+
+  // Initialize EGL
+  EGLint major, minor;
+  if (!eglInitialize(egl_display_, &major, &minor))
+  {
+    RCLCPP_ERROR(node_->get_logger(), "EGL: Failed to initialize (error: 0x%x)", eglGetError());
+    return false;
+  }
+  RCLCPP_INFO(node_->get_logger(), "EGL: Initialized version %d.%d", major, minor);
+
+  // Choose EGL config for offscreen rendering
+  const EGLint config_attribs[] = { EGL_SURFACE_TYPE,
+                                    EGL_PBUFFER_BIT,
+                                    EGL_RED_SIZE,
+                                    8,
+                                    EGL_GREEN_SIZE,
+                                    8,
+                                    EGL_BLUE_SIZE,
+                                    8,
+                                    EGL_ALPHA_SIZE,
+                                    8,
+                                    EGL_DEPTH_SIZE,
+                                    24,
+                                    EGL_RENDERABLE_TYPE,
+                                    EGL_OPENGL_BIT,
+                                    EGL_NONE };
+
+  EGLConfig egl_config;
+  EGLint num_configs;
+  if (!eglChooseConfig(egl_display_, config_attribs, &egl_config, 1, &num_configs) || num_configs == 0)
+  {
+    RCLCPP_ERROR(node_->get_logger(), "EGL: Failed to choose config (error: 0x%x)", eglGetError());
+    eglTerminate(egl_display_);
+    egl_display_ = EGL_NO_DISPLAY;
+    return false;
+  }
+
+  // Bind OpenGL API
+  if (!eglBindAPI(EGL_OPENGL_API))
+  {
+    RCLCPP_ERROR(node_->get_logger(), "EGL: Failed to bind OpenGL API (error: 0x%x)", eglGetError());
+    eglTerminate(egl_display_);
+    egl_display_ = EGL_NO_DISPLAY;
+    return false;
+  }
+
+  // Create EGL context
+  egl_context_ = eglCreateContext(egl_display_, egl_config, EGL_NO_CONTEXT, nullptr);
+  if (egl_context_ == EGL_NO_CONTEXT)
+  {
+    RCLCPP_ERROR(node_->get_logger(), "EGL: Failed to create context (error: 0x%x)", eglGetError());
+    eglTerminate(egl_display_);
+    egl_display_ = EGL_NO_DISPLAY;
+    return false;
+  }
+
+  // Create PBuffer surface for offscreen rendering
+  const EGLint pbuffer_attribs[] = { EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE };
+  egl_surface_ = eglCreatePbufferSurface(egl_display_, egl_config, pbuffer_attribs);
+  if (egl_surface_ == EGL_NO_SURFACE)
+  {
+    RCLCPP_ERROR(node_->get_logger(), "EGL: Failed to create PBuffer surface (error: 0x%x)", eglGetError());
+    eglDestroyContext(egl_display_, egl_context_);
+    eglTerminate(egl_display_);
+    egl_context_ = EGL_NO_CONTEXT;
+    egl_display_ = EGL_NO_DISPLAY;
+    return false;
+  }
+
+  // Make the context current
+  if (!eglMakeCurrent(egl_display_, egl_surface_, egl_surface_, egl_context_))
+  {
+    RCLCPP_ERROR(node_->get_logger(), "EGL: Failed to make context current (error: 0x%x)", eglGetError());
+    cleanup_egl_context();
+    return false;
+  }
+
+  RCLCPP_INFO(node_->get_logger(), "EGL: Successfully initialized headless OpenGL context");
+  return true;
+}
+
+void MujocoCameras::cleanup_egl_context()
+{
+  if (egl_display_ != EGL_NO_DISPLAY)
+  {
+    eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    if (egl_surface_ != EGL_NO_SURFACE)
+    {
+      eglDestroySurface(egl_display_, egl_surface_);
+      egl_surface_ = EGL_NO_SURFACE;
+    }
+    if (egl_context_ != EGL_NO_CONTEXT)
+    {
+      eglDestroyContext(egl_display_, egl_context_);
+      egl_context_ = EGL_NO_CONTEXT;
+    }
+    eglTerminate(egl_display_);
+    egl_display_ = EGL_NO_DISPLAY;
+  }
+}
+
 void MujocoCameras::update_loop()
 {
-  // We create an offscreen context specific to this process for managing camera rendering.
-  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-  GLFWwindow* window = glfwCreateWindow(1, 1, "", NULL, NULL);
-  glfwMakeContextCurrent(window);
+  GLFWwindow* window = nullptr;
+
+  if (use_egl_)
+  {
+    // Initialize EGL for headless rendering
+    if (!init_egl_context())
+    {
+      RCLCPP_ERROR(node_->get_logger(), "Failed to initialize EGL context. Disabling camera publishing.");
+      publish_images_ = false;
+      return;
+    }
+  }
+  else
+  {
+    // Use GLFW for offscreen context (display available)
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    window = glfwCreateWindow(1, 1, "", NULL, NULL);
+    if (!window)
+    {
+      RCLCPP_ERROR(node_->get_logger(), "Failed to create GLFW window. Disabling camera publishing.");
+      publish_images_ = false;
+      return;
+    }
+    glfwMakeContextCurrent(window);
+  }
 
   // Initialization of the context and data structures has to happen in the rendering thread
-  RCLCPP_INFO(node_->get_logger(), "Initializing rendering for cameras");
+  RCLCPP_INFO(node_->get_logger(), "Initializing rendering for cameras (using %s)", use_egl_ ? "EGL" : "GLFW");
   mjv_defaultOption(&mjv_opt_);
   mjv_defaultScene(&mjv_scn_);
   mjr_defaultContext(&mjr_con_);
@@ -195,7 +336,15 @@ void MujocoCameras::update_loop()
   mjv_freeScene(&mjv_scn_);
   mjr_freeContext(&mjr_con_);
   mj_deleteData(mj_camera_data_);
-  glfwDestroyWindow(window);
+
+  if (use_egl_)
+  {
+    cleanup_egl_context();
+  }
+  else if (window)
+  {
+    glfwDestroyWindow(window);
+  }
 }
 
 void MujocoCameras::update()
