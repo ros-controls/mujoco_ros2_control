@@ -22,8 +22,6 @@ find_package(backward_ros REQUIRED)
 find_package(tinyxml2_vendor QUIET)
 find_package(TinyXML2 REQUIRED)
 
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
 # Attempt to link MuJoCo via the vendor package, if available
 find_package(mujoco_vendor QUIET)
 if(mujoco_vendor_FOUND)
@@ -39,6 +37,7 @@ else()
   # not have the vendor package available (like pixi, currently).
   list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
   include(DownloadMujoco)
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 endif()
 
 # Fetch lodepng dependency.
@@ -139,8 +138,6 @@ PUBLIC
   ${MUJOCO_LIB}
 PRIVATE
   mujoco::libsimulate
-  controller_manager::controller_manager
-  hardware_interface::mock_components
   control_toolbox::control_toolbox
   Eigen3::Eigen
   Threads::Threads
