@@ -13,6 +13,9 @@ To run ensure pixi is installed.
 Then,
 
 ```bash
+# Install the environment
+pixi install --frozen
+
 # Setup the build environment
 pixi run setup-colcon
 

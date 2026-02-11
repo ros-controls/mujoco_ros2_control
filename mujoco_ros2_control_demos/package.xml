@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>mujoco_ros2_control_tests</name>
+  <name>mujoco_ros2_control_demos</name>
   <version>0.0.0</version>
-  <description>Tests for mujoco_ros2_control package</description>
+  <description>Demonstration examples for mujoco_ros2_control package</description>
   <maintainer email="nathan.b.dunkelberger@nasa.gov">Nathan Dunkelberger</maintainer>
   <maintainer email="erik.holum@nasa.gov">Erik Holum</maintainer>
 
@@ -16,21 +16,14 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <test_depend>ament_cmake_gtest</test_depend>
-  <test_depend>hardware_interface</test_depend>
-  <test_depend>joint_state_broadcaster</test_depend>
-  <test_depend>launch_testing_ament_cmake</test_depend>
-  <test_depend>mujoco_ros2_control</test_depend>
-  <test_depend>mujoco_ros2_control_demos</test_depend>
-  <test_depend>mujoco_ros2_control_msgs</test_depend>
-  <test_depend>pluginlib</test_depend>
-  <test_depend>position_controllers</test_depend>
-  <test_depend>rclcpp</test_depend>
-  <test_depend>robot_state_publisher</test_depend>
-  <test_depend>rviz2</test_depend>
-  <test_depend>urdfdom</test_depend>
-  <test_depend>urdfdom_py</test_depend>
-  <test_depend>xacro</test_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>mujoco_ros2_control</exec_depend>
+  <exec_depend>mujoco_ros2_control_msgs</exec_depend>
+  <exec_depend>position_controllers</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>xacro</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -960,7 +960,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
 
   // Create reset_world service
-  reset_world_service_ = get_node()->create_service<std_srvs::srv::Empty>(
+  reset_world_service_ = get_node()->create_service<mujoco_ros2_control_msgs::srv::ResetWorld>(
       "~/reset_world",
       std::bind(&MujocoSystemInterface::reset_world_callback, this, std::placeholders::_1, std::placeholders::_2));
   RCLCPP_INFO(get_logger(), "Created reset_world service at: %s/reset_world", get_node()->get_fully_qualified_name());
@@ -1752,11 +1752,12 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     const std::string keyframe_name = get_hardware_parameter_or(get_hardware_info(), "initial_keyframe", "");
     if (!keyframe_name.empty())
     {
-      RCLCPP_INFO(get_logger(), "Applying initial keyframe: '%s'", keyframe_name.c_str());
-      override_mujoco_actuator_positions_ = apply_keyframe(keyframe_name);
+      initial_keyframe_ = keyframe_name;
+      RCLCPP_INFO(get_logger(), "Applying initial keyframe: '%s'", initial_keyframe_.c_str());
+      override_mujoco_actuator_positions_ = apply_keyframe(initial_keyframe_);
       if (!override_mujoco_actuator_positions_)
       {
-        RCLCPP_ERROR(get_logger(), "Failed to apply initial keyframe: '%s'", keyframe_name.c_str());
+        RCLCPP_ERROR(get_logger(), "Failed to apply initial keyframe: '%s'", initial_keyframe_.c_str());
         return false;
       }
     }
@@ -2210,7 +2211,7 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
   return true;
 }
 
-bool MujocoSystemInterface::initialize_initial_positions(const hardware_interface::HardwareInfo& hardware_info)
+bool MujocoSystemInterface::initialize_initial_positions(const hardware_interface::HardwareInfo& /*hardware_info*/)
 {
   if (override_mujoco_actuator_positions_)
   {
@@ -2467,17 +2468,20 @@ void MujocoSystemInterface::set_initial_pose()
   mj_copyData(mj_data_control_, mj_model_, mj_data_);
 }
 
-void MujocoSystemInterface::reset_simulation_state()
+void MujocoSystemInterface::reset_simulation_state(bool fill_initial_state)
 {
   /// @note This method assumes sim_mutex_ is already held by the caller
 
   // Save the simulation time to preserve ROS clock continuity
   const mjtNum saved_time = mj_data_->time;
 
-  // Reset all positions, velocities and controls to initial state
-  std::copy(initial_qpos_.begin(), initial_qpos_.end(), mj_data_->qpos);
-  std::copy(initial_qvel_.begin(), initial_qvel_.end(), mj_data_->qvel);
-  std::copy(initial_ctrl_.begin(), initial_ctrl_.end(), mj_data_->ctrl);
+  if (fill_initial_state)
+  {
+    // Reset all positions, velocities and controls to initial state
+    std::copy(initial_qpos_.begin(), initial_qpos_.end(), mj_data_->qpos);
+    std::copy(initial_qvel_.begin(), initial_qvel_.end(), mj_data_->qvel);
+    std::copy(initial_ctrl_.begin(), initial_ctrl_.end(), mj_data_->ctrl);
+  }
 
   // Reset actuator activations (for muscles and similar)
   std::fill(mj_data_->act, mj_data_->act + mj_model_->na, 0.0);
@@ -2548,15 +2552,34 @@ void MujocoSystemInterface::reset_simulation_state()
   }
 }
 
-void MujocoSystemInterface::reset_world_callback(const std::shared_ptr<std_srvs::srv::Empty::Request> /*request*/,
-                                                 std::shared_ptr<std_srvs::srv::Empty::Response> /*response*/)
+void MujocoSystemInterface::reset_world_callback(
+    const std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Request> request,
+    std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Response> response)
 {
-  RCLCPP_INFO(get_logger(), "Reset world service called.....");
+  RCLCPP_INFO_EXPRESSION(get_logger(), !request->keyframe.empty(), "Reset world service called with keyframe: '%s'",
+                         request->keyframe.c_str());
+  RCLCPP_INFO_EXPRESSION(get_logger(), request->keyframe.empty(),
+                         "Reset world service called. Resetting to initial keyframe...");
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
 
-  reset_simulation_state();
+  bool fill_initial_state = request->keyframe.empty();
+  if (!fill_initial_state)
+  {
+    if (!apply_keyframe(request->keyframe))
+    {
+      response->message = "Failed to apply keyframe: '" + request->keyframe + "'. Not resetting world.";
+      RCLCPP_ERROR(get_logger(), "%s", response->message.c_str());
+      response->success = false;
+      return;
+    }
+  }
 
-  RCLCPP_INFO(get_logger(), "Successfully reset the mujoco world to the initial state.");
+  reset_simulation_state(fill_initial_state);
+  response->success = true;
+  const std::string keyframe_str = fill_initial_state ? "initial" : ("'" + request->keyframe + "'");
+  response->message = "Successfully reset the mujoco world to the " + keyframe_str + " state.";
+
+  RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
 }
 
 // simulate in background thread (while rendering in main thread)
@@ -2599,7 +2622,7 @@ void MujocoSystemInterface::PhysicsLoop()
         mj_data_->time = prevSimTime;
 
         // Apply initial state using common method
-        reset_simulation_state();
+        reset_simulation_state(true);
 
         // Force speed_changed to re-sync timing
         sim_->speed_changed = true;

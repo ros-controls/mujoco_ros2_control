@@ -30,6 +30,7 @@
 #include <hardware_interface/hardware_info.hpp>
 #include <hardware_interface/system_interface.hpp>
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
+#include <mujoco_ros2_control_msgs/srv/reset_world.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/macros.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -38,7 +39,6 @@
 #include <realtime_tools/realtime_publisher.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
-#include <std_srvs/srv/empty.hpp>
 
 #include <mujoco/mujoco.h>
 
@@ -264,7 +264,7 @@ private:
    * @note This method assumes the sim_mutex_ is already held by the caller.
    * @note Simulation time (mj_data_->time) is preserved to maintain ROS clock continuity.
    */
-  void reset_simulation_state();
+  void reset_simulation_state(bool fill_initial_state);
 
   /**
    * @brief Service callback for reset_world service.
@@ -272,8 +272,8 @@ private:
    * This method resets all joints to their initial positions and velocities,
    * and resets all free bodies (objects) to their spawned positions.
    */
-  void reset_world_callback(const std::shared_ptr<std_srvs::srv::Empty::Request> request,
-                            std::shared_ptr<std_srvs::srv::Empty::Response> response);
+  void reset_world_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Request> request,
+                            std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Response> response);
 
   /**
    * @brief Spins the physics simulation for the Simulate Application
@@ -383,12 +383,13 @@ private:
   bool override_urdf_joint_positions_{ false };
 
   // Reset world service
-  rclcpp::Service<std_srvs::srv::Empty>::SharedPtr reset_world_service_;
+  rclcpp::Service<mujoco_ros2_control_msgs::srv::ResetWorld>::SharedPtr reset_world_service_;
 
   // Storage for initial state (used for reset_world)
   std::vector<mjtNum> initial_qpos_;
   std::vector<mjtNum> initial_qvel_;
   std::vector<mjtNum> initial_ctrl_;
+  std::string initial_keyframe_ = "";
 };
 
 }  // namespace mujoco_ros2_control

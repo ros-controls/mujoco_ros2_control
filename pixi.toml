@@ -30,10 +30,11 @@ build = "colcon build"
 clean = "rm -rf build install log"
 
 # Test tasks
-test = { cmd = "bash -c 'source install/setup.bash && colcon test'" }
-test-result = { cmd = "bash -c 'source install/setup.bash && colcon test-result --verbose'" }
+test = "colcon test"
+test-result = "colcon test-result --verbose"
 
 [dependencies]
+python = ">=3.11,<3.13"
 colcon-common-extensions = ">=0.3.0,<0.4"
 colcon-mixin = ">=0.2.3,<0.3"
 cmake = ">=4.1.2,<5"
@@ -54,6 +55,7 @@ ros-jazzy-control-toolbox = "*"
 ros-jazzy-hardware-interface = "*"
 ros-jazzy-transmission-interface = "*"
 ros-jazzy-joint-state-broadcaster = "*"
+# mujoco_vendor not available on pixi - MuJoCo provided via pypi mujoco package instead
 ros-jazzy-position-controllers = "*"
 ros-jazzy-robot-state-publisher = "*"
 ros-jazzy-ros2-control-cmake = "*"
