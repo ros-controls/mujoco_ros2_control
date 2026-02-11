@@ -136,10 +136,10 @@ PUBLIC
   transmission_interface::transmission_interface
   pluginlib::pluginlib
   ${MUJOCO_LIB}
-PRIVATE
-  mujoco::libsimulate
   control_toolbox::control_toolbox
   Eigen3::Eigen
+PRIVATE
+  mujoco::libsimulate
   Threads::Threads
   lodepng
   glfw
