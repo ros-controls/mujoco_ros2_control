@@ -153,45 +153,6 @@ public:
 protected:
   rclcpp::Logger get_logger() const;
 
-private:
-  /**
-   * @brief Loads actuator information from MuJoCo model into the SystemInterface.
-   *
-   * This function reads the actuator definitions from the MuJoCo model and initializes their corresponding
-   * state and command information of the actuator handles.
-   */
-  bool register_mujoco_actuators();
-
-  /**
-   * @brief Loads actuator information into the HW interface.
-   *
-   * Will pull joint/actuator information from the provided HardwareInfo, and map it to the appropriate
-   * actuator in the sim's mujoco data. The data wrappers will be used as control/state interfaces for
-   * the HW interface.
-   */
-  void register_urdf_joints(const hardware_interface::HardwareInfo& info);
-
-  /**
-   * @brief Loads transmission information into the HW interface.
-   *
-   * Will pull transmission information from the provided HardwareInfo, and map it to the appropriate
-   * joints/actuators in the sim's mujoco data. This is primarily used to have cases where the URDF
-   * specifies the transmission ratios between joints and physical actuators.
-   */
-  bool register_transmissions(const hardware_interface::HardwareInfo& info);
-
-  bool initialize_initial_positions(const hardware_interface::HardwareInfo& info);
-
-  /**
-   * @brief Applies a keyframe to the simulation.
-   *
-   * This method sets the simulation state to the specified keyframe defined in the MuJoCo model.
-   * @param key_frame_name Name of the keyframe to apply.
-   *
-   * @return true if the keyframe was applied successfully, false otherwise.
-   */
-  bool apply_keyframe(const std::string& keyframe_name);
-
   /**
    * @brief Constructs all sensor data containers for the interface
    *
@@ -242,7 +203,46 @@ private:
    *    <state_interface name="linear_acceleration.z"/>
    *  </sensor>
    */
-  void register_sensors(const hardware_interface::HardwareInfo& info);
+  virtual void register_sensors(const hardware_interface::HardwareInfo& info);
+
+private:
+  /**
+   * @brief Loads actuator information from MuJoCo model into the SystemInterface.
+   *
+   * This function reads the actuator definitions from the MuJoCo model and initializes their corresponding
+   * state and command information of the actuator handles.
+   */
+  bool register_mujoco_actuators();
+
+  /**
+   * @brief Loads actuator information into the HW interface.
+   *
+   * Will pull joint/actuator information from the provided HardwareInfo, and map it to the appropriate
+   * actuator in the sim's mujoco data. The data wrappers will be used as control/state interfaces for
+   * the HW interface.
+   */
+  void register_urdf_joints(const hardware_interface::HardwareInfo& info);
+
+  /**
+   * @brief Loads transmission information into the HW interface.
+   *
+   * Will pull transmission information from the provided HardwareInfo, and map it to the appropriate
+   * joints/actuators in the sim's mujoco data. This is primarily used to have cases where the URDF
+   * specifies the transmission ratios between joints and physical actuators.
+   */
+  bool register_transmissions(const hardware_interface::HardwareInfo& info);
+
+  bool initialize_initial_positions(const hardware_interface::HardwareInfo& info);
+
+  /**
+   * @brief Applies a keyframe to the simulation.
+   *
+   * This method sets the simulation state to the specified keyframe defined in the MuJoCo model.
+   * @param key_frame_name Name of the keyframe to apply.
+   *
+   * @return true if the keyframe was applied successfully, false otherwise.
+   */
+  bool apply_keyframe(const std::string& keyframe_name);
 
   /**
    * @brief Sets the initial simulation conditions (pos, vel, ctrl) values from provided filepath.

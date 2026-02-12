@@ -2371,7 +2371,9 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     }
     else
     {
-      RCLCPP_ERROR_STREAM(get_logger(), "Invalid mujoco_type passed to the mujoco hardware interface: " << mujoco_type);
+      // Base only handles standard sensors; derived classes may override register_sensors for more types.
+      RCLCPP_DEBUG_STREAM(get_logger(),
+                          "Skipping sensor type '" << mujoco_type << "' (not fts/imu); derived classes may handle it");
     }
   }
 }
