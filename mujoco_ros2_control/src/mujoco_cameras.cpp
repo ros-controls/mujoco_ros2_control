@@ -22,6 +22,8 @@
 
 #include "sensor_msgs/image_encodings.hpp"
 
+#include <dlfcn.h>
+
 using namespace std::chrono_literals;
 
 namespace mujoco_ros2_control
@@ -342,6 +344,18 @@ void MujocoCameras::update_loop()
 
   // create scene and context
   mjv_makeScene(mj_model_, &mjv_scn_, 2000);
+
+#ifdef OSMESA_AVAILABLE
+  // When using OSMesa, make its symbols globally visible so MuJoCo's internal
+  // glad can find OSMesaGetProcAddress via dlsym. Without this, MuJoCo detects
+  // libGL/libGLX (loaded by GLFW) first and tries glXGetProcAddressARB, which
+  // fails in headless environments.
+  if (use_osmesa_)
+  {
+    dlopen("libOSMesa.so", RTLD_NOW | RTLD_GLOBAL);
+  }
+#endif
+
   mjr_makeContext(mj_model_, &mjr_con_, mjFONTSCALE_150);
 
   // Ensure the context will support the largest cameras

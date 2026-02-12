@@ -157,6 +157,7 @@ PRIVATE
   glfw
   OpenGL::EGL
   OpenGL::OpenGL
+  ${CMAKE_DL_LIBS}
 )
 if(OSMESA_FOUND)
   target_link_libraries(mujoco_ros2_control PRIVATE ${OSMESA_LIBRARY})
