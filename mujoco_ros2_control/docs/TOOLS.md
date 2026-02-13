@@ -59,11 +59,10 @@ options:
 
 A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_tests/test/test_resources/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_tests/test/test_resources/test_inputs.xml).
 
-To convert the URDF, run the following from the repo root (or in `src/mujoco_ros2_control` inside the container),
+To convert the URDF, run the following,
 
 ```bash
 ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py \
-  --scene mujoco_ros2_control_demos/demo_resources/scene.xml \
   --save_only \
   -u mujoco_ros2_control_demos/demo_resources/test_robot.urdf \
   -m mujoco_ros2_control_demos/demo_resources/test_inputs.xml \
@@ -74,7 +73,7 @@ The `/tmp/output/` directory will contain all necessary assets and MJCF files th
 They can also be adjusted as needed after the fact.
 
 ```bash
-/opt/ros/${ROS_DISTRO}/opt/mujoco_vendor/bin/simulate /tmp/output/scene.xml
+/opt/ros/${ROS_DISTRO}/opt/mujoco_vendor/bin/simulate /tmp/output/mujoco_description_formatted.xml
 ```
 
 Of note, the test robot has a good chunk of supported functionality, and we recommend using it as a guide.
