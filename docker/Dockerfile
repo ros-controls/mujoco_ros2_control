@@ -13,10 +13,6 @@ FROM ros:${ROS_DISTRO} AS mujoco_ros
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Defaults for the MuJoCo install, CPU_ARCH may be set to aarch64 for arm cpus
-ARG MUJOCO_VERSION=3.4.0
-ARG CPU_ARCH=x86_64
-
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Configure base dependencies
@@ -40,6 +36,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       wget \
       xterm \
       vim
+
+# Install MuJoCo specific pip dependencies
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    pip install mujoco obj2mjcf trimesh pycollada
 
 # Setup a ROS workspace
 ENV ROS_WS="/opt/mujoco/ws"
