@@ -397,19 +397,24 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                 scene = trimesh.load(temp_filepath, force=trimesh.scene)
 
                 # The default glossiness was way too high, so here we iterate over each visual
-                # element, assign default glossiness and specular but keep the rgba values
-                for geom in scene.geometry.values():
-                    visual = geom.visual
-                    rgba = extract_rgba(visual)
+                # element, assign default glossiness and specular but keep the rgba values.
+                # We also ignore this process if there are any image files so that we don't
+                # accidentally overwrite those. Technically we could have cases where daes have
+                # both images, and materials but I think the logic gets exceedingly complex to
+                # handle that.
+                if not image_files:
+                    for geom in scene.geometry.values():
+                        visual = geom.visual
+                        rgba = extract_rgba(visual)
 
-                    new_mat = trimesh.visual.material.SimpleMaterial(
-                        diffuse=rgba[:3],
-                        alpha=rgba[3],
-                        glossiness=1000,
-                        specular=[0.2, 0.2, 0.2],
-                    )
+                        new_mat = trimesh.visual.material.SimpleMaterial(
+                            diffuse=rgba[:3],
+                            alpha=rgba[3],
+                            glossiness=1000,
+                            specular=[0.2, 0.2, 0.2],
+                        )
 
-                    visual.material = new_mat
+                        visual.material = new_mat
 
                 # give the material a unique name so that it can be properly referenced
                 mtl_modifier = f"m{mtl_num}"
