@@ -1,13 +1,15 @@
-# MuJoCo To ROS Tools
+# URDF to MJCF Conversion
 
-
-> **WARNING**: These tools are highly experimental.
+> **WARNING**: This tool is hacky and _highly_ experimental!
 Expect things to be broken.
 
 As MuJoCo does not ingest URDFs, we have written a helper tool for converting URDF to MJCF to assist with converting a robot description to an MJCF.
+This can either be done offline or at runtime, refer to [demo 2](../../mujoco_ros2_control_demos/launch/02_mjcf_generation.launch.py) for an example.
 
-As noted in the warning above, but reiterating here, these tools are highly experimental.
+As noted in the warning above, but reiterating here, these tools are highly experimental!
 They are intended to be used for assistance and getting started, but do not expect things to work for all possible inputs, nor to work immediately out of the box.
+
+Additional cleanup, documentation, and tips and tricks are a work in progress.
 
 ## Usage
 
@@ -57,17 +59,22 @@ options:
 
 A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_tests/test/test_resources/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_tests/test/test_resources/test_inputs.xml).
 
-To convert the URDF, run the following from the repo root
+To convert the URDF, run the following from the repo root (or in `src/mujoco_ros2_control` inside the container),
 
 ```bash
-ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py --scene resources/scene.xml --save_only -u mujoco_ros2_control_tests/test/test_resources/test_robot.urdf  -m mujoco_ros2_control_tests/test/test_resources/test_inputs.xml -o /tmp/output/
+ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py \
+  --scene mujoco_ros2_control_demos/demo_resources/scene.xml \
+  --save_only \
+  -u mujoco_ros2_control_demos/demo_resources/test_robot.urdf \
+  -m mujoco_ros2_control_demos/demo_resources/test_inputs.xml \
+  -o /tmp/output/
 ```
 
 The `/tmp/output/` directory will contain all necessary assets and MJCF files that can be copied into the relevant locations in a config package.
 They can also be adjusted as needed after the fact.
 
 ```bash
-"${MUJOCO_DIR}"/bin/simulate /tmp/output/scene.xml
+/opt/ros/${ROS_DISTRO}/opt/mujoco_vendor/bin/simulate /tmp/output/scene.xml
 ```
 
 Of note, the test robot has a good chunk of supported functionality, and we recommend using it as a guide.
@@ -75,36 +82,13 @@ Of note, the test robot has a good chunk of supported functionality, and we reco
 > [!NOTE]
 > The `make_mjcf_from_robot_description.py` script requires `trimesh`, `mujoco`, and `obj2mjcf`. These must either be installed system-wide or available within a virtual environment that is sourced before running the command.
 
-## Conversion of CLR
-
-We generally recommend using the `view_robot.launch.py` from description packages to run a conversion for one of our robots.
-Though it can be as long as there is an active `/robot_description` topic with a fully processed URDF.
-For example, to convert the ChonkUR robot, we can use the inputs from the `clr_mujoco_config` package:
-
-```bash
-# Publish the robot description
-ros2 launch clr_description view_robot.launch.py
-
-# Then process the urdf, note you MUST break down the .objs by passing `-c`.
-ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py -c -m $(ros2 pkg prefix clr_mujoco_config --share)/description/mujoco_inputs.xml -o /tmp/clr_output/
-```
-
-Like above, this will dump all necessary data to the `/tmp/clr_output/` directory, which can then be copied or modified as needed.
-
-To view the results of the conversion, you can use MuJoCo's `simulate` tool.
-This will bringup the standard MuJoCo user panel with the converted Chonkur:
-
-```bash
-"${MUJOCO_DIR}"/bin/simulate /tmp/clr_output/scene.xml
-```
-
 ## Notes
 
 **NOTE** This has some heave non-ROS dependencies that could probably be cleaned up:
 
+* MuJoCo Python API
 * trimesh - Python library for loading and using triangular meshes.
 * obj2mjcf - A tool for converting Wavefront OBJ files to multiple MuJoCo meshes grouped by material.
-* MuJoCo Python API
 * xml.etree (not sure if this is already available)
 * xml.dom (not sure if this is already available)
 
@@ -113,12 +97,12 @@ A rough outline of the automated process to convert a URDF:
 * reads a robot descriptiong URDF
 * add in mujoco tag that provides necessary info for conversion
 * replace package names from `package://` to absolute filepaths
-* read absolute filepaths of all meshes and convert either dae or stl to obj using blender python api
+* read absolute filepaths of all meshes and convert either dae or stl to obj using trimesh
   * put all of these meshes into an `assets/` folder under `mjcf_data/` relative to current working dir
   * modify filepaths again in urdf to point to `assets/` folder
-  * (NOTE) blender dae conversion is kind of broken, need to get this to do better orientation
+  * decomposes large meshes into multiple components to ensure convex hulls
 * publish the new formatted robot description xml file that can be used for conversion
 * convert the new robot description urdf file
 * run the mujoco conversion tool to get the mjcf version
 * copy in a default scene.xml file which gives some better camera and scene info
-* add remaining sites and items
+* add remaining sites and items and any other custom inputs
