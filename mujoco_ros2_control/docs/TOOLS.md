@@ -59,7 +59,7 @@ options:
 
 A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_tests/test/test_resources/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_tests/test/test_resources/test_inputs.xml).
 
-To convert the URDF, run the following,
+To convert the URDF, run the following from the repo root
 
 ```bash
 ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py \
@@ -88,7 +88,6 @@ Of note, the test robot has a good chunk of supported functionality, and we reco
 * MuJoCo Python API
 * trimesh - Python library for loading and using triangular meshes.
 * obj2mjcf - A tool for converting Wavefront OBJ files to multiple MuJoCo meshes grouped by material.
-* xml.etree (not sure if this is already available)
 * xml.dom (not sure if this is already available)
 
 A rough outline of the automated process to convert a URDF:
