@@ -60,6 +60,8 @@ jobs:
       - name: Run tests
         run: |
           docker run --rm \
+            -e LIBGL_ALWAYS_SOFTWARE=1 \
+            -e GALLIUM_DRIVER=llvmpipe \
             ${{ steps.meta.outputs.tags }} \
             bash -c "
               colcon test &&
@@ -103,6 +105,8 @@ jobs:
             -v ${{ github.workspace }}/.sccache:/workspace/.sccache \
             -w /workspace \
             -e SCCACHE_DIR=/workspace/.sccache \
+            -e LIBGL_ALWAYS_SOFTWARE=1 \
+            -e GALLIUM_DRIVER=llvmpipe \
             mujoco_ros2_control_pixi:ci \
             bash -c "
               pixi run setup-colcon && \

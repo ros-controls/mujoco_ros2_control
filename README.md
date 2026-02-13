@@ -328,6 +328,20 @@ Additionally camera_info, color, and depth images will be published to topics ca
 Also note that MuJuCo's conventions for cameras are different than ROS's, and which must be accounted for.
 Refer to the documentation for more information.
 
+#### Headless Rendering
+
+Camera rendering is supported in headless environments (without a display).
+The system automatically detects whether a display is available:
+
+- **With display**: Uses GLFW for OpenGL context creation (default behavior)
+- **Without display**: Falls back to EGL for GPU-accelerated headless rendering
+
+This allows camera topics to be published even when running in headless mode (e.g., on a server, in Docker containers, or in CI environments).
+
+> [!NOTE]
+> EGL requires proper GPU drivers and EGL libraries to be installed (e.g., `libegl1-mesa` on Ubuntu).
+> If both GLFW and EGL fail to initialize, camera publishing will be disabled with a warning.
+
 For example,
 
 ```xml

@@ -274,8 +274,11 @@ class TestFixture(unittest.TestCase):
         )
         wait_for_topics.shutdown()
 
-    # Runs the tests when the DISPLAY is set
-    @unittest.skipIf(os.environ.get("DISPLAY", "") == "", "Skipping camera tests in headless mode.")
+    # Camera tests now work in headless mode via EGL fallback.
+    # Skip only if explicitly disabled (e.g., on systems without GPU/EGL support).
+    @unittest.skipIf(
+        os.environ.get("SKIP_CAMERA_TESTS", "").lower() == "true", "Skipping camera tests (SKIP_CAMERA_TESTS=true)."
+    )
     def test_camera_topics(self):
         topic_list = [
             ("/camera/color/image_raw", Image),
