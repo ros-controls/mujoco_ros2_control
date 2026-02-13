@@ -18,6 +18,11 @@ ros2 launch mujoco_ros2_control_demos 01_basic_robot.launch.py
 
 **Resources:** `demo_resources/scenes/scene.xml`, `demo_resources/robot/test_robot.xml`
 
+> [!TIP]
+> UI panels can be toggled with `Tab` or `Shift+Tab`.
+> All standard MuJoCo keyboard shortcuts are available.
+> To see a short list, press `F1`.
+
 ---
 
 ### Tutorial 2: MJCF Generation at Runtime

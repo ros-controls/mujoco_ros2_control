@@ -8,24 +8,13 @@ Because the app is not bundled as a library, we compile it directly from a local
 
 Parts of this library are also based on the MoveIt [mujoco_ros2_control](https://github.com/moveit/mujoco_ros2_control) package.
 
-## Installation
-
-This interface has only been tested against ROS 2 jazzy and MuJoCo `3.4.0`.
-It should also be compatible with kilted and rolling, but we do not actively maintain those.
-We assume all required ROS dependencies have been installed either manually or with `rosdep`.
-
-For configuring MuJoCo, the included [CMakeLists.txt](./mujoco_ros2_control/CMakeLists.txt) will first attempt to use the [mujoco_vendor](https://github.com/pal-robotics/mujoco_vendor) package if it is installed in your ROS environment.
-If it is not found, will download and install the tarfile automatically.
-As long as users have a good network connection there should not be an issue.
-
-From there the library can be compiled with `colcon build ...`, as normal.
-
 ## URDF Model Conversion
 
 Mujoco does not support the full feature set of xacro/URDFs in the ROS 2 ecosystem.
 As such, users are required to convert any existing robot description files to an MJCF format.
 This includes adding actuators, sensors, and cameras as needed to the MJCF XML.
 
+This conversion can be done either offline or at run time.
 We have built a *highly experimental tool to automate URDF conversion.
 For more information refer to the [documentation](./mujoco_ros2_control/docs/TOOLS.md).
 
@@ -129,12 +118,11 @@ It is the same executable and parameters as the upstream, but requires updating 
 
 > [!NOTE]
 > We can remove the the ROS 2 control node after the next ros2_control upstream release,
-> as the simulation requires [this PR](https://github.com/ros-controls/ros2_control/pull/2654) to run.
-> The hardware interface _should_ then be compatible with `humble`, `jazzy`, and `kilted`.
+> as the simulation requires [this PR](https://github.com/ros-controls/ros2_control/pull/2963) to run.
 
 ### Joints
 
-Joints in the ros2_control interface are mapped to actuators defined in the MJCF.
+Joints in the ros2_control interface are mapped to actuators defined in the MJCF, either directly or as transmission interfaces.
 The system supports different joint control modes based on the actuator type and available command interfaces.
 
 We rely on MuJoCo's PD-level ctrl input for direct position, velocity, or effort control.
@@ -211,12 +199,10 @@ Could map to the following hardware interface:
 > [!NOTE]
 > The `torque` and `force` command/state interfaces are semantically equivalent to `effort`, and map to the same underlying data in the sim.
 
-Switching actuator/control types on the fly is an [open issue](#13).
-
 ### Grippers and Mimic Joints
 
 Many robot grippers include mimic joints, where control of a single actuator affects the state of many joints.
-There are many possible ways to handle this on the mujoco side of things, and cannot suggest which is optimal.
+There are many possible ways to handle this on the mujoco side of things, we recommend research and experimentation, or referring to existing models in the wild.
 
 In the current implementation drivers _require_ a motor type actuator for joint control and state information.
 In particular, tendons and other "non-standard" joint types in an MJCF are not directly controllable through the drivers.
@@ -421,36 +407,11 @@ regardless of whether their interfaces are exposed via `ros2_control`.
 > snap back to its previous commanded position. To avoid this, it is recommended to deactivate any active joint
 > controllers before calling this service.
 
-
 ## Test Robot System
 
-While examples are limited, we maintain a functional example 2-dof robot system in the [test examples](./mujoco_ros2_control_tests/test_resources/test_robot.urdf) space.
+While examples are limited, we maintain a functional example 2-dof robot system in the [demos](../mujoco_ros2_control_demos/README.md) space.
 We generally recommend looking there for examples and recommended workflows.
-
-For now, built the drivers with testing enabled, then the test robot system can be launched with:
-
-```bash
-# Brings up the hardware drivers and mujoco interface, along with a single position controller
-ros2 launch mujoco_ros2_control_tests test_robot.launch.py
-
-# Or optionally include the PID controller as mentioned above
-ros2 launch mujoco_ros2_control_tests test_robot.launch.py use_pid:=true
-
-# Launch an rviz2 window with the provided configuration
-rviz2 -d $(ros2 pkg prefix --share mujoco_ros2_control_tests)/config/test_robot.rviz
-```
-
-From there, command joints to move with,
-
-```bash
-ros2 topic pub /position_controller/commands std_msgs/msg/Float64MultiArray "data: [-0.25, 0.75]" --once
-```
-
-> [!TIP]
-> UI panels can be toggled with `Tab` or `Shift+Tab`.
-> All standard MuJoCo keyboard shortcuts are available.
-> To see a short list, press `F1`.
 
 ## Development
 
-More information is provided in the [developers guide](./mujoco_ros2_control/docs/DEVELOPMENT.md) document.
+More information is provided in the [developers guide](./../docs/DEVELOPMENT.md) document.
