@@ -37,11 +37,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       xterm \
       vim
 
-# Install MuJoCo specific pip dependencies, ignoring the conflict in kilted and rolling images
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
-RUN pip install --ignore-installed typing-extensions && \
-    pip install mujoco obj2mjcf trimesh pycollada
-
 # Setup a ROS workspace
 ENV ROS_WS="/opt/mujoco/ws"
 RUN mkdir -p ${ROS_WS}/src/mujoco_ros2_control

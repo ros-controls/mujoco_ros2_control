@@ -62,7 +62,8 @@ A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros
 To convert the URDF, run the following from the repo root
 
 ```bash
-ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py \
+# Dependencies are installed on the fly, if needed
+ros2 run mujoco_ros2_control robot_description_to_mjcf.sh \
   --save_only \
   -u mujoco_ros2_control_demos/demo_resources/test_robot.urdf \
   -m mujoco_ros2_control_demos/demo_resources/test_inputs.xml \
