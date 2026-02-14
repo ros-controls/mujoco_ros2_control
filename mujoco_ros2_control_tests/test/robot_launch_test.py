@@ -175,7 +175,7 @@ class TestFixture(unittest.TestCase):
         # Allow some time for the message to be processed
         time.sleep(4.0)
         if os.environ.get("TEST_TRANSMISSIONS") == "true":
-            # wait a bit more for the mujoco actuator states to be reach as they move double
+            # wait a bit more for the MuJoCo actuator states to be reach as they move double
             time.sleep(2.0)
 
         # Now, check that the joint states have been updated accordingly
@@ -318,7 +318,7 @@ class TestFixture(unittest.TestCase):
         # Allow time for robot to move
         time.sleep(3.0)
         if os.environ.get("TEST_TRANSMISSIONS") == "true":
-            # wait a bit more for the mujoco actuator states to be reach as they move double
+            # wait a bit more for the MuJoCo actuator states to be reach as they move double
             time.sleep(4.0)
 
         # Wait for the joint states
@@ -396,7 +396,7 @@ class TestFixture(unittest.TestCase):
             rclpy.spin_once(self.node, timeout_sec=0.1)
         time.sleep(3.0)
         if os.environ.get("TEST_TRANSMISSIONS") == "true":
-            # wait a bit more for the mujoco actuator states to be reach as they move double
+            # wait a bit more for the MuJoCo actuator states to be reach as they move double
             time.sleep(4.0)
 
         self.verify_arm_joint_states({"joint1": -0.5, "joint2": 0.5}, delta=0.05)

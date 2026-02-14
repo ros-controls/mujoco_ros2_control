@@ -94,7 +94,7 @@ Of note, the test robot has a good chunk of supported functionality, and we reco
 A rough outline of the automated process to convert a URDF:
 
 * reads a robot descriptiong URDF
-* add in mujoco tag that provides necessary info for conversion
+* add in MuJoCo tag that provides necessary info for conversion
 * replace package names from `package://` to absolute filepaths
 * read absolute filepaths of all meshes and convert either dae or stl to obj using trimesh
   * put all of these meshes into an `assets/` folder under `mjcf_data/` relative to current working dir
@@ -102,6 +102,6 @@ A rough outline of the automated process to convert a URDF:
   * decomposes large meshes into multiple components to ensure convex hulls
 * publish the new formatted robot description xml file that can be used for conversion
 * convert the new robot description urdf file
-* run the mujoco conversion tool to get the mjcf version
+* run the MuJoCo conversion tool to get the mjcf version
 * copy in a default scene.xml file which gives some better camera and scene info
 * add remaining sites and items and any other custom inputs

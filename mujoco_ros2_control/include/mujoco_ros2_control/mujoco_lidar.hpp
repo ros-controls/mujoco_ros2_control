@@ -46,7 +46,7 @@ struct LidarData
   double range_min;
   double range_max;
 
-  // Maps the index of the rangefinder to the index of the mujoco rangefinder's data.
+  // Maps the index of the rangefinder to the index of the MuJoCo rangefinder's data.
   // E.g. lidar-034 -> sensor_indexes[34] will contain index of that rangefinder in mj_data_->sensordata
   std::vector<int> sensor_indexes;
 

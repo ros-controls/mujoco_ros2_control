@@ -156,7 +156,7 @@ target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
   $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>
 )
 
-# Export mujoco alongside the interface to provide access to data.
+# Export MuJoCo alongside the interface to provide access to data.
 install(TARGETS mujoco_ros2_control ${MUJOCO_EXPORT_TARGETS}
   EXPORT export_${PROJECT_NAME}
   LIBRARY DESTINATION lib

@@ -23,11 +23,11 @@ import sys
 from collections import deque, defaultdict
 
 # Prints a list of all moveable links in an URDF that are missing inertial data.
-# Mujoco requires that all moveable bodies have a non-zero inertia and mass, which boils
+# MuJoCo requires that all moveable bodies have a non-zero inertia and mass, which boils
 # down to having at least one statically attached object to every non-fixed joint's children.
 # This is a little helper script to identify joints/links that are missing required data
 # because it can be really annoying to identify what is missing when converting URDFs,
-# and the errors from Mujoco's XML loader do not give info.
+# and the errors from MuJoCo's XML loader do not give info.
 
 
 def parse_urdf(urdf_fp):

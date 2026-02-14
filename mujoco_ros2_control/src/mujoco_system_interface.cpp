@@ -403,7 +403,7 @@ mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::string& top
 
   rclcpp::QoS qos_profile(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
   qos_profile.reliable().transient_local().keep_last(1);
-  RCLCPP_INFO(node->get_logger(), "Trying to get the mujoco model from topic");
+  RCLCPP_INFO(node->get_logger(), "Trying to get the MuJoCo model from topic");
 
   // Try to get mujoco_model via topic
   auto mujoco_model_sub = node->create_subscription<std_msgs::msg::String>(
@@ -455,7 +455,7 @@ mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::string& top
 
 mjModel* LoadModel(const char* file, const std::string& topic, mj::Simulate& sim, rclcpp::Node::SharedPtr node)
 {
-  // Try to get the mujoco model from URDF.
+  // Try to get the MuJoCo model from URDF.
   // If it is not available, create a subscription and listen for the model on a topic.
 
   // this copy is needed so that the mju::strlen call below compiles
@@ -467,7 +467,7 @@ mjModel* LoadModel(const char* file, const std::string& topic, mj::Simulate& sim
   {
     return loadModelFromFile(file, sim);
   }
-  // Try to get the mujoco model from topic
+  // Try to get the MuJoCo model from topic
   return loadModelFromTopic(node, topic);
 }
 
@@ -794,7 +794,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       sim_ready->set_value();
 
       // Blocks until terminated
-      RCLCPP_INFO(get_logger(), "Starting the mujoco rendering thread...");
+      RCLCPP_INFO(get_logger(), "Starting the MuJoCo rendering thread...");
       sim_->RenderLoop();
     });
   }
@@ -1010,7 +1010,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // When the interface is activated, we start the physics engine.
   physics_thread_ = std::thread([this, headless]() {
     // Load the simulation and do an initial forward pass
-    RCLCPP_INFO(get_logger(), "Starting the mujoco physics thread...");
+    RCLCPP_INFO(get_logger(), "Starting the MuJoCo physics thread...");
     if (headless)
     {
       const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
@@ -1155,7 +1155,7 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
           new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.linear_acceleration.data.z());
         }
         // Add covariance interfaces, these aren't currently used but some controllers require them.
-        // TODO: Is there mujoco covariance data we could use?
+        // TODO: Is there MuJoCo covariance data we could use?
         else if (state_if.name.find("orientation_covariance") == 0)
         {
           // Convert the index from the end of the string, this doesn't really matter yet
@@ -1241,7 +1241,7 @@ MujocoSystemInterface::on_deactivate(const rclcpp_lifecycle::State& /*previous_s
 {
   RCLCPP_INFO(get_logger(), "Deactivating MuJoCo hardware interface and shutting down Simulate...");
 
-  // TODO: Should we shut mujoco things down here or in the destructor?
+  // TODO: Should we shut MuJoCo things down here or in the destructor?
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -1488,7 +1488,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   };
 
   // Joint commands
-  // TODO: Support command limits. For now those ranges can be limited in the mujoco actuators themselves.
+  // TODO: Support command limits. For now those ranges can be limited in the MuJoCo actuators themselves.
   for (auto& actuator : mujoco_actuator_data_)
   {
     if (actuator.actuator_type == ActuatorType::PASSIVE)
@@ -1524,7 +1524,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 
 void MujocoSystemInterface::actuator_state_to_joint_state()
 {
-  // actuator: mujoco -> transmission
+  // actuator: MuJoCo -> transmission
   std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
                 [](auto& actuator_interface) { actuator_interface.copy_state_to_transmission(); });
 
@@ -1561,7 +1561,7 @@ void MujocoSystemInterface::joint_command_to_actuator_command()
   std::for_each(transmission_instances_.begin(), transmission_instances_.end(),
                 [](auto& transmission) { transmission->joint_to_actuator(); });
 
-  // set the commands to the mujoco actuators
+  // set the commands to the MuJoCo actuators
   std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
                 [](auto& actuator_interface) { actuator_interface.copy_command_from_transmission(); });
 
@@ -1733,7 +1733,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
     RCLCPP_DEBUG(get_logger(), "Successfully registered actuator '%s'", act_name);
   }
 
-  // now look out for the mujoco joints that do not have any actuator associated with them
+  // now look out for the MuJoCo joints that do not have any actuator associated with them
   for (int jnt_id = 0; jnt_id < mj_model_->njnt; jnt_id++)
   {
     const auto actuator_it = std::find_if(mujoco_actuator_data_.cbegin(), mujoco_actuator_data_.cend(),
@@ -2051,7 +2051,7 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
       return false;
     }
 
-    // If the joints are not found as mujoco actuators, check the actuators of transmission
+    // If the joints are not found as MuJoCo actuators, check the actuators of transmission
     bool all_transmission_actuators = true;
     for (const auto& tran_actuator_info : t_info.actuators)
     {
@@ -2265,7 +2265,7 @@ bool MujocoSystemInterface::apply_keyframe(const std::string& keyframe_name)
   int keyframe_id = mj_name2id(mj_model_, mjOBJ_KEY, keyframe_name.c_str());
   if (keyframe_id == -1)
   {
-    RCLCPP_ERROR(get_logger(), "Failed to find keyframe : '%s' in the mujoco model!", keyframe_name.c_str());
+    RCLCPP_ERROR(get_logger(), "Failed to find keyframe : '%s' in the MuJoCo model!", keyframe_name.c_str());
     return false;
   }
 
@@ -2293,7 +2293,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     }
     const auto mujoco_type = sensor.parameters.at("mujoco_type");
 
-    // If there is a specific sensor name provided we use that, otherwise we assume the mujoco model's
+    // If there is a specific sensor name provided we use that, otherwise we assume the MuJoCo model's
     // sensor is named identically to the ros2_control hardware interface's.
     std::string mujoco_sensor_name;
     if (sensor.parameters.count("mujoco_sensor_name") == 0)
@@ -2326,7 +2326,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       if (force_sensor_id == -1 || torque_sensor_id == -1)
       {
         RCLCPP_ERROR_STREAM(get_logger(),
-                            "Failed to find force/torque sensor in mujoco model, sensor name: " << sensor.name);
+                            "Failed to find force/torque sensor in MuJoCo model, sensor name: " << sensor.name);
         continue;
       }
 
@@ -2359,7 +2359,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
       if (quat_id == -1 || gyro_id == -1 || accel_id == -1)
       {
-        RCLCPP_ERROR_STREAM(get_logger(), "Failed to find IMU sensor in mujoco model, sensor name: " << sensor.name);
+        RCLCPP_ERROR_STREAM(get_logger(), "Failed to find IMU sensor in MuJoCo model, sensor name: " << sensor.name);
         continue;
       }
 
@@ -2371,7 +2371,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     }
     else
     {
-      RCLCPP_ERROR_STREAM(get_logger(), "Invalid mujoco_type passed to the mujoco hardware interface: " << mujoco_type);
+      RCLCPP_ERROR_STREAM(get_logger(), "Invalid mujoco_type passed to the MuJoCo hardware interface: " << mujoco_type);
     }
   }
 }
@@ -2588,7 +2588,7 @@ void MujocoSystemInterface::reset_world_callback(
   reset_simulation_state(fill_initial_state);
   response->success = true;
   const std::string keyframe_str = fill_initial_state ? "initial" : ("'" + request->keyframe + "'");
-  response->message = "Successfully reset the mujoco world to the " + keyframe_str + " state.";
+  response->message = "Successfully reset the MuJoCo world to the " + keyframe_str + " state.";
 
   RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
 }

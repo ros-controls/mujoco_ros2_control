@@ -69,7 +69,7 @@ struct InterfaceData
 };
 
 /**
- * Wrapper for mujoco actuators and relevant ROS HW interface data.
+ * Wrapper for MuJoCo actuators and relevant ROS HW interface data.
  * @param joint_name Name of the MuJoCo joint handled by the actuator.
  * @param position_interface Data for position command/state interface.
  * @param velocity_interface Data for velocity command/state interface.
