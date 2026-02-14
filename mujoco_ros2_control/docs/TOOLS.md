@@ -1,7 +1,9 @@
 # URDF to MJCF Conversion
 
-> **WARNING**: This tool is hacky and _highly_ experimental!
-Expect things to be broken.
+
+> [!WARNING]
+> This tool is hacky and _highly_ experimental!
+> Expect things to be broken.
 
 As MuJoCo does not ingest URDFs, we have written a helper tool for converting URDF to MJCF to assist with converting a robot description to an MJCF.
 This can either be done offline or at runtime, refer to [demo 2](../../mujoco_ros2_control_demos/launch/02_mjcf_generation.launch.py) for an example.
@@ -86,7 +88,8 @@ Of note, the test robot has a good chunk of supported functionality, and we reco
 
 ## Notes
 
-**NOTE** This has some heave non-ROS dependencies that could probably be cleaned up:
+> [!NOTE]
+>  This has some heavy non-ROS dependencies that could probably be cleaned up:
 
 * MuJoCo Python API
 * trimesh - Python library for loading and using triangular meshes.
