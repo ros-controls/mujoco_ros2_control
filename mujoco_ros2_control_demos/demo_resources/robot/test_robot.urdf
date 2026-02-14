@@ -194,7 +194,7 @@
     <origin xyz="0 0 0" rpy="-1.5708 0 1.5708"/>
   </joint>
 
-  <!-- For the sake of visibility, this is where the mujoco camera should end up -->
+  <!-- For the sake of visibility, this is where the MuJoCo camera should end up -->
   <link name="camera_color_mujoco_frame"/>
   <joint name="camera_color_mujoco_joint" type="fixed">
     <parent link="camera_color_optical_frame"/>

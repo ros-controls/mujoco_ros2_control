@@ -39,7 +39,7 @@ from ament_index_python.packages import get_package_share_directory
 from xml.dom import minidom
 
 
-# Hardcoded relative paths for mujoco asset outputs
+# Hardcoded relative paths for MuJoCo asset outputs
 DECOMPOSED_PATH_NAME = "decomposed"
 COMPOSED_PATH_NAME = "full"
 
@@ -377,7 +377,7 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
             # keep track of the files that were copied to tmp directory to delete
             copied_image_files = []
 
-            # set z axis to up in the dae file because that is how mujoco expects it
+            # set z axis to up in the dae file because that is how MuJoCo expects it
             z_up_dae_txt = set_up_axis_to_z_up(full_filepath)
 
             # make a temporary file rather than overwriting the old one
@@ -886,7 +886,7 @@ def parse_inputs_xml(filename=None):
     if not filename:
         return None, None
 
-    print(f"Parsing mujoco elements from: {filename}")
+    print(f"Parsing MuJoCo elements from: {filename}")
 
     dom = minidom.parse(filename)
     root = dom.documentElement
@@ -943,7 +943,7 @@ def parse_scene_xml(filename=None):
     if not filename:
         return None
 
-    print(f"Parsing mujoco scene from: {filename}")
+    print(f"Parsing MuJoCo scene from: {filename}")
 
     dom = minidom.parse(filename)
     root = dom.documentElement
@@ -1053,7 +1053,7 @@ def add_links_as_sites(urdf, dom, add_free_joint):
     for link, (parent, tf, is_root) in tfs.items():
         pos = remove_epsilons(tf.p)
         quat = remove_epsilons(tf.M.GetQuaternion())
-        # change x y z w to w x y z for ros to mujoco convention
+        # change x y z w to w x y z for ros to MuJoCo convention
         quat = [quat[3], quat[0], quat[1], quat[2]]
         # root items are special because they don't attach to a body
         if is_root and not add_free_joint:
@@ -1089,7 +1089,7 @@ def add_links_as_sites(urdf, dom, add_free_joint):
     modified_data = dom.toprettyxml(indent="  ")
     modified_data = "\n".join([line for line in modified_data.splitlines() if line.strip()])
 
-    # remove the first line bc mujoco doesn't like the xml tag at the beginning
+    # remove the first line bc MuJoCo doesn't like the xml tag at the beginning
     modified_lines = modified_data.splitlines(True)
     modified_lines.pop(0)
     modified_data = "".join(modified_lines)
@@ -1135,7 +1135,7 @@ def add_cameras_from_sites(dom, cameras_dict):
         > +y should point down in the image
         > +z should point into to plane of the image
 
-    Mujoco Cameras are oriented slightly differently, https://mujoco.readthedocs.io/en/latest/modeling.html#cameras
+    MuJoCo Cameras are oriented slightly differently, https://mujoco.readthedocs.io/en/latest/modeling.html#cameras
 
         > Cameras look towards the negative Z axis of the camera frame, while positive X and Y correspond
         > to right and up in the image plane, respectively.
@@ -1170,7 +1170,7 @@ def add_cameras_from_sites(dom, cameras_dict):
 
 def add_lidar_from_sites(dom, lidar_dict):
     """
-    Creates a replicates tag from mujoco inputs below the specified site name and lidar tag.
+    Creates a replicates tag from MuJoCo inputs below the specified site name and lidar tag.
 
     Replicates must be under to a body, so we add a massless body with an identical transform to support
     attaching the sensor's replicates.
@@ -1323,7 +1323,7 @@ def fix_mujoco_description(
     dom = update_obj_assets(dom, output_filepath, mesh_info_dict)
     dom = update_non_obj_assets(dom, output_filepath)
 
-    # Add the mujoco input elements
+    # Add the MuJoCo input elements
     dom = add_mujoco_inputs(dom, raw_inputs, scene_inputs)
 
     # Add links as sites
@@ -1344,7 +1344,7 @@ def fix_mujoco_description(
         modified_data = dom.toprettyxml(indent="  ")
         modified_data = "\n".join([line for line in modified_data.splitlines() if line.strip()])
 
-        # remove the first line bc mujoco doesn't like the xml tag at the beginning
+        # remove the first line bc MuJoCo doesn't like the xml tag at the beginning
         modified_lines = modified_data.splitlines(True)
         modified_lines.pop(0)
         modified_data = "".join(modified_lines)
@@ -1440,7 +1440,7 @@ def get_urdf_transforms(urdf_string):
             # if it isn't fixed, we are done here!
 
             # actually, maybe we need this, not sure. I'm not sure if the
-            # mujoco goes to the end of the joint
+            # MuJoCo goes to the end of the joint
             # transform = link_tf*transform
             return (link, transform, False)
 
@@ -1495,7 +1495,7 @@ def publish_model_on_topic(publish_topic, output_filepath, args=None):
 
 def add_urdf_free_joint(urdf):
     """
-    Adds a free joint to the top of the urdf. This makes Mujoco create a
+    Adds a free joint to the top of the urdf. This makes MuJoCo create a
     floating joint so that a base is free to move, like on an AMR.
     """
 
@@ -1562,7 +1562,7 @@ def write_mujoco_scene(scene_inputs, output_filepath):
     root.setAttribute("model", "scene")
     dom.appendChild(root)
 
-    # Add an <include> tag for the mujoco description
+    # Add an <include> tag for the MuJoCo description
     include_node = dom.createElement("include")
     include_node.setAttribute("file", "mujoco_description_formatted.xml")
     root.appendChild(include_node)
@@ -1591,7 +1591,7 @@ def write_mujoco_scene(scene_inputs, output_filepath):
 
 def main(args=None):
 
-    parser = argparse.ArgumentParser(description="Convert a full URDF to MJCF for use in Mujoco")
+    parser = argparse.ArgumentParser(description="Convert a full URDF to MJCF for use in MuJoCo")
     parser.add_argument("-u", "--urdf", required=False, default=None, help="Optionally pass an existing URDF file")
     parser.add_argument(
         "-r", "--robot_description", required=False, help="Optionally pass the robot description string"
@@ -1716,7 +1716,7 @@ def main(args=None):
 
     print(f"Using destination directory: {output_filepath}")
 
-    # Add required mujoco tags to the starting URDF
+    # Add required MuJoCo tags to the starting URDF
     xml_data = add_mujoco_info(urdf, output_filepath, parsed_args.publish_topic, parsed_args.fuse)
 
     # get rid of collision data, assuming the visual data is much better resolution.
@@ -1737,7 +1737,7 @@ def main(args=None):
     model = mujoco.MjModel.from_xml_path(f"{output_filepath}{robot_description_filename}")
     mujoco.mj_saveLastXML(f"{output_filepath}mujoco_description.xml", model)
 
-    # Converts objs for use in mujoco, adds tags, inputs, sites, and sensors to the final xml
+    # Converts objs for use in MuJoCo, adds tags, inputs, sites, and sensors to the final xml
     fix_mujoco_description(
         output_filepath,
         mesh_info_dict,

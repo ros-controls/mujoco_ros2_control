@@ -197,7 +197,7 @@ private:
    *
    * Pulls sensors (FTS and IMUs) out of the HardwareInfo and uses it to map relevant data containers
    * in the ros2_control interface. There are expectations on the naming of sensors in both the MJCF and
-   * the ros2_control xacro, as Mujoco does not have direct support for either of these sensors.
+   * the ros2_control xacro, as MuJoCo does not have direct support for either of these sensors.
    *
    * For a FTS named <FTS>, we add both a `force` and `torque` sensor to the MJCF as:
    *

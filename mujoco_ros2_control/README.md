@@ -10,13 +10,13 @@ Parts of this library are also based on the MoveIt [mujoco_ros2_control](https:/
 
 ## URDF Model Conversion
 
-Mujoco does not support the full feature set of xacro/URDFs in the ROS 2 ecosystem.
+MuJoCo does not support the full feature set of xacro/URDFs in the ROS 2 ecosystem.
 As such, users are required to convert any existing robot description files to an MJCF format.
 This includes adding actuators, sensors, and cameras as needed to the MJCF XML.
 
 This conversion can be done either offline or at run time.
-We have built a *highly experimental tool to automate URDF conversion.
-For more information refer to the [documentation](./mujoco_ros2_control/docs/TOOLS.md).
+We have built a *highly experimental* tool to automate URDF conversion.
+For more information refer to the [documentation](./docs/TOOLS.md).
 
 ## Hardware Interface Setup
 
@@ -49,7 +49,7 @@ Just specify the plugin and point to a valid MJCF on launch:
 
       <!--
         Optional parameter to use a particular keyframe already present in the parsed MJCF configuration.
-        If the key frame is present, it applies it to the mujoco state. If not, it continues with the default one.
+        If the key frame is present, it applies it to the MuJoCo state. If not, it continues with the default one.
         This parameter will have no affect, if the `override_start_position_file` parameter is also set.
         The simulation will instead use the frame from the parsed file.
       -->
@@ -58,7 +58,7 @@ Just specify the plugin and point to a valid MJCF on launch:
       <!--
         Optional parameter to use the keyframe from a provided file as the starting configuration. This is mutually exclusive with
         the initial_value that can be used for state interfaces. This is intended to provide an alternative method to load an entire
-        mujoco model state from a configuration that was saved by clicking 'Copy state' in the simulate window, and pasted into a
+        MuJoCo model state from a configuration that was saved by clicking 'Copy state' in the simulate window, and pasted into a
         config file. Expected use cases are to work on a specific part of an application that involves the environment being in a
         very specific starting configuration. If this parameter is an empty string, it will be ignored.
       -->
@@ -129,13 +129,13 @@ We rely on MuJoCo's PD-level ctrl input for direct position, velocity, or effort
 For velocity, motor, or custom actuators, a position or velocity PID is created if specified using ROS parameters to enable accurate control.
 Incompatible actuator-interface combinations trigger an error.
 
-Refer to Mujoco's [actuation model](https://mujoco.readthedocs.io/en/stable/computation/index.html#geactuation) for more information.
+Refer to MuJoCo's [actuation model](https://mujoco.readthedocs.io/en/stable/computation/index.html#geactuation) for more information.
 
 Of note, only one type of MuJoCo actuator per-joint can be controllable at a time, and the type CANNOT be switched during runtime (i.e., switching from position to motor actuator is not supported).
 However, the active command interface can be switched dynamically, allowing control to shift between position, velocity, or effort as supported by the actuator type.
 Users are required to manually adjust actuator types and command interfaces to ensure that they are compatible.
 
-For example a position controlled joint on the mujoco
+For example a position controlled joint on the MuJoCo
 
 ```xml
   <actuator>
@@ -202,7 +202,7 @@ Could map to the following hardware interface:
 ### Grippers and Mimic Joints
 
 Many robot grippers include mimic joints, where control of a single actuator affects the state of many joints.
-There are many possible ways to handle this on the mujoco side of things, we recommend research and experimentation, or referring to existing models in the wild.
+There are many possible ways to handle this on the MuJoCo side of things, we recommend research and experimentation, or referring to existing models in the wild.
 
 In the current implementation drivers _require_ a motor type actuator for joint control and state information.
 In particular, tendons and other "non-standard" joint types in an MJCF are not directly controllable through the drivers.
@@ -231,7 +231,7 @@ This way, the drivers will only provide control and state information from that 
 ### Sensors
 
 The hardware interfaces supports force-torque sensors (FTS) and inertial measurement units (IMUs).
-Mujoco does not support modeling complete FTS and IMUs out of the box, so we combine supported MJCF constructs to map to a ros2_control sensor.
+MuJoCo does not support modeling complete FTS and IMUs out of the box, so we combine supported MJCF constructs to map to a ros2_control sensor.
 The types and other parameters can be specified in the ros2_control xacro, as noted below.
 
 For FTS, we model the `force` and `torque` sensors individually in the MJFC.

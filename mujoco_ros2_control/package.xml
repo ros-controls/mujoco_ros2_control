@@ -3,7 +3,7 @@
 <package format="3">
   <name>mujoco_ros2_control</name>
   <version>0.0.0</version>
-  <description>ros2_control wrapper for the Mujoco Simulate application</description>
+  <description>ros2_control wrapper for the MuJoCo Simulate application</description>
   <maintainer email="nathan.b.dunkelberger@nasa.gov">Nathan Dunkelberger</maintainer>
   <maintainer email="erik.holum@nasa.gov">Erik Holum</maintainer>
 

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This script checks if the dependencies trimesh, mujoco and obj2mjcf are installed in a virtual environment inside the ROS_HOME/ros2_control/.venv.
+# This script checks if the dependencies trimesh, MuJoCo and obj2mjcf are installed in a virtual environment inside the ROS_HOME/ros2_control/.venv.
 # If it is present, then sources it and runs the make_mjcf_from_robot_description.py script.
 # If it is not present, it will create it and install the dependencies and the source it before running the make_mjcf_from_robot_description.py script.
 
@@ -37,13 +37,13 @@ function check_virtual_env() {
     source "$ROS_HOME/ros2_control/.venv/bin/activate"
 }
 
-# Check if the dependencies trimesh, mujoco and obj2mjcf are installed, if not install them
+# Check if the dependencies trimesh, MuJoCo and obj2mjcf are installed, if not install them
 function check_dependencies() {
     if [ ! -f "$ROS_HOME/ros2_control/.venv/bin/activate" ]; then
         echo "Virtual environment : '$ROS_HOME/ros2_control/.venv' not found. Something went wrong. Aborting...."
         exit 1
     fi
-    # check if the dependencies trimesh, mujoco, obj2mjcf and scipy are installed, if not install them
+    # check if the dependencies trimesh, MuJoCo, obj2mjcf and scipy are installed, if not install them
     if ! python3 -c "import trimesh; import mujoco; import obj2mjcf" &> /dev/null; then
         echo "Dependencies not found. Installing trimesh, mujoco, obj2mjcf, scipy...."
         start_time=$(date +%s)
