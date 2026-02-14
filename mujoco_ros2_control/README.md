@@ -10,7 +10,7 @@ Parts of this library are also based on the MoveIt [mujoco_ros2_control](https:/
 
 ## URDF Model Conversion
 
-Mujoco does not support the full feature set of xacro/URDFs in the ROS 2 ecosystem.
+MuJoCo does not support the full feature set of xacro/URDFs in the ROS 2 ecosystem.
 As such, users are required to convert any existing robot description files to an MJCF format.
 This includes adding actuators, sensors, and cameras as needed to the MJCF XML.
 
@@ -129,7 +129,7 @@ We rely on MuJoCo's PD-level ctrl input for direct position, velocity, or effort
 For velocity, motor, or custom actuators, a position or velocity PID is created if specified using ROS parameters to enable accurate control.
 Incompatible actuator-interface combinations trigger an error.
 
-Refer to Mujoco's [actuation model](https://mujoco.readthedocs.io/en/stable/computation/index.html#geactuation) for more information.
+Refer to MuJoCo's [actuation model](https://mujoco.readthedocs.io/en/stable/computation/index.html#geactuation) for more information.
 
 Of note, only one type of MuJoCo actuator per-joint can be controllable at a time, and the type CANNOT be switched during runtime (i.e., switching from position to motor actuator is not supported).
 However, the active command interface can be switched dynamically, allowing control to shift between position, velocity, or effort as supported by the actuator type.
@@ -231,7 +231,7 @@ This way, the drivers will only provide control and state information from that 
 ### Sensors
 
 The hardware interfaces supports force-torque sensors (FTS) and inertial measurement units (IMUs).
-Mujoco does not support modeling complete FTS and IMUs out of the box, so we combine supported MJCF constructs to map to a ros2_control sensor.
+MuJoCo does not support modeling complete FTS and IMUs out of the box, so we combine supported MJCF constructs to map to a ros2_control sensor.
 The types and other parameters can be specified in the ros2_control xacro, as noted below.
 
 For FTS, we model the `force` and `torque` sensors individually in the MJFC.

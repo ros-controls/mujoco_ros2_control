@@ -71,7 +71,7 @@ set(MUJOCO_SILENCE_COMPILER_WARNINGS
   -Wno-psabi
 )
 
-# Build Mujoco's simulate application and make it available for linking
+# Build MuJoCo's simulate application and make it available for linking
 add_library(platform_ui_adapter OBJECT)
 set_target_properties(platform_ui_adapter PROPERTIES
   POSITION_INDEPENDENT_CODE ON
@@ -105,7 +105,7 @@ target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 set_compiler_options()
 export_windows_symbols()
 
-# Mujoco ROS 2 control system interface (this package)
+# MuJoCo ROS 2 control system interface (this package)
 add_library(mujoco_ros2_control SHARED
     src/mujoco_system_interface.cpp
     src/mujoco_cameras.cpp
@@ -150,7 +150,7 @@ target_include_directories(mujoco_ros2_control PUBLIC
   $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
   $<INSTALL_INTERFACE:${MUJOCO_INSTALL_SIMULATE_DIR}>
 )
-# Mark Mujoco source as system to avoid compiler warnings
+# Mark MuJoCo source as system to avoid compiler warnings
 target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
   $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
   $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>

@@ -35,7 +35,7 @@ A complete list of options is available from the argument parser:
 $ ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py --help
 usage: make_mjcf_from_robot_description.py [-h] [-u URDF] [-r ROBOT_DESCRIPTION] [-m MUJOCO_INPUTS] [-o OUTPUT] [-p PUBLISH_TOPIC] [-c] [-s] [-f] [-a ASSET_DIR] [--scene SCENE]
 
-Convert a full URDF to MJCF for use in Mujoco
+Convert a full URDF to MJCF for use in MuJoCo
 
 options:
   -h, --help            show this help message and exit

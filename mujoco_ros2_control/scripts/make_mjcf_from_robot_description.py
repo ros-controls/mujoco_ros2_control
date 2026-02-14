@@ -1135,7 +1135,7 @@ def add_cameras_from_sites(dom, cameras_dict):
         > +y should point down in the image
         > +z should point into to plane of the image
 
-    Mujoco Cameras are oriented slightly differently, https://mujoco.readthedocs.io/en/latest/modeling.html#cameras
+    MuJoCo Cameras are oriented slightly differently, https://mujoco.readthedocs.io/en/latest/modeling.html#cameras
 
         > Cameras look towards the negative Z axis of the camera frame, while positive X and Y correspond
         > to right and up in the image plane, respectively.
@@ -1495,7 +1495,7 @@ def publish_model_on_topic(publish_topic, output_filepath, args=None):
 
 def add_urdf_free_joint(urdf):
     """
-    Adds a free joint to the top of the urdf. This makes Mujoco create a
+    Adds a free joint to the top of the urdf. This makes MuJoCo create a
     floating joint so that a base is free to move, like on an AMR.
     """
 
@@ -1591,7 +1591,7 @@ def write_mujoco_scene(scene_inputs, output_filepath):
 
 def main(args=None):
 
-    parser = argparse.ArgumentParser(description="Convert a full URDF to MJCF for use in Mujoco")
+    parser = argparse.ArgumentParser(description="Convert a full URDF to MJCF for use in MuJoCo")
     parser.add_argument("-u", "--urdf", required=False, default=None, help="Optionally pass an existing URDF file")
     parser.add_argument(
         "-r", "--robot_description", required=False, help="Optionally pass the robot description string"

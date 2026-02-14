@@ -432,7 +432,7 @@ mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::string& top
 
   if (!robot_description.empty())
   {
-    // Load Mujoco model
+    // Load MuJoCo model
     char error[1000] = "Could not load XML model";
 
     mjSpec* spec = nullptr;
@@ -852,7 +852,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   mj_model_ = LoadModel(model_path_.c_str(), mujoco_model_topic, *sim_, get_node());
   if (!mj_model_)
   {
-    RCLCPP_FATAL(get_logger(), "Mujoco failed to load the model");
+    RCLCPP_FATAL(get_logger(), "MuJoCo failed to load the model");
     return hardware_interface::CallbackReturn::ERROR;
   }
 
