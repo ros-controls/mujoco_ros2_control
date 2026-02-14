@@ -59,6 +59,8 @@ options:
 
 A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_tests/test/test_resources/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_tests/test/test_resources/test_inputs.xml).
 
+<!-- TODO: Updates test paths -->
+
 To convert the URDF, run the following from the repo root
 
 ```bash
