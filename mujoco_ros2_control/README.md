@@ -15,7 +15,7 @@ As such, users are required to convert any existing robot description files to a
 This includes adding actuators, sensors, and cameras as needed to the MJCF XML.
 
 This conversion can be done either offline or at run time.
-We have built a *highly experimental tool to automate URDF conversion.
+We have built a *highly experimental* tool to automate URDF conversion.
 For more information refer to the [documentation](./mujoco_ros2_control/docs/TOOLS.md).
 
 ## Hardware Interface Setup
