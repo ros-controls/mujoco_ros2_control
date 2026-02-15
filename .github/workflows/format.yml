@@ -28,7 +28,34 @@ jobs:
       - uses: pre-commit/action@v3.0.1
 
   markdown-link-check:
+    name: markdown-link-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: tcort/github-action-markdown-link-check@v1
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install markdown-link-check
+        run: npm install -g markdown-link-check@3.12.2
+      - name: Run markdown link check
+        run: |
+          set -o pipefail
+          REPO_ROOT=$GITHUB_WORKSPACE
+          CONFIG_FILE="$REPO_ROOT/.github/markdown-link-check.json"
+          exit_code=0
+          for f in $(git ls-files "*.md"); do
+            echo -e "\n------------------------------------------------------------\nChecking: $f"
+            if ! (cd "$(dirname "$f")" && markdown-link-check --config "$CONFIG_FILE" --projectBaseUrl "$REPO_ROOT" --verbose "$(basename "$f")" > /tmp/out.txt 2>&1); then
+              cat /tmp/out.txt
+              if grep -q "dead links found" /tmp/out.txt; then
+                echo "FAILED: $f"
+                exit_code=1
+              fi
+            else
+              cat /tmp/out.txt
+            fi
+          done
+          [ $exit_code -eq 0 ] && echo -e "\nAll markdown links are valid." || echo -e "\nSome markdown files contain broken links."
+          exit $exit_code

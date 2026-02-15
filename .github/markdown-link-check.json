@@ -1,0 +1,19 @@
+{
+  "retry": 2,
+  "timeout": 10000,
+  "userAgent": "markdown-link-check",
+  "ignorePatterns": [
+    { "pattern": "^mailto:" },
+    { "pattern": "^tel:" },
+    { "pattern": "^https?://" },
+    { "pattern": "^#" }
+  ],
+
+  "replacementPatterns": [
+    {
+      "pattern": "^/",
+      "replacement": "{{BASEURL}}/"
+    }
+  ],
+  "aliveStatusCodes": [200, 206, 301, 302, 307, 308]
+}
