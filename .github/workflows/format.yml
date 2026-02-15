@@ -28,7 +28,22 @@ jobs:
       - uses: pre-commit/action@v3.0.1
 
   markdown-link-check:
+    name: markdown-link-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: tcort/github-action-markdown-link-check@v1
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install markdown-link-check
+        run: npm install -g markdown-link-check@3.9.0
+      - name: Run markdown link check
+        # Check all markdown files and fail the job if broken links are found
+        run: |
+          set -o pipefail
+          echo "Running markdown-link-check..."
+          # Use a glob to check repository markdown files. Configure ignores in .github/markdown-link-check.json
+          # Run the installed binary directly for reliability and show verbose output.
+          markdown-link-check --config .github/markdown-link-check.json --verbose "**/*.md"
