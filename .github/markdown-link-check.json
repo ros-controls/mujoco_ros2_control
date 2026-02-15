@@ -1,17 +1,14 @@
 {
   "retry": 2,
   "timeout": 10000,
-  "userAgent": "markdown-link-check-action",
+  "userAgent": "markdown-link-check",
   "ignorePatterns": [
     { "pattern": "^mailto:" },
     { "pattern": "^tel:" },
-    { "pattern": "^http://localhost" },
-    { "pattern": "^https://localhost" },
-    { "pattern": "^http://127.0.0.1" },
-    { "pattern": "^https://127.0.0.1" },
     { "pattern": "^https?://" },
     { "pattern": "^#" }
   ],
+
   "replacementPatterns": [
     {
       "pattern": "^/",
