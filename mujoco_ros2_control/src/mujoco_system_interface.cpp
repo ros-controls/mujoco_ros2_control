@@ -679,6 +679,43 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     return hardware_interface::CallbackReturn::ERROR;
   }
 
+  // Construct and start the ROS node spinning
+  /// The PIDs config file
+  const auto pids_config_file = get_hardware_parameter(get_hardware_info(), "pids_config_file");
+  rclcpp::NodeOptions node_options;
+  node_options.append_parameter_override("use_sim_time", rclcpp::ParameterValue(true));
+  if (pids_config_file.has_value())
+  {
+    std::string pids_config_file_path = pids_config_file.value();
+    // trim the trailing and leading whitespaces
+    pids_config_file_path.erase(0, pids_config_file_path.find_first_not_of(" \t\n\r\f\v"));
+    pids_config_file_path.erase(pids_config_file_path.find_last_not_of(" \t\n\r\f\v") + 1);
+
+    // Check if the file exists
+    const std::filesystem::path path_to_file(pids_config_file_path);
+    if (!std::filesystem::exists(path_to_file))
+    {
+      RCLCPP_FATAL(get_logger(), "PID config file '%s' does not exist!", pids_config_file->c_str());
+      return hardware_interface::CallbackReturn::ERROR;
+    }
+    RCLCPP_INFO_STREAM(get_logger(), "Loading PID config from file: " << pids_config_file.value());
+    auto node_options_arguments = node_options.arguments();
+    node_options_arguments.push_back(RCL_ROS_ARGS_FLAG);
+    node_options_arguments.push_back(RCL_PARAM_FILE_FLAG);
+    node_options_arguments.push_back(pids_config_file.value());
+    node_options.arguments(node_options_arguments);
+  }
+  RCLCPP_INFO(get_logger(), "Constructing node and executor...");
+  executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>();
+  mujoco_node_ = std::make_shared<rclcpp::Node>("mujoco_node", node_options);
+  executor_->add_node(mujoco_node_);
+  executor_thread_ = std::thread([this]() { executor_->spin(); });
+  RCLCPP_INFO(get_logger(), "Executor thread started.");
+
+  param_listener_ = std::make_shared<mujoco_ros2_control::ParamListener>(get_node()->get_node_parameters_interface(),
+                                                                         this->get_logger());
+  params_ = std::make_shared<mujoco_ros2_control::Params>(param_listener_->get_params());
+
   // Load the model path from hardware parameters
   const auto model_path_maybe = get_hardware_parameter(get_hardware_info(), "mujoco_model");
   if (!model_path_maybe.has_value())
@@ -813,39 +850,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // Load the model and data prior to hw registration and starting the physics thread
   sim_->LoadMessage(model_path_.c_str());
 
-  // Construct and start the ROS node spinning
-  /// The PIDs config file
-  const auto pids_config_file = get_hardware_parameter(get_hardware_info(), "pids_config_file");
-  rclcpp::NodeOptions node_options;
-  node_options.append_parameter_override("use_sim_time", rclcpp::ParameterValue(true));
-  if (pids_config_file.has_value())
-  {
-    std::string pids_config_file_path = pids_config_file.value();
-    // trim the trailing and leading whitespaces
-    pids_config_file_path.erase(0, pids_config_file_path.find_first_not_of(" \t\n\r\f\v"));
-    pids_config_file_path.erase(pids_config_file_path.find_last_not_of(" \t\n\r\f\v") + 1);
-
-    // Check if the file exists
-    const std::filesystem::path path_to_file(pids_config_file_path);
-    if (!std::filesystem::exists(path_to_file))
-    {
-      RCLCPP_FATAL(get_logger(), "PID config file '%s' does not exist!", pids_config_file->c_str());
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-    RCLCPP_INFO_STREAM(get_logger(), "Loading PID config from file: " << pids_config_file.value());
-    auto node_options_arguments = node_options.arguments();
-    node_options_arguments.push_back(RCL_ROS_ARGS_FLAG);
-    node_options_arguments.push_back(RCL_PARAM_FILE_FLAG);
-    node_options_arguments.push_back(pids_config_file.value());
-    node_options.arguments(node_options_arguments);
-  }
-  RCLCPP_INFO(get_logger(), "Constructing node and executor...");
-  executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>();
-  mujoco_node_ = std::make_shared<rclcpp::Node>("mujoco_node", node_options);
-  executor_->add_node(mujoco_node_);
-  executor_thread_ = std::thread([this]() { executor_->spin(); });
-  RCLCPP_INFO(get_logger(), "Executor thread started.");
-
   const std::string mujoco_model_topic =
       get_hardware_parameter_or(get_hardware_info(), "mujoco_model_topic", "/mujoco_robot_description");
   RCLCPP_INFO(get_logger(), "Loading model...");
@@ -855,10 +859,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     RCLCPP_FATAL(get_logger(), "MuJoCo failed to load the model");
     return hardware_interface::CallbackReturn::ERROR;
   }
-
-  param_listener_ = std::make_shared<mujoco_ros2_control::ParamListener>(get_node()->get_node_parameters_interface(),
-                                                                         this->get_logger());
-  params_ = std::make_shared<mujoco_ros2_control::Params>(param_listener_->get_params());
 
   {
     std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
