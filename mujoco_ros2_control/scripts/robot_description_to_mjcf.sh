@@ -37,7 +37,7 @@ function check_virtual_env() {
     source "$ROS_HOME/ros2_control/.venv/bin/activate"
 }
 
-# Check if the dependencies trimesh, MuJoCo and obj2mjcf are installed, if not install them
+# Check if the dependencies trimesh, mujoco and obj2mjcf are installed, if not install them
 function check_dependencies() {
     if [ ! -f "$ROS_HOME/ros2_control/.venv/bin/activate" ]; then
         echo "Virtual environment : '$ROS_HOME/ros2_control/.venv' not found. Something went wrong. Aborting...."
