@@ -14,7 +14,7 @@
   "replacementPatterns": [
     {
       "pattern": "^/",
-      "replacement": "REPLACE_ME_WITH_REPO_ROOT/"
+      "replacement": "{{BASEURL}}/"
     }
   ],
   "aliveStatusCodes": [200, 206, 301, 302, 307, 308]
