@@ -44,7 +44,7 @@ For more information on pixi and ROS refer to the documentation or this excellen
 
 ## Docker Development Workflow
 
-This project includes a [compose](../docker-compose.yml) and [Dockerfile](../docker/Dockerfile) for development and testing in an isolated environment.
+This project includes a [compose](./../docker-compose.yml) and [Dockerfile](./../docker/Dockerfile) for development and testing in an isolated environment.
 
 > [!NOTE]
 > You may need to give docker access to xhost with `xhost +local:docker` to ensure the container has access to the host UI.
