@@ -59,7 +59,7 @@ options:
   --scene SCENE         Optionally pass an existing xml for the scene
 ```
 
-A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_tests/test/test_resources/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_tests/test/test_resources/test_inputs.xml).
+A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_demos/demo_resources/test_inputs.xml).
 
 <!-- TODO: Updates test paths -->
 
