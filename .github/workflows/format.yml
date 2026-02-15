@@ -40,40 +40,22 @@ jobs:
       - name: Install markdown-link-check
         run: npm install -g markdown-link-check@3.12.2
       - name: Run markdown link check
-        # Check all tracked markdown files and fail the job if broken links are found
         run: |
           set -o pipefail
-          echo "Running markdown-link-check..."
-
-          REPO_ROOT=$(pwd)
+          REPO_ROOT=$GITHUB_WORKSPACE
           CONFIG_FILE="$REPO_ROOT/.github/markdown-link-check.json"
-
           exit_code=0
-          # Use git to list tracked markdown files
           for f in $(git ls-files "*.md"); do
-            echo -e "\n------------------------------------------------------------"
-            echo "Checking: $f"
-            
-            # Run the checker from the file's directory to ensure relative links resolve correctly.
-            # --projectBaseUrl handles root-relative links starting with / by replacing {{BASEURL}} in the config
-            # We use a temporary file to capture output and check for actual dead links
-            if ! (cd "$(dirname "$f")" && markdown-link-check --config "$CONFIG_FILE" --projectBaseUrl "$REPO_ROOT" --verbose "$(basename "$f")" > /tmp/link-check-out.txt 2>&1); then
-              cat /tmp/link-check-out.txt
-              if grep -q "dead links found" /tmp/link-check-out.txt; then
+            echo -e "\n------------------------------------------------------------\nChecking: $f"
+            if ! (cd "$(dirname "$f")" && markdown-link-check --config "$CONFIG_FILE" --projectBaseUrl "$REPO_ROOT" --verbose "$(basename "$f")" > /tmp/out.txt 2>&1); then
+              cat /tmp/out.txt
+              if grep -q "dead links found" /tmp/out.txt; then
                 echo "FAILED: $f"
                 exit_code=1
-              else
-                echo "Warning: markdown-link-check reported an error for $f but no dead links were found."
               fi
             else
-              cat /tmp/link-check-out.txt
+              cat /tmp/out.txt
             fi
           done
-
-
-          if [ $exit_code -eq 0 ]; then
-            echo -e "\nAll markdown links are valid."
-          else
-            echo -e "\nSome markdown files contain broken links."
-          fi
+          [ $exit_code -eq 0 ] && echo -e "\nAll markdown links are valid." || echo -e "\nSome markdown files contain broken links."
           exit $exit_code
