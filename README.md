@@ -65,7 +65,7 @@ or install prebuilt binaries (if available for your distribution).
   ros2 launch mujoco_ros2_control_demos demo.launch.py
   ```
 
-See `mujoco_ros2_control/mujoco_ros2_control/README.md` for detailed usage, configuration examples and mappings between MJCF actuators/sensors and ros2_control interfaces.
+See `mujoco_ros2_control/README.md` for detailed usage, configuration examples and mappings between MJCF actuators/sensors and ros2_control interfaces.
 
 Supported ROS 2 distributions
 - The project is developed and tested against multiple ROS 2 distributions.
