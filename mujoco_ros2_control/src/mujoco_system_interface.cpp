@@ -856,6 +856,10 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     return hardware_interface::CallbackReturn::ERROR;
   }
 
+  param_listener_ = std::make_shared<mujoco_ros2_control::ParamListener>(get_node()->get_node_parameters_interface(),
+                                                                         this->get_logger());
+  params_ = std::make_shared<mujoco_ros2_control::Params>(param_listener_->get_params());
+
   {
     std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
     mj_data_ = mj_makeData(mj_model_);
