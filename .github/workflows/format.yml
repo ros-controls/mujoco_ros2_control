@@ -59,6 +59,10 @@ jobs:
             base=$(basename "$f")
             # Run the checker with working directory set to the file's directory so
             # relative links are resolved correctly against the markdown file location.
-            (cd "$dir" && markdown-link-check --config ../.github/markdown-link-check.json --verbose "$base") || exit_code=1
+            # Resolve repository root (use GITHUB_WORKSPACE in Actions, fall
+            # back to git toplevel when running locally) so the config file
+            # is always addressed by an absolute path.
+            (cd "$dir" && repo_root="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}" && \
+              markdown-link-check --config "$repo_root/.github/markdown-link-check.json" --verbose "$base") || exit_code=1
           done
           exit $exit_code
