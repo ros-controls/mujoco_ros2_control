@@ -43,7 +43,7 @@ function check_dependencies() {
         echo "Virtual environment : '$ROS_HOME/ros2_control/.venv' not found. Something went wrong. Aborting...."
         exit 1
     fi
-    # check if the dependencies trimesh, MuJoCo, obj2mjcf and scipy are installed, if not install them
+    # check if the dependencies trimesh, mujoco, obj2mjcf and scipy are installed, if not install them
     if ! python3 -c "import trimesh; import mujoco; import obj2mjcf" &> /dev/null; then
         echo "Dependencies not found. Installing trimesh, mujoco, obj2mjcf, scipy...."
         start_time=$(date +%s)
