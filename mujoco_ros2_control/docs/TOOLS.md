@@ -99,7 +99,7 @@ Of note, the test robot has a good chunk of supported functionality, and we reco
 A rough outline of the automated process to convert a URDF:
 
 * reads a robot descriptiong URDF
-* add in MuJoCo tag that provides necessary info for conversion
+* add in mujoco tag that provides necessary info for conversion
 * replace package names from `package://` to absolute filepaths
 * read absolute filepaths of all meshes and convert either dae or stl to obj using trimesh
   * put all of these meshes into an `assets/` folder under `mjcf_data/` relative to current working dir
