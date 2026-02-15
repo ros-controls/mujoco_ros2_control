@@ -3,14 +3,14 @@
   "timeout": 10000,
   "userAgent": "markdown-link-check-action",
   "ignorePatterns": [
-    "^mailto:",
-    "^tel:",
-    "^http://localhost",
-    "^https://localhost",
-    "^http://127.0.0.1",
-    "^https://127.0.0.1",
-    "^#",
-    "^/"
+    { "pattern": "^mailto:" },
+    { "pattern": "^tel:" },
+    { "pattern": "^http://localhost" },
+    { "pattern": "^https://localhost" },
+    { "pattern": "^http://127.0.0.1" },
+    { "pattern": "^https://127.0.0.1" },
+    { "pattern": "^#" }
   ],
-  "acceptedStatusCodes": [200, 301, 302, 307, 308]
+  "acceptedStatusCodes": [200, 301, 302, 307, 308],
+  "projectBase": "."
 }

@@ -36,9 +36,9 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
       - name: Install markdown-link-check
-        run: npm install -g markdown-link-check@3.9.0
+        run: npm install -g markdown-link-check@3.12.2
       - name: Run markdown link check
         # Check all tracked markdown files and fail the job if broken links are found
         run: |
@@ -53,17 +53,8 @@ jobs:
           exit_code=0
           for f in $md_files; do
             echo "\nChecking: $f"
-            dir=$(dirname "$f")
-            base=$(basename "$f")
-            # Run the checker with working directory set to the file's directory so
-            # relative links are resolved correctly against the markdown file location.
-            # Resolve repository root (use GITHUB_WORKSPACE in Actions, fall
-            # back to git toplevel when running locally) so the config file
-            # is always addressed by an absolute path.
-            (cd "$dir" && repo_root="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}" && \
-              echo "Repo root: $repo_root" && \
-              echo "Config path: $repo_root/.github/markdown-link-check.json" && \
-              echo "Checker working dir: $(pwd)" && \
-              markdown-link-check --config "$repo_root/.github/markdown-link-check.json" --verbose "$base") || exit_code=1
+            # Run the checker from the repository root so relative and root-relative
+            # links are resolved correctly against the markdown file location and projectBase.
+            markdown-link-check --config ".github/markdown-link-check.json" --verbose "$f" || exit_code=1
           done
           exit $exit_code
