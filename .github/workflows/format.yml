@@ -55,6 +55,10 @@ jobs:
           exit_code=0
           for f in $md_files; do
             echo "\nChecking: $f"
-            markdown-link-check --config .github/markdown-link-check.json --verbose "$f" || exit_code=1
+            dir=$(dirname "$f")
+            base=$(basename "$f")
+            # Run the checker with working directory set to the file's directory so
+            # relative links are resolved correctly against the markdown file location.
+            (cd "$dir" && markdown-link-check --config ../.github/markdown-link-check.json --verbose "$base") || exit_code=1
           done
           exit $exit_code
