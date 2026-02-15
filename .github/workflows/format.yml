@@ -33,8 +33,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-      - name: Run tcort/github-action-markdown-link-check
-        uses: tcort/github-action-markdown-link-check@v1
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -63,6 +61,9 @@ jobs:
             # back to git toplevel when running locally) so the config file
             # is always addressed by an absolute path.
             (cd "$dir" && repo_root="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}" && \
+              echo "Repo root: $repo_root" && \
+              echo "Config path: $repo_root/.github/markdown-link-check.json" && \
+              echo "Checker working dir: $(pwd)" && \
               markdown-link-check --config "$repo_root/.github/markdown-link-check.json" --verbose "$base") || exit_code=1
           done
           exit $exit_code
