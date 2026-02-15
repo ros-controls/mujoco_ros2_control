@@ -12,5 +12,11 @@
     { "pattern": "^#" }
   ],
   "acceptedStatusCodes": [200, 301, 302, 307, 308],
-  "projectBase": "."
+  "projectBase": [
+    {
+      "uri": "/",
+      "mapTo": "GITHUB_WORKSPACE"
+    }
+  ]
 }
+

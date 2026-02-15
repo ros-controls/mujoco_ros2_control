@@ -44,17 +44,23 @@ jobs:
         run: |
           set -o pipefail
           echo "Running markdown-link-check..."
-          # Use git to list tracked markdown files so we don't rely on shell glob expansion
+          # Use git to list tracked markdown files
           md_files=$(git ls-files "*.md")
           if [ -z "$md_files" ]; then
             echo "No markdown files found."
             exit 0
           fi
+
+          # Create a temporary config with the correct projectBase path
+          REPO_ROOT=$(pwd)
+          sed "s|GITHUB_WORKSPACE|$REPO_ROOT|g" .github/markdown-link-check.json > /tmp/link-check-config.json
+
           exit_code=0
           for f in $md_files; do
             echo "\nChecking: $f"
-            # Run the checker from the repository root so relative and root-relative
-            # links are resolved correctly against the markdown file location and projectBase.
-            markdown-link-check --config ".github/markdown-link-check.json" --verbose "$f" || exit_code=1
+            dir=$(dirname "$f")
+            base=$(basename "$f")
+            # Run the checker from the file's directory to ensure relative links resolve correctly.
+            (cd "$dir" && markdown-link-check --config "/tmp/link-check-config.json" --verbose "$base") || exit_code=1
           done
           exit $exit_code
