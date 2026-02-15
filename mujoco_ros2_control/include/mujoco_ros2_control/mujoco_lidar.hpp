@@ -46,7 +46,7 @@ struct LidarData
   double range_min;
   double range_max;
 
-  // Maps the index of the rangefinder to the index of the mujoco rangefinder's data.
+  // Maps the index of the rangefinder to the index of the MuJoCo rangefinder's data.
   // E.g. lidar-034 -> sensor_indexes[34] will contain index of that rangefinder in mj_data_->sensordata
   std::vector<int> sensor_indexes;
 
@@ -57,7 +57,7 @@ struct LidarData
 };
 
 /**
- * @brief Wraps Mujoco rangefinder sensors for publishing ROS 2 LaserScan messages.
+ * @brief Wraps MuJoCo rangefinder sensors for publishing ROS 2 LaserScan messages.
  */
 class MujocoLidar
 {
@@ -67,8 +67,8 @@ public:
    *
    * @param node Will be used to construct laserscan publishers
    * @param sim_mutex Provides synchronized access to the mujoco_data object for grabbing rangefinder data
-   * @param mujoco_data Mujoco data for the simulation
-   * @param mujoco_model Mujoco model for the simulation
+   * @param mujoco_data MuJoCo data for the simulation
+   * @param mujoco_model MuJoCo model for the simulation
    * @param lidar_publish_rate The rate to publish all camera images, for now all images are published at the same rate.
    */
   explicit MujocoLidar(rclcpp::Node::SharedPtr node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,

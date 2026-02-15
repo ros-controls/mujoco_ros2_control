@@ -1,7 +1,9 @@
 # URDF to MJCF Conversion
 
-> **WARNING**: This tool is hacky and _highly_ experimental!
-Expect things to be broken.
+
+> [!WARNING]
+> This tool is hacky and _highly_ experimental!
+> Expect things to be broken.
 
 As MuJoCo does not ingest URDFs, we have written a helper tool for converting URDF to MJCF to assist with converting a robot description to an MJCF.
 This can either be done offline or at runtime, refer to [demo 2](../../mujoco_ros2_control_demos/launch/02_mjcf_generation.launch.py) for an example.
@@ -35,7 +37,7 @@ A complete list of options is available from the argument parser:
 $ ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py --help
 usage: make_mjcf_from_robot_description.py [-h] [-u URDF] [-r ROBOT_DESCRIPTION] [-m MUJOCO_INPUTS] [-o OUTPUT] [-p PUBLISH_TOPIC] [-c] [-s] [-f] [-a ASSET_DIR] [--scene SCENE]
 
-Convert a full URDF to MJCF for use in Mujoco
+Convert a full URDF to MJCF for use in MuJoCo
 
 options:
   -h, --help            show this help message and exit
@@ -58,6 +60,8 @@ options:
 ```
 
 A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_tests/test/test_resources/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_tests/test/test_resources/test_inputs.xml).
+
+<!-- TODO: Updates test paths -->
 
 To convert the URDF, run the following from the repo root
 
@@ -84,7 +88,8 @@ Of note, the test robot has a good chunk of supported functionality, and we reco
 
 ## Notes
 
-**NOTE** This has some heave non-ROS dependencies that could probably be cleaned up:
+> [!NOTE]
+>  This has some heavy non-ROS dependencies that could probably be cleaned up:
 
 * MuJoCo Python API
 * trimesh - Python library for loading and using triangular meshes.
@@ -102,6 +107,6 @@ A rough outline of the automated process to convert a URDF:
   * decomposes large meshes into multiple components to ensure convex hulls
 * publish the new formatted robot description xml file that can be used for conversion
 * convert the new robot description urdf file
-* run the mujoco conversion tool to get the mjcf version
+* run the MuJoCo conversion tool to get the mjcf version
 * copy in a default scene.xml file which gives some better camera and scene info
 * add remaining sites and items and any other custom inputs

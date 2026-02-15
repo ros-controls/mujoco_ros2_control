@@ -15,7 +15,7 @@ LD_LIBRARY_PATH = "${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}"
 LDFLAGS = "-L${CONDA_PREFIX}/lib -Wl,-rpath,${CONDA_PREFIX}/lib"
 CXXFLAGS = "-fuse-ld=mold"
 
-# The default location for mujoco
+# The default location for MuJoCo
 MUJOCO_DIR="${PIXI_PROJECT_ROOT}/mujoco/mujoco-3.4.0"
 
 [tasks]

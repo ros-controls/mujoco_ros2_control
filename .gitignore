@@ -1,7 +1,7 @@
 # Python
 *.pyc
 
-# Mujoco logs
+# MuJoCo logs
 MUJOCO_LOG.TXT
 
 # pixi environments
@@ -13,5 +13,5 @@ build/*
 install/*
 log/*
 
-# Cloned mujoco src
+# Cloned MuJoCo src
 mujoco_ros2_control/mujoco/*

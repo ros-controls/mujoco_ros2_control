@@ -65,7 +65,7 @@ struct CameraData
 };
 
 /**
- * @brief Wraps Mujoco cameras for publishing ROS 2 RGB-D streams.
+ * @brief Wraps MuJoCo cameras for publishing ROS 2 RGB-D streams.
  */
 class MujocoCameras
 {
@@ -75,8 +75,8 @@ public:
    *
    * @param node Will be used to construct image publishers
    * @param sim_mutex Provides synchronized access to the mujoco_data object for rendering
-   * @param mujoco_data Mujoco data for the simulation
-   * @param mujoco_model Mujoco model for the simulation
+   * @param mujoco_data MuJoCo data for the simulation
+   * @param mujoco_model MuJoCo model for the simulation
    * @param camera_publish_rate The rate to publish all camera images, for now all images are published at the same rate.
    */
   explicit MujocoCameras(rclcpp::Node::SharedPtr node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
