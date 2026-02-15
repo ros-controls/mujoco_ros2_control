@@ -10,6 +10,7 @@ find_package(controller_manager REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(control_toolbox REQUIRED)
+find_package(generate_parameter_library REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
@@ -105,6 +106,10 @@ target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 set_compiler_options()
 export_windows_symbols()
 
+generate_parameter_library(mujoco_ros2_control_parameters
+  src/mujoco_ros2_control_parameters.yaml
+)
+
 # MuJoCo ROS 2 control system interface (this package)
 add_library(mujoco_ros2_control SHARED
     src/mujoco_system_interface.cpp
@@ -138,6 +143,7 @@ PUBLIC
   ${MUJOCO_LIB}
   control_toolbox::control_toolbox
   Eigen3::Eigen
+  mujoco_ros2_control_parameters
 PRIVATE
   mujoco::libsimulate
   Threads::Threads
@@ -157,7 +163,7 @@ target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
 )
 
 # Export MuJoCo alongside the interface to provide access to data.
-install(TARGETS mujoco_ros2_control ${MUJOCO_EXPORT_TARGETS}
+install(TARGETS mujoco_ros2_control ${MUJOCO_EXPORT_TARGETS} mujoco_ros2_control_parameters
   EXPORT export_${PROJECT_NAME}
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib

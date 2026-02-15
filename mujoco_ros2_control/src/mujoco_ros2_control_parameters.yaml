@@ -1,0 +1,79 @@
+mujoco_ros2_control:
+  mujoco_model: {
+    type: string,
+    default_value: "",
+    read_only: true,
+    description: "The MuJoCo model file path used by the simulation."
+  }
+
+  pids_config_file: {
+    type: string,
+    default_value: "",
+    read_only: true,
+    description: "The file path to a custom PID configuration file. If specified, this file will be used to set the PID gains for the MuJoCo's actuators in the simulation. Optional parameter to load the PIDs that can be used with the actuators loaded with the MuJoCo model. The velocity actuator supports position mode with the PID gains, and the rest of the actuation models support both position and velocity mode provided the corresponding PID gains. The gains should be in ROS parameters format to be loaded by the control_toolbox::PidROS class."
+  }
+
+  sim_speed_factor: {
+    type: double,
+    default_value: 1.0,
+    read_only: true,
+    description: "The speed factor for the MuJoCo simulation. A value of 1.0 runs the simulation in real-time, while values greater than 1.0 speed up the simulation and values less than 1.0 slow it down. Optional parameter to override the speed scaling parameters from the Simulate App window and just attempt to run at whatever the desired rate is here. This allows users to run the simulation faster than real time. For example, at 500% speed as set here. If this param is omitted or set to a value <0, then the simulation will run using the slowdown requested from the App."
+  }
+
+  initial_keyframe: {
+    type: string,
+    default_value: "",
+    read_only: true,
+    description: "The name of the initial keyframe to use for the simulation. If not specified, the simulation will start from the default initial state defined in the MuJoCo model."
+  }
+
+  override_start_position_file: {
+    type: string,
+    default_value: "",
+    read_only: true,
+    description: "The file path to a custom start position file. If specified, this file will be used to set the initial MuJoCo actuator positions of the robot in the simulation instead of the default positions defined in the MuJoCo model."
+  }
+
+  mujoco_model_topic: {
+    type: string,
+    default_value: "/mujoco_robot_description",
+    read_only: true,
+    description: "The ROS topic name where the MuJoCo model information is published. Optional parameter to choose a topic name from which it can subscribe and get the MJCF contents to load the model. This is only used, when the mujoco_model parameter is not set."
+  }
+
+  publish_rate:
+    camera: {
+      type: double,
+      default_value: 5.0,
+      read_only: true,
+      description: "The rate at which camera data is published in Hz. Optional parameter to update the simulated camera's color and depth image publish rates. Note that all cameras in the sim currently publish at the same intervals."
+    }
+
+    lidar: {
+      type: double,
+      default_value: 5.0,
+      read_only: true,
+      description: "The rate at which LiDAR data is published in Hz. Optional parameter to update the simulated LiDAR's sensor scan message publish rates. All lidar sensors in the simulation will be configured to publish these scan messages at the same rate."
+    }
+
+  headless: {
+    type: bool,
+    default_value: false,
+    read_only: true,
+    description: "Whether to run the MuJoCo simulation in headless mode (without rendering). Optional parameter to choose whether to run the simulation with or without rendering."
+  }
+
+  odom:
+    free_joint_name: {
+      type: string,
+      default_value: "floating_base_joint",
+      read_only: true,
+      description: "The name of the free joint to use for odometry. The optional parameters to choose the name of the floating base joint and the topic name to publish the odometry of the robot. The provided joint needs to be a valid MuJoCo free joint."
+    }
+
+    topic_name: {
+      type: string,
+      default_value: "/simulator/floating_base_state",
+      read_only: true,
+      description: "The ROS topic name where the odometry information is published."
+    }
