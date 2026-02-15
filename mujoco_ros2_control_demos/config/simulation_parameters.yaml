@@ -1,0 +1,16 @@
+/**:
+  ros__parameters:
+    mujoco_model: ${MUJOCO_MODEL_PATH}
+    sim_speed_factor: 2.0
+    headless: true
+    publish_rate:
+      camera: 6.0
+      lidar: 1.0
+    sensors:
+      mjcf_suffix:
+        force: "_force"
+        torque: "_torque"
+
+        orientation: "_quat"
+        angular_velocity: "_ang_vel"
+        linear_acceleration: "_lin_accel"
