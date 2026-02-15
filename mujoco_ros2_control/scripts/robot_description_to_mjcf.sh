@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This script checks if the dependencies trimesh, MuJoCo and obj2mjcf are installed in a virtual environment inside the ROS_HOME/ros2_control/.venv.
+# This script checks if the dependencies trimesh, mujoco and obj2mjcf are installed in a virtual environment inside the ROS_HOME/ros2_control/.venv.
 # If it is present, then sources it and runs the make_mjcf_from_robot_description.py script.
 # If it is not present, it will create it and install the dependencies and the source it before running the make_mjcf_from_robot_description.py script.
 
