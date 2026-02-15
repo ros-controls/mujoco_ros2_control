@@ -44,6 +44,7 @@ jobs:
         run: |
           set -o pipefail
           echo "Running markdown-link-check..."
+
           # Use git to list tracked markdown files
           md_files=$(git ls-files "*.md")
           if [ -z "$md_files" ]; then
@@ -51,16 +52,31 @@ jobs:
             exit 0
           fi
 
-          # Create a temporary config with the correct projectBase path
+          # Create a temporary config with the correct absolute repo root path
           REPO_ROOT=$(pwd)
-          sed "s|GITHUB_WORKSPACE|$REPO_ROOT|g" .github/markdown-link-check.json > /tmp/link-check-config.json
+          sed "s|REPLACE_ME_WITH_REPO_ROOT|$REPO_ROOT|g" .github/markdown-link-check.json > /tmp/link-check-config.json
+
+          echo "Using config:"
+          cat /tmp/link-check-config.json
 
           exit_code=0
           for f in $md_files; do
-            echo "\nChecking: $f"
+            echo -e "\n------------------------------------------------------------"
+            echo "Checking: $f"
             dir=$(dirname "$f")
             base=$(basename "$f")
+
             # Run the checker from the file's directory to ensure relative links resolve correctly.
-            (cd "$dir" && markdown-link-check --config "/tmp/link-check-config.json" --verbose "$base") || exit_code=1
+            # Use a subshell to avoid affecting the main shell's directory.
+            if ! (cd "$dir" && markdown-link-check --config "/tmp/link-check-config.json" --verbose "$base"); then
+              echo "FAILED: $f"
+              exit_code=1
+            fi
           done
+
+          if [ $exit_code -eq 0 ]; then
+            echo -e "\nAll markdown links are valid."
+          else
+            echo -e "\nSome markdown files contain broken links."
+          fi
           exit $exit_code

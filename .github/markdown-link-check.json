@@ -14,9 +14,8 @@
   "replacementPatterns": [
     {
       "pattern": "^/",
-      "replacement": "{{BASEURL}}/"
+      "replacement": "REPLACE_ME_WITH_REPO_ROOT/"
     }
   ],
-  "projectBaseUrl": "GITHUB_WORKSPACE",
   "aliveStatusCodes": [200, 206, 301, 302, 307, 308]
 }
