@@ -9,6 +9,7 @@
     { "pattern": "^https://localhost" },
     { "pattern": "^http://127.0.0.1" },
     { "pattern": "^https://127.0.0.1" },
+    { "pattern": "^https?://" },
     { "pattern": "^#" }
   ],
   "replacementPatterns": [
