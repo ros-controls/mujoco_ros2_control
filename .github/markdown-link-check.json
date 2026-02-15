@@ -11,12 +11,12 @@
     { "pattern": "^https://127.0.0.1" },
     { "pattern": "^#" }
   ],
-  "acceptedStatusCodes": [200, 301, 302, 307, 308],
-  "projectBase": [
+  "replacementPatterns": [
     {
-      "uri": "/",
-      "mapTo": "GITHUB_WORKSPACE"
+      "pattern": "^/",
+      "replacement": "{{BASEURL}}/"
     }
-  ]
+  ],
+  "projectBaseUrl": "GITHUB_WORKSPACE",
+  "aliveStatusCodes": [200, 206, 301, 302, 307, 308]
 }
-
