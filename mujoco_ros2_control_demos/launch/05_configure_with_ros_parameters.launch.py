@@ -15,9 +15,10 @@
 # limitations under the License.
 
 """
-Tutorial 1: Basic Robot Demo
+Tutorial 5: Configure with ROS Parameters
 
-This tutorial demonstrates how to set the MuJoCo simulation by parsing parameters via ROS parameters instead of using encoding them in the URDF.
+This tutorial demonstrates how to set the MuJoCo simulation by parsing parameters via ROS parameters
+instead of encoding them in the URDF.
 It launches a two-link arm robot with position controllers using a pre-defined MJCF model.
 
 Key concepts:
@@ -26,8 +27,8 @@ Key concepts:
 - Position control of joints via position_controller
 
 Usage:
-    ros2 launch mujoco_ros2_control_demos 01_basic_robot.launch.py
-    ros2 launch mujoco_ros2_control_demos 01_basic_robot.launch.py headless:=true
+    ros2 launch mujoco_ros2_control_demos 05_configure_with_ros_parameters.launch.py
+    ros2 launch mujoco_ros2_control_demos 05_configure_with_ros_parameters.launch.py headless:=true
 
 Control the robot:
     ros2 topic pub /position_controller/commands std_msgs/msg/Float64MultiArray "data: [0.5, -0.5]"
@@ -41,7 +42,6 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction, Shutdown
 from launch.substitutions import (
     Command,
     FindExecutable,
-    LaunchConfiguration,
     PathJoinSubstitution,
 )
 from launch_ros.actions import Node
@@ -59,11 +59,10 @@ def launch_setup(context, *args, **kwargs):
     # If it does not, generate a conservative template that the ros2_control_node can load.
     simulation_params_path = os.path.join(pkg_share_path, "config", "simulation_parameters.yaml")
 
-
     # Read the (possibly newly created) template and replace the placeholder
     # ${MUJOCO_MODEL_PATH} with the actual model path used by this demo.
     # We write the final parameter file to a temporary file and pass that to ros2_control_node.
-    with open(simulation_params_path, "r", encoding="utf-8") as f:
+    with open(simulation_params_path, encoding="utf-8") as f:
         sim_content = f.read()
 
     # Choose the model path used by this demo (non-PID scene)
@@ -114,7 +113,7 @@ def launch_setup(context, *args, **kwargs):
 
     # ros2_control node with MuJoCo
     nodes.append(
-            Node(
+        Node(
             package="mujoco_ros2_control",
             executable="ros2_control_node",
             emulate_tty=True,
