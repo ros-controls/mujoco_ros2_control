@@ -42,6 +42,7 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction, Shutdown
 from launch.substitutions import (
     Command,
     FindExecutable,
+    LaunchConfiguration,
     PathJoinSubstitution,
 )
 from launch_ros.actions import Node
@@ -69,6 +70,7 @@ def launch_setup(context, *args, **kwargs):
     mujoco_model_path = os.path.join(pkg_share_path, "demo_resources", "scenes", "scene.xml")
 
     sim_content_filled = sim_content.replace("${MUJOCO_MODEL_PATH}", mujoco_model_path)
+    sim_content_filled = sim_content_filled.replace("${HEADLESS}", LaunchConfiguration("headless").perform(context))
 
     # Create a temp file to hold the final parameters (ros launch expects a filesystem path)
     tmp_file = tempfile.NamedTemporaryFile(prefix="simulation_parameters_", suffix=".yaml", delete=False)

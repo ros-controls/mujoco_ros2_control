@@ -1,8 +1,8 @@
 /**:
   ros__parameters:
     mujoco_model: ${MUJOCO_MODEL_PATH}
+    headless: ${HEADLESS}
     sim_speed_factor: 2.0
-    headless: true
     publish_rate:
       camera: 6.0
       lidar: 1.0
