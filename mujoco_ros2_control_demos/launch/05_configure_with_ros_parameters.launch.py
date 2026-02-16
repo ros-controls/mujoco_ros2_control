@@ -92,6 +92,7 @@ def launch_setup(context, *args, **kwargs):
             " headless:=false",
             " use_mjcf_from_topic:=false",
             " use_transmissions:=false",
+            " setup_with_ros_parameters:=true",
         ]
     )
 
