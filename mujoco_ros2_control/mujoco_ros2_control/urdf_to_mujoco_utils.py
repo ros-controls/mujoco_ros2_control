@@ -70,3 +70,98 @@ def add_mujoco_info(raw_xml, output_filepath, publish_topic, fuse=True):
     formatted_xml = "\n".join([line for line in formatted_xml.splitlines() if line.strip()])
 
     return formatted_xml
+
+
+def remove_tag(xml_string, tag_to_remove):
+    xmldoc = minidom.parseString(xml_string)
+    nodes = xmldoc.getElementsByTagName(tag_to_remove)
+
+    for node in nodes:
+        parent = node.parentNode
+        parent.removeChild(node)
+
+    return xmldoc.toprettyxml()
+
+
+def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
+    robot = URDF.from_xml_string(raw_xml)
+    mesh_info_dict = {}
+
+    robot_materials = dict()
+    for material in robot.materials:
+        robot_materials[material.name] = material
+
+    def resolve_color(visual):
+        mat = visual.material
+        if mat is None:
+            return (1.0, 1.0, 1.0, 1.0)
+        if mat.color:
+            return tuple(mat.color.rgba)
+        if mat.name:
+            if mat.name in robot_materials:
+                ref = robot_materials[mat.name]
+                if ref and ref.color:
+                    return tuple(ref.color.rgba)
+        return (1.0, 1.0, 1.0, 1.0)
+
+    for link in robot.links:
+        for vis in link.visuals:
+            geom = vis.geometry
+            if not (geom and hasattr(geom, "filename")):
+                continue
+
+            uri = geom.filename  # full URI
+            stem = pathlib.Path(uri).stem  # filename without extension
+
+            # Select the mesh file: use a pre-generated OBJ if available and valid; otherwise use the original
+            is_pre_generated = False
+            new_uri = uri  # default fallback
+
+            if asset_dir:
+                if stem in decompose_dict:
+                    # Decomposed mesh: check if a pre-generated OBJ exists and threshold matches
+                    mesh_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/{stem}/{stem}/{stem}.obj"
+                    settings_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/metadata.json"
+
+                    if os.path.exists(mesh_file) and os.path.exists(settings_file):
+                        try:
+                            with open(settings_file) as f:
+                                data = json.load(f)
+                                used_threshold = float(data.get(f"{stem}"))
+                        except (FileNotFoundError, PermissionError, json.JSONDecodeError) as e:
+                            print(f"Warning: could not read thresholds for {stem}: {e}")
+                            used_threshold = None
+                        # Use existing decomposed object only if it has the same threshold, otherwise regenerate it.
+                        if used_threshold is not None and math.isclose(
+                            used_threshold, float(decompose_dict[stem]), rel_tol=1e-9
+                        ):
+                            new_uri = mesh_file
+                            is_pre_generated = True
+                        else:
+                            print(
+                                f"Existing decomposed obj for {stem} has different threshold {used_threshold} "
+                                f"than required {decompose_dict[stem]}. Regenerating..."
+                            )
+                else:
+                    # Composed mesh: check if a pre-generated OBJ exists
+                    mesh_file = f"{asset_dir}/{COMPOSED_PATH_NAME}/{stem}/{stem}.obj"
+
+                    if os.path.exists(mesh_file):
+                        new_uri = mesh_file
+                        is_pre_generated = True
+
+            scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
+            rgba = resolve_color(vis)
+
+            # If the same stem appears more than once, keep the first, or change as you prefer
+            mesh_info_dict.setdefault(
+                stem,
+                {
+                    "is_pre_generated": is_pre_generated,
+                    "filename": new_uri,
+                    "scale": scale,
+                    "color": rgba,
+                },
+            )
+
+    return mesh_info_dict

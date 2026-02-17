@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .urdf_to_mujoco_utils import (
-    add_mujoco_info,
-)
+from .urdf_to_mujoco_utils import add_mujoco_info, remove_tag, extract_mesh_info
 
-__all__ = [
-    "add_mujoco_info",
-]
+__all__ = ["add_mujoco_info", "remove_tag", "extract_mesh_info"]
