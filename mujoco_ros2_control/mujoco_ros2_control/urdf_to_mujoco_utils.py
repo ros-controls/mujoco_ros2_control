@@ -255,39 +255,6 @@ def rename_material_textures(dir_path, modifier):
         path.rename(new_path)
 
 
-def extract_rgba(visual):
-    """
-    Extracts the rgba values for a trimesh object. This apparently is pretty tricky because the materials can
-    come in a number of forms. This is basically chat gpt's best guess of how to do this, but seems to work
-    for my cases.
-
-    :param visual: visual component of a trimesh scene
-    """
-    # 1) Material base color
-    mat = getattr(visual, "material", None)
-    if mat is not None:
-        # PBR
-        if isinstance(mat, trimesh.visual.material.PBRMaterial) and mat.baseColorFactor is not None:
-            return np.array(mat.baseColorFactor)
-
-        # Simple / Phong
-        if hasattr(mat, "diffuse") and mat.diffuse is not None:
-            rgb = np.array(mat.diffuse)
-            alpha = getattr(mat, "alpha", 1.0)
-            return np.concatenate([rgb, [alpha]])
-
-    # 2) Per-vertex colors
-    if visual.kind == "vertex" and visual.vertex_colors is not None:
-        vc = visual.vertex_colors
-        if vc.shape[1] == 4:
-            return vc[0] / 255.0
-        else:
-            return np.append(vc[0] / 255.0, 1.0)
-
-    # 3) I don't think this should ever happen, but just in case
-    return np.array([0.7, 0.7, 0.7, 1.0])
-
-
 def set_up_axis_to_z_up(dae_file_path):
     # Parse the DAE file from the in-memory file-like object using minidom
     dom = minidom.parse(dae_file_path)
@@ -429,3 +396,184 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                         parent.appendChild(sub_geom_local)
 
     return dom
+
+
+def update_non_obj_assets(dom, output_filepath):
+    """
+    We want to take the group 1 objects that get created, and turn them into the equivalent
+    but both in group 2 and in group 3. That means taking something like this
+        <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.2 0.2 0.2 1" mesh="finger_v6"/>
+    and turning it into this
+        <geom mesh="finger_v6" class="visual" pos="0 0 0" quat="0.707107 0.707107 0 0"/>
+        <geom mesh="finger_v6" class="collision" pos="0 0 0" quat="0.707107 0.707107 0 0"/>
+
+    To do this, we need to add in class visual, and class collision to them, keep the rgba on the visual one, and
+    get rid of the other components (type, contype, conaffinity, group, density)
+
+    We can tell that we need to modify it because it will have a contype attribute attached to it (not the best way
+    but I guess it works for now)
+    """
+
+    # Find the <worldbody> element
+    worldbody = dom.getElementsByTagName("worldbody")
+    worldbody_element = worldbody[0]
+
+    # get all of the geom elements in the worldbody element
+    worldbody_geoms = worldbody_element.getElementsByTagName("geom")
+
+    # elements to remove
+    remove_attributes = ["contype", "conaffinity", "group", "density"]
+
+    for geom in worldbody_geoms:
+        if not geom.hasAttribute("contype"):
+            pass
+        else:
+            collision_geom = geom.cloneNode(False)
+
+            # if there is no type associated, make the type sphere explicitly
+            if not collision_geom.hasAttribute("type"):
+                collision_geom.setAttribute("type", "sphere")
+
+            # set to collision class
+            collision_geom.setAttribute("class", "collision")
+            for attribute in remove_attributes:
+                if collision_geom.hasAttribute(attribute):
+                    collision_geom.removeAttribute(attribute)
+
+            # most of the components are the same between collision and visual, so just copy it
+            visual_geom = collision_geom.cloneNode(False)
+            visual_geom.setAttribute("class", "visual")
+
+            # remove rgba from collision geom bc it isn't necessary
+            if geom.hasAttribute("rgba"):
+                collision_geom.removeAttribute("rgba")
+
+            # get the parent of the geom node, and remove the old element
+            parent = geom.parentNode
+            parent.removeChild(geom)
+            # add the new collision and visual specific elements
+            parent.appendChild(collision_geom)
+            parent.appendChild(visual_geom)
+
+    return dom
+
+
+def add_mujoco_inputs(dom, raw_inputs, scene_inputs):
+    """
+    Copies all elements under the "raw_inputs" and "scene_inputs" XML tags directly in the provided dom.
+    This is useful for adding things like actuators, options, or defaults or scene-specific elements. But any tag that
+    is supported in the MJCF can be added here.
+    """
+    root = dom.documentElement
+
+    if scene_inputs:
+        for child in scene_inputs.childNodes:
+            if child.nodeType == child.ELEMENT_NODE:
+                imported_node = dom.importNode(child, True)
+                root.appendChild(imported_node)
+
+    if raw_inputs:
+        for child in raw_inputs.childNodes:
+            if child.nodeType == child.ELEMENT_NODE:
+                imported_node = dom.importNode(child, True)
+                root.appendChild(imported_node)
+
+    return dom
+
+
+def get_processed_mujoco_inputs(processed_inputs_element):
+    """
+    Returns the processed inputs as dictionaries from the specified processed_inputs_element.
+
+    Right now this supports tags for decomposing meshes and attaching cameras or lidar sensors to sites.
+    """
+
+    decompose_dict = dict()
+    cameras_dict = dict()
+    modify_element_dict = dict()
+    lidar_dict = dict()
+
+    if not processed_inputs_element:
+        return decompose_dict, cameras_dict, modify_element_dict, lidar_dict
+
+    for child in processed_inputs_element.childNodes:
+        if child.nodeType != child.ELEMENT_NODE:
+            continue
+
+        # Grab meshes to decompose
+        if child.tagName == "decompose_mesh":
+            name = child.getAttribute("mesh_name")
+            threshold = "0.05"
+            if not child.hasAttribute("threshold"):
+                print(f"defaulting threshold to 0.05 for decompose of {name}")
+            else:
+                threshold = child.getAttribute("threshold")
+            print(f"Will decompose mesh with name: {name}")
+            decompose_dict[name] = threshold
+
+        # Grab cameras
+        if child.nodeType == child.ELEMENT_NODE and child.tagName == "camera":
+            camera_element = child
+            site_name = camera_element.getAttribute("site")
+            camera_name = camera_element.getAttribute("name")
+
+            # We don't need this in the MJCF
+            camera_element.removeAttribute("site")
+            cameras_dict[site_name] = camera_element
+
+            print(f"Will add camera ({camera_name}) for site ({site_name})")
+
+        # Grab replicates
+        if child.nodeType == child.ELEMENT_NODE and child.tagName == "lidar":
+            lidar_element = child
+            site_name = lidar_element.getAttribute("ref_site")
+            sensor_name = lidar_element.getAttribute("sensor_name")
+            min_angle = float(lidar_element.getAttribute("min_angle"))
+            max_angle = float(lidar_element.getAttribute("max_angle"))
+            angle_increment = float(lidar_element.getAttribute("angle_increment"))
+
+            num_sensors = int((max_angle - min_angle) / angle_increment) + 1
+
+            doc = minidom.Document()
+            site = doc.createElement("site")
+            site.setAttribute("name", sensor_name)
+            site.setAttribute("pos", "0.0 0.0 0.0")
+            site.setAttribute("quat", "0.0 0.0 0.0 1.0")
+
+            replicate = doc.createElement("replicate")
+            replicate.setAttribute("site", site_name)
+            replicate.setAttribute("count", str(num_sensors))
+            replicate.setAttribute("sep", "-")
+            replicate.setAttribute("offset", "0 0 0")
+            replicate.setAttribute("euler", f"0 {angle_increment} 0")
+            replicate.setAttribute("min_angle", lidar_element.getAttribute("min_angle"))
+
+            replicate.appendChild(site)
+
+            # We don't need this in the MJCF
+            lidar_dict[site_name] = replicate
+
+            print(f"Will add replicate tag at site ({site_name})")
+
+        # Grab modify element information
+        if child.nodeType == child.ELEMENT_NODE and child.tagName == "modify_element":
+            modify_element_element = child
+
+            # get the attributes from the modify_element_tag
+            attr_dict = {attr.name: attr.value for attr in modify_element_element.attributes.values()}
+            # we must have a name element
+            if "name" not in attr_dict or "type" not in attr_dict:
+                raise ValueError("'name' and 'type' must be in the attributes of a 'modify_element' tag!")
+
+            # remove the name and type entries because those will be used as the key in the returned dict
+            element_name = attr_dict["name"]
+            element_type = attr_dict["type"]
+            del attr_dict["name"]
+            del attr_dict["type"]
+            modify_element_dict[(element_type, element_name)] = attr_dict
+
+            print(f"Will add the following attributes to {element_type} '{element_name}':")
+            for key, value in attr_dict.items():
+                print(f"  {key}: {value}")
+
+    return decompose_dict, cameras_dict, modify_element_dict, lidar_dict
