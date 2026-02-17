@@ -1864,7 +1864,7 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
                              joint_data.mimic_multiplier);
       if (!joint.command_interfaces.empty())
       {
-        RCLCPP_WARN(
+        RCLCPP_ERROR(
             get_logger(),
             "Joint : '%s' is a mimic joint but has command interfaces defined. Command interfaces for mimic joints "
             "will be ignored and this joint will be only mimicked.",
@@ -1889,10 +1889,10 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
                            "Joint : %s is a passive joint", joint.name.c_str());
     if (!joint.command_interfaces.empty() && !actuator_exists)
     {
-      RCLCPP_WARN(get_logger(),
-                  "Joint : %s has command interfaces defined but no matching actuator in the MuJoCo model. This joint "
-                  "will be treated as a passive joint and no command interfaces will be exported.",
-                  joint.name.c_str());
+      RCLCPP_ERROR(get_logger(),
+                   "Joint : %s has command interfaces defined but no matching actuator in the MuJoCo model. This joint "
+                   "will be treated as a passive joint and no command interfaces will be exported.",
+                   joint.name.c_str());
       joint.command_interfaces.clear();
     }
 
