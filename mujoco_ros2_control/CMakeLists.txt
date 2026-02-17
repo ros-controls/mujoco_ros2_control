@@ -201,5 +201,9 @@ if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
 
+ament_python_install_package(mujoco_ros2_control
+  SCRIPTS_DESTINATION lib/mujoco_ros2_control
+)
+
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_package()

@@ -37,47 +37,11 @@ from urdf_parser_py.urdf import URDF
 
 from ament_index_python.packages import get_package_share_directory
 from xml.dom import minidom
-
+from mujoco_ros2_control import add_mujoco_info
 
 # Hardcoded relative paths for MuJoCo asset outputs
 DECOMPOSED_PATH_NAME = "decomposed"
 COMPOSED_PATH_NAME = "full"
-
-
-def add_mujoco_info(raw_xml, output_filepath, publish_topic, fuse=True):
-    dom = minidom.parseString(raw_xml)
-
-    mujoco_element = dom.createElement("mujoco")
-    compiler_element = dom.createElement("compiler")
-
-    # Use relative path for fixed directory otherwise use absolute path
-    if not publish_topic:
-        asset_dir = "assets"
-    else:
-        asset_dir = os.path.join(output_filepath, "assets")
-
-    compiler_element.setAttribute("assetdir", asset_dir)
-    compiler_element.setAttribute("balanceinertia", "true")
-    compiler_element.setAttribute("discardvisual", "false")
-    compiler_element.setAttribute("strippath", "false")
-
-    if not fuse:
-        # Prevents merging of static bodies (like the fixed root link)
-        compiler_element.setAttribute("fusestatic", "false")
-
-    mujoco_element.appendChild(compiler_element)
-
-    robot_element = dom.getElementsByTagName("robot")
-
-    robot_element[0].appendChild(mujoco_element)
-
-    # Use minidom to format the string with line breaks and indentation
-    formatted_xml = dom.toprettyxml(indent="    ")
-
-    # Remove extra newlines that minidom adds after each tag
-    formatted_xml = "\n".join([line for line in formatted_xml.splitlines() if line.strip()])
-
-    return formatted_xml
 
 
 def remove_tag(xml_string, tag_to_remove):
