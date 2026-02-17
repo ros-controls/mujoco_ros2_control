@@ -60,6 +60,8 @@ from mujoco_ros2_control import (
     get_urdf_from_rsp,
     get_xml_from_file,
     publish_model_on_topic,
+    add_urdf_free_joint,
+    write_mujoco_scene,
     COMPOSED_PATH_NAME,
     DECOMPOSED_PATH_NAME,
 )
@@ -377,102 +379,6 @@ def fix_mujoco_description(
         modified_lines.pop(0)
         modified_data = "".join(modified_lines)
         file.write(modified_data)
-
-
-def add_urdf_free_joint(urdf):
-    """
-    Adds a free joint to the top of the urdf. This makes MuJoCo create a
-    floating joint so that a base is free to move, like on an AMR.
-    """
-
-    # get the old root link
-    robot = URDF.from_xml_string(urdf)
-    old_root = robot.get_root()
-
-    if old_root == "world":
-        print("Not adding a free joint because world is the URDF root")
-        return
-
-    urdf_dom = minidom.parseString(urdf)
-
-    # Get the <robot> root element
-    robot_elem = urdf_dom.getElementsByTagName("robot")[0]
-
-    ###################################
-    # virtual base link
-    virtual_link = urdf_dom.createElement("link")
-    virtual_link.setAttribute("name", "virtual_base")
-
-    ###################################
-    # joint of virtual base link to dummy link
-    virtual_joint = urdf_dom.createElement("joint")
-    virtual_joint.setAttribute("name", "virtual_base_joint")
-    virtual_joint.setAttribute("type", "floating")
-
-    # <parent link="virtual_base"/>
-    parent_elem = urdf_dom.createElement("parent")
-    parent_elem.setAttribute("link", "virtual_base")
-    virtual_joint.appendChild(parent_elem)
-
-    # <child link="old_root"/>
-    child_elem = urdf_dom.createElement("child")
-    # replace with your real root link name
-    child_elem.setAttribute("link", old_root)
-    virtual_joint.appendChild(child_elem)
-
-    # <origin xyz="0 0 0" rpy="0 0 0"/>
-    origin_elem = urdf_dom.createElement("origin")
-    origin_elem.setAttribute("xyz", "0 0 0")
-    origin_elem.setAttribute("rpy", "0 0 0")
-    virtual_joint.appendChild(origin_elem)
-
-    # Insert the elements at the top of the robot definition
-    robot_elem.insertBefore(virtual_joint, robot_elem.firstChild)
-    robot_elem.insertBefore(virtual_link, robot_elem.firstChild)
-
-    # Use minidom to format the string with line breaks and indentation
-    formatted_xml = urdf_dom.toprettyxml(indent="    ")
-
-    # Remove extra newlines that minidom adds after each tag
-    formatted_xml = "\n".join([line for line in formatted_xml.splitlines() if line.strip()])
-
-    return formatted_xml
-
-
-def write_mujoco_scene(scene_inputs, output_filepath):
-    from xml.dom.minidom import Document, Node
-
-    dom = Document()
-
-    root = dom.createElement("mujoco")
-    root.setAttribute("model", "scene")
-    dom.appendChild(root)
-
-    # Add an <include> tag for the MuJoCo description
-    include_node = dom.createElement("include")
-    include_node.setAttribute("file", "mujoco_description_formatted.xml")
-    root.appendChild(include_node)
-
-    if scene_inputs:
-        scene_node = None
-        if scene_inputs.tagName == "scene":
-            scene_node = scene_inputs
-        else:
-            for child in scene_inputs.childNodes:
-                if child.nodeType == Node.ELEMENT_NODE and child.tagName == "scene":
-                    scene_node = child
-                    break
-
-        # If a <scene> node was found, import all of its child nodes
-        if scene_node:
-            for child in scene_node.childNodes:
-                if child.nodeType == Node.TEXT_NODE and not child.data.strip():
-                    continue
-                imported_node = dom.importNode(child, True)  # deep copy
-                root.appendChild(imported_node)
-
-    with open(output_filepath + "scene.xml", "w") as file:
-        file.write(dom.toprettyxml(indent="    "))
 
 
 def main(args=None):

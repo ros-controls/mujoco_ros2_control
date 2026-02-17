@@ -35,6 +35,8 @@ from .urdf_to_mujoco_utils import (
     get_urdf_from_rsp,
     get_xml_from_file,
     publish_model_on_topic,
+    add_urdf_free_joint,
+    write_mujoco_scene,
     DECOMPOSED_PATH_NAME,
     COMPOSED_PATH_NAME,
 )
@@ -62,6 +64,8 @@ __all__ = [
     "get_urdf_from_rsp",
     "get_xml_from_file",
     "publish_model_on_topic",
+    "add_urdf_free_joint",
+    "write_mujoco_scene",
     DECOMPOSED_PATH_NAME,
     COMPOSED_PATH_NAME,
 ]
