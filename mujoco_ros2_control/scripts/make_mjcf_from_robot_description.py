@@ -49,6 +49,9 @@ from mujoco_ros2_control import (
     update_non_obj_assets,
     add_mujoco_inputs,
     get_processed_mujoco_inputs,
+    parse_inputs_xml,
+    parse_scene_xml,
+    add_free_joint,
 )
 
 # Hardcoded relative paths for MuJoCo asset outputs
@@ -87,6 +90,7 @@ def extract_rgba(visual):
 
     # 3) I don't think this should ever happen, but just in case
     return np.array([0.7, 0.7, 0.7, 1.0])
+
 
 def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, decompose_dict):
     # keep track of files we have already processed so we don't do it again
@@ -303,195 +307,6 @@ def run_obj2mjcf(output_filepath, decompose_dict):
 
     with open(thresholds_file, "w") as f:
         json.dump(thresholds_data, f, indent=4)
-
-
-def parse_inputs_xml(filename=None):
-    """
-    This script can accept inputs in the form of an xml file. This allows users to inject data
-    into the MJCF that is not necessarily included in the URDF.
-
-    E.g.,
-
-    <mujoco_inputs>
-
-        <!-- The contents of `raw_inputs` will be copied and pasted directly into the MJCF -->
-        <raw_inputs>
-            <option integrator="implicitfast"/>
-
-            <default>
-                ...
-            </default>
-
-            <actuator>
-                ...
-            </actuator>
-        </raw_inputs>
-
-        <!-- Specific inputs that require processing from the conversion script-->
-        <processed_inputs>
-            <!-- Specifying decompose_mesh will set the `decompose` flag when using obj2mjcf -->
-            <!-- <decompose_mesh mesh_name="shoulder_link" threshold="0.05"/> -->
-
-            <!-- The camera with the specified values will be added at the specified site name. -->
-            <!-- The position and quaterinion will be filled in by the converter -->
-            <camera site="camera_color_optical_frame" name="camera" fovy="58" mode="fixed" resolution="640 480"/>
-
-            <!-- Adds a lidar tag below a site tag to support a lidar sensor. -->
-            <!-- In the URDF, we assume that that the sensor frame has the Z-axis pointed directly up in the sensor -->
-            <!-- frame. This tag will create rangefinders in the MJCF between min_angle and max_angle at each -->
-            <!-- angle_increment, and the drivers combine them into a single LaserScan message. -->
-            <lidar ref_site="lidar_sensor_frame"
-                   sensor_name="rf"
-                   min_angle="0"
-                   max_angle="1.57"
-                   angle_increment="0.025"
-            />
-
-        </processed_inputs>
-    </mujoco_inputs>
-    """
-
-    if not filename:
-        return None, None
-
-    print(f"Parsing MuJoCo elements from: {filename}")
-
-    dom = minidom.parse(filename)
-    root = dom.documentElement
-
-    raw_inputs = None
-    processed_inputs = None
-
-    if root.tagName == "mujoco_inputs":
-        # The file itself is a standalone xml
-        for child in root.childNodes:
-            if child.nodeType != child.ELEMENT_NODE:
-                continue
-            if child.tagName == "raw_inputs":
-                raw_inputs = child
-            elif child.tagName == "processed_inputs":
-                processed_inputs = child
-
-    elif root.tagName == "robot":
-        # The file is a URDF
-        mujoco_inputs_node = None
-
-        # find <mujoco_inputs>
-        for child in root.childNodes:
-            if child.nodeType == child.ELEMENT_NODE and child.tagName == "mujoco_inputs":
-                mujoco_inputs_node = child
-                break
-
-        if mujoco_inputs_node is None:
-            # URDF without mujoco_inputs is allowed
-            return None, None
-
-        # parse children of <mujoco_inputs>
-        for child in mujoco_inputs_node.childNodes:
-            if child.nodeType != child.ELEMENT_NODE:
-                continue
-            if child.tagName == "raw_inputs":
-                raw_inputs = child
-            elif child.tagName == "processed_inputs":
-                processed_inputs = child
-    else:
-        raise ValueError(
-            f"Root tag in file must be either 'mujoco_inputs' (standalone XML) or 'robot' (URDF), not '{root.tagName}'"
-        )
-
-    return raw_inputs, processed_inputs
-
-
-def parse_scene_xml(filename=None):
-    """
-    This script can accept the scene in the form of an xml file. This allows users to inject this data
-    into the MJCF that is not necessarily included in the URDF.
-    """
-
-    if not filename:
-        return None
-
-    print(f"Parsing MuJoCo scene from: {filename}")
-
-    dom = minidom.parse(filename)
-    root = dom.documentElement
-
-    scene_inputs = None
-
-    if root.tagName == "mujoco":
-        # The file itself is a standalone xml
-        scene_inputs = root
-        return scene_inputs
-
-    elif root.tagName == "robot":
-        # The file is a URDF
-        mujoco_inputs_node = None
-
-        # find <mujoco_inputs>
-        for child in root.childNodes:
-            if child.nodeType == child.ELEMENT_NODE and child.tagName == "mujoco_inputs":
-                mujoco_inputs_node = child
-                break
-
-        if mujoco_inputs_node is None:
-            # URDF without mujoco_inputs is allowed
-            return None
-
-        # parse children of <mujoco_inputs>
-        for child in mujoco_inputs_node.childNodes:
-            if child.nodeType != child.ELEMENT_NODE:
-                continue
-            if child.tagName == "scene":
-                scene_inputs = child
-    else:
-        raise ValueError(
-            f"Root tag in file must be either 'mujoco_inputs' (standalone XML) or 'robot' (URDF), not '{root.tagName}'"
-        )
-
-    return scene_inputs
-
-
-def add_free_joint(dom, urdf, joint_name="floating_base_joint"):
-    """
-    This change is on the mjcf side, and replaces the "free" joint type with a freejoint tag.
-    This is a special item which explicitly sets all stiffness/damping to 0.
-    https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-freejoint
-    """
-    robot = URDF.from_xml_string(urdf)
-    root_link = robot.get_root()
-    if root_link == "world":
-        print("Not adding a free joint because world is the URDF root")
-        return
-
-    # Try to find the virtual_base_joint (standard behavior with fuse=True)
-    # Locate the one with name="virtual_base_joint" of type="free"
-    joints = dom.getElementsByTagName("joint")
-    for joint in joints:
-        if joint.getAttribute("name") == "virtual_base_joint" and joint.getAttribute("type") == "free":
-            # Create the new freejoint element
-            new_joint = dom.createElement("freejoint")
-            new_joint.setAttribute("name", joint_name)
-            # Replace the old joint with the new one
-            joint.parentNode.replaceChild(new_joint, joint)
-            return dom
-
-    # Fallback: If no virtual joint found (likely because --no-fuse is on),
-    #    find the root body and insert the freejoint directly.
-    bodies = dom.getElementsByTagName("body")
-    for body in bodies:
-        if body.getAttribute("name") == root_link:
-            print(f"Adding free joint directly to root body: {root_link}")
-            new_joint = dom.createElement("freejoint")
-            new_joint.setAttribute("name", joint_name)
-
-            # Insert at the top of the body
-            if body.hasChildNodes():
-                body.insertBefore(new_joint, body.firstChild)
-            else:
-                body.appendChild(new_joint)
-            return dom
-
-    raise ValueError("Did not find virtual_base_joint nor a body matching the URDF root to add a free joint.")
 
 
 def add_links_as_sites(urdf, dom, add_free_joint):

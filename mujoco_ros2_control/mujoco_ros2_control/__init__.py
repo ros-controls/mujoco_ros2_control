@@ -24,6 +24,9 @@ from .urdf_to_mujoco_utils import (
     update_non_obj_assets,
     add_mujoco_inputs,
     get_processed_mujoco_inputs,
+    parse_inputs_xml,
+    parse_scene_xml,
+    add_free_joint,
 )
 
 __all__ = [
@@ -38,4 +41,7 @@ __all__ = [
     "update_non_obj_assets",
     "add_mujoco_inputs",
     "get_processed_mujoco_inputs",
+    "parse_inputs_xml",
+    "parse_scene_xml",
+    "add_free_joint",
 ]
