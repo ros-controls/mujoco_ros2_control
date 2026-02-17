@@ -85,6 +85,18 @@ std::string get_hardware_parameter_or(const hardware_interface::HardwareInfo& ha
   }
   return default_value;
 }
+
+bool is_mimic_joint(const std::string& joint_name, const hardware_interface::HardwareInfo& hardware_info)
+{
+  for (const auto& mimic_joint : hardware_info.mimic_joints)
+  {
+    if (hardware_info.joints.at(mimic_joint.joint_index).name == joint_name)
+    {
+      return true;
+    }
+  }
+  return false;
+}
 }  // namespace
 namespace mujoco_ros2_control
 {
@@ -1746,9 +1758,13 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       // no actuator found for this joint, register a passive actuator
       MuJoCoActuatorData passive_actuator;
       passive_actuator.joint_name = std::string(mj_id2name(mj_model_, mjOBJ_JOINT, jnt_id));
-      RCLCPP_INFO(get_logger(), "MuJoCo joint '%s' has no associated actuator. Registering as a passive joint.",
-                  passive_actuator.joint_name.c_str());
-      passive_actuator.mj_actuator_id = -1;  // indicates no actuator
+      const bool is_mimic = is_mimic_joint(passive_actuator.joint_name, get_hardware_info());
+      RCLCPP_INFO_EXPRESSION(get_logger(), !is_mimic,
+                             "MuJoCo joint '%s' has no associated actuator. Registering as a passive joint.",
+                             passive_actuator.joint_name.c_str());
+      RCLCPP_INFO_EXPRESSION(get_logger(), is_mimic,
+                             "MuJoCo joint '%s' is a mimic joint and has no associated actuator.",
+                             passive_actuator.joint_name.c_str());
       passive_actuator.mj_pos_adr = mj_model_->jnt_qposadr[jnt_id];
       passive_actuator.mj_vel_adr = mj_model_->jnt_dofadr[jnt_id];
       passive_actuator.mj_joint_type = mj_model_->jnt_type[jnt_id];
