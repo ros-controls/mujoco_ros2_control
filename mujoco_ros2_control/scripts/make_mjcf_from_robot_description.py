@@ -20,22 +20,15 @@
 import argparse
 import mujoco
 import os
-import pathlib
-import re
 import shutil
 import subprocess
 import tempfile
-import PyKDL
 import sys
 import json
-import math
 
 import numpy as np
 import trimesh  # Added trimesh
 
-from urdf_parser_py.urdf import URDF
-
-from ament_index_python.packages import get_package_share_directory
 from xml.dom import minidom
 from mujoco_ros2_control import (
     add_mujoco_info,

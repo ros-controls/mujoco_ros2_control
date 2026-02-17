@@ -21,10 +21,7 @@ import os
 import pathlib
 import re
 import shutil
-import subprocess
-import tempfile
 import PyKDL
-import sys
 import json
 import math
 
