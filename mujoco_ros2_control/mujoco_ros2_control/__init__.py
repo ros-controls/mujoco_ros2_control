@@ -27,6 +27,9 @@ from .urdf_to_mujoco_utils import (
     parse_inputs_xml,
     parse_scene_xml,
     add_free_joint,
+    add_links_as_sites,
+    add_cameras_from_sites,
+    add_lidar_from_sites,
 )
 
 __all__ = [
@@ -44,4 +47,7 @@ __all__ = [
     "parse_inputs_xml",
     "parse_scene_xml",
     "add_free_joint",
+    "add_links_as_sites",
+    "add_cameras_from_sites",
+    "add_lidar_from_sites",
 ]
