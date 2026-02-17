@@ -32,6 +32,9 @@ from .urdf_to_mujoco_utils import (
     add_lidar_from_sites,
     add_modifiers,
     copy_pre_generated_meshes,
+    get_urdf_from_rsp,
+    get_xml_from_file,
+    publish_model_on_topic,
     DECOMPOSED_PATH_NAME,
     COMPOSED_PATH_NAME,
 )
@@ -56,6 +59,9 @@ __all__ = [
     "add_lidar_from_sites",
     "add_modifiers",
     "copy_pre_generated_meshes",
+    "get_urdf_from_rsp",
+    "get_xml_from_file",
+    "publish_model_on_topic",
     DECOMPOSED_PATH_NAME,
     COMPOSED_PATH_NAME,
 ]

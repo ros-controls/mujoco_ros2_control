@@ -1077,3 +1077,99 @@ def copy_pre_generated_meshes(output_filepath, mesh_info_dict, decompose_dict):
                 dst_base = f"{output_filepath}assets/{COMPOSED_PATH_NAME}/{filename_no_ext}"
 
             shutil.copytree(mesh_dir, dst_base, dirs_exist_ok=True)
+
+
+def get_urdf_from_rsp(args=None):
+    """
+    Pulls the robot description from the /robot_description topic, if available.
+    """
+
+    import rclpy
+    from rclpy.node import Node
+    from rcl_interfaces.srv import GetParameters
+
+    class ParameterClient(Node):
+        def __init__(self, node_name="/robot_state_publisher/get_parameters"):
+            super().__init__("parameter_client")
+            self.node_name = node_name
+            self.client = self.create_client(GetParameters, node_name)
+
+        def get_params(self, params):
+            print()
+            while not self.client.wait_for_service(timeout_sec=1.0):
+                self.get_logger().info("service not available, waiting again...")
+
+            self.req = GetParameters.Request()
+            self.req.names = params
+            self.future = self.client.call_async(self.req)
+            rclpy.spin_until_future_complete(self, self.future)
+            return self.future.result()
+
+    rclpy.init(args=args)
+
+    param_client = ParameterClient()
+    response = param_client.get_params(["robot_description"])
+    if response is not None:
+        urdf = response.values[0].string_value
+    else:
+        param_client.get_logger().error("Failed to call service")
+    param_client.destroy_node()
+    rclpy.try_shutdown()
+
+    return urdf
+
+
+def get_xml_from_file(urdf_file=None):
+    """
+    Optionally parse a URDF from file. Can create a URDF from /robot_description with:
+
+    ros2 topic echo  --full-length --once /robot_description  | \
+        sed -e 's/^data: "//' -e 's/"$//' -e 's/\\n/\n/g' -e 's/\\\"/\"/g' -e 's/---//g' > \
+        /tmp/robot_description.urdf
+    """
+    with open(urdf_file) as file:
+        urdf = file.read()
+    return urdf
+
+
+def publish_model_on_topic(publish_topic, output_filepath, args=None):
+
+    import rclpy
+    from rclpy.node import Node
+    from std_msgs.msg import String
+    from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
+
+    # Remove leading slash if present
+    publish_topic = publish_topic.lstrip("/")
+
+    # --- Node ROS2 for model publishing MJCF ---
+    class MjcfPublisher(Node):
+        def __init__(self, mjcf_path):
+            super().__init__("mjcf_publisher")
+
+            qos_profile = QoSProfile(
+                depth=1, reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL
+            )
+
+            self.publisher_ = self.create_publisher(String, publish_topic, qos_profile)
+            self.mjcf_path = mjcf_path
+            self.publish_mjcf()
+
+        def publish_mjcf(self):
+            with open(self.mjcf_path) as f:
+                xml_content = f.read()
+            msg = String()
+            msg.data = xml_content
+            self.publisher_.publish(msg)
+
+    rclpy.init(args=args)
+    mjcf_path = os.path.join(output_filepath, "mujoco_description_formatted.xml")
+    mjcf_node = MjcfPublisher(mjcf_path)
+
+    try:
+        rclpy.spin(mjcf_node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        mjcf_node.destroy_node()
+        rclpy.try_shutdown()
