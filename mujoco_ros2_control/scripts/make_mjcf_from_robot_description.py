@@ -44,44 +44,14 @@ from mujoco_ros2_control import (
     replace_package_names,
     get_images_from_dae,
     rename_material_textures,
+    extract_rgba,
+    set_up_axis_to_z_up,
+    update_obj_assets,
 )
 
 # Hardcoded relative paths for MuJoCo asset outputs
 DECOMPOSED_PATH_NAME = "decomposed"
 COMPOSED_PATH_NAME = "full"
-
-
-def extract_rgba(visual):
-    """
-    Extracts the rgba values for a trimesh object. This apparently is pretty tricky because the materials can
-    come in a number of forms. This is basically chat gpt's best guess of how to do this, but seems to work
-    for my cases.
-
-    :param visual: visual component of a trimesh scene
-    """
-    # 1) Material base color
-    mat = getattr(visual, "material", None)
-    if mat is not None:
-        # PBR
-        if isinstance(mat, trimesh.visual.material.PBRMaterial) and mat.baseColorFactor is not None:
-            return np.array(mat.baseColorFactor)
-
-        # Simple / Phong
-        if hasattr(mat, "diffuse") and mat.diffuse is not None:
-            rgb = np.array(mat.diffuse)
-            alpha = getattr(mat, "alpha", 1.0)
-            return np.concatenate([rgb, [alpha]])
-
-    # 2) Per-vertex colors
-    if visual.kind == "vertex" and visual.vertex_colors is not None:
-        vc = visual.vertex_colors
-        if vc.shape[1] == 4:
-            return vc[0] / 255.0
-        else:
-            return np.append(vc[0] / 255.0, 1.0)
-
-    # 3) I don't think this should ever happen, but just in case
-    return np.array([0.7, 0.7, 0.7, 1.0])
 
 
 def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, decompose_dict):
@@ -252,46 +222,6 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
     return xml_data
 
 
-def set_up_axis_to_z_up(dae_file_path):
-    # Parse the DAE file from the in-memory file-like object using minidom
-    dom = minidom.parse(dae_file_path)
-
-    # Find the <asset> element
-    asset = dom.getElementsByTagName("asset")
-
-    if not asset:
-        # Create the <asset> element if it doesn't exist
-        asset_element = dom.createElement("asset")
-        dom.documentElement.appendChild(asset_element)
-    else:
-        asset_element = asset[0]
-
-    # Find the 'up_axis' tag in the asset element
-    up_axis = asset_element.getElementsByTagName("up_axis")
-
-    # If the 'up_axis' tag is found, update or add it
-    if up_axis:
-        up_axis_element = up_axis[0]
-        # If it's not already set to Z_UP, update it
-        if up_axis_element.firstChild.nodeValue != "Z_UP":
-            up_axis_element.firstChild.nodeValue = "Z_UP"
-            print(f"Updated 'up_axis' to 'Z_UP' for {dae_file_path}")
-        else:
-            print(f"'up_axis' is already 'Z_UP' for {dae_file_path}")
-    else:
-        # If the 'up_axis' tag doesn't exist, create it and set it to Z_UP
-        new_up_axis = dom.createElement("up_axis")
-        new_up_axis.appendChild(dom.createTextNode("Z_UP"))
-        asset_element.appendChild(new_up_axis)
-        print(f"Added 'up_axis' with value 'Z_UP' for {dae_file_path}")
-
-    # Convert the DOM back to a string
-    modified_data = dom.toprettyxml(indent="  ")
-
-    # You can return the modified data if you need to further process it
-    return modified_data
-
-
 def run_obj2mjcf(output_filepath, decompose_dict):
     # remove the folders in the asset directory so that we are clean to run obj2mjcf
     with os.scandir(f"{output_filepath}assets/{COMPOSED_PATH_NAME}") as entries:
@@ -339,109 +269,6 @@ def run_obj2mjcf(output_filepath, decompose_dict):
 
     with open(thresholds_file, "w") as f:
         json.dump(thresholds_data, f, indent=4)
-
-
-def update_obj_assets(dom, output_filepath, mesh_info_dict):
-    # Find the <asset> element
-    asset = dom.getElementsByTagName("asset")
-
-    # If there are no assets then we don't need to worry about obj conversions, but we still
-    # support mesh-less URDFs
-    if len(asset) == 0:
-        print("No assets in URDF, skipping conversions...")
-        return dom
-
-    # Find the <worldbody> element
-    worldbody = dom.getElementsByTagName("worldbody")
-    worldbody_element = worldbody[0]
-    worldbody_geoms = worldbody_element.getElementsByTagName("geom")
-
-    # get all of the mesh tags in the asset element
-    asset_element = asset[0]
-    meshes = asset_element.getElementsByTagName("mesh")
-
-    # obj
-    full_decomposed_path = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}"
-    full_composed_path = f"{output_filepath}assets/{COMPOSED_PATH_NAME}"
-    decomposed_dirs = [
-        name for name in os.listdir(full_decomposed_path) if os.path.isdir(os.path.join(full_decomposed_path, name))
-    ]
-    composed_dirs = [
-        name for name in os.listdir(full_composed_path) if os.path.isdir(os.path.join(full_composed_path, name))
-    ]
-
-    for mesh in meshes:
-        mesh_name = mesh.getAttribute("name")
-
-        # This should definitely be there, otherwise something is horribly wrong
-        scale = mesh_info_dict[mesh_name]["scale"]
-
-        mesh_path = ""
-        if mesh_name in decomposed_dirs:
-            composed_type = DECOMPOSED_PATH_NAME
-            mesh_path = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/{mesh_name}.xml"
-        elif mesh_name in composed_dirs:
-            composed_type = COMPOSED_PATH_NAME
-            mesh_path = f"{output_filepath}assets/{COMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}.xml"
-
-        if mesh_path:
-            sub_dom = minidom.parse(mesh_path)
-            # Find the <asset> element
-            sub_asset = sub_dom.getElementsByTagName("asset")
-            sub_asset_element = sub_asset[0]
-
-            # remove the old mesh element that is not separated
-            asset_element.removeChild(mesh)
-
-            # bring in the new elements
-            sub_meshes = sub_asset_element.getElementsByTagName("mesh")
-            for sub_mesh in sub_meshes:
-                sub_mesh_file = sub_mesh.getAttribute("file")
-                if composed_type == DECOMPOSED_PATH_NAME:
-                    sub_mesh.setAttribute("file", f"{composed_type}/{mesh_name}/{mesh_name}/{sub_mesh_file}")
-                else:
-                    sub_mesh.setAttribute("file", f"{composed_type}/{mesh_name}/{sub_mesh_file}")
-                if scale:
-                    sub_mesh.setAttribute("scale", scale)
-                asset_element.appendChild(sub_mesh)
-
-            # bring in the materials
-            sub_materials = sub_asset_element.getElementsByTagName("material")
-            for sub_material in sub_materials:
-                asset_element.appendChild(sub_material)
-
-            # bring in the textures, and modify filepath to properly reference filepaths
-            sub_textures = sub_asset_element.getElementsByTagName("texture")
-            for sub_texture in sub_textures:
-                if sub_texture.hasAttribute("file"):
-                    sub_texture_file = sub_texture.getAttribute("file")
-                    if composed_type == DECOMPOSED_PATH_NAME:
-                        sub_texture.setAttribute("file", f"{composed_type}/{mesh_name}/{mesh_name}/{sub_texture_file}")
-                    else:
-                        sub_texture.setAttribute("file", f"{composed_type}/{mesh_name}/{sub_texture_file}")
-                    asset_element.appendChild(sub_texture)
-
-            sub_body = sub_dom.getElementsByTagName("body")
-            sub_body = sub_body[0]
-
-            # change the geoms
-            body = sub_dom.getElementsByTagName("body")
-            body_element = body[0]
-            sub_geoms = body_element.getElementsByTagName("geom")
-            for geom_element in worldbody_geoms:
-                if geom_element.getAttribute("mesh") == mesh_name:
-                    pos = geom_element.getAttribute("pos")
-                    quat = geom_element.getAttribute("quat")
-
-                    parent = geom_element.parentNode
-                    parent.removeChild(geom_element)
-                    for sub_geom in sub_geoms:
-                        sub_geom_local = sub_geom.cloneNode(False)
-                        sub_geom_local.setAttribute("pos", pos)
-                        sub_geom_local.setAttribute("quat", quat)
-                        parent.appendChild(sub_geom_local)
-
-    return dom
 
 
 def update_non_obj_assets(dom, output_filepath):

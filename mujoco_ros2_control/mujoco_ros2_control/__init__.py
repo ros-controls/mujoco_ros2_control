@@ -19,6 +19,9 @@ from .urdf_to_mujoco_utils import (
     replace_package_names,
     get_images_from_dae,
     rename_material_textures,
+    extract_rgba,
+    set_up_axis_to_z_up,
+    update_obj_assets,
 )
 
 __all__ = [
@@ -28,4 +31,7 @@ __all__ = [
     "replace_package_names",
     "get_images_from_dae",
     "rename_material_textures",
+    "extract_rgba",
+    "set_up_axis_to_z_up",
+    "update_obj_assets",
 ]
