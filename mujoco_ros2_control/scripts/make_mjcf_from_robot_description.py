@@ -37,99 +37,18 @@ from urdf_parser_py.urdf import URDF
 
 from ament_index_python.packages import get_package_share_directory
 from xml.dom import minidom
-from mujoco_ros2_control import *
+from mujoco_ros2_control import (
+    add_mujoco_info,
+    remove_tag,
+    extract_mesh_info,
+    replace_package_names,
+    get_images_from_dae,
+    rename_material_textures,
+)
 
 # Hardcoded relative paths for MuJoCo asset outputs
 DECOMPOSED_PATH_NAME = "decomposed"
 COMPOSED_PATH_NAME = "full"
-
-
-def replace_package_names(xml_data):
-    # Regular expression to find all package names in "package://{package_name}/"
-    pattern = r"package://([^/]+)/"
-
-    # Find all matches for the package name (but no duplicates)
-    package_names = set(re.findall(pattern, xml_data))
-
-    # Replace all of the package looks up with absolute paths
-    for package_name in package_names:
-        old_string = f"package://{package_name}/"
-        replace_string = f"{get_package_share_directory(package_name)}/"
-        print(f"replacing {old_string} with {replace_string}")
-        xml_data = xml_data.replace(old_string, replace_string)
-
-    # get rid of absolute filepaths
-    xml_data = xml_data.replace("file://", "")
-
-    return xml_data
-
-
-# get required images from dae so that we can copy them to the temporary filepath
-def get_images_from_dae(dae_path):
-
-    dae_dir = os.path.dirname(dae_path)
-
-    doc = minidom.parse(dae_path)
-
-    image_paths = []
-    seen = set()
-
-    # access data from dae files with this structure to access image_filepath
-    # <library_images>
-    #     <image id="id" name="name">
-    #         <init_from>image_filepath</init_from>
-    #     </image>
-    # </library_images>
-    for image in doc.getElementsByTagName("image"):
-        init_from_elems = image.getElementsByTagName("init_from")
-        if not init_from_elems:
-            continue
-
-        path = init_from_elems[0].firstChild
-        if path is None:
-            continue
-
-        image_path = path.nodeValue.strip()
-
-        # Resolve relative paths
-        if not os.path.isabs(image_path):
-            image_path = os.path.normpath(os.path.join(dae_dir, image_path))
-
-        # make sure it is an image
-        if image_path.lower().endswith((".png", ".jpg", ".jpeg")):
-            # ignore duplucates
-            if image_path not in seen:
-                seen.add(image_path)
-                image_paths.append(image_path)
-
-    return image_paths
-
-
-# Change all files that match "material_{some_int}.{png, jpg, jpeg}"
-# in a specified directory to be "material_{modifier}_{some_int}.{png, jpg, jpeg}"
-# This is important because trimesh puts out materials that look like
-# material_{some_int}.{png, jpg, jpeg}, and they need to be indexed per item
-def rename_material_textures(dir_path, modifier):
-    dir_path = pathlib.Path(dir_path)
-
-    # regex to match files we want to modify
-    pattern = re.compile(r"^material_(\d+)\.(png|jpg|jpeg)$", re.IGNORECASE)
-
-    for path in dir_path.iterdir():
-        if not path.is_file():
-            continue
-
-        m = pattern.match(path.name)
-        if not m:
-            continue
-
-        # extract important components and reorder
-        index, ext = m.groups()
-        new_name = f"material_{modifier}_{index}.{ext}"
-        new_path = path.with_name(new_name)
-
-        print(f"{path.name} -> {new_name}")
-        path.rename(new_path)
 
 
 def extract_rgba(visual):
