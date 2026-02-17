@@ -88,9 +88,9 @@ std::string get_hardware_parameter_or(const hardware_interface::HardwareInfo& ha
 
 bool is_mimic_joint(const std::string& joint_name, const hardware_interface::HardwareInfo& hardware_info)
 {
-  for (const auto& mimic_joint : hardware_info.mimic_joints)
+  for (const auto& joint : hardware_info.joints)
   {
-    if (hardware_info.joints.at(mimic_joint.joint_index).name == joint_name)
+    if (joint.parameters.find("mimic") != joint.parameters.end() && joint.name == joint_name)
     {
       return true;
     }
