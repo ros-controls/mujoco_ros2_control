@@ -30,6 +30,10 @@ from .urdf_to_mujoco_utils import (
     add_links_as_sites,
     add_cameras_from_sites,
     add_lidar_from_sites,
+    add_modifiers,
+    copy_pre_generated_meshes,
+    DECOMPOSED_PATH_NAME,
+    COMPOSED_PATH_NAME,
 )
 
 __all__ = [
@@ -50,4 +54,8 @@ __all__ = [
     "add_links_as_sites",
     "add_cameras_from_sites",
     "add_lidar_from_sites",
+    "add_modifiers",
+    "copy_pre_generated_meshes",
+    DECOMPOSED_PATH_NAME,
+    COMPOSED_PATH_NAME,
 ]

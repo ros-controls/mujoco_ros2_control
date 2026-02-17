@@ -35,6 +35,10 @@ from urdf_parser_py.urdf import URDF
 from ament_index_python.packages import get_package_share_directory
 from xml.dom import minidom
 
+# Hardcoded relative paths for MuJoCo asset outputs
+DECOMPOSED_PATH_NAME = "decomposed"
+COMPOSED_PATH_NAME = "full"
+
 
 def add_mujoco_info(raw_xml, output_filepath, publish_topic, fuse=True):
     dom = minidom.parseString(raw_xml)
@@ -1008,3 +1012,68 @@ def add_lidar_from_sites(dom, lidar_dict):
             node.parentNode.appendChild(new_body)
 
     return dom
+
+
+def add_modifiers(dom, modify_element_dict):
+    """
+    Modify elements that are a part of the worldbody tag by adding attributes.
+    These attributes are defined as a part of the modify_element_dict and are stored with the key as the name of the
+    element to be modified, and the value being another dictionary mapping attribute names to attribute values.
+
+    This method will leave the attributes that were already a part of the element in the mjcf file, and append the
+    new values, but will overwrite the old values with newly provided ones if there are conflicts.
+
+    The modify_element_dict looks like
+    key (tuple): (element_type (str), element_name (str))
+    value (dict):
+        key[0]: attribute_name (str)
+        value[0]: attribute_value (str)
+        key[1]: attribute_name (str)
+        value[1]: attribute_value (str)
+        ...
+    """
+
+    # Get the joint elements underneath the <worldbody> element
+    worldbody = dom.getElementsByTagName("worldbody")
+    worldbody_element = worldbody[0]
+
+    # Figure out what element types we need to look at
+    types = []
+    for key in modify_element_dict:
+        if key[0] not in types:
+            types.append(key[0])
+
+    # work on each set of element types at a time
+    for element_type in types:
+        element_set = worldbody_element.getElementsByTagName(element_type)
+        # check if the each element needs modification
+        for element in element_set:
+            potential_key = (element.tagName, element.getAttribute("name"))
+            if potential_key in modify_element_dict:
+                # apply attributes to the elements
+                attr_dict = modify_element_dict[potential_key]
+                for attr_name, attr_value in attr_dict.items():
+                    element.setAttribute(attr_name, attr_value)
+
+    return dom
+
+
+def copy_pre_generated_meshes(output_filepath, mesh_info_dict, decompose_dict):
+    """
+    Copies pre-generated mesh folders into the final MJCF assets structure.
+    """
+
+    for mesh_name in mesh_info_dict:
+        mesh_item = mesh_info_dict[mesh_name]
+        filename = os.path.basename(mesh_item["filename"])
+        filename_no_ext = os.path.splitext(filename)[0]
+        full_path = mesh_item["filename"]
+        mesh_dir = os.path.dirname(os.path.splitext(full_path)[0])
+
+        if mesh_item["is_pre_generated"]:
+            if filename_no_ext in decompose_dict:
+                dst_base = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{filename_no_ext}/{filename_no_ext}/"
+            else:
+                dst_base = f"{output_filepath}assets/{COMPOSED_PATH_NAME}/{filename_no_ext}"
+
+            shutil.copytree(mesh_dir, dst_base, dirs_exist_ok=True)
