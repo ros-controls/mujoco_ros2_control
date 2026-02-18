@@ -36,6 +36,7 @@ from mujoco_ros2_control import (
     add_urdf_free_joint,
     get_xml_from_file,
     add_modifiers,
+    add_lidar_from_sites,
 )
 
 
@@ -821,7 +822,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             len(result_dom.getElementsByTagName("mujoco")[0].attributes), 0
         )  # mujoco should have no attributes
 
-        ## Validate the number of children for each body element
+        # Validate the number of children for each body element
         self.assertEqual(
             len(get_child_elements(result_dom.getElementsByTagName("body")[0])), 1
         )  # link1 should have one child joint
@@ -867,7 +868,70 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         result_dom = add_modifiers(dom, {})
         result_xml = result_dom.toxml()
-        self.assertEqual(result_xml, dom.toxml())  # No modifications should be made
+        self.assertEqual(result_xml, dom.toxml())
+
+    def test_add_lidar_from_sites_basic(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="base">
+      <site name="lidar_site" pos="0 0 0.5" quat="1 0 0 0"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        lidar_dict = {}
+        lidar_elem = minidom.parseString('<lidar name="lidar" url="file://sensor.xml"/>').documentElement
+        lidar_elem.setAttribute("min_angle", "0")
+        lidar_dict["lidar_site"] = lidar_elem
+
+        with patch("builtins.print"):
+            result_dom = add_lidar_from_sites(dom, lidar_dict)
+
+        result_xml = result_dom.toxml()
+        self.assertIn('name="lidar_site_lidar_body"', result_xml)
+        self.assertIn("<lidar", result_xml)
+
+    def test_add_lidar_from_sites_no_matching_sites(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="base">
+      <site name="camera_site" pos="0 0 0.5" quat="1 0 0 0"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        lidar_dict = {}
+        lidar_elem = minidom.parseString('<lidar name="lidar"/>').documentElement
+        lidar_elem.setAttribute("min_angle", "0")
+        lidar_dict["other_site"] = lidar_elem
+
+        result_dom = add_lidar_from_sites(dom, lidar_dict)
+        result_xml = result_dom.toxml()
+        self.assertNotIn("lidar_body", result_xml)
+
+    def test_add_lidar_from_sites_removes_min_angle(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="base">
+      <site name="lidar_site" pos="0 0 0.5" quat="1 0 0 0"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        lidar_dict = {}
+        lidar_elem = minidom.parseString('<lidar name="lidar" min_angle="0" max_angle="3.14"/>').documentElement
+        lidar_elem.setAttribute("min_angle", "0")
+        lidar_dict["lidar_site"] = lidar_elem
+
+        with patch("builtins.print"):
+            result_dom = add_lidar_from_sites(dom, lidar_dict)
+
+        result_xml = result_dom.toxml()
+        self.assertIn('name="lidar"', result_xml)
+        self.assertIn('max_angle="3.14"', result_xml)
 
 
 if __name__ == "__main__":
