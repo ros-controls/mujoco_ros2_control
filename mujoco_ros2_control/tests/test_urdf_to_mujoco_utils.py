@@ -34,6 +34,7 @@ from mujoco_ros2_control import (
     COMPOSED_PATH_NAME,
     write_mujoco_scene,
     add_urdf_free_joint,
+    get_xml_from_file,
 )
 
 
@@ -696,6 +697,27 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result = add_urdf_free_joint(urdf)
         self.assertIn('xyz="0 0 0"', result)
         self.assertIn('rpy="0 0 0"', result)
+
+    def test_get_xml_from_file_basic(self):
+        urdf_content = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+</robot>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".urdf", delete=False) as f:
+            f.write(urdf_content)
+            urdf_path = f.name
+
+        try:
+            result = get_xml_from_file(urdf_path)
+            self.assertIn('<robot name="test_robot">', result)
+            self.assertIn('<link name="base_link"/>', result)
+            self.assertEqual(result, urdf_content)
+        finally:
+            os.unlink(urdf_path)
+
+    def test_get_xml_from_file_nonexistent(self):
+        with self.assertRaises(FileNotFoundError):
+            get_xml_from_file("/nonexistent/path/robot.urdf")
 
 
 if __name__ == "__main__":
