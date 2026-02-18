@@ -55,7 +55,7 @@ options:
                         If we should convert .stls to .objs
   -s, --save_only       Save files permanently on disk; without this flag, files go to a temporary directory
   -f, --add_free_joint  Adds a free joint before the root link of the robot in the urdf before conversion
-  --fuse, --no-fuse     Allows MuJoCo to merge static bodies. Use --no-fuse to prevent merging.
+  --fuse, --no-fuse     Allows MuJoCo to merge static bodies. Use --no-fuse to prevent merging (Default: --fuse).
   -a ASSET_DIR, --asset_dir ASSET_DIR
                         Optionally pass an existing folder with pre-generated OBJ meshes.
   --scene SCENE         Optionally pass an existing xml for the scene
