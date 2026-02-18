@@ -85,6 +85,18 @@ std::string get_hardware_parameter_or(const hardware_interface::HardwareInfo& ha
   }
   return default_value;
 }
+
+bool is_mimic_joint(const std::string& joint_name, const hardware_interface::HardwareInfo& hardware_info)
+{
+  for (const auto& joint : hardware_info.joints)
+  {
+    if (joint.parameters.find("mimic") != joint.parameters.end() && joint.name == joint_name)
+    {
+      return true;
+    }
+  }
+  return false;
+}
 }  // namespace
 namespace mujoco_ros2_control
 {
@@ -1746,9 +1758,13 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       // no actuator found for this joint, register a passive actuator
       MuJoCoActuatorData passive_actuator;
       passive_actuator.joint_name = std::string(mj_id2name(mj_model_, mjOBJ_JOINT, jnt_id));
-      RCLCPP_INFO(get_logger(), "MuJoCo joint '%s' has no associated actuator. Registering as a passive joint.",
-                  passive_actuator.joint_name.c_str());
-      passive_actuator.mj_actuator_id = -1;  // indicates no actuator
+      const bool is_mimic = is_mimic_joint(passive_actuator.joint_name, get_hardware_info());
+      RCLCPP_INFO_EXPRESSION(get_logger(), !is_mimic,
+                             "MuJoCo joint '%s' has no associated actuator. Registering as a passive joint.",
+                             passive_actuator.joint_name.c_str());
+      RCLCPP_INFO_EXPRESSION(get_logger(), is_mimic,
+                             "MuJoCo joint '%s' is a mimic joint and has no associated actuator.",
+                             passive_actuator.joint_name.c_str());
       passive_actuator.mj_pos_adr = mj_model_->jnt_qposadr[jnt_id];
       passive_actuator.mj_vel_adr = mj_model_->jnt_dofadr[jnt_id];
       passive_actuator.mj_joint_type = mj_model_->jnt_type[jnt_id];
@@ -1813,31 +1829,6 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
   {
     auto joint = hardware_info.joints.at(joint_index);
     const std::string actuator_name = get_joint_actuator_name(joint.name, hardware_info, mj_model_);
-    const auto actuator_it =
-        std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
-                     [&actuator_name, this](const MuJoCoActuatorData& actuator) {
-                       return (actuator.actuator_type != ActuatorType::PASSIVE) &&
-                              ((mj_id2name(mj_model_, mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name) ||
-                               (actuator.joint_name == actuator_name));
-                     });
-    const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
-    // This isn't a failure the joint just won't be controllable
-    RCLCPP_WARN_EXPRESSION(get_logger(), !actuator_exists,
-                           "Failed to find actuator for joint : %s. This joint will be treated as a passive joint.",
-                           joint.name.c_str());
-    RCLCPP_INFO_EXPRESSION(get_logger(), joint.command_interfaces.empty(), "Joint : %s is a passive joint",
-                           joint.name.c_str());
-    if (!joint.command_interfaces.empty() && !actuator_exists)
-    {
-      RCLCPP_WARN(get_logger(),
-                  "Joint : %s has command interfaces defined but no matching actuator in the MuJoCo model. This joint "
-                  "will be treated as a passive joint and no command interfaces will be exported.",
-                  joint.name.c_str());
-      joint.command_interfaces.clear();
-    }
-
-    // Add to the joint hw information map
-    joint_hw_info_.insert(std::make_pair(joint.name, joint));
 
     // Get the information for the URDF Joint data
     URDFJointData& joint_data = urdf_joint_data_.at(joint_index);
@@ -1867,7 +1858,46 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
       {
         joint_data.mimic_multiplier = 1.0;
       }
+      RCLCPP_INFO_EXPRESSION(get_logger(), joint_data.is_mimic,
+                             "Joint : '%s' is a mimic joint mimicking joint '%s' with multiplier '%.2f'",
+                             joint.name.c_str(), hardware_info.joints.at(joint_data.mimicked_joint_index).name.c_str(),
+                             joint_data.mimic_multiplier);
+      if (!joint.command_interfaces.empty())
+      {
+        RCLCPP_ERROR(
+            get_logger(),
+            "Joint : '%s' is a mimic joint but has command interfaces defined. Command interfaces for mimic joints "
+            "will be ignored and this joint will be only mimicked.",
+            joint.name.c_str());
+        joint.command_interfaces.clear();
+      }
     }
+
+    const auto actuator_it =
+        std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
+                     [&actuator_name, this](const MuJoCoActuatorData& actuator) {
+                       return (actuator.actuator_type != ActuatorType::PASSIVE) &&
+                              ((mj_id2name(mj_model_, mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name) ||
+                               (actuator.joint_name == actuator_name));
+                     });
+    const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
+    // This isn't a failure the joint just won't be controllable
+    RCLCPP_INFO_EXPRESSION(get_logger(), !actuator_exists && !joint_data.is_mimic,
+                           "Failed to find actuator for joint : %s. This joint will be treated as a passive joint.",
+                           joint.name.c_str());
+    RCLCPP_INFO_EXPRESSION(get_logger(), joint.command_interfaces.empty() && !joint_data.is_mimic,
+                           "Joint : %s is a passive joint", joint.name.c_str());
+    if (!joint.command_interfaces.empty() && !actuator_exists)
+    {
+      RCLCPP_ERROR(get_logger(),
+                   "Joint : %s has command interfaces defined but no matching actuator in the MuJoCo model. This joint "
+                   "will be treated as a passive joint and no command interfaces will be exported.",
+                   joint.name.c_str());
+      joint.command_interfaces.clear();
+    }
+
+    // Add to the joint hw information map
+    joint_hw_info_.insert(std::make_pair(joint.name, joint));
 
     auto get_initial_value = [this](const hardware_interface::InterfaceInfo& interface_info) {
       if (!interface_info.initial_value.empty())
