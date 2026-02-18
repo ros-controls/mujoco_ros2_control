@@ -35,7 +35,12 @@ from mujoco_ros2_control import (
     write_mujoco_scene,
     add_urdf_free_joint,
     get_xml_from_file,
+    add_modifiers,
 )
+
+
+def get_child_elements(dom) -> list:
+    return [node for node in dom.childNodes if node.nodeType == node.ELEMENT_NODE]
 
 
 class TestUrdfToMjcfUtils(unittest.TestCase):
@@ -718,6 +723,151 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
     def test_get_xml_from_file_nonexistent(self):
         with self.assertRaises(FileNotFoundError):
             get_xml_from_file("/nonexistent/path/robot.urdf")
+
+    def test_add_modifiers_basic(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="base_link">
+      <geom type="box" size="1 1 1"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        modify_element_dict = {("body", "base_link"): {"pos": "1 2 3", "quat": "0 0 0 1"}}
+        result_dom = add_modifiers(dom, modify_element_dict)
+        result_xml = result_dom.toxml()
+        print(result_xml)
+        self.assertIn('name="base_link"', result_xml)
+        self.assertIn('pos="1 2 3"', result_xml)
+        self.assertIn('quat="0 0 0 1"', result_xml)
+
+        # Make sure the original attributes are preserved
+        # check per element attributes to ensure no unintended modifications
+        self.assertEqual(len(result_dom.getElementsByTagName("body")), 1)  # only one body element should be present
+        self.assertEqual(len(result_dom.getElementsByTagName("geom")), 1)  # only one geom element should be present
+
+        self.assertEqual(result_dom.getElementsByTagName("body")[0].getAttribute("name"), "base_link")
+        self.assertEqual(result_dom.getElementsByTagName("body")[0].getAttribute("pos"), "1 2 3")
+        self.assertEqual(result_dom.getElementsByTagName("body")[0].getAttribute("quat"), "0 0 0 1")
+        self.assertNotEqual(
+            result_dom.getElementsByTagName("body")[0].getAttribute("size"), "1 1 1"
+        )  # size should not be modified
+        # make sure there is no other attribute added to the body element
+        self.assertEqual(len(result_dom.getElementsByTagName("body")[0].attributes), 3)  # name, pos, quat
+
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("type"), "box")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("size"), "1 1 1")
+        self.assertEqual(len(result_dom.getElementsByTagName("geom")[0].attributes), 2)  # type, size
+
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("worldbody")[0].attributes), 0
+        )  # worldbody should have no attributes
+
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("mujoco")[0].attributes), 0
+        )  # mujoco should have no attributes
+
+        # Number of child links
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("body")[0])), 1
+        )  # body should have one child geom
+
+    def test_add_modifiers_multiple_elements(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="link1">
+      <joint name="joint1"/>
+    </body>
+    <body name="link2">
+      <joint name="joint2"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        modify_element_dict = {("body", "link1"): {"pos": "0 0 1"}, ("joint", "joint2"): {"damping": "0.5"}}
+        result_dom = add_modifiers(dom, modify_element_dict)
+        result_xml = result_dom.toxml()
+        self.assertIn('pos="0 0 1"', result_xml)
+        self.assertIn('damping="0.5"', result_xml)
+
+        self.assertEqual(len(result_dom.getElementsByTagName("body")), 2)  # two body elements should be present
+        self.assertEqual(len(result_dom.getElementsByTagName("joint")), 2)  # two joint elements should be present
+
+        self.assertEqual(result_dom.getElementsByTagName("body")[0].getAttribute("name"), "link1")
+        self.assertEqual(result_dom.getElementsByTagName("body")[1].getAttribute("name"), "link2")
+        self.assertEqual(result_dom.getElementsByTagName("body")[0].getAttribute("pos"), "0 0 1")
+
+        self.assertEqual(result_dom.getElementsByTagName("joint")[0].getAttribute("name"), "joint1")
+        self.assertEqual(result_dom.getElementsByTagName("joint")[1].getAttribute("name"), "joint2")
+        self.assertEqual(result_dom.getElementsByTagName("joint")[1].getAttribute("damping"), "0.5")
+
+        # Make sure no unnecessary modifications
+        self.assertEqual(len(result_dom.getElementsByTagName("body")[0].attributes), 2)  # name and pos for link1
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("body")[1].attributes), 1
+        )  # only name for link2, no pos added
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("joint")[0].attributes), 1
+        )  # only name for joint1, no damping added
+        self.assertEqual(len(result_dom.getElementsByTagName("joint")[1].attributes), 2)  # name and damping for joint2
+
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("worldbody")[0].attributes), 0
+        )  # worldbody should have no attributes
+
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("mujoco")[0].attributes), 0
+        )  # mujoco should have no attributes
+
+        ## Validate the number of children for each body element
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("body")[0])), 1
+        )  # link1 should have one child joint
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("body")[1])), 1
+        )  # link2 should have one child joint
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("joint")[0])), 0
+        )  # joint1 should have no children
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("joint")[1])), 0
+        )  # joint2 should have no children
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("worldbody")[0])), 2
+        )  # worldbody should have two child bodies
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("mujoco")[0])), 1
+        )  # mujoco should have one child worldbody
+
+    def test_add_modifiers_overwrite_existing(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="base_link" pos="0 0 0">
+      <geom type="box"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        modify_element_dict = {("body", "base_link"): {"pos": "1 2 3"}}
+        result_dom = add_modifiers(dom, modify_element_dict)
+        result_xml = result_dom.toxml()
+        self.assertIn('pos="1 2 3"', result_xml)
+        self.assertNotIn('pos="0 0 0"', result_xml)
+
+    def test_add_modifiers_empty_dict(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="base_link"/>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        result_dom = add_modifiers(dom, {})
+        result_xml = result_dom.toxml()
+        self.assertEqual(result_xml, dom.toxml())  # No modifications should be made
 
 
 if __name__ == "__main__":
