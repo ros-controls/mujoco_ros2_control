@@ -653,9 +653,14 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         urdf = """<?xml version="1.0"?>
 <robot name="test_robot">
   <link name="world"/>
+  <joint name="joint1" type="revolute">
+    <parent link="world"/>
+    <child link="link2"/>
+  </joint>
 </robot>"""
         result = add_urdf_free_joint(urdf)
-        self.assertIsNone(result)
+        # Should return the URDF unchanged as the world link is present
+        self.assertEqual(result, urdf)
 
     def test_add_urdf_free_joint_preserves_existing_content(self):
         urdf = """<?xml version="1.0"?>

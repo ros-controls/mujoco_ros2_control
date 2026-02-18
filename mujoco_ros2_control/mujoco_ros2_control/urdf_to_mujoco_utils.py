@@ -1184,7 +1184,7 @@ def add_urdf_free_joint(urdf):
 
     if old_root == "world":
         print("Not adding a free joint because world is the URDF root")
-        return
+        return urdf
 
     urdf_dom = minidom.parseString(urdf)
 
