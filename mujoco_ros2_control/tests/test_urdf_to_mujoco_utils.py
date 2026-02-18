@@ -27,6 +27,7 @@ from mujoco_ros2_control import (
     set_up_axis_to_z_up,
     multiply_quaternion,
     euler_to_quaternion,
+    add_mujoco_inputs,
     get_processed_mujoco_inputs,
 )
 
@@ -294,6 +295,49 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         finally:
             os.unlink(dae_path)
 
+    def test_add_mujoco_inputs_both_none(self):
+        xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
+        dom = minidom.parseString(xml_string)
+        result_dom = add_mujoco_inputs(dom, None, None)
+        self.assertIsNotNone(result_dom)
+
+    def test_add_mujoco_inputs_with_raw_inputs(self):
+        xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
+        raw_xml = '<?xml version="1.0"?><raw_inputs><option integrator="implicitfast"/></raw_inputs>'
+        raw_dom = minidom.parseString(raw_xml)
+        raw_inputs = raw_dom.getElementsByTagName("raw_inputs")[0]
+
+        dom = minidom.parseString(xml_string)
+        result_dom = add_mujoco_inputs(dom, raw_inputs, None)
+        result_xml = result_dom.toxml()
+        self.assertIn("integrator", result_xml)
+
+    def test_add_mujoco_inputs_with_scene_inputs(self):
+        xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
+        scene_xml = '<?xml version="1.0"?><scene><light name="test" diffuse="1 1 1"/></scene>'
+        scene_dom = minidom.parseString(scene_xml)
+        scene_inputs = scene_dom.getElementsByTagName("scene")[0]
+
+        dom = minidom.parseString(xml_string)
+        result_dom = add_mujoco_inputs(dom, None, scene_inputs)
+        result_xml = result_dom.toxml()
+        self.assertIn("light", result_xml)
+
+    def test_add_mujoco_inputs_both_inputs(self):
+        xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
+        raw_xml = '<?xml version="1.0"?><raw_inputs><option integrator="implicitfast"/></raw_inputs>'
+        raw_dom = minidom.parseString(raw_xml)
+        raw_inputs = raw_dom.getElementsByTagName("raw_inputs")[0]
+
+        scene_xml = '<?xml version="1.0"?><scene><light name="test"/></scene>'
+        scene_dom = minidom.parseString(scene_xml)
+        scene_inputs = scene_dom.getElementsByTagName("scene")[0]
+
+        dom = minidom.parseString(xml_string)
+        result_dom = add_mujoco_inputs(dom, raw_inputs, scene_inputs)
+        result_xml = result_dom.toxml()
+        self.assertIn("integrator", result_xml)
+        self.assertIn("light", result_xml)
 
     def test_get_processed_mujoco_inputs_none_element(self):
         result = get_processed_mujoco_inputs(None)
