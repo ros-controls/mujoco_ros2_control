@@ -27,6 +27,7 @@ from mujoco_ros2_control import (
     set_up_axis_to_z_up,
     multiply_quaternion,
     euler_to_quaternion,
+    get_processed_mujoco_inputs,
 )
 
 
@@ -292,6 +293,105 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertIn("Z_UP", result)
         finally:
             os.unlink(dae_path)
+
+
+    def test_get_processed_mujoco_inputs_none_element(self):
+        result = get_processed_mujoco_inputs(None)
+        self.assertEqual(len(result), 4)
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = result
+        self.assertEqual(decompose_dict, {})
+        self.assertEqual(cameras_dict, {})
+        self.assertEqual(modify_element_dict, {})
+        self.assertEqual(lidar_dict, {})
+
+    def test_get_processed_mujoco_inputs_decompose_mesh(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <decompose_mesh mesh_name="test_mesh" threshold="0.03"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        self.assertIn("test_mesh", decompose_dict)
+        self.assertEqual(decompose_dict["test_mesh"], "0.03")
+
+    def test_get_processed_mujoco_inputs_decompose_mesh_default_threshold(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <decompose_mesh mesh_name="test_mesh"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        self.assertEqual(decompose_dict["test_mesh"], "0.05")
+
+    def test_get_processed_mujoco_inputs_camera(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <camera site="camera_site" name="test_camera" fovy="58" mode="fixed"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        self.assertIn("camera_site", cameras_dict)
+        self.assertEqual(cameras_dict["camera_site"].getAttribute("name"), "test_camera")
+
+    def test_get_processed_mujoco_inputs_lidar(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <lidar ref_site="lidar_site" sensor_name="rf" min_angle="0" max_angle="1.57" angle_increment="0.025"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        self.assertIn("lidar_site", lidar_dict)
+
+    def test_get_processed_mujoco_inputs_modify_element(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <modify_element name="test_body" type="body" pos="1 2 3"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        key = ("body", "test_body")
+        self.assertIn(key, modify_element_dict)
+        self.assertEqual(modify_element_dict[key]["pos"], "1 2 3")
+
+    def test_get_processed_mujoco_inputs_modify_element_missing_attrs(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <modify_element name="test_body"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        with self.assertRaises(ValueError) as context:
+            get_processed_mujoco_inputs(processed_element)
+        self.assertIn("'name' and 'type'", str(context.exception))
+
+    def test_get_processed_mujoco_inputs_multiple_elements(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <decompose_mesh mesh_name="mesh1" threshold="0.01"/>
+  <decompose_mesh mesh_name="mesh2"/>
+  <camera site="site1" name="cam1" fovy="60"/>
+  <modify_element name="body1" type="body" pos="0 0 0"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        self.assertEqual(len(decompose_dict), 2)
+        self.assertIn("mesh1", decompose_dict)
+        self.assertIn("mesh2", decompose_dict)
+        self.assertIn("site1", cameras_dict)
+        self.assertIn(("body", "body1"), modify_element_dict)
 
 
 if __name__ == '__main__':
