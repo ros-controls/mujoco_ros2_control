@@ -27,8 +27,11 @@ from mujoco_ros2_control import (
     set_up_axis_to_z_up,
     multiply_quaternion,
     euler_to_quaternion,
+    update_non_obj_assets,
     add_mujoco_inputs,
     get_processed_mujoco_inputs,
+    DECOMPOSED_PATH_NAME,
+    COMPOSED_PATH_NAME,
 )
 
 
@@ -294,6 +297,82 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertIn("Z_UP", result)
         finally:
             os.unlink(dae_path)
+
+
+    def test_update_obj_assets_no_assets(self):
+        xml_string = '<?xml version="1.0"?><mujoco><worldbody><body name="test"/></worldbody></mujoco>'
+        dom = minidom.parseString(xml_string)
+        result_dom = update_obj_assets(dom, "/tmp/output/", {})
+        self.assertIsNotNone(result_dom)
+
+    def test_update_obj_assets_no_matching_dirs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, "assets", DECOMPOSED_PATH_NAME))
+            os.makedirs(os.path.join(tmpdir, "assets", COMPOSED_PATH_NAME))
+            xml_string = '<?xml version="1.0"?><mujoco><asset><mesh name="unknown_mesh" file="test.obj"/></asset><worldbody><body name="test"><geom mesh="unknown_mesh" pos="0 0 0" quat="1 0 0 0"/></body></worldbody></mujoco>'
+            dom = minidom.parseString(xml_string)
+            mesh_info_dict = {
+                "unknown_mesh": {
+                    "is_pre_generated": False,
+                    "filename": "/some/path.obj",
+                    "scale": "1.0 1.0 1.0",
+                    "color": (1.0, 1.0, 1.0, 1.0)
+                }
+            }
+            result_dom = update_obj_assets(dom, tmpdir + "/", mesh_info_dict)
+            self.assertIsNotNone(result_dom)
+
+    def test_update_non_obj_assets_basic(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="test">
+      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.2 0.2 0.2 1" mesh="finger_v6"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        result_dom = update_non_obj_assets(dom, "/tmp/output/")
+        result_xml = result_dom.toxml()
+        self.assertIn('class="collision"', result_xml)
+        self.assertIn('class="visual"', result_xml)
+        self.assertNotIn('contype', result_xml)
+
+    def test_update_non_obj_assets_no_contype(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="test">
+      <geom type="box" size="1 1 1"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        result_dom = update_non_obj_assets(dom, "/tmp/output/")
+        result_xml = result_dom.toxml()
+        self.assertIn('<geom', result_xml)
+
+    def test_update_non_obj_assets_multiple_geoms(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="test">
+      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="mesh1"/>
+      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="mesh2"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        result_dom = update_non_obj_assets(dom, "/tmp/output/")
+        result_xml = result_dom.toxml()
+        self.assertEqual(result_xml.count('class="collision"'), 2)
+        self.assertEqual(result_xml.count('class="visual"'), 2)
+        self.assertEqual(result_xml.count('contype'), 0)
+        self.assertEqual(result_xml.count('conaffinity'), 0)
+        self.assertEqual(result_xml.count('group="1"'), 0)
+        self.assertEqual(result_xml.count('density="0"'), 0)
+        self.assertRegex(result_xml, r'<geom[^>]*mesh="mesh1"[^>]*class="visual"[^>]*>')
+        self.assertRegex(result_xml, r'<geom[^>]*mesh="mesh2"[^>]*class="collision"[^>]*>')
 
     def test_add_mujoco_inputs_both_none(self):
         xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
