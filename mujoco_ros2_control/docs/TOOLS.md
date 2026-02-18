@@ -243,6 +243,7 @@ attributes the demo converter recognizes; converters may extend this list.
   - Optional: `fovy` (int/float) — vertical field of view in degrees (example: `58`).
   - Optional: `mode` (string) — MJCF camera mode (commonly `fixed`).
   - Optional: `resolution` (string) — two integers `"<width> <height>"` (example: `640 480`).
+  - Optional: any other args supported by the mjcf [camera tag](https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-camera)
   - Notes: Converter fills transform (position + quaternion) from the URDF link pose.
 
 - `lidar`
