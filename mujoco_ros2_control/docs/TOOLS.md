@@ -250,9 +250,9 @@ attributes the demo converter recognizes; converters may extend this list.
   - Required: `sensor_name` (string) — base name for generated MJCF rangefinders (e.g.
     `rf` will produce `rf-01`, `rf-02`, ...). URDF `sensor` entries and ROS mapping should
     reference the same base name.
-  - Optional: `min_angle` (float) — start angle in radians (default depends on converter).
-  - Optional: `max_angle` (float) — end angle in radians.
-  - Optional: `angle_increment` (float) — angular step between generated rangefinders.
+  - Required: `min_angle` (float) — start angle in radians (default depends on converter).
+  - Required: `max_angle` (float) — end angle in radians.
+  - Required: `angle_increment` (float) — angular step between generated rangefinders.
   - Notes: The converter creates multiple MJCF `rangefinder` sensors across the angle range;
     the hardware interface merges them into a single ROS LaserScan.
 
