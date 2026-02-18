@@ -93,19 +93,19 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
     def test_remove_tag_basic(self):
         xml_string = "<root><tag_to_remove>content</tag_to_remove><other>value</other></root>"
         result = remove_tag(xml_string, "tag_to_remove")
-        self.assertNotIn("tag_to_remove", result)
-        self.assertIn("<other>value</other>", result)
+        assert "tag_to_remove" not in result
+        assert "<other>value</other>" in result
 
     def test_remove_tag_nonexistent(self):
         xml_string = "<root><other>value</other></root>"
         result = remove_tag(xml_string, "nonexistent")
-        self.assertIn("<other>value</other>", result)
+        assert "<other>value</other>" in result
 
     def test_remove_tag_multiple(self):
         xml_string = "<root><tag>first</tag><other>value</other><tag>second</tag></root>"
         result = remove_tag(xml_string, "tag")
-        self.assertNotIn("<tag>", result)
-        self.assertIn("<other>value</other>", result)
+        assert "<tag>" not in result
+        assert "<other>value</other>" in result
 
     def test_add_mujoco_info_basic(self):
         raw_xml = '<?xml version="1.0"?><robot name="test"></robot>'
@@ -114,11 +114,11 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         result = add_mujoco_info(raw_xml, output_filepath, publish_topic)
 
-        self.assertIn("<mujoco>", result)
-        self.assertIn("<compiler", result)
-        self.assertIn('assetdir="', result)
-        self.assertIn('balanceinertia="true"', result)
-        self.assertIn("<robot", result)
+        assert "<mujoco>" in result
+        assert "<compiler" in result
+        assert 'assetdir="' in result
+        assert 'balanceinertia="true"' in result
+        assert "<robot" in result
 
     def test_add_mujoco_info_no_publish_topic(self):
         raw_xml = '<?xml version="1.0"?><robot name="test"></robot>'
@@ -127,7 +127,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         result = add_mujoco_info(raw_xml, output_filepath, publish_topic)
 
-        self.assertIn('assetdir="assets"', result)
+        assert 'assetdir="assets"' in result
 
     def test_add_mujoco_info_with_publish_topic(self):
         raw_xml = '<?xml version="1.0"?><robot name="test"></robot>'
@@ -136,7 +136,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         result = add_mujoco_info(raw_xml, output_filepath, publish_topic)
 
-        self.assertIn('assetdir="/tmp/test/assets"', result)
+        assert 'assetdir="/tmp/test/assets"' in result
 
     def test_add_mujoco_info_no_fuse(self):
         raw_xml = '<?xml version="1.0"?><robot name="test"></robot>'
@@ -146,7 +146,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         result = add_mujoco_info(raw_xml, output_filepath, publish_topic, fuse=fuse)
 
-        self.assertIn('fusestatic="false"', result)
+        assert 'fusestatic="false"' in result
 
     def test_get_images_from_dae_basic(self):
         dae_content = """<?xml version="1.0" encoding="utf-8"?>
@@ -284,8 +284,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         try:
             result = set_up_axis_to_z_up(dae_path)
-            self.assertIn("<up_axis>", result)
-            self.assertIn("Z_UP", result)
+            assert "<up_axis>" in result
+            assert "Z_UP" in result
         finally:
             os.unlink(dae_path)
 
@@ -303,7 +303,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         try:
             result = set_up_axis_to_z_up(dae_path)
-            self.assertIn("Z_UP", result)
+            assert "Z_UP" in result
         finally:
             os.unlink(dae_path)
 
@@ -318,7 +318,11 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             os.makedirs(os.path.join(tmpdir, "assets", DECOMPOSED_PATH_NAME))
             os.makedirs(os.path.join(tmpdir, "assets", COMPOSED_PATH_NAME))
-            xml_string = '<?xml version="1.0"?><mujoco><asset><mesh name="unknown_mesh" file="test.obj"/></asset><worldbody><body name="test"><geom mesh="unknown_mesh" pos="0 0 0" quat="1 0 0 0"/></body></worldbody></mujoco>'
+            xml_string = (
+                '<?xml version="1.0"?><mujoco><asset><mesh name="unknown_mesh" '
+                'file="test.obj"/></asset><worldbody><body name="test"><geom mesh="unknown_mesh" '
+                'pos="0 0 0" quat="1 0 0 0"/></body></worldbody></mujoco>'
+            )
             dom = minidom.parseString(xml_string)
             mesh_info_dict = {
                 "unknown_mesh": {
@@ -343,9 +347,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         result_dom = update_non_obj_assets(dom, "/tmp/output/")
         result_xml = result_dom.toxml()
-        self.assertIn('class="collision"', result_xml)
-        self.assertIn('class="visual"', result_xml)
-        self.assertNotIn("contype", result_xml)
+        assert 'class="collision"' in result_xml
+        assert 'class="visual"' in result_xml
+        assert "contype" not in result_xml
 
     def test_update_non_obj_assets_no_contype(self):
         xml_string = """<?xml version="1.0"?>
@@ -359,7 +363,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         result_dom = update_non_obj_assets(dom, "/tmp/output/")
         result_xml = result_dom.toxml()
-        self.assertIn("<geom", result_xml)
+        assert "<geom" in result_xml
 
     def test_update_non_obj_assets_multiple_geoms(self):
         xml_string = """<?xml version="1.0"?>
@@ -398,7 +402,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         result_dom = add_mujoco_inputs(dom, raw_inputs, None)
         result_xml = result_dom.toxml()
-        self.assertIn("integrator", result_xml)
+        assert "integrator" in result_xml
 
     def test_add_mujoco_inputs_with_scene_inputs(self):
         xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
@@ -409,7 +413,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         result_dom = add_mujoco_inputs(dom, None, scene_inputs)
         result_xml = result_dom.toxml()
-        self.assertIn("light", result_xml)
+        assert "light" in result_xml
 
     def test_add_mujoco_inputs_both_inputs(self):
         xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
@@ -424,8 +428,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         result_dom = add_mujoco_inputs(dom, raw_inputs, scene_inputs)
         result_xml = result_dom.toxml()
-        self.assertIn("integrator", result_xml)
-        self.assertIn("light", result_xml)
+        assert "integrator" in result_xml
+        assert "light" in result_xml
 
     def test_get_processed_mujoco_inputs_none_element(self):
         result = get_processed_mujoco_inputs(None)
@@ -445,7 +449,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         processed_element = dom.getElementsByTagName("processed_inputs")[0]
 
         decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
-        self.assertIn("test_mesh", decompose_dict)
+        assert "test_mesh" in decompose_dict
         self.assertEqual(decompose_dict["test_mesh"], "0.03")
 
     def test_get_processed_mujoco_inputs_decompose_mesh_default_threshold(self):
@@ -468,7 +472,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         processed_element = dom.getElementsByTagName("processed_inputs")[0]
 
         decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
-        self.assertIn("camera_site", cameras_dict)
+        assert "camera_site" in cameras_dict
         self.assertEqual(cameras_dict["camera_site"].getAttribute("name"), "test_camera")
 
     def test_get_processed_mujoco_inputs_lidar(self):
@@ -480,7 +484,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         processed_element = dom.getElementsByTagName("processed_inputs")[0]
 
         decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
-        self.assertIn("lidar_site", lidar_dict)
+        assert "lidar_site" in lidar_dict
 
     def test_get_processed_mujoco_inputs_modify_element(self):
         xml_string = """<?xml version="1.0"?>
@@ -492,7 +496,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
         key = ("body", "test_body")
-        self.assertIn(key, modify_element_dict)
+        assert key in modify_element_dict
         self.assertEqual(modify_element_dict[key]["pos"], "1 2 3")
 
     def test_get_processed_mujoco_inputs_modify_element_missing_attrs(self):
@@ -505,7 +509,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         with self.assertRaises(ValueError) as context:
             get_processed_mujoco_inputs(processed_element)
-        self.assertIn("'name' and 'type'", str(context.exception))
+        assert "'name' and 'type'" in str(context.exception)
 
     def test_get_processed_mujoco_inputs_multiple_elements(self):
         xml_string = """<?xml version="1.0"?>
@@ -520,10 +524,10 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
         self.assertEqual(len(decompose_dict), 2)
-        self.assertIn("mesh1", decompose_dict)
-        self.assertIn("mesh2", decompose_dict)
-        self.assertIn("site1", cameras_dict)
-        self.assertIn(("body", "body1"), modify_element_dict)
+        assert "mesh1" in decompose_dict
+        assert "mesh2" in decompose_dict
+        assert "site1" in cameras_dict
+        assert ("body", "body1") in modify_element_dict
 
     def test_write_mujoco_scene_none(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -532,16 +536,16 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertTrue(os.path.exists(output_file))
             with open(output_file) as f:
                 content = f.read()
-            self.assertIn("<mujoco", content)
-            self.assertIn('model="scene"', content)
-            self.assertIn("<include", content)
+            assert "<mujoco" in content
+            assert 'model="scene"' in content
+            assert "<include" in content
 
             dom = minidom.parseString(content)
             self.assertEqual(dom.documentElement.tagName, "mujoco")
             self.assertEqual(dom.documentElement.getAttribute("model"), "scene")
             include_tags = dom.getElementsByTagName("include")
             self.assertEqual(len(include_tags), 1)
-            self.assertIn("file", include_tags[0].attributes)
+            assert "file" in include_tags[0].attributes
             child_nodes = [node for node in dom.documentElement.childNodes if node.nodeType == node.ELEMENT_NODE]
             self.assertEqual(len(child_nodes), 1)  # Only the include tag should be present
             self.assertEqual(child_nodes[0].tagName, "include")
@@ -557,10 +561,10 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertTrue(os.path.exists(output_file))
             with open(output_file) as f:
                 content = f.read()
-            self.assertIn("<mujoco", content)
-            self.assertIn("<include", content)
-            self.assertIn("light", content)
-            self.assertIn('name="test_light"', content)
+            assert "<mujoco" in content
+            assert "<include" in content
+            assert "light" in content
+            assert 'name="test_light"' in content
 
             dom = minidom.parseString(content)
             lights = dom.getElementsByTagName("light")
@@ -570,7 +574,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             child_nodes = [node for node in dom.documentElement.childNodes if node.nodeType == node.ELEMENT_NODE]
             self.assertEqual(len(child_nodes), 2)  # 1 light + 1 include
             for node in child_nodes:
-                self.assertIn(node.tagName, ["light", "include"])
+                assert node.tagName in ["light", "include"]
 
     def test_write_mujoco_scene_with_muojco_inputs(self):
         xml_string = """<?xml version="1.0"?>
@@ -588,9 +592,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertTrue(os.path.exists(output_file))
             with open(output_file) as f:
                 content = f.read()
-            self.assertIn("light", content)
-            self.assertIn('name="scene_light"', content)
-            self.assertIn('diffuse="0.5 0.5 0.5"', content)
+            assert "light" in content
+            assert 'name="scene_light"' in content
+            assert 'diffuse="0.5 0.5 0.5"' in content
 
             dom = minidom.parseString(content)
             lights = dom.getElementsByTagName("light")
@@ -600,7 +604,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             child_nodes = [node for node in dom.documentElement.childNodes if node.nodeType == node.ELEMENT_NODE]
             self.assertEqual(len(child_nodes), 2)  # 1 light + 1 include
             for node in child_nodes:
-                self.assertIn(node.tagName, ["light", "include"])
+                assert node.tagName in ["light", "include"]
 
     def test_write_mujoco_scene_with_multiple_elements(self):
         xml_string = """<?xml version="1.0"?>
@@ -618,9 +622,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertTrue(os.path.exists(output_file))
             with open(output_file) as f:
                 content = f.read()
-            self.assertIn("light1", content)
-            self.assertIn("light2", content)
-            self.assertIn("global", content)
+            assert "light1" in content
+            assert "light2" in content
+            assert "global" in content
             # Also check that nothing more exists beyond the expected tags using xml parsing
             dom = minidom.parseString(content)
             lights = dom.getElementsByTagName("light")
@@ -631,7 +635,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             child_nodes = [node for node in dom.documentElement.childNodes if node.nodeType == node.ELEMENT_NODE]
             self.assertEqual(len(child_nodes), 4)  # 2 lights + 1 global + 1 include
             for node in child_nodes:
-                self.assertIn(node.tagName, ["light", "global", "include"])
+                assert node.tagName in ["light", "global", "include"]
 
     def test_add_urdf_free_joint_basic(self):
         urdf = """<?xml version="1.0"?>
@@ -645,11 +649,11 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   </link>
 </robot>"""
         result = add_urdf_free_joint(urdf)
-        self.assertIn('name="virtual_base"', result)
-        self.assertIn('name="virtual_base_joint"', result)
-        self.assertIn('type="floating"', result)
-        self.assertIn('parent link="virtual_base"', result)
-        self.assertIn('child link="base_link"', result)
+        assert 'name="virtual_base"' in result
+        assert 'name="virtual_base_joint"' in result
+        assert 'type="floating"' in result
+        assert 'parent link="virtual_base"' in result
+        assert 'child link="base_link"' in result
 
         # check the number of links are equal to 2 (virtual_base + base_link)
         self.assertEqual(result.count("<link"), 2)
@@ -686,11 +690,11 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   <link name="link2"/>
 </robot>"""
         result = add_urdf_free_joint(urdf)
-        self.assertIn('name="base_link"', result)
-        self.assertIn('name="joint1"', result)
-        self.assertIn('name="link2"', result)
-        self.assertIn('name="virtual_base"', result)
-        self.assertIn('name="virtual_base_joint"', result)
+        assert 'name="base_link"' in result
+        assert 'name="joint1"' in result
+        assert 'name="link2"' in result
+        assert 'name="virtual_base"' in result
+        assert 'name="virtual_base_joint"' in result
 
         self.assertEqual(result.count("<link"), 3)  # virtual_base + base_link + link2
         self.assertEqual(result.count("<joint"), 2)  # virtual_base_joint + joint1
@@ -701,8 +705,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   <link name="base_link"/>
 </robot>"""
         result = add_urdf_free_joint(urdf)
-        self.assertIn('xyz="0 0 0"', result)
-        self.assertIn('rpy="0 0 0"', result)
+        assert 'xyz="0 0 0"' in result
+        assert 'rpy="0 0 0"' in result
 
     def test_get_xml_from_file_basic(self):
         urdf_content = """<?xml version="1.0"?>
@@ -715,8 +719,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         try:
             result = get_xml_from_file(urdf_path)
-            self.assertIn('<robot name="test_robot">', result)
-            self.assertIn('<link name="base_link"/>', result)
+            assert '<robot name="test_robot">' in result
+            assert '<link name="base_link"/>' in result
             self.assertEqual(result, urdf_content)
         finally:
             os.unlink(urdf_path)
@@ -739,9 +743,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_dom = add_modifiers(dom, modify_element_dict)
         result_xml = result_dom.toxml()
         print(result_xml)
-        self.assertIn('name="base_link"', result_xml)
-        self.assertIn('pos="1 2 3"', result_xml)
-        self.assertIn('quat="0 0 0 1"', result_xml)
+        assert 'name="base_link"' in result_xml
+        assert 'pos="1 2 3"' in result_xml
+        assert 'quat="0 0 0 1"' in result_xml
 
         # Make sure the original attributes are preserved
         # check per element attributes to ensure no unintended modifications
@@ -790,8 +794,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         modify_element_dict = {("body", "link1"): {"pos": "0 0 1"}, ("joint", "joint2"): {"damping": "0.5"}}
         result_dom = add_modifiers(dom, modify_element_dict)
         result_xml = result_dom.toxml()
-        self.assertIn('pos="0 0 1"', result_xml)
-        self.assertIn('damping="0.5"', result_xml)
+        assert 'pos="0 0 1"' in result_xml
+        assert 'damping="0.5"' in result_xml
 
         self.assertEqual(len(result_dom.getElementsByTagName("body")), 2)  # two body elements should be present
         self.assertEqual(len(result_dom.getElementsByTagName("joint")), 2)  # two joint elements should be present
@@ -855,8 +859,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         modify_element_dict = {("body", "base_link"): {"pos": "1 2 3"}}
         result_dom = add_modifiers(dom, modify_element_dict)
         result_xml = result_dom.toxml()
-        self.assertIn('pos="1 2 3"', result_xml)
-        self.assertNotIn('pos="0 0 0"', result_xml)
+        assert 'pos="1 2 3"' in result_xml
+        assert 'pos="0 0 0"' not in result_xml
 
     def test_add_modifiers_empty_dict(self):
         xml_string = """<?xml version="1.0"?>
@@ -889,8 +893,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             result_dom = add_lidar_from_sites(dom, lidar_dict)
 
         result_xml = result_dom.toxml()
-        self.assertIn('name="lidar_site_lidar_body"', result_xml)
-        self.assertIn("<lidar", result_xml)
+        assert 'name="lidar_site_lidar_body"' in result_xml
+        assert "<lidar" in result_xml
 
     def test_add_lidar_from_sites_no_matching_sites(self):
         xml_string = """<?xml version="1.0"?>
@@ -909,7 +913,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         result_dom = add_lidar_from_sites(dom, lidar_dict)
         result_xml = result_dom.toxml()
-        self.assertNotIn("lidar_body", result_xml)
+        assert "lidar_body" not in result_xml
 
     def test_add_lidar_from_sites_removes_min_angle(self):
         xml_string = """<?xml version="1.0"?>
@@ -930,8 +934,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             result_dom = add_lidar_from_sites(dom, lidar_dict)
 
         result_xml = result_dom.toxml()
-        self.assertIn('name="lidar"', result_xml)
-        self.assertIn('max_angle="3.14"', result_xml)
+        assert 'name="lidar"' in result_xml
+        assert 'max_angle="3.14"' in result_xml
 
 
 if __name__ == "__main__":
