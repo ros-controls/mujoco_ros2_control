@@ -33,6 +33,7 @@ from mujoco_ros2_control import (
     DECOMPOSED_PATH_NAME,
     COMPOSED_PATH_NAME,
     write_mujoco_scene,
+    add_urdf_free_joint,
 )
 
 
@@ -624,6 +625,72 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertEqual(len(child_nodes), 4)  # 2 lights + 1 global + 1 include
             for node in child_nodes:
                 self.assertIn(node.tagName, ["light", "global", "include"])
+
+    def test_add_urdf_free_joint_basic(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="1 1 1"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>"""
+        result = add_urdf_free_joint(urdf)
+        self.assertIn('name="virtual_base"', result)
+        self.assertIn('name="virtual_base_joint"', result)
+        self.assertIn('type="floating"', result)
+        self.assertIn('parent link="virtual_base"', result)
+        self.assertIn('child link="base_link"', result)
+
+        # check the number of links are equal to 2 (virtual_base + base_link)
+        self.assertEqual(result.count("<link"), 2)
+        # check the number of joints are equal to 1 (virtual_base_joint)
+        self.assertEqual(result.count("<joint"), 1)
+
+    def test_add_urdf_free_joint_world_root(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="world"/>
+</robot>"""
+        result = add_urdf_free_joint(urdf)
+        self.assertIsNone(result)
+
+    def test_add_urdf_free_joint_preserves_existing_content(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="1 1 1"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="joint1" type="revolute">
+    <parent link="base_link"/>
+    <child link="link2"/>
+  </joint>
+  <link name="link2"/>
+</robot>"""
+        result = add_urdf_free_joint(urdf)
+        self.assertIn('name="base_link"', result)
+        self.assertIn('name="joint1"', result)
+        self.assertIn('name="link2"', result)
+        self.assertIn('name="virtual_base"', result)
+        self.assertIn('name="virtual_base_joint"', result)
+
+        self.assertEqual(result.count("<link"), 3)  # virtual_base + base_link + link2
+        self.assertEqual(result.count("<joint"), 2)  # virtual_base_joint + joint1
+
+    def test_add_urdf_free_joint_origin_attributes(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+</robot>"""
+        result = add_urdf_free_joint(urdf)
+        self.assertIn('xyz="0 0 0"', result)
+        self.assertIn('rpy="0 0 0"', result)
 
 
 if __name__ == "__main__":
