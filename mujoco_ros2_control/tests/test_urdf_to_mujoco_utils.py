@@ -47,11 +47,11 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertAlmostEqual(result[3], 0.0, places=6)
 
     def test_multiply_quaternion_90deg_rotation(self):
-        q1 = [math.sqrt(2)/2, math.sqrt(2)/2, 0.0, 0.0]
-        q2 = [math.sqrt(2)/2, 0.0, math.sqrt(2)/2, 0.0]
+        q1 = [math.sqrt(2) / 2, math.sqrt(2) / 2, 0.0, 0.0]
+        q2 = [math.sqrt(2) / 2, 0.0, math.sqrt(2) / 2, 0.0]
         result = multiply_quaternion(q1, q2)
         w, x, y, z = result
-        norm = math.sqrt(w*w + x*x + y*y + z*z)
+        norm = math.sqrt(w * w + x * x + y * y + z * z)
         self.assertAlmostEqual(norm, 1.0, places=6)
 
     def test_euler_to_quaternion_identity(self):
@@ -62,25 +62,25 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertAlmostEqual(result[3], 0.0, places=6)
 
     def test_euler_to_quaternion_90deg_roll(self):
-        result = euler_to_quaternion(math.pi/2, 0.0, 0.0)
-        self.assertAlmostEqual(result[0], math.sqrt(2)/2, places=6)
-        self.assertAlmostEqual(result[1], math.sqrt(2)/2, places=6)
+        result = euler_to_quaternion(math.pi / 2, 0.0, 0.0)
+        self.assertAlmostEqual(result[0], math.sqrt(2) / 2, places=6)
+        self.assertAlmostEqual(result[1], math.sqrt(2) / 2, places=6)
         self.assertAlmostEqual(result[2], 0.0, places=6)
         self.assertAlmostEqual(result[3], 0.0, places=6)
 
     def test_euler_to_quaternion_90deg_pitch(self):
-        result = euler_to_quaternion(0.0, math.pi/2, 0.0)
-        self.assertAlmostEqual(result[0], math.sqrt(2)/2, places=6)
+        result = euler_to_quaternion(0.0, math.pi / 2, 0.0)
+        self.assertAlmostEqual(result[0], math.sqrt(2) / 2, places=6)
         self.assertAlmostEqual(result[1], 0.0, places=6)
-        self.assertAlmostEqual(result[2], math.sqrt(2)/2, places=6)
+        self.assertAlmostEqual(result[2], math.sqrt(2) / 2, places=6)
         self.assertAlmostEqual(result[3], 0.0, places=6)
 
     def test_euler_to_quaternion_90deg_yaw(self):
-        result = euler_to_quaternion(0.0, 0.0, math.pi/2)
-        self.assertAlmostEqual(result[0], math.sqrt(2)/2, places=6)
+        result = euler_to_quaternion(0.0, 0.0, math.pi / 2)
+        self.assertAlmostEqual(result[0], math.sqrt(2) / 2, places=6)
         self.assertAlmostEqual(result[1], 0.0, places=6)
         self.assertAlmostEqual(result[2], 0.0, places=6)
-        self.assertAlmostEqual(result[3], math.sqrt(2)/2, places=6)
+        self.assertAlmostEqual(result[3], math.sqrt(2) / 2, places=6)
 
     def test_remove_tag_basic(self):
         xml_string = "<root><tag_to_remove>content</tag_to_remove><other>value</other></root>"
@@ -150,14 +150,14 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   </library_images>
 </COLLADA>"""
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.dae', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".dae", delete=False) as f:
             f.write(dae_content)
             dae_path = f.name
 
         try:
             result = get_images_from_dae(dae_path)
             self.assertEqual(len(result), 1)
-            self.assertTrue(result[0].endswith('image.png'))
+            self.assertTrue(result[0].endswith("image.png"))
         finally:
             os.unlink(dae_path)
 
@@ -174,7 +174,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   </library_images>
 </COLLADA>"""
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.dae', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".dae", delete=False) as f:
             f.write(dae_content)
             dae_path = f.name
 
@@ -195,7 +195,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   </library_geometries>
 </COLLADA>"""
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.dae', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".dae", delete=False) as f:
             f.write(dae_content)
             dae_path = f.name
 
@@ -215,7 +215,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   </library_images>
 </COLLADA>"""
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.dae', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".dae", delete=False) as f:
             f.write(dae_content)
             dae_path = f.name
 
@@ -229,24 +229,24 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
     def test_rename_material_textures_basic(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             test_files = [
-                'material_0.png',
-                'material_1.jpg',
-                'material_2.jpeg',
-                'other_file.png',
+                "material_0.png",
+                "material_1.jpg",
+                "material_2.jpeg",
+                "other_file.png",
             ]
 
             for fname in test_files:
                 filepath = os.path.join(tmpdir, fname)
-                with open(filepath, 'w') as f:
-                    f.write('test')
+                with open(filepath, "w") as f:
+                    f.write("test")
 
-            rename_material_textures(tmpdir, 'test_modifier')
+            rename_material_textures(tmpdir, "test_modifier")
 
             expected = [
-                'material_test_modifier_0.png',
-                'material_test_modifier_1.jpg',
-                'material_test_modifier_2.jpeg',
-                'other_file.png',
+                "material_test_modifier_0.png",
+                "material_test_modifier_1.jpg",
+                "material_test_modifier_2.jpeg",
+                "other_file.png",
             ]
 
             for fname in expected:
@@ -255,13 +255,13 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
     def test_rename_material_textures_no_match(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            filepath = os.path.join(tmpdir, 'other_file.png')
-            with open(filepath, 'w') as f:
-                f.write('test')
+            filepath = os.path.join(tmpdir, "other_file.png")
+            with open(filepath, "w") as f:
+                f.write("test")
 
-            rename_material_textures(tmpdir, 'modifier')
+            rename_material_textures(tmpdir, "modifier")
 
-            self.assertTrue(os.path.exists(os.path.join(tmpdir, 'other_file.png')))
+            self.assertTrue(os.path.exists(os.path.join(tmpdir, "other_file.png")))
 
     def test_set_up_axis_to_z_up_create(self):
         dae_content = """<?xml version="1.0" encoding="utf-8"?>
@@ -270,7 +270,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   </library_visual_scenes>
 </COLLADA>"""
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.dae', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".dae", delete=False) as f:
             f.write(dae_content)
             dae_path = f.name
 
@@ -289,7 +289,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   </asset>
 </COLLADA>"""
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.dae', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".dae", delete=False) as f:
             f.write(dae_content)
             dae_path = f.name
 
@@ -317,7 +317,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
                     "is_pre_generated": False,
                     "filename": "/some/path.obj",
                     "scale": "1.0 1.0 1.0",
-                    "color": (1.0, 1.0, 1.0, 1.0)
+                    "color": (1.0, 1.0, 1.0, 1.0),
                 }
             }
             result_dom = update_obj_assets(dom, tmpdir + "/", mesh_info_dict)
@@ -337,7 +337,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_xml = result_dom.toxml()
         self.assertIn('class="collision"', result_xml)
         self.assertIn('class="visual"', result_xml)
-        self.assertNotIn('contype', result_xml)
+        self.assertNotIn("contype", result_xml)
 
     def test_update_non_obj_assets_no_contype(self):
         xml_string = """<?xml version="1.0"?>
@@ -351,7 +351,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         result_dom = update_non_obj_assets(dom, "/tmp/output/")
         result_xml = result_dom.toxml()
-        self.assertIn('<geom', result_xml)
+        self.assertIn("<geom", result_xml)
 
     def test_update_non_obj_assets_multiple_geoms(self):
         xml_string = """<?xml version="1.0"?>
@@ -368,8 +368,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_xml = result_dom.toxml()
         self.assertEqual(result_xml.count('class="collision"'), 2)
         self.assertEqual(result_xml.count('class="visual"'), 2)
-        self.assertEqual(result_xml.count('contype'), 0)
-        self.assertEqual(result_xml.count('conaffinity'), 0)
+        self.assertEqual(result_xml.count("contype"), 0)
+        self.assertEqual(result_xml.count("conaffinity"), 0)
         self.assertEqual(result_xml.count('group="1"'), 0)
         self.assertEqual(result_xml.count('density="0"'), 0)
         self.assertRegex(result_xml, r'<geom[^>]*mesh="mesh1"[^>]*class="visual"[^>]*>')
