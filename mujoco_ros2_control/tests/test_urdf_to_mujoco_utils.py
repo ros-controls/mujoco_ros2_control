@@ -32,6 +32,7 @@ from mujoco_ros2_control import (
     get_processed_mujoco_inputs,
     DECOMPOSED_PATH_NAME,
     COMPOSED_PATH_NAME,
+    write_mujoco_scene,
 )
 
 
@@ -516,6 +517,114 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertIn("site1", cameras_dict)
         self.assertIn(("body", "body1"), modify_element_dict)
 
+    def test_write_mujoco_scene_none(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_mujoco_scene(None, tmpdir + "/")
+            output_file = os.path.join(tmpdir, "scene.xml")
+            self.assertTrue(os.path.exists(output_file))
+            with open(output_file) as f:
+                content = f.read()
+            self.assertIn("<mujoco", content)
+            self.assertIn('model="scene"', content)
+            self.assertIn("<include", content)
 
-if __name__ == '__main__':
+            dom = minidom.parseString(content)
+            self.assertEqual(dom.documentElement.tagName, "mujoco")
+            self.assertEqual(dom.documentElement.getAttribute("model"), "scene")
+            include_tags = dom.getElementsByTagName("include")
+            self.assertEqual(len(include_tags), 1)
+            self.assertIn("file", include_tags[0].attributes)
+            child_nodes = [node for node in dom.documentElement.childNodes if node.nodeType == node.ELEMENT_NODE]
+            self.assertEqual(len(child_nodes), 1)  # Only the include tag should be present
+            self.assertEqual(child_nodes[0].tagName, "include")
+
+    def test_write_mujoco_scene_with_scene_tag(self):
+        scene_xml = '<?xml version="1.0"?><scene><light name="test_light" diffuse="1 1 1"/></scene>'
+        scene_dom = minidom.parseString(scene_xml)
+        scene_inputs = scene_dom.getElementsByTagName("scene")[0]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_mujoco_scene(scene_inputs, tmpdir + "/")
+            output_file = os.path.join(tmpdir, "scene.xml")
+            self.assertTrue(os.path.exists(output_file))
+            with open(output_file) as f:
+                content = f.read()
+            self.assertIn("<mujoco", content)
+            self.assertIn("<include", content)
+            self.assertIn("light", content)
+            self.assertIn('name="test_light"', content)
+
+            dom = minidom.parseString(content)
+            lights = dom.getElementsByTagName("light")
+            self.assertEqual(len(lights), 1)
+            self.assertEqual(lights[0].getAttribute("name"), "test_light")
+            self.assertEqual(lights[0].getAttribute("diffuse"), "1 1 1")
+            child_nodes = [node for node in dom.documentElement.childNodes if node.nodeType == node.ELEMENT_NODE]
+            self.assertEqual(len(child_nodes), 2)  # 1 light + 1 include
+            for node in child_nodes:
+                self.assertIn(node.tagName, ["light", "include"])
+
+    def test_write_mujoco_scene_with_muojco_inputs(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco_inputs>
+  <scene>
+    <light name="scene_light" diffuse="0.5 0.5 0.5"/>
+  </scene>
+</mujoco_inputs>"""
+        scene_dom = minidom.parseString(xml_string)
+        scene_inputs = scene_dom.getElementsByTagName("mujoco_inputs")[0]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_mujoco_scene(scene_inputs, tmpdir + "/")
+            output_file = os.path.join(tmpdir, "scene.xml")
+            self.assertTrue(os.path.exists(output_file))
+            with open(output_file) as f:
+                content = f.read()
+            self.assertIn("light", content)
+            self.assertIn('name="scene_light"', content)
+            self.assertIn('diffuse="0.5 0.5 0.5"', content)
+
+            dom = minidom.parseString(content)
+            lights = dom.getElementsByTagName("light")
+            self.assertEqual(len(lights), 1)
+            self.assertEqual(lights[0].getAttribute("name"), "scene_light")
+            self.assertEqual(lights[0].getAttribute("diffuse"), "0.5 0.5 0.5")
+            child_nodes = [node for node in dom.documentElement.childNodes if node.nodeType == node.ELEMENT_NODE]
+            self.assertEqual(len(child_nodes), 2)  # 1 light + 1 include
+            for node in child_nodes:
+                self.assertIn(node.tagName, ["light", "include"])
+
+    def test_write_mujoco_scene_with_multiple_elements(self):
+        xml_string = """<?xml version="1.0"?>
+<scene>
+  <light name="light1" diffuse="1 1 1"/>
+  <light name="light2" diffuse="0 0 1"/>
+  <global><ambient>0.5 0.5 0.5</ambient></global>
+</scene>"""
+        scene_dom = minidom.parseString(xml_string)
+        scene_inputs = scene_dom.getElementsByTagName("scene")[0]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_mujoco_scene(scene_inputs, tmpdir + "/")
+            output_file = os.path.join(tmpdir, "scene.xml")
+            self.assertTrue(os.path.exists(output_file))
+            with open(output_file) as f:
+                content = f.read()
+            self.assertIn("light1", content)
+            self.assertIn("light2", content)
+            self.assertIn("global", content)
+            # Also check that nothing more exists beyond the expected tags using xml parsing
+            dom = minidom.parseString(content)
+            lights = dom.getElementsByTagName("light")
+            self.assertEqual(len(lights), 2)
+            globals_ = dom.getElementsByTagName("global")
+            self.assertEqual(len(globals_), 1)
+            # Check that the DOMElement only has the expected children
+            child_nodes = [node for node in dom.documentElement.childNodes if node.nodeType == node.ELEMENT_NODE]
+            self.assertEqual(len(child_nodes), 4)  # 2 lights + 1 global + 1 include
+            for node in child_nodes:
+                self.assertIn(node.tagName, ["light", "global", "include"])
+
+
+if __name__ == "__main__":
     unittest.main()
