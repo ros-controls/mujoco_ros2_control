@@ -45,6 +45,8 @@ from mujoco_ros2_control import (
     add_links_as_sites,
     get_urdf_transforms,
     add_free_joint,
+    parse_inputs_xml,
+    parse_scene_xml,
 )
 
 
@@ -1406,6 +1408,172 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertEqual(
             len(get_child_elements(result_dom.getElementsByTagName("freejoint")[0])), 0
         )  # freejoint should have no children
+
+    def test_parse_inputs_xml_none(self):
+        result = parse_inputs_xml(None)
+        self.assertIsNone(result[0])
+        self.assertIsNone(result[1])
+
+    def test_parse_inputs_xml_standalone(self):
+        inputs_xml = """<?xml version="1.0"?>
+<mujoco_inputs>
+  <raw_inputs>
+    <option integrator="implicitfast"/>
+  </raw_inputs>
+  <processed_inputs>
+    <decompose_mesh mesh_name="test_mesh"/>
+  </processed_inputs>
+</mujoco_inputs>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
+            f.write(inputs_xml)
+            inputs_path = f.name
+
+        try:
+            raw_inputs, processed_inputs = parse_inputs_xml(inputs_path)
+            self.assertIsNotNone(raw_inputs)
+            self.assertIsNotNone(processed_inputs)
+            self.assertEqual(raw_inputs.tagName, "raw_inputs")
+            self.assertEqual(raw_inputs.getElementsByTagName("option")[0].getAttribute("integrator"), "implicitfast")
+            self.assertEqual(processed_inputs.tagName, "processed_inputs")
+        finally:
+            os.unlink(inputs_path)
+
+    def test_parse_inputs_xml_in_urdf(self):
+        urdf_with_inputs = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+  <mujoco_inputs>
+    <raw_inputs>
+      <option integrator="implicitfast"/>
+    </raw_inputs>
+    <processed_inputs>
+      <camera site="camera_site" name="camera" fovy="58"/>
+    </processed_inputs>
+  </mujoco_inputs>
+</robot>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".urdf", delete=False) as f:
+            f.write(urdf_with_inputs)
+            urdf_path = f.name
+
+        try:
+            raw_inputs, processed_inputs = parse_inputs_xml(urdf_path)
+            self.assertIsNotNone(raw_inputs)
+            self.assertIsNotNone(processed_inputs)
+            self.assertEqual(raw_inputs.tagName, "raw_inputs")
+            self.assertEqual(
+                len(raw_inputs.getElementsByTagName("option")), 1
+            )  # only one option element should be present
+            self.assertEqual(raw_inputs.getElementsByTagName("option")[0].getAttribute("integrator"), "implicitfast")
+            self.assertEqual(processed_inputs.tagName, "processed_inputs")
+            self.assertEqual(
+                len(processed_inputs.getElementsByTagName("camera")), 1
+            )  # only one camera element should be present
+            self.assertEqual(processed_inputs.getElementsByTagName("camera")[0].getAttribute("name"), "camera")
+        finally:
+            os.unlink(urdf_path)
+
+    def test_parse_inputs_xml_invalid_root(self):
+        invalid_xml = """<?xml version="1.0"?>
+<invalid_root>
+  <raw_inputs/>
+</invalid_root>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
+            f.write(invalid_xml)
+            invalid_path = f.name
+
+        try:
+            with self.assertRaises(ValueError) as context:
+                parse_inputs_xml(invalid_path)
+            assert "Root tag" in str(context.exception)
+        finally:
+            os.unlink(invalid_path)
+
+    def test_parse_scene_xml_none(self):
+        result = parse_scene_xml(None)
+        self.assertIsNone(result)
+
+    def test_parse_scene_xml_standalone_mujoco(self):
+        scene_xml = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <light name="test_light" diffuse="1 1 1"/>
+  </worldbody>
+</mujoco>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
+            f.write(scene_xml)
+            scene_path = f.name
+
+        try:
+            result = parse_scene_xml(scene_path)
+            self.assertIsNotNone(result)
+            self.assertEqual(result.tagName, "mujoco")
+            self.assertEqual(len(result.getElementsByTagName("light")), 1)  # only one light element should be present
+            self.assertEqual(result.getElementsByTagName("light")[0].getAttribute("name"), "test_light")
+            self.assertEqual(result.getElementsByTagName("light")[0].getAttribute("diffuse"), "1 1 1")
+            self.assertEqual(
+                len(get_child_elements(result.getElementsByTagName("worldbody")[0])), 1
+            )  # worldbody should have one child light element
+            self.assertEqual(
+                len(result.getElementsByTagName("worldbody")), 1
+            )  # only one worldbody element should be present
+        finally:
+            os.unlink(scene_path)
+
+    def test_parse_scene_xml_in_urdf(self):
+        urdf_with_scene = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+  <mujoco_inputs>
+    <scene>
+      <light name="test_light" diffuse="1 1 1"/>
+    </scene>
+  </mujoco_inputs>
+</robot>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".urdf", delete=False) as f:
+            f.write(urdf_with_scene)
+            urdf_path = f.name
+
+        try:
+            result = parse_scene_xml(urdf_path)
+            self.assertIsNotNone(result)
+            self.assertEqual(result.tagName, "scene")
+            self.assertEqual(len(result.getElementsByTagName("light")), 1)  # only one light element should be present
+            self.assertEqual(result.getElementsByTagName("light")[0].getAttribute("name"), "test_light")
+            self.assertEqual(result.getElementsByTagName("light")[0].getAttribute("diffuse"), "1 1 1")
+            self.assertEqual(len(get_child_elements(result)), 1)  # scene should have one child light element
+        finally:
+            os.unlink(urdf_path)
+
+    def test_parse_scene_xml_urdf_without_scene(self):
+        urdf_without_scene = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+</robot>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".urdf", delete=False) as f:
+            f.write(urdf_without_scene)
+            urdf_path = f.name
+
+        try:
+            result = parse_scene_xml(urdf_path)
+            self.assertIsNone(result)
+        finally:
+            os.unlink(urdf_path)
+
+    def test_parse_scene_xml_invalid_root(self):
+        invalid_xml = """<?xml version="1.0"?>
+<invalid_root>
+  <scene/>
+</invalid_root>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
+            f.write(invalid_xml)
+            invalid_path = f.name
+
+        try:
+            with self.assertRaises(ValueError) as context:
+                parse_scene_xml(invalid_path)
+            assert "Root tag" in str(context.exception)
+        finally:
+            os.unlink(invalid_path)
 
 
 if __name__ == "__main__":

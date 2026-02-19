@@ -662,6 +662,8 @@ def parse_inputs_xml(filename=None):
             return None, None
 
         # parse children of <mujoco_inputs>
+        # TODO(saikishor): Handle cases where there are multiple raw_inputs or processed_inputs tags
+        # (currently we just take the last one)
         for child in mujoco_inputs_node.childNodes:
             if child.nodeType != child.ELEMENT_NODE:
                 continue
