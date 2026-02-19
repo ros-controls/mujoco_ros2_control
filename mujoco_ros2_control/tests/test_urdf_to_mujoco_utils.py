@@ -37,11 +37,12 @@ from mujoco_ros2_control import (
     get_xml_from_file,
     add_modifiers,
     add_lidar_from_sites,
+    add_cameras_from_sites,
 )
 
 
 def get_child_elements(dom) -> list:
-    return [node for node in dom.childNodes if node.nodeType == node.ELEMENT_NODE]
+    return [node.nodeName for node in dom.childNodes if node.nodeType == node.ELEMENT_NODE]
 
 
 class TestUrdfToMjcfUtils(unittest.TestCase):
@@ -936,6 +937,79 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_xml = result_dom.toxml()
         assert 'name="lidar"' in result_xml
         assert 'max_angle="3.14"' in result_xml
+
+    def test_add_cameras_from_sites_check_attributes(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="base">
+      <site name="camera_site" pos="0 0 0.5" quat="1 0 0 0"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        cameras_dict = {}
+        camera_elem = minidom.parseString('<camera name="camera" fovy="60"/>').documentElement
+        cameras_dict["camera_site"] = camera_elem
+
+        with patch("builtins.print"):
+            result_dom = add_cameras_from_sites(dom, cameras_dict)
+
+        result_xml = result_dom.toxml()
+        print(result_xml)
+        assert 'name="camera"' in result_xml
+        assert 'fovy="60"' in result_xml
+
+        # Check the result XML has all the information as XML string
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("camera")[0])), 0
+        )  # camera should have no children
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("worldbody")[0])), 1
+        )  # worldbody should have one child body
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("mujoco")[0])), 1
+        )  # mujoco should have one child worldbody
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("body")[0])), 2
+        )  # base body should have site and camera body as children
+
+        self.assertEqual(len(result_dom.getElementsByTagName("camera")), 1)  # only one camera element should be present
+        self.assertEqual(result_dom.getElementsByTagName("camera")[0].getAttribute("name"), "camera")
+        self.assertEqual(result_dom.getElementsByTagName("camera")[0].getAttribute("fovy"), "60")
+        self.assertEqual(result_dom.getElementsByTagName("camera")[0].getAttribute("pos"), "0 0 0.5")
+        self.assertEqual(result_dom.getElementsByTagName("camera")[0].getAttribute("quat"), "0.0 1.0 0.0 0.0")
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("worldbody")[0].attributes), 0
+        )  # worldbody should have no attributes
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("mujoco")[0].attributes), 0
+        )  # mujoco should have no attributes
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("body")), 1
+        )  # there should be two body elements (base and camera body)
+        self.assertEqual(
+            sorted(["camera", "site"]), sorted(get_child_elements(result_dom.getElementsByTagName("body")[0]))
+        )  # base body should have site and camera body as children
+
+    def test_add_cameras_from_sites_no_matching_sites(self):
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="base">
+      <site name="other_site" pos="0 0 0.5" quat="1 0 0 0"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        cameras_dict = {}
+        camera_elem = minidom.parseString('<camera name="camera"/>').documentElement
+        cameras_dict["camera_site"] = camera_elem
+
+        result_dom = add_cameras_from_sites(dom, cameras_dict)
+        result_xml = result_dom.toxml()
+        assert 'name="camera"' not in result_xml
+        self.assertEqual(dom.toxml(), result_dom.toxml())  # DOM should be unchanged
 
 
 if __name__ == "__main__":

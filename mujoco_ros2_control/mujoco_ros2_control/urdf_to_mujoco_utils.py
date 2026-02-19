@@ -938,6 +938,7 @@ def add_cameras_from_sites(dom, cameras_dict):
     # Construct all cameras for relevant sites in xml and add them as children to the same parent
     for node in dom.getElementsByTagName("site"):
         site_name = node.getAttribute("name")
+        # TODO(saikishor): raise error when the site doesn't exist
         if site_name in cameras_dict:
             camera_pos = node.getAttribute("pos")
             quat = [float(x) for x in node.getAttribute("quat").split()]
