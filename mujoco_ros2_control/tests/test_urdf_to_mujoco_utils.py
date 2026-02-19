@@ -49,6 +49,7 @@ from mujoco_ros2_control import (
     parse_inputs_xml,
     parse_scene_xml,
     extract_mesh_info,
+    copy_pre_generated_meshes,
 )
 
 
@@ -1678,6 +1679,85 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
             assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
+
+    def test_copy_pre_generated_meshes_decomposed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = os.path.join(tmpdir, "source")
+            output_dir = os.path.join(tmpdir, "output") + "/"
+            os.makedirs(source_dir)
+
+            mesh_source_dir = os.path.join(source_dir, "mesh_name", "mesh_name")
+            os.makedirs(mesh_source_dir)
+            mesh_file = os.path.join(mesh_source_dir, "mesh_name.obj")
+            with open(mesh_file, "w") as f:
+                f.write("# OBJ content")
+
+            mesh_info_dict = {
+                "mesh_name": {
+                    "is_pre_generated": True,
+                    "filename": os.path.join(source_dir, "mesh_name", "mesh_name", "mesh_name.obj"),
+                    "scale": "1.0 1.0 1.0",
+                    "color": (1.0, 1.0, 1.0, 1.0),
+                }
+            }
+            decompose_dict = {"mesh_name": "0.05"}
+
+            copy_pre_generated_meshes(output_dir, mesh_info_dict, decompose_dict)
+
+            expected_dst = os.path.join(
+                output_dir, "assets", DECOMPOSED_PATH_NAME, "mesh_name", "mesh_name", "mesh_name.obj"
+            )
+            self.assertTrue(os.path.exists(expected_dst))
+            with open(expected_dst) as f:
+                self.assertEqual(f.read(), "# OBJ content")
+
+    def test_copy_pre_generated_meshes_composed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = os.path.join(tmpdir, "source")
+            output_dir = os.path.join(tmpdir, "output") + "/"
+            os.makedirs(source_dir)
+
+            mesh_source_dir = os.path.join(source_dir, "mesh_name")
+            os.makedirs(mesh_source_dir)
+            mesh_file = os.path.join(mesh_source_dir, "mesh_name.obj")
+            with open(mesh_file, "w") as f:
+                f.write("# COMPOSED OBJ content")
+
+            mesh_info_dict = {
+                "mesh_name": {
+                    "is_pre_generated": True,
+                    "filename": os.path.join(source_dir, "mesh_name", "mesh_name.obj"),
+                    "scale": "1.0 1.0 1.0",
+                    "color": (1.0, 1.0, 1.0, 1.0),
+                }
+            }
+            decompose_dict = {}
+
+            copy_pre_generated_meshes(output_dir, mesh_info_dict, decompose_dict)
+
+            expected_dst = os.path.join(output_dir, "assets", COMPOSED_PATH_NAME, "mesh_name", "mesh_name.obj")
+            self.assertTrue(os.path.exists(expected_dst))
+            with open(expected_dst) as f:
+                self.assertEqual(f.read(), "# COMPOSED OBJ content")
+
+    def test_copy_pre_generated_meshes_not_pre_generated(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = os.path.join(tmpdir, "output")
+
+            mesh_info_dict = {
+                "mesh_name": {
+                    "is_pre_generated": False,
+                    "filename": "/some/path/mesh.obj",
+                    "scale": "1.0 1.0 1.0",
+                    "color": (1.0, 1.0, 1.0, 1.0),
+                }
+            }
+            decompose_dict = {}
+
+            copy_pre_generated_meshes(output_dir, mesh_info_dict, decompose_dict)
+
+            assets_dir = os.path.join(output_dir, "assets")
+            self.assertFalse(os.path.exists(assets_dir))
 
 
 if __name__ == "__main__":
