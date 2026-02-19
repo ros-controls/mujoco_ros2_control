@@ -736,7 +736,7 @@ def add_free_joint(dom, urdf, joint_name="floating_base_joint"):
     root_link = robot.get_root()
     if root_link == "world":
         print("Not adding a free joint because world is the URDF root")
-        return
+        return dom
 
     # Try to find the virtual_base_joint (standard behavior with fuse=True)
     # Locate the one with name="virtual_base_joint" of type="free"

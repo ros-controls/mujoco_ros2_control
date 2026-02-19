@@ -41,6 +41,7 @@ from mujoco_ros2_control import (
     add_cameras_from_sites,
     add_links_as_sites,
     get_urdf_transforms,
+    add_free_joint,
 )
 
 
@@ -1258,6 +1259,109 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertEqual(link, "world")
         self.assertTrue(is_root)
         self.assertEqual(transform, PyKDL.Frame.Identity())
+
+    def test_add_free_joint_with_virtual_base_joint(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+</robot>"""
+        mjcf_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="virtual_base">
+      <joint name="virtual_base_joint" type="free"/>
+      <body name="base_link">
+        <geom type="box" size="1 1 1"/>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(mjcf_string)
+        result_dom = add_free_joint(dom, urdf)
+        result_xml = result_dom.toxml()
+
+        assert "<freejoint" in result_xml
+        self.assertNotIn('name="virtual_base_joint"', result_xml)
+        self.assertEqual(dom.toxml(), result_dom.toxml())  # DOM should be unchanged
+
+    def test_add_free_joint_world_root(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="world"/>
+  <joint name="joint1" type="revolute">
+    <parent link="world"/>
+    <child link="base_link"/>
+  </joint>
+  <link name="base_link"/>
+</robot>"""
+        mjcf_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="base_link">
+      <geom type="box" size="1 1 1"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(mjcf_string)
+        result_dom = add_free_joint(dom, urdf)
+
+        self.assertEqual(dom.toxml(), result_dom.toxml())  # DOM should be unchanged
+
+    def test_add_free_joint_custom_name(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+</robot>"""
+        mjcf_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="virtual_base">
+      <joint name="virtual_base_joint" type="free"/>
+      <body name="base_link">
+        <geom type="box" size="1 1 1"/>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(mjcf_string)
+        result_dom = add_free_joint(dom, urdf, joint_name="my_custom_joint")
+        result_xml = result_dom.toxml()
+
+        print(result_xml)
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("freejoint")), 1
+        )  # only one freejoint element should be present
+        self.assertEqual(result_xml.count("<freejoint"), 1)  # only one freejoint element should be present
+        self.assertEqual(result_dom.getElementsByTagName("freejoint")[0].getAttribute("name"), "my_custom_joint")
+
+        # Make sure the other data did not change and only the free joint name is modified
+        self.assertEqual(len(result_dom.getElementsByTagName("body")), 2)  # virtual_base and base_link
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("geom")), 1
+        )  # only one geom element should be present (from original)
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("joint")), 0
+        )  # only one joint element should be present (the free joint)
+        # Checking the names of the elements
+        self.assertEqual(result_dom.getElementsByTagName("body")[0].getAttribute("name"), "virtual_base")
+        self.assertEqual(result_dom.getElementsByTagName("body")[1].getAttribute("name"), "base_link")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("type"), "box")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("size"), "1 1 1")
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("worldbody")[0].attributes), 0
+        )  # worldbody should have no attributes
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("mujoco")[0].attributes), 0
+        )  # mujoco should have no attributes
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("body")[0])), 2
+        )  # virtual_base should have two child elements (freejoint and base_link)
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("body")[1])), 1
+        )  # base_link should have geom as child
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("freejoint")[0])), 0
+        )  # freejoint should have no children
 
 
 if __name__ == "__main__":
