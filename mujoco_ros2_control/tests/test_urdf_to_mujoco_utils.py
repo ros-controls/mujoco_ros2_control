@@ -16,6 +16,7 @@ import os
 import tempfile
 import unittest
 import math
+import json
 import PyKDL
 from unittest.mock import patch
 
@@ -47,6 +48,7 @@ from mujoco_ros2_control import (
     add_free_joint,
     parse_inputs_xml,
     parse_scene_xml,
+    extract_mesh_info,
 )
 
 
@@ -1574,6 +1576,108 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             assert "Root tag" in str(context.exception)
         finally:
             os.unlink(invalid_path)
+
+    def test_extract_mesh_info_basic(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/model.dae"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>"""
+        result = extract_mesh_info(urdf, None, {})
+        self.assertEqual(len(result), 1)
+        assert "model" in result
+        self.assertEqual(result["model"]["filename"], "package://test_package/meshes/model.dae")
+        self.assertEqual(result["model"]["scale"], "1.0 1.0 1.0")
+        self.assertEqual(result["model"]["color"], (1.0, 1.0, 1.0, 1.0))
+        self.assertFalse(result["model"]["is_pre_generated"])
+
+    def test_extract_mesh_info_with_material_color(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <material name="red_material">
+    <color rgba="1.0 0.0 0.0 1.0"/>
+  </material>
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/model.dae"/>
+      </geometry>
+      <material name="red_material"/>
+    </visual>
+  </link>
+</robot>"""
+        result = extract_mesh_info(urdf, None, {})
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result["model"]["filename"], "package://test_package/meshes/model.dae")
+        self.assertEqual(result["model"]["color"], (1.0, 0.0, 0.0, 1.0))
+        self.assertEqual(result["model"]["scale"], "1.0 1.0 1.0")
+        self.assertFalse(result["model"]["is_pre_generated"])
+
+    def test_extract_mesh_info_with_scale(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/model.stl" scale="2.0 3.0 4.0"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>"""
+        result = extract_mesh_info(urdf, None, {})
+        self.assertEqual(result["model"]["scale"], "2.0 3.0 4.0")
+        self.assertFalse(result["model"]["is_pre_generated"])
+        self.assertEqual(result["model"]["color"], (1.0, 1.0, 1.0, 1.0))
+        self.assertEqual(result["model"]["filename"], "package://test_package/meshes/model.stl")
+
+    def test_extract_mesh_info_no_mesh_geometry(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="1 1 1"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>"""
+        result = extract_mesh_info(urdf, None, {})
+        self.assertEqual(len(result), 0)
+
+    def test_extract_mesh_info_with_decompose_dict(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/complex_mesh.stl"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            decomposed_dir = os.path.join(tmpdir, DECOMPOSED_PATH_NAME, "complex_mesh", "complex_mesh")
+            os.makedirs(decomposed_dir)
+            mesh_file = os.path.join(decomposed_dir, "complex_mesh.obj")
+            with open(mesh_file, "w") as f:
+                f.write("# OBJ file")
+
+            metadata_file = os.path.join(tmpdir, DECOMPOSED_PATH_NAME, "metadata.json")
+            with open(metadata_file, "w") as f:
+                json.dump({"complex_mesh": "0.05"}, f)
+
+            result = extract_mesh_info(urdf, tmpdir, {"complex_mesh": "0.05"})
+            self.assertEqual(len(result), 1)
+            assert "complex_mesh" in result
+            self.assertTrue(result["complex_mesh"]["is_pre_generated"])
+            self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
+            self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
+            assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
 
 
 if __name__ == "__main__":
