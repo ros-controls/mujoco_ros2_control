@@ -30,34 +30,7 @@ import numpy as np
 import trimesh  # Added trimesh
 
 from xml.dom import minidom
-from mujoco_ros2_control import (
-    add_mujoco_info,
-    remove_tag,
-    extract_mesh_info,
-    replace_package_names,
-    get_images_from_dae,
-    rename_material_textures,
-    set_up_axis_to_z_up,
-    update_obj_assets,
-    update_non_obj_assets,
-    add_mujoco_inputs,
-    get_processed_mujoco_inputs,
-    parse_inputs_xml,
-    parse_scene_xml,
-    add_free_joint,
-    add_links_as_sites,
-    add_cameras_from_sites,
-    add_lidar_from_sites,
-    add_modifiers,
-    copy_pre_generated_meshes,
-    get_urdf_from_rsp,
-    get_xml_from_file,
-    publish_model_on_topic,
-    add_urdf_free_joint,
-    write_mujoco_scene,
-    COMPOSED_PATH_NAME,
-    DECOMPOSED_PATH_NAME,
-)
+import mujoco_ros2_control as mrc
 
 
 def extract_rgba(visual):
@@ -102,8 +75,8 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
     # clean assets directory and remake required paths
     if os.path.exists(f"{directory}assets/"):
         shutil.rmtree(f"{directory}assets/")
-    os.makedirs(f"{directory}assets/{COMPOSED_PATH_NAME}", exist_ok=True)
-    os.makedirs(f"{directory}assets/{DECOMPOSED_PATH_NAME}", exist_ok=True)
+    os.makedirs(f"{directory}assets/{mrc.COMPOSED_PATH_NAME}", exist_ok=True)
+    os.makedirs(f"{directory}assets/{mrc.DECOMPOSED_PATH_NAME}", exist_ok=True)
 
     for mesh_name in mesh_info_dict:
         mesh_item = mesh_info_dict[mesh_name]
@@ -118,10 +91,10 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
 
         # if we want to decompose the mesh, put it in decomposed filepath, otherwise put it in full
         if filename_no_ext in decompose_dict:
-            assets_relative_filepath = f"{DECOMPOSED_PATH_NAME}/{filename_no_ext}/"
+            assets_relative_filepath = f"{mrc.DECOMPOSED_PATH_NAME}/{filename_no_ext}/"
             os.makedirs(f"{directory}assets/{assets_relative_filepath}", exist_ok=True)
         else:
-            assets_relative_filepath = f"{COMPOSED_PATH_NAME}/"
+            assets_relative_filepath = f"{mrc.COMPOSED_PATH_NAME}/"
         assets_relative_filepath += filename_no_ext
 
         output_path = f"{directory}assets/{assets_relative_filepath}.obj"
@@ -170,12 +143,12 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
             # objs are ok as is
         elif filename_ext.lower() == ".dae":
             # keep track of the image files that we need to copy from the dae
-            image_files = get_images_from_dae(full_filepath)
+            image_files = mrc.get_images_from_dae(full_filepath)
             # keep track of the files that were copied to tmp directory to delete
             copied_image_files = []
 
             # set z axis to up in the dae file because that is how MuJoCo expects it
-            z_up_dae_txt = set_up_axis_to_z_up(full_filepath)
+            z_up_dae_txt = mrc.set_up_axis_to_z_up(full_filepath)
 
             # make a temporary file rather than overwriting the old one
             temp_file = tempfile.NamedTemporaryFile(suffix=".dae", mode="w+", delete=False)
@@ -220,7 +193,7 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
 
                 scene.export(output_path, include_color=True, mtl_name=mtl_name)
                 # rename textures
-                rename_material_textures(dir_path=os.path.dirname(output_path), modifier=mtl_modifier)
+                mrc.rename_material_textures(dir_path=os.path.dirname(output_path), modifier=mtl_modifier)
 
                 # we need to modify the material names to not all be material_X so they don't conflict
                 # all of the objs will have a line that looks like
@@ -263,13 +236,13 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
 
 def run_obj2mjcf(output_filepath, decompose_dict):
     # remove the folders in the asset directory so that we are clean to run obj2mjcf
-    with os.scandir(f"{output_filepath}assets/{COMPOSED_PATH_NAME}") as entries:
+    with os.scandir(f"{output_filepath}assets/{mrc.COMPOSED_PATH_NAME}") as entries:
         for entry in entries:
             if entry.is_dir():
                 shutil.rmtree(entry.path)
 
     # remove the folders in the asset directory so that we are clean to run obj2mjcf
-    top_level_path = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}"
+    top_level_path = f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}"
     for item in os.listdir(top_level_path):
         first_level_path = os.path.join(top_level_path, item)
         if os.path.isdir(first_level_path):
@@ -280,10 +253,10 @@ def run_obj2mjcf(output_filepath, decompose_dict):
                     shutil.rmtree(second_level_path)
 
     # run obj2mjcf to generate folders of processed objs
-    cmd = ["obj2mjcf", "--obj-dir", f"{output_filepath}assets/{COMPOSED_PATH_NAME}", "--save-mjcf"]
+    cmd = ["obj2mjcf", "--obj-dir", f"{output_filepath}assets/{mrc.COMPOSED_PATH_NAME}", "--save-mjcf"]
     subprocess.run(cmd)
 
-    thresholds_file = os.path.join(f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}", "metadata.json")
+    thresholds_file = os.path.join(f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}", "metadata.json")
 
     if os.path.exists(thresholds_file):
         with open(thresholds_file) as f:
@@ -296,7 +269,7 @@ def run_obj2mjcf(output_filepath, decompose_dict):
         cmd = [
             "obj2mjcf",
             "--obj-dir",
-            f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{mesh_name}",
+            f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}",
             "--save-mjcf",
             "--decompose",
             "--coacd-args.threshold",
@@ -334,32 +307,32 @@ def fix_mujoco_description(
     run_obj2mjcf(output_filepath, decompose_dict)
 
     # Copy pre-geerated mesh folders to the final directory
-    copy_pre_generated_meshes(output_filepath, mesh_info_dict, decompose_dict)
+    mrc.copy_pre_generated_meshes(output_filepath, mesh_info_dict, decompose_dict)
 
     # Parse the DAE file
     dom = minidom.parse(full_filepath)
 
     if request_add_free_joint:
-        dom = add_free_joint(dom, urdf)
+        dom = mrc.add_free_joint(dom, urdf)
 
     # Update and add the new fixed assets
-    dom = update_obj_assets(dom, output_filepath, mesh_info_dict)
-    dom = update_non_obj_assets(dom, output_filepath)
+    dom = mrc.update_obj_assets(dom, output_filepath, mesh_info_dict)
+    dom = mrc.update_non_obj_assets(dom, output_filepath)
 
     # Add the MuJoCo input elements
-    dom = add_mujoco_inputs(dom, raw_inputs, scene_inputs)
+    dom = mrc.add_mujoco_inputs(dom, raw_inputs, scene_inputs)
 
     # Add links as sites
-    dom = add_links_as_sites(urdf, dom, request_add_free_joint)
+    dom = mrc.add_links_as_sites(urdf, dom, request_add_free_joint)
 
     # Add cameras based on site names
-    dom = add_cameras_from_sites(dom, cameras_dict)
+    dom = mrc.add_cameras_from_sites(dom, cameras_dict)
 
     # Add replicates based on site names
-    dom = add_lidar_from_sites(dom, lidar_dict)
+    dom = mrc.add_lidar_from_sites(dom, lidar_dict)
 
     # modify elements based on modify_element tags
-    dom = add_modifiers(dom, modify_element_dict)
+    dom = mrc.add_modifiers(dom, modify_element_dict)
 
     # Write the updated file
     with open(destination_file, "w") as file:
@@ -434,13 +407,13 @@ def main(args=None):
     # Load URDF from file, string, or topic
     urdf_path = None
     if parsed_args.urdf:
-        urdf = get_xml_from_file(parsed_args.urdf)
+        urdf = mrc.get_xml_from_file(parsed_args.urdf)
         urdf_path = parsed_args.urdf
     else:
         if parsed_args.robot_description:
             urdf = parsed_args.robot_description
         else:
-            urdf = get_urdf_from_rsp(args)
+            urdf = mrc.get_urdf_from_rsp(args)
         # Create a tempfile and store the URDF
         tmp = tempfile.NamedTemporaryFile()
         with open(tmp.name, "w") as f:
@@ -472,19 +445,19 @@ def main(args=None):
     mujoco_inputs_file = parsed_args.mujoco_inputs or urdf_path
     mujoco_scene_file = parsed_args.scene or urdf_path
 
-    raw_inputs, processed_inputs = parse_inputs_xml(mujoco_inputs_file)
+    raw_inputs, processed_inputs = mrc.parse_inputs_xml(mujoco_inputs_file)
 
     scene_inputs = None
     if parsed_args.publish_topic or (parsed_args.save_only and not parsed_args.scene):
-        scene_inputs = parse_scene_xml(mujoco_scene_file)
+        scene_inputs = mrc.parse_scene_xml(mujoco_scene_file)
 
     # Copy the scene tags from URDF to a separate xml il not publishing
     if not parsed_args.publish_topic and parsed_args.save_only and scene_inputs:
         print("Copying scene tags from URDF to a separate xml")
-        write_mujoco_scene(scene_inputs, output_filepath)
+        mrc.write_mujoco_scene(scene_inputs, output_filepath)
         scene_inputs = None
 
-    decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_inputs)
+    decompose_dict, cameras_dict, modify_element_dict, lidar_dict = mrc.get_processed_mujoco_inputs(processed_inputs)
 
     if parsed_args.asset_dir:
         assets_filepath = parsed_args.asset_dir
@@ -495,21 +468,21 @@ def main(args=None):
 
     # Add a free joint to the urdf
     # Only add the virtual link structure if we allow fusing.
-    # If no-fuse is on, we skip this and add the freejoint directly in add_free_joint.
+    # If no-fuse is on, we skip this and add the freejoint directly in mrc.add_free_joint.
     if request_add_free_joint and parsed_args.fuse:
-        urdf = add_urdf_free_joint(urdf)
+        urdf = mrc.add_urdf_free_joint(urdf)
 
     print(f"Using destination directory: {output_filepath}")
 
     # Add required MuJoCo tags to the starting URDF
-    xml_data = add_mujoco_info(urdf, output_filepath, parsed_args.publish_topic, parsed_args.fuse)
+    xml_data = mrc.add_mujoco_info(urdf, output_filepath, parsed_args.publish_topic, parsed_args.fuse)
 
     # get rid of collision data, assuming the visual data is much better resolution.
     # not sure if this is the best move...
-    xml_data = remove_tag(xml_data, "collision")
+    xml_data = mrc.remove_tag(xml_data, "collision")
 
-    xml_data = replace_package_names(xml_data)
-    mesh_info_dict = extract_mesh_info(xml_data, parsed_args.asset_dir, decompose_dict)
+    xml_data = mrc.replace_package_names(xml_data)
+    mesh_info_dict = mrc.extract_mesh_info(xml_data, parsed_args.asset_dir, decompose_dict)
     xml_data = convert_to_objs(mesh_info_dict, output_filepath, xml_data, convert_stl_to_obj, decompose_dict)
 
     print("writing data to robot_description_formatted.urdf")
@@ -538,7 +511,7 @@ def main(args=None):
 
     # Publish the MuJoCo model to the specified topic if provided
     if parsed_args.publish_topic:
-        publish_model_on_topic(parsed_args.publish_topic, output_filepath, args)
+        mrc.publish_model_on_topic(parsed_args.publish_topic, output_filepath, args)
 
     # Copy the existing scene.xml to the output folder if not publishing
     if not parsed_args.publish_topic and parsed_args.save_only and parsed_args.scene:
