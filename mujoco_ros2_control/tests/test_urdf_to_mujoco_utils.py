@@ -16,6 +16,7 @@ import os
 import tempfile
 import unittest
 import math
+import PyKDL
 
 from xml.dom import minidom
 
@@ -39,6 +40,7 @@ from mujoco_ros2_control import (
     add_lidar_from_sites,
     add_cameras_from_sites,
     add_links_as_sites,
+    get_urdf_transforms,
 )
 
 
@@ -1173,6 +1175,89 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         sites = result_dom.getElementsByTagName("site")
         site_names = [site.getAttribute("name") for site in sites]
         assert "base_link" in site_names
+
+    def test_get_urdf_transforms_single_link(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+</robot>"""
+        result = get_urdf_transforms(urdf)
+        assert "base_link" in result
+        link, transform, is_root = result["base_link"]
+        self.assertEqual(link, "base_link")
+        self.assertTrue(is_root)
+        self.assertEqual(transform, PyKDL.Frame.Identity())
+
+    def test_get_urdf_transforms_multiple_links(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+  <joint name="joint1" type="revolute">
+    <parent link="base_link"/>
+    <child link="link2"/>
+  </joint>
+  <link name="link2"/>
+  <joint name="joint2" type="revolute">
+    <origin xyz="1 2 3" rpy="0 0 1.57"/>
+    <parent link="link2"/>
+    <child link="link3"/>
+  </joint>
+  <link name="link3"/>
+</robot>"""
+        result = get_urdf_transforms(urdf)
+        assert "base_link" in result
+        assert "link2" in result
+        assert "link3" in result
+
+        link, transform, is_root = result["base_link"]
+        self.assertEqual(link, "base_link")
+        self.assertTrue(is_root)
+        self.assertEqual(transform, PyKDL.Frame.Identity())
+
+        link, transform, is_root = result["link2"]
+        self.assertEqual(link, "link2")
+        self.assertFalse(is_root)
+        # Identity as it is a revolute joint, only works for fixed joints
+        self.assertEqual(transform, PyKDL.Frame.Identity())
+
+    def test_get_urdf_transforms_with_fixed_joint(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+  <joint name="joint1" type="fixed">
+    <parent link="base_link"/>
+    <child link="link2"/>
+    <origin xyz="1 2 3" rpy="0 0 1.57"/>
+  </joint>
+  <link name="link2"/>
+</robot>"""
+        result = get_urdf_transforms(urdf)
+        assert "base_link" in result
+        assert "link2" in result
+        link, transform, is_root = result["link2"]
+        self.assertEqual(link, "base_link")
+        self.assertTrue(is_root)
+        expected_transform = PyKDL.Frame(PyKDL.Rotation.RPY(0, 0, 1.57), PyKDL.Vector(1, 2, 3))
+        self.assertEqual(transform, expected_transform)
+
+    def test_get_urdf_transforms_with_world_root(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="world"/>
+  <joint name="joint1" type="revolute">
+    <parent link="world"/>
+    <child link="base_link"/>
+  </joint>
+  <link name="base_link"/>
+</robot>"""
+        result = get_urdf_transforms(urdf)
+        assert "world" in result
+        assert "base_link" in result
+
+        link, transform, is_root = result["world"]
+        self.assertEqual(link, "world")
+        self.assertTrue(is_root)
+        self.assertEqual(transform, PyKDL.Frame.Identity())
 
 
 if __name__ == "__main__":
