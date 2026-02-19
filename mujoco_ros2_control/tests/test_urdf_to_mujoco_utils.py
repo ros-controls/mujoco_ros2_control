@@ -17,6 +17,7 @@ import tempfile
 import unittest
 import math
 import PyKDL
+from unittest.mock import patch
 
 from xml.dom import minidom
 
@@ -28,6 +29,7 @@ from mujoco_ros2_control import (
     set_up_axis_to_z_up,
     multiply_quaternion,
     euler_to_quaternion,
+    replace_package_names,
     update_obj_assets,
     update_non_obj_assets,
     add_mujoco_inputs,
@@ -313,6 +315,47 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         finally:
             os.unlink(dae_path)
 
+    @patch("mujoco_ros2_control.urdf_to_mujoco_utils.get_package_share_directory")
+    def test_replace_package_names_basic(self, mock_get_package):
+        mock_get_package.return_value = "/opt/ros/rolling/share/test_package"
+        xml_data = (
+            '<?xml version="1.0"?><robot><link><visual><geometry><mesh '
+            'filename="package://test_package/meshes/model.dae"/></geometry>'
+            "</visual></link></robot>"
+        )
+        result = replace_package_names(xml_data)
+        assert "package://test_package/" not in result
+        mock_get_package.assert_called_once_with("test_package")
+
+    def test_replace_package_names_no_package(self):
+        xml_data = (
+            '<?xml version="1.0"?><robot><link><visual><geometry><mesh '
+            'filename="/absolute/path/model.dae"/></geometry></visual></link></robot>'
+        )
+        result = replace_package_names(xml_data)
+        assert "/absolute/path/model.dae" in result
+
+    def test_replace_package_names_file_prefix_removed(self):
+        xml_data = (
+            '<?xml version="1.0"?><robot><link><visual><geometry>'
+            '<mesh filename="file:///some/path/model.dae"/></geometry></visual></link></robot>'
+        )
+        result = replace_package_names(xml_data)
+        assert "file://" not in result
+        assert "/some/path/model.dae" in result
+
+    @patch("mujoco_ros2_control.urdf_to_mujoco_utils.get_package_share_directory")
+    def test_replace_package_names_multiple_packages(self, mock_get_package):
+        mock_get_package.side_effect = lambda pkg: f"/opt/ros/rolling/share/{pkg}"
+        xml_data = (
+            '<?xml version="1.0"?><robot><link><visual><geometry><mesh '
+            'filename="package://pkg_a/mesh.dae"/></geometry></visual></link><link>'
+            '<visual><geometry><mesh filename="package://pkg_b/mesh.dae"/></geometry>'
+            "</visual></link></robot>"
+        )
+        result = replace_package_names(xml_data)
+        assert "package://pkg_a/" not in result
+        assert "package://pkg_b/" not in result
 
     def test_update_obj_assets_no_assets(self):
         xml_string = '<?xml version="1.0"?><mujoco><worldbody><body name="test"/></worldbody></mujoco>'
