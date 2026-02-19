@@ -28,6 +28,7 @@ from mujoco_ros2_control import (
     set_up_axis_to_z_up,
     multiply_quaternion,
     euler_to_quaternion,
+    update_obj_assets,
     update_non_obj_assets,
     add_mujoco_inputs,
     get_processed_mujoco_inputs,
