@@ -38,6 +38,7 @@ from mujoco_ros2_control import (
     add_modifiers,
     add_lidar_from_sites,
     add_cameras_from_sites,
+    add_links_as_sites,
 )
 
 
@@ -1010,6 +1011,168 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_xml = result_dom.toxml()
         assert 'name="camera"' not in result_xml
         self.assertEqual(dom.toxml(), result_dom.toxml())  # DOM should be unchanged
+
+    def test_add_links_as_sites_basic(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+  <joint name="joint1" type="revolute">
+    <parent link="base_link"/>
+    <child link="link2"/>
+  </joint>
+  <link name="link2"/>
+</robot>"""
+        mjcf_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="base_link">
+      <joint name="joint1" type="revolute"/>
+      <geom type="box" size="1 1 1"/>
+    </body>
+    <body name="link2">
+      <geom type="sphere" size="0.5"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(mjcf_string)
+        result_dom = add_links_as_sites(urdf, dom, True)
+        result_xml = result_dom.toxml()
+
+        sites = result_dom.getElementsByTagName("site")
+        site_names = [site.getAttribute("name") for site in sites]
+        assert "base_link" in site_names
+        assert "link2" in site_names
+        print(result_xml)
+
+        # Check that the site elements have all attributes same as mjcf_string but only sites are extra
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("worldbody")), 1
+        )  # only one worldbody element should be present
+        self.assertEqual(len(result_dom.getElementsByTagName("mujoco")), 1)  # only one mujoco element should be present
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("mujoco")[0])), 1
+        )  # mujoco should have one child worldbody
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("worldbody")[0])), 2
+        )  # worldbody should have two child bodies (base_link and link2)
+        self.assertEqual(len(result_dom.getElementsByTagName("body")), 2)  # two body elements should be present
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("geom")), 2
+        )  # two geom elements should be present (2 from original)
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("joint")), 1
+        )  # two joint elements should be present (joint1)
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("site")), 2
+        )  # two site elements should be present (one for each link)
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("body")[0])), 3
+        )  # base_link body should have joint, geom, and site as children
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("body")[1])), 2
+        )  # link2 body should have geom and site as children
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("joint")[0])), 0
+        )  # joint1 should have no children
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("geom")[0])), 0
+        )  # base_link geom should have no children
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("geom")[1])), 0
+        )  # link2 geom should have no children
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("site")[0])), 0
+        )  # base_link site should have no children
+        self.assertEqual(
+            len(get_child_elements(result_dom.getElementsByTagName("site")[1])), 0
+        )  # link2 site should have no children
+
+    def test_add_links_as_sites_with_world_root(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="world"/>
+  <joint name="joint1" type="revolute">
+    <parent link="world"/>
+    <child link="link1"/>
+  </joint>
+  <link name="link1"/>
+</robot>"""
+        mjcf_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="link1">
+      <geom type="box" size="1 1 1"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(mjcf_string)
+        result_dom = add_links_as_sites(urdf, dom, True)
+
+        sites = result_dom.getElementsByTagName("site")
+        site_names = [site.getAttribute("name") for site in sites]
+        assert "world" in site_names
+        assert "link1" in site_names
+
+    #     def test_add_links_as_sites_urdf_has_more_links_than_mjcf(self):
+    #         urdf = """<?xml version="1.0"?>
+    # <robot name="test_robot">
+    #   <link name="base_link"/>
+    #   <joint name="joint1" type="revolute">
+    #     <parent link="base_link"/>
+    #     <child link="link2"/>
+    #   </joint>
+    #   <link name="link2"/>
+    #   <joint name="joint2" type="revolute">
+    #     <parent link="link2"/>
+    #     <child link="link3"/>
+    #   </joint>
+    #   <link name="link3"/>
+    #   <joint name="joint3" type="revolute">
+    #     <parent link="link3"/>
+    #     <child link="link4"/>
+    #   </joint>
+    #   <link name="link4"/>
+    # </robot>"""
+    #         mjcf_string = """<?xml version="1.0"?>
+    # <mujoco>
+    #   <worldbody>
+    #     <body name="base_link">
+    #       <joint name="joint1" type="revolute"/>
+    #       <geom type="box" size="1 1 1"/>
+    #     </body>
+    #   </worldbody>
+    # </mujoco>"""
+    #         dom = minidom.parseString(mjcf_string)
+    #         result_dom = add_links_as_sites(urdf, dom, True)
+    #         result_xml = result_dom.toxml()
+
+    #         sites = result_dom.getElementsByTagName("site")
+    #         print(result_xml)
+    #         site_names = [site.getAttribute("name") for site in sites]
+    #         assert "base_link" in site_names
+    #         assert "link2" in site_names
+    #         assert "link3" in site_names
+    #         assert "link4" in site_names
+
+    def test_add_links_as_sites_no_free_joint(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+</robot>"""
+        mjcf_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="base_link">
+      <geom type="box" size="1 1 1"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(mjcf_string)
+        result_dom = add_links_as_sites(urdf, dom, False)
+
+        sites = result_dom.getElementsByTagName("site")
+        site_names = [site.getAttribute("name") for site in sites]
+        assert "base_link" in site_names
 
 
 if __name__ == "__main__":
