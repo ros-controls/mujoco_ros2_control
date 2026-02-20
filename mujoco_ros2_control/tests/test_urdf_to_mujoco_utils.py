@@ -320,6 +320,18 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         finally:
             os.unlink(dae_path)
 
+    def test_replace_package_names_minimal(self):
+        xml_data = (
+            '<?xml version="1.0"?><robot><link><visual><geometry><mesh '
+            'filename="package://mujoco_ros2_control/model.dae"/></geometry>'
+            "</visual></link></robot>"
+        )
+        result = replace_package_names(xml_data)
+        assert "package://mujoco_ros2_control/" not in result
+        dom = minidom.parseString(result)
+        self.assertTrue(dom.getElementsByTagName("mesh")[0].getAttribute("filename").endswith("model.dae"))
+        self.assertTrue(os.path.isdir(os.path.dirname(dom.getElementsByTagName("mesh")[0].getAttribute("filename"))))
+
     @patch("mujoco_ros2_control.urdf_to_mujoco_utils.get_package_share_directory")
     def test_replace_package_names_basic(self, mock_get_package):
         mock_get_package.return_value = "/opt/ros/rolling/share/test_package"
@@ -354,13 +366,16 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         mock_get_package.side_effect = lambda pkg: f"/opt/ros/rolling/share/{pkg}"
         xml_data = (
             '<?xml version="1.0"?><robot><link><visual><geometry><mesh '
-            'filename="package://pkg_a/mesh.dae"/></geometry></visual></link><link>'
-            '<visual><geometry><mesh filename="package://pkg_b/mesh.dae"/></geometry>'
+            'filename="package://pkg_a/mesh_a.dae"/></geometry></visual></link><link>'
+            '<visual><geometry><mesh filename="package://pkg_b/mesh_b.dae"/></geometry>'
             "</visual></link></robot>"
         )
         result = replace_package_names(xml_data)
         assert "package://pkg_a/" not in result
         assert "package://pkg_b/" not in result
+        dom = minidom.parseString(result)
+        self.assertTrue(dom.getElementsByTagName("mesh")[0].getAttribute("filename").endswith("mesh_a.dae"))
+        self.assertTrue(dom.getElementsByTagName("mesh")[1].getAttribute("filename").endswith("mesh_b.dae"))
 
     def test_update_obj_assets_no_assets(self):
         xml_string = '<?xml version="1.0"?><mujoco><worldbody><body name="test"/></worldbody></mujoco>'
