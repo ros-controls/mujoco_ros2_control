@@ -2,8 +2,8 @@
 Changelog for package mujoco_ros2_control
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.0.1 (2026-02-24)
+------------------
 * Update documentation of URDF <-> MJCF tool (`#117 <https://github.com/ros-controls/mujoco_ros2_control/issues/117>`_)
 * Add proper logging for the mimic joints (`#118 <https://github.com/ros-controls/mujoco_ros2_control/issues/118>`_)
 * Fix mardown link checker CI + fix local references (`#114 <https://github.com/ros-controls/mujoco_ros2_control/issues/114>`_)
