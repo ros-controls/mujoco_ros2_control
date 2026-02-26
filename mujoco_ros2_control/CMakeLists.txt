@@ -14,6 +14,7 @@ find_package(hardware_interface REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclpy REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(mujoco_ros2_control_msgs REQUIRED)
 find_package(Threads REQUIRED)
@@ -198,8 +199,12 @@ install(
 pluginlib_export_plugin_description_file(hardware_interface mujoco_system_interface_plugin.xml)
 
 if(BUILD_TESTING)
-  add_subdirectory(test)
+  add_subdirectory(tests)
 endif()
+
+ament_python_install_package(mujoco_ros2_control
+  SCRIPTS_DESTINATION lib/mujoco_ros2_control
+)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_package()
