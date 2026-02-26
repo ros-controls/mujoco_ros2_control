@@ -15,6 +15,7 @@
   <license>Apache License, Version 2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
   <buildtool_depend>git</buildtool_depend>
   <build_depend>ros2_control_cmake</build_depend>
 
@@ -35,6 +36,7 @@
   <depend>transmission_interface</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
 
   <exec_depend>python3-venv</exec_depend>
   <exec_depend>python3-pip</exec_depend>
