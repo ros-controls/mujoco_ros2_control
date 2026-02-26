@@ -2708,8 +2708,7 @@ void MujocoSystemInterface::PhysicsLoop()
 
             // Copy data to the control
             mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, static_cast<int>(mj_model_->nu));
-            mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied,
-                     static_cast<int>(mj_model_->nu));
+            mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, static_cast<int>(mj_model_->nu));
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
 
@@ -2759,9 +2758,8 @@ void MujocoSystemInterface::PhysicsLoop()
 #endif
 
               // Copy data to the control
-               mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, static_cast<int>(mj_model_->nu));
-               mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied,
-                        static_cast<int>(mj_model_->nu));
+              mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, static_cast<int>(mj_model_->nu));
+              mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, static_cast<int>(mj_model_->nu));
               // call mj_step
               mj_step(mj_model_, mj_data_);
 
