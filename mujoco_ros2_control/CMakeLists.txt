@@ -111,9 +111,11 @@ add_library(mujoco_ros2_control SHARED
     src/mujoco_cameras.cpp
     src/mujoco_lidar.cpp
 )
-# Ensure MuJoCo library can be found at runtime regardless of how it was installed above
+# Ensure MuJoCo library can be found at runtime regardless of how it was installed above.
+# mujoco_vendor installs libmujoco.so under opt/mujoco_vendor/lib/ relative to the
+# install prefix, so that directory must be in the RPATH alongside the standard lib/.
 set_target_properties(mujoco_ros2_control PROPERTIES
-  INSTALL_RPATH "\$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
+  INSTALL_RPATH "\$ORIGIN/../lib;\$ORIGIN/../opt/mujoco_vendor/lib;${CMAKE_INSTALL_PREFIX}/lib"
 )
 # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
 # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
