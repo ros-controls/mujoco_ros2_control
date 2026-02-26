@@ -1055,7 +1055,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         )  # mujoco should have no attributes
         self.assertEqual(
             len(result_dom.getElementsByTagName("body")), 1
-        )  # there should be two body elements (base and camera body)
+        )  # there should still be a single body element (base)
         self.assertEqual(
             sorted(["camera", "site"]), sorted(get_child_elements(result_dom.getElementsByTagName("body")[0]))
         )  # base body should have site and camera body as children
