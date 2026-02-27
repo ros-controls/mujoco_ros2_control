@@ -1,11 +1,9 @@
 name: Coverage Build - Jazzy
-
 on:
   workflow_dispatch:
   pull_request: &event
     branches:
       - main
-      - jazzy
     paths:
       - '**.hpp'
       - '**.h'
@@ -18,79 +16,9 @@ on:
       - 'codecov.yml'
   push: *event
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/heads') }}
-
 jobs:
-  coverage:
-    timeout-minutes: 30
-    env:
-      SCCACHE_DIR: ${{ github.workspace }}/.sccache
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/Dockerfile.pixi
-          push: false
-          load: true
-          tags: mujoco_ros2_control_pixi:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Cache sccache
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ runner.os }}-sccache-coverage-${{ github.head_ref || github.ref_name }}
-          restore-keys: |
-            ${{ runner.os }}-sccache-coverage-main
-            ${{ runner.os }}-sccache-coverage-
-
-      - name: Build with coverage, run tests, and generate report
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -v ${{ github.workspace }}/.sccache:/workspace/.sccache \
-            -w /workspace \
-            -e SCCACHE_DIR=/workspace/.sccache \
-            mujoco_ros2_control_pixi:ci \
-            bash -c "
-              apt-get update -qq && apt-get install -y lcov && \
-              pixi run setup-colcon && \
-              eval \"\$(pixi shell-hook)\" && \
-              colcon build \
-                --cmake-args \
-                  '-DCMAKE_CXX_FLAGS=--coverage' \
-                  '-DCMAKE_EXE_LINKER_FLAGS=--coverage' && \
-              colcon test && \
-              colcon test-result --verbose && \
-              lcov --capture \
-                --directory build/ \
-                --output-file coverage.info \
-                --ignore-errors mismatch,source \
-                --rc geninfo_unexecuted_blocks=1 && \
-              lcov --remove coverage.info \
-                '/usr/*' \
-                '*/install/*' \
-                '*/test/*' \
-                '*/mujoco_ros2_control_demos/*' \
-                --output-file coverage.info \
-                --ignore-errors unused && \
-              lcov --list coverage.info && \
-              chmod -R a+rwX /workspace/.sccache
-            "
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.info
-          token: ${{ secrets.CODECOV_TOKEN }}
+  coverage_jazzy:
+    uses: ros-controls/ros2_control_ci/.github/workflows/reusable-build-coverage.yml@master
+    secrets: inherit
+    with:
+      ros_distro: jazzy
