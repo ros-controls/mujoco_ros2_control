@@ -1611,7 +1611,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertEqual(result["model"]["scale"], "1.0 1.0 1.0")
         self.assertEqual(result["model"]["color"], (1.0, 1.0, 1.0, 1.0))
         self.assertFalse(result["model"]["is_pre_generated"])
-        self.assertIn("package://test_package/meshes/model.dae", updated_xml)
+        assert "package://test_package/meshes/model.dae" in updated_xml
 
     def test_extract_mesh_info_with_material_color(self):
         urdf = """<?xml version="1.0"?>
@@ -1634,7 +1634,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertEqual(result["model"]["color"], (1.0, 0.0, 0.0, 1.0))
         self.assertEqual(result["model"]["scale"], "1.0 1.0 1.0")
         self.assertFalse(result["model"]["is_pre_generated"])
-        self.assertIn("package://test_package/meshes/model.dae", updated_xml)
+        assert "package://test_package/meshes/model.dae" in updated_xml
 
     def test_extract_mesh_info_with_scale(self):
         urdf = """<?xml version="1.0"?>
@@ -1652,7 +1652,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertFalse(result["model"]["is_pre_generated"])
         self.assertEqual(result["model"]["color"], (1.0, 1.0, 1.0, 1.0))
         self.assertEqual(result["model"]["filename"], "package://test_package/meshes/model.stl")
-        self.assertIn("package://test_package/meshes/model.stl", updated_xml)
+        assert "package://test_package/meshes/model.stl" in updated_xml
 
     def test_extract_mesh_info_no_mesh_geometry(self):
         urdf = """<?xml version="1.0"?>
@@ -1698,8 +1698,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
             assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
-            self.assertIn(result["complex_mesh"]["filename"], updated_xml)
-            self.assertNotIn("package://test_package/meshes/complex_mesh.stl", updated_xml)
+            assert result["complex_mesh"]["filename"] in updated_xml
+            assert "package://test_package/meshes/complex_mesh.stl" not in updated_xml
 
     def test_extract_mesh_different_threshold(self):
         urdf = """<?xml version="1.0"?>
@@ -1730,7 +1730,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
             assert "complex_mesh.stl" in result["complex_mesh"]["filename"]
-            self.assertIn(result["complex_mesh"]["filename"], updated_xml)
+            assert result["complex_mesh"]["filename"] in updated_xml
 
     def test_extract_mesh_with_compose_dict(self):
         urdf = """<?xml version="1.0"?>
@@ -1757,8 +1757,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
             assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
-            self.assertIn(result["complex_mesh"]["filename"], updated_xml)
-            self.assertNotIn("package://test_package/meshes/complex_mesh.stl", updated_xml)
+            assert result["complex_mesh"]["filename"] in updated_xml
+            assert "package://test_package/meshes/complex_mesh.stl" not in updated_xml
 
     def test_copy_pre_generated_meshes_decomposed(self):
         with tempfile.TemporaryDirectory() as tmpdir:
