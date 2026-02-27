@@ -643,8 +643,12 @@ def parse_inputs_xml(filename=None):
             if child.nodeType != child.ELEMENT_NODE:
                 continue
             if child.tagName == "raw_inputs":
+                if raw_inputs is not None:
+                    raise ValueError("Multiple 'raw_inputs' tags found in 'mujoco_inputs'")
                 raw_inputs = child
             elif child.tagName == "processed_inputs":
+                if processed_inputs is not None:
+                    raise ValueError("Multiple 'processed_inputs' tags found in 'mujoco_inputs'")
                 processed_inputs = child
 
     elif root.tagName == "robot":
@@ -662,14 +666,16 @@ def parse_inputs_xml(filename=None):
             return None, None
 
         # parse children of <mujoco_inputs>
-        # TODO(saikishor): Handle cases where there are multiple raw_inputs or processed_inputs tags
-        # (currently we just take the last one)
         for child in mujoco_inputs_node.childNodes:
             if child.nodeType != child.ELEMENT_NODE:
                 continue
             if child.tagName == "raw_inputs":
+                if raw_inputs is not None:
+                    raise ValueError("Multiple 'raw_inputs' tags found in 'mujoco_inputs'")
                 raw_inputs = child
             elif child.tagName == "processed_inputs":
+                if processed_inputs is not None:
+                    raise ValueError("Multiple 'processed_inputs' tags found in 'mujoco_inputs'")
                 processed_inputs = child
     else:
         raise ValueError(
@@ -937,11 +943,13 @@ def add_cameras_from_sites(dom, cameras_dict):
 
     x_rotation = [0.0, 1.0, 0.0, 0.0]  # Rotation by pi around x axis
 
+    matched_sites = set()
+
     # Construct all cameras for relevant sites in xml and add them as children to the same parent
     for node in dom.getElementsByTagName("site"):
         site_name = node.getAttribute("name")
-        # TODO(saikishor): raise error when the site doesn't exist
         if site_name in cameras_dict:
+            matched_sites.add(site_name)
             camera_pos = node.getAttribute("pos")
             quat = [float(x) for x in node.getAttribute("quat").split()]
             camera_quat = multiply_quaternion(quat, x_rotation)
@@ -956,6 +964,10 @@ def add_cameras_from_sites(dom, cameras_dict):
                 print(f"  {attr.name}: {attr.value}")
 
             node.parentNode.appendChild(camera)
+
+    unmatched = set(cameras_dict.keys()) - matched_sites
+    if unmatched:
+        raise ValueError(f"Camera site(s) not found in the MJCF: {', '.join(sorted(unmatched))}")
 
     return dom
 
