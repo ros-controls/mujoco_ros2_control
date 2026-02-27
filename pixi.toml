@@ -38,6 +38,9 @@ sccache = ">=0.11.0,<0.12"
 mold = ">=2.40.2,<3"
 colcon-common-extensions = ">=0.3.0,<0.4"
 colcon-mixin = ">=0.2.3,<0.3"
+libcap = ">=2.76,<3"
+glfw = ">=3.4,<4"
+pip = "*"
 
 # Path dependencies to local ROS packages
 ros-jazzy-mujoco-ros2-control = { path = "mujoco_ros2_control" }

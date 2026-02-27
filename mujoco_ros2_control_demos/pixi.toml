@@ -1,2 +1,6 @@
 [package.build]
 backend = { name = "pixi-build-ros", version = "*" }
+
+[package.build.additional-dependencies]
+ros-jazzy-mujoco-ros2-control = { path = "../mujoco_ros2_control" }
+ros-jazzy-mujoco-ros2-control-msgs = { path = "../mujoco_ros2_control_msgs" }
