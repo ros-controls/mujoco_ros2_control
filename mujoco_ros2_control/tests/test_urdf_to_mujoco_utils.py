@@ -1700,6 +1700,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
 
             # The updated_xml differs from urdf only for the new path
+            expected_mesh_tag = f'filename="{result["complex_mesh"]["filename"]}"'
+            assert expected_mesh_tag in updated_xml
             reverted_xml = updated_xml.replace(
                 result["complex_mesh"]["filename"], "package://test_package/meshes/complex_mesh.stl"
             )
@@ -1765,6 +1767,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
 
             # The updated_xml differs from urdf only for the new path
+            expected_mesh_tag = f'filename="{result["complex_mesh"]["filename"]}"'
+            assert expected_mesh_tag in updated_xml
             reverted_xml = updated_xml.replace(
                 result["complex_mesh"]["filename"], "package://test_package/meshes/complex_mesh.stl"
             )
