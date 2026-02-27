@@ -14,6 +14,7 @@ find_package(hardware_interface REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclpy REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(mujoco_ros2_control_msgs REQUIRED)
 find_package(Threads REQUIRED)
@@ -111,9 +112,11 @@ add_library(mujoco_ros2_control SHARED
     src/mujoco_cameras.cpp
     src/mujoco_lidar.cpp
 )
-# Ensure MuJoCo library can be found at runtime regardless of how it was installed above
+# Ensure MuJoCo library can be found at runtime regardless of how it was installed above.
+# mujoco_vendor installs libmujoco.so under opt/mujoco_vendor/lib/ relative to the
+# install prefix, so that directory must be in the RPATH alongside the standard lib/.
 set_target_properties(mujoco_ros2_control PROPERTIES
-  INSTALL_RPATH "\$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
+  INSTALL_RPATH "\$ORIGIN/../lib;\$ORIGIN/../opt/mujoco_vendor/lib;${CMAKE_INSTALL_PREFIX}/lib"
 )
 # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
 # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
@@ -198,8 +201,12 @@ install(
 pluginlib_export_plugin_description_file(hardware_interface mujoco_system_interface_plugin.xml)
 
 if(BUILD_TESTING)
-  add_subdirectory(test)
+  add_subdirectory(tests)
 endif()
+
+ament_python_install_package(mujoco_ros2_control
+  SCRIPTS_DESTINATION lib/mujoco_ros2_control
+)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_package()
