@@ -16,9 +16,9 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <buildtool_depend>git</buildtool_depend>
   <build_depend>ros2_control_cmake</build_depend>
 
-  <depend>git</depend>
   <depend>backward_ros</depend>
   <depend>control_toolbox</depend>
   <depend>controller_manager</depend>
