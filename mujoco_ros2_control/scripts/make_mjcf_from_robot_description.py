@@ -482,7 +482,7 @@ def main(args=None):
     xml_data = mrc.remove_tag(xml_data, "collision")
 
     xml_data = mrc.replace_package_names(xml_data)
-    mesh_info_dict, xml_data  = mrc.extract_mesh_info(xml_data, parsed_args.asset_dir, decompose_dict)
+    mesh_info_dict, xml_data = mrc.extract_mesh_info(xml_data, parsed_args.asset_dir, decompose_dict)
     xml_data = convert_to_objs(mesh_info_dict, output_filepath, xml_data, convert_stl_to_obj, decompose_dict)
 
     print("writing data to robot_description_formatted.urdf")

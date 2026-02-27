@@ -1628,7 +1628,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
     </visual>
   </link>
 </robot>"""
-        result, updated_xml= extract_mesh_info(urdf, None, {})
+        result, updated_xml = extract_mesh_info(urdf, None, {})
         self.assertEqual(len(result), 1)
         self.assertEqual(result["model"]["filename"], "package://test_package/meshes/model.dae")
         self.assertEqual(result["model"]["color"], (1.0, 0.0, 0.0, 1.0))
@@ -1700,7 +1700,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
             self.assertIn(result["complex_mesh"]["filename"], updated_xml)
             self.assertNotIn("package://test_package/meshes/complex_mesh.stl", updated_xml)
-    
+
     def test_extract_mesh_different_threshold(self):
         urdf = """<?xml version="1.0"?>
 <robot name="test_robot">
@@ -1731,7 +1731,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
             assert "complex_mesh.stl" in result["complex_mesh"]["filename"]
             self.assertIn(result["complex_mesh"]["filename"], updated_xml)
-    
+
     def test_extract_mesh_with_compose_dict(self):
         urdf = """<?xml version="1.0"?>
 <robot name="test_robot">
