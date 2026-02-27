@@ -12,7 +12,7 @@
   <maintainer email="christoph.froehlich@ait.ac.at">Christoph Froehlich</maintainer>
   <maintainer email="sai.kishor@pal-robotics.com">Sai Kishor Kothakota</maintainer>
 
-  <license>Apache-2.0</license>
+  <license>Apache License 2.0</license>
 
   <url type="website">https://control.ros.org</url>
   <author email="sai.kishor@pal-robotics.com">Sai Kishor Kothakota</author>
