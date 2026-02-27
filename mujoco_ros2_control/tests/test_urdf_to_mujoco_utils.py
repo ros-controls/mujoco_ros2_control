@@ -1698,8 +1698,12 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
             assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
-            assert result["complex_mesh"]["filename"] in updated_xml
-            assert "package://test_package/meshes/complex_mesh.stl" not in updated_xml
+
+            # The updated_xml differs from urdf only for the new path
+            reverted_xml = updated_xml.replace(
+                result["complex_mesh"]["filename"], "package://test_package/meshes/complex_mesh.stl"
+            )
+            self.assertEqual(urdf, reverted_xml)
 
     def test_extract_mesh_different_threshold(self):
         urdf = """<?xml version="1.0"?>
@@ -1723,6 +1727,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             with open(metadata_file, "w") as f:
                 json.dump({"complex_mesh": "0.05"}, f)
 
+            # The pregenerated object has a different threshold than the one required
             result, updated_xml = extract_mesh_info(urdf, tmpdir, {"complex_mesh": "0.02"})
             self.assertEqual(len(result), 1)
             assert "complex_mesh" in result
@@ -1730,7 +1735,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
             assert "complex_mesh.stl" in result["complex_mesh"]["filename"]
-            assert result["complex_mesh"]["filename"] in updated_xml
+
+            self.assertEqual(urdf, updated_xml)
 
     def test_extract_mesh_with_compose_dict(self):
         urdf = """<?xml version="1.0"?>
@@ -1757,8 +1763,12 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
             assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
-            assert result["complex_mesh"]["filename"] in updated_xml
-            assert "package://test_package/meshes/complex_mesh.stl" not in updated_xml
+
+            # The updated_xml differs from urdf only for the new path
+            reverted_xml = updated_xml.replace(
+                result["complex_mesh"]["filename"], "package://test_package/meshes/complex_mesh.stl"
+            )
+            self.assertEqual(urdf, reverted_xml)
 
     def test_copy_pre_generated_meshes_decomposed(self):
         with tempfile.TemporaryDirectory() as tmpdir:
