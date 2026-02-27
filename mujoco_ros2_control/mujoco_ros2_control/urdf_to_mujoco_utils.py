@@ -138,6 +138,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
                         ):
                             new_uri = mesh_file
                             is_pre_generated = True
+                            raw_xml = raw_xml.replace(geom.filename, new_uri)
                         else:
                             print(
                                 f"Existing decomposed obj for {stem} has different threshold {used_threshold} "
@@ -150,6 +151,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
                     if os.path.exists(mesh_file):
                         new_uri = mesh_file
                         is_pre_generated = True
+                        raw_xml = raw_xml.replace(geom.filename, new_uri)
 
             scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
             rgba = resolve_color(vis)
@@ -165,7 +167,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
                 },
             )
 
-    return mesh_info_dict
+    return mesh_info_dict, raw_xml
 
 
 def replace_package_names(xml_data):
