@@ -40,6 +40,9 @@ Usage:
 
     # Transmissions demo
     ros2 launch mujoco_ros2_control_demos demo.launch.py test_transmissions:=true
+
+    # Configuring the simulator with ROS Parameters instead of URDF
+    ros2 launch mujoco_ros2_control_demos demo.launch.py setup_with_ros_parameters:=true
 """
 
 from launch import LaunchDescription
@@ -56,6 +59,7 @@ def launch_setup(context, *args, **kwargs):
     use_pid = LaunchConfiguration("use_pid").perform(context) == "true"
     use_mjcf_from_topic = LaunchConfiguration("use_mjcf_from_topic").perform(context) == "true"
     test_transmissions = LaunchConfiguration("test_transmissions").perform(context) == "true"
+    setup_with_ros_parameters = LaunchConfiguration("setup_with_ros_parameters").perform(context) == "true"
     headless = LaunchConfiguration("headless").perform(context)
 
     # Determine which launch file to use based on arguments
@@ -68,6 +72,11 @@ def launch_setup(context, *args, **kwargs):
     elif use_pid:
         launch_file = "03_pid_control.launch.py"
         launch_args = {"headless": headless}
+    elif setup_with_ros_parameters:
+        launch_file = "05_configure_with_ros_parameters.launch.py"
+        launch_args = {
+            "headless": headless,
+        }
     else:
         launch_file = "01_basic_robot.launch.py"
         launch_args = {"headless": headless}
@@ -105,12 +114,20 @@ def generate_launch_description():
         description="If true, uses transmissions demo (04_transmissions.launch.py)",
     )
 
+    setup_with_ros_parameters = DeclareLaunchArgument(
+        "setup_with_ros_parameters",
+        default_value="false",
+        description="If true, configures the simulator with ROS Parameters"
+        " (05_configure_with_ros_parameters.launch.py)",
+    )
+
     return LaunchDescription(
         [
             use_pid,
             headless,
             use_mjcf_from_topic,
             test_transmissions,
+            setup_with_ros_parameters,
             OpaqueFunction(function=launch_setup),
         ]
     )

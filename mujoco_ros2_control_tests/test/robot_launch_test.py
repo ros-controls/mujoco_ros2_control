@@ -37,7 +37,9 @@ from controller_manager_msgs.srv import ListHardwareInterfaces, SwitchController
 
 
 # This function specifies the processes to be run for our test
-def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false", test_transmissions="false"):
+def generate_test_description_common(
+    use_pid="false", use_mjcf_from_topic="false", test_transmissions="false", setup_with_ros_parameters="false"
+):
     # This is necessary to get unbuffered output from the process under test
     proc_env = os.environ.copy()
     proc_env["PYTHONUNBUFFERED"] = "1"
@@ -65,6 +67,7 @@ def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false
             "use_pid": use_pid,
             "use_mjcf_from_topic": use_mjcf_from_topic,
             "test_transmissions": test_transmissions,
+            "setup_with_ros_parameters": setup_with_ros_parameters,
         }.items(),
     )
 
