@@ -1697,11 +1697,10 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertTrue(result["complex_mesh"]["is_pre_generated"])
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
-            assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
+            assert f"{mesh_file}" in result["complex_mesh"]["filename"]
 
             # The updated_xml differs from urdf only for the new path
-            expected_mesh_tag = f'filename="{result["complex_mesh"]["filename"]}"'
-            assert expected_mesh_tag in updated_xml
+            assert f"{mesh_file}" in updated_xml
             reverted_xml = updated_xml.replace(
                 result["complex_mesh"]["filename"], "package://test_package/meshes/complex_mesh.stl"
             )
@@ -1764,11 +1763,10 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertTrue(result["complex_mesh"]["is_pre_generated"])
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
-            assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
+            assert f"{mesh_file}" in result["complex_mesh"]["filename"]
 
             # The updated_xml differs from urdf only for the new path
-            expected_mesh_tag = f'filename="{result["complex_mesh"]["filename"]}"'
-            assert expected_mesh_tag in updated_xml
+            assert f"{mesh_file}" in updated_xml
             reverted_xml = updated_xml.replace(
                 result["complex_mesh"]["filename"], "package://test_package/meshes/complex_mesh.stl"
             )
