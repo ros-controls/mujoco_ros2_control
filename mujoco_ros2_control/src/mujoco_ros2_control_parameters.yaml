@@ -46,24 +46,23 @@ mujoco_ros2_control:
       is set to '/mujoco_robot_description'."
   }
 
-  publish_rate:
-    camera: {
-      type: double,
-      default_value: -1.0,
-      read_only: true,
-      description: "The rate at which camera data is published in Hz. Optional parameter to update
-        the simulated camera's color and depth image publish rates. Note that all cameras in the
-        sim currently publish at the same intervals."
-    }
+  camera_publish_rate: {
+    type: double,
+    default_value: -1.0,
+    read_only: true,
+    description: "The rate at which camera data is published in Hz. Optional parameter to update
+      the simulated camera's color and depth image publish rates. Note that all cameras in the
+      sim currently publish at the same intervals."
+  }
 
-    lidar: {
-      type: double,
-      default_value: -1.0,
-      read_only: true,
-      description: "The rate at which LiDAR data is published in Hz. Optional parameter to update
-        the simulated LiDAR's sensor scan message publish rates. All lidar sensors in the
-        simulation will be configured to publish these scan messages at the same rate."
-    }
+  lidar_publish_rate: {
+    type: double,
+    default_value: -1.0,
+    read_only: true,
+    description: "The rate at which LiDAR data is published in Hz. Optional parameter to update
+      the simulated LiDAR's sensor scan message publish rates. All lidar sensors in the
+      simulation will be configured to publish these scan messages at the same rate."
+  }
 
   headless: {
     type: bool,
@@ -73,24 +72,23 @@ mujoco_ros2_control:
       Optional parameter to choose whether to run the simulation with or without rendering."
   }
 
-  odom:
-    free_joint_name: {
-      type: string,
-      default_value: "",
-      read_only: true,
-      description: "The name of the free joint to use for odometry. The optional parameters to
-        choose the name of the floating base joint and the topic name to publish the odometry of
-        the robot. The provided joint needs to be a valid MuJoCo free joint. The default free joint
-        name is 'floating_base_joint'."
-    }
+  odom_free_joint_name: {
+    type: string,
+    default_value: "",
+    read_only: true,
+    description: "The name of the free joint to use for odometry. The optional parameters to
+      choose the name of the floating base joint and the topic name to publish the odometry of
+      the robot. The provided joint needs to be a valid MuJoCo free joint. The default free joint
+      name is 'floating_base_joint'."
+  }
 
-    topic_name: {
-      type: string,
-      default_value: "",
-      read_only: true,
-      description: "The ROS topic name where the odometry information is published. The default is
-        set to '/simulator/floating_base_state'."
-    }
+  odom_topic: {
+    type: string,
+    default_value: "",
+    read_only: true,
+    description: "The ROS topic name where the odometry information is published. The default is
+      set to '/simulator/floating_base_state'."
+  }
 
   sensors:
     mjcf_suffix:
