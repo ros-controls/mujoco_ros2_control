@@ -49,7 +49,7 @@ libcap = ">=2.76,<3"
 glfw = ">=3.4,<4"
 pip = "*"
 
-# Not included in rosdeps, but making it available for launching
+# Not necessary for building, but for tests/running in isolated environments
 ros-jazzy-ros-base = "*"
 
 [pypi-dependencies]
