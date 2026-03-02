@@ -55,6 +55,12 @@ def generate_launch_description():
         description="When set to true, a transmission is added to the robot model for testing purposes",
     )
 
+    setup_with_ros_parameters = DeclareLaunchArgument(
+        "setup_with_ros_parameters",
+        default_value="false",
+        description="When set to true, the simulator is configured with ROS Parameters instead of URDF",
+    )
+
     # Include the demo launch file
     demo_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -65,6 +71,7 @@ def generate_launch_description():
             "headless": LaunchConfiguration("headless"),
             "use_mjcf_from_topic": LaunchConfiguration("use_mjcf_from_topic"),
             "test_transmissions": LaunchConfiguration("test_transmissions"),
+            "setup_with_ros_parameters": LaunchConfiguration("setup_with_ros_parameters"),
         }.items(),
     )
 
@@ -74,6 +81,7 @@ def generate_launch_description():
             headless,
             use_mjcf_from_topic,
             test_transmissions,
+            setup_with_ros_parameters,
             demo_launch,
         ]
     )

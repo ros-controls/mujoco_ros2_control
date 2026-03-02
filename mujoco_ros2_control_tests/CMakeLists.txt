@@ -40,6 +40,10 @@ if(BUILD_TESTING)
   add_launch_test(test/robot_launch_transmission_pid_test.py
     TIMEOUT 50
   )
+
+  add_launch_test(test/robot_launch_configure_with_ros_parameters.py
+    TIMEOUT 50
+  )
 endif()
 
 ament_package()

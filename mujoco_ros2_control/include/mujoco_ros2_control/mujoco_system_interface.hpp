@@ -49,6 +49,7 @@
 #include "mujoco_ros2_control/data.hpp"
 #include "mujoco_ros2_control/mujoco_cameras.hpp"
 #include "mujoco_ros2_control/mujoco_lidar.hpp"
+#include "mujoco_ros2_control/mujoco_ros2_control_parameters.hpp"
 
 #include <pluginlib/class_list_macros.hpp>
 #include <pluginlib/class_loader.hpp>
@@ -391,6 +392,9 @@ private:
   std::vector<mjtNum> initial_qvel_;
   std::vector<mjtNum> initial_ctrl_;
   std::string initial_keyframe_ = "";
+
+  std::shared_ptr<mujoco_ros2_control::ParamListener> param_listener_;
+  std::shared_ptr<mujoco_ros2_control::Params> params_;
 };
 
 }  // namespace mujoco_ros2_control
