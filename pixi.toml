@@ -1,9 +1,6 @@
 [workspace]
 authors = ["Erik Holum <erik.holum@nasa.gov>"]
-channels = [
-  "https://prefix.dev/robostack-jazzy",
-  "https://prefix.dev/conda-forge",
-]
+channels = ["conda-forge", "robostack-jazzy"]
 name = "mujoco_ros2_control_ws"
 platforms = ["linux-aarch64", "linux-64"]
 version = "0.1.0"
@@ -30,6 +27,13 @@ clean = "rm -rf build install log .pixi"
 test = "colcon test"
 test-result = "colcon test-result --verbose"
 
+[dev]
+# Path dependencies to local ROS packages
+ros-jazzy-mujoco-ros2-control-msgs = { path = "./mujoco_ros2_control_msgs/package.xml" }
+ros-jazzy-mujoco-ros2-control = { path = "./mujoco_ros2_control/package.xml" }
+ros-jazzy-mujoco-ros2-control-demos = { path = "./mujoco_ros2_control_demos/package.xml" }
+ros-jazzy-mujoco-ros2-control-tests = { path = "./mujoco_ros2_control_tests/package.xml" }
+
 [dependencies]
 python = ">=3.11,<3.13"
 cmake = ">=4.1.2,<5"
@@ -41,12 +45,6 @@ colcon-mixin = ">=0.2.3,<0.3"
 libcap = ">=2.76,<3"
 glfw = ">=3.4,<4"
 pip = "*"
-
-# Path dependencies to local ROS packages
-ros-jazzy-mujoco-ros2-control = { path = "mujoco_ros2_control" }
-ros-jazzy-mujoco-ros2-control-msgs = { path = "mujoco_ros2_control_msgs" }
-ros-jazzy-mujoco-ros2-control-demos = { path = "mujoco_ros2_control_demos" }
-ros-jazzy-mujoco-ros2-control-tests = { path = "mujoco_ros2_control_tests" }
 
 [pypi-dependencies]
 xacro = ">=2.1.1, <3"
