@@ -30,6 +30,7 @@ set(MUJOCO_LIB mujoco::mujoco)
 # The vendor package may be installed in different locations depending on if it
 # was installed with apt vs pixi. So resolve the install root and use that to
 # locate the relevant header files for this project.
+# TODO: It would easier if the vendor package exported the variables that we need here.
 get_filename_component(MUJOCO_PREFIX "${mujoco_vendor_DIR}/../../.." ABSOLUTE)
 set(MUJOCO_ROOT "${MUJOCO_PREFIX}/opt/mujoco_vendor")
 if(NOT EXISTS "${MUJOCO_ROOT}/include/mujoco/mujoco.h")
@@ -77,11 +78,30 @@ set(MUJOCO_SILENCE_COMPILER_WARNINGS
   -Wno-psabi
 )
 
-# Build MuJoCo's simulate application and make it available for linking, if not available
-if(NOT TARGET mujoco::libmujoco_simulate)
+# Check if MuJoCo's simulate application is available for linking. The github tarfiles packaged
+# by the vendor package has the simulate application compiled with -flto=auto, so we cannot
+# actually link against it as normal symbols are not available. If that is the case, we must
+# compile the application from source. For the conda installed version, we can link directly
+# against the package. We create a `mujoco_simulate` library in both cases.
+find_library(mujoco_simulate_lib
+  NAMES simulate
+  PATHS "${MUJOCO_ROOT}/lib"
+  NO_DEFAULT_PATH
+)
+if(mujoco_simulate_lib AND NOT EXISTS "${MUJOCO_SIMULATE_DIR}/simulate.cc")
+  # Conda installed package does not have source, so link against the library directly
+  message(STATUS "Linking against the mujoco simulate application directly")
+  add_library(mujoco_simulate STATIC IMPORTED)
+  set_target_properties(mujoco_simulate PROPERTIES
+    IMPORTED_LOCATION "${mujoco_simulate_lib}"
+  )
+  target_include_directories(mujoco_simulate INTERFACE ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
+  target_link_libraries(mujoco_simulate INTERFACE ${MUJOCO_LIB} glfw)
+else()
+  message(STATUS "No linkable simulate application available, compiling from source")
   add_library(platform_ui_adapter OBJECT)
   set_target_properties(platform_ui_adapter PROPERTIES
-    POSITION_INDEPENDENT_CODE ON
+  POSITION_INDEPENDENT_CODE ON
   )
   target_sources(
     platform_ui_adapter
@@ -93,25 +113,23 @@ if(NOT TARGET mujoco::libmujoco_simulate)
   target_compile_options(platform_ui_adapter PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
   add_library(mujoco::platform_ui_adapter ALIAS platform_ui_adapter)
 
-  add_library(libsimulate STATIC $<TARGET_OBJECTS:platform_ui_adapter>)
-  add_library(mujoco::libmujoco_simulate ALIAS libsimulate)
-  set_target_properties(libsimulate PROPERTIES
+  add_library(mujoco_simulate STATIC $<TARGET_OBJECTS:platform_ui_adapter>)
+  set_target_properties(mujoco_simulate PROPERTIES
     OUTPUT_NAME simulate
     POSITION_INDEPENDENT_CODE ON
   )
-  target_sources(
-    libsimulate
+  target_sources(mujoco_simulate
     PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.h
     PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.cc ${MUJOCO_SIMULATE_DIR}/array_safety.h
   )
-  target_include_directories(libsimulate PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
-  target_link_libraries(libsimulate PRIVATE lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
-  target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
+  target_include_directories(mujoco_simulate PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
+  target_link_libraries(mujoco_simulate PRIVATE lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
+  target_compile_options(mujoco_simulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 
   # We set these after creating the targets to avoid propagating them to other third-party targets
   set_compiler_options()
   export_windows_symbols()
-  install(TARGETS libsimulate
+  install(TARGETS mujoco_simulate
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
   )
@@ -153,7 +171,7 @@ PUBLIC
   control_toolbox::control_toolbox
   Eigen3::Eigen
 PRIVATE
-  mujoco::libmujoco_simulate
+  mujoco_simulate
   Threads::Threads
   lodepng
   glfw
