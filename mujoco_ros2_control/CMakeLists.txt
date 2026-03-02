@@ -46,6 +46,9 @@ endif()
 find_package(lodepng QUIET)
 if(NOT TARGET lodepng)
   include(FetchContent)
+  if(NOT DEFINED MUJOCO_DEP_VERSION_lodepng)
+    message(WARNING "MUJOCO_DEP_VERSION_lodepng not exported by mujoco_vendor; fetching lodepng HEAD")
+  endif()
   FetchContent_Declare(
     lodepng
     GIT_REPOSITORY https://github.com/lvandeve/lodepng.git
