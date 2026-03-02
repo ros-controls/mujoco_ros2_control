@@ -20,6 +20,7 @@
 #include "mujoco_ros2_control/mujoco_system_interface.hpp"
 #include "array_safety.h"
 
+#include <unistd.h>
 #include <cerrno>
 #include <chrono>
 #include <cstdint>

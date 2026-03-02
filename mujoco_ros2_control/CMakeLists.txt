@@ -23,25 +23,26 @@ find_package(backward_ros REQUIRED)
 find_package(tinyxml2_vendor QUIET)
 find_package(TinyXML2 REQUIRED)
 
-# Attempt to link MuJoCo via the vendor package, if available
-find_package(mujoco_vendor QUIET)
-if(mujoco_vendor_FOUND)
-  set(MUJOCO_LIB mujoco::mujoco)
-  set(MUJOCO_INCLUDE_DIR ${mujoco_vendor_INCLUDE_DIRS})
-  set(MUJOCO_SIMULATE_DIR ${MUJOCO_INCLUDE_DIR}/../simulate)
-  set(MUJOCO_INSTALL_INCLUDE_DIR ${MUJOCO_INCLUDE_DIR})
-  set(MUJOCO_INSTALL_SIMULATE_DIR ${MUJOCO_SIMULATE_DIR})
-  set(MUJOCO_EXPORT_TARGETS "")
-else()
-  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-  # Otherwise we fallback to downloading the required version on the fly, but this requires
-  # an active internet connection! This should only be necessary for environments that do
-  # not have the vendor package available (like pixi, currently).
-  list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-  include(DownloadMujoco)
+# Link MuJoCo via the vendor package
+find_package(mujoco_vendor REQUIRED)
+set(MUJOCO_LIB mujoco::mujoco)
+
+# The vendor package may be installed in different locations depending on if it
+# was installed with apt vs pixi. So resolve the install root and use that to
+# locate the relevant header files for this project.
+get_filename_component(MUJOCO_PREFIX "${mujoco_vendor_DIR}/../../.." ABSOLUTE)
+set(MUJOCO_ROOT "${MUJOCO_PREFIX}/opt/mujoco_vendor")
+if(NOT EXISTS "${MUJOCO_ROOT}/include/mujoco/mujoco.h")
+  set(MUJOCO_ROOT "${MUJOCO_PREFIX}")
+endif()
+set(MUJOCO_INCLUDE_DIR "${MUJOCO_ROOT}/include")
+set(MUJOCO_SIMULATE_DIR "${MUJOCO_ROOT}/simulate")
+if(NOT EXISTS "${MUJOCO_SIMULATE_DIR}/simulate.h")
+  set(MUJOCO_SIMULATE_DIR "${MUJOCO_ROOT}/include/simulate")
 endif()
 
-# Fetch lodepng dependency.
+# Fetch lodepng dependency, if not available
+find_package(lodepng QUIET)
 if(NOT TARGET lodepng)
   include(FetchContent)
   FetchContent_Declare(
@@ -62,6 +63,10 @@ if(NOT TARGET lodepng)
     target_link_options(lodepng PRIVATE ${MUJOCO_MACOS_LINK_OPTIONS})
     target_include_directories(lodepng PUBLIC ${lodepng_SOURCE_DIR})
   endif()
+  install(TARGETS lodepng
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
 endif()
 
 # We don't care about warnings from the external sources
@@ -72,39 +77,45 @@ set(MUJOCO_SILENCE_COMPILER_WARNINGS
   -Wno-psabi
 )
 
-# Build MuJoCo's simulate application and make it available for linking
-add_library(platform_ui_adapter OBJECT)
-set_target_properties(platform_ui_adapter PROPERTIES
-  POSITION_INDEPENDENT_CODE ON
-)
-target_sources(
-  platform_ui_adapter
-  PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.h ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.h ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.h
-  PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.cc ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.cc ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.cc
-)
-target_include_directories(platform_ui_adapter PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
-target_link_libraries(platform_ui_adapter PRIVATE ${MUJOCO_LIB} glfw)
-target_compile_options(platform_ui_adapter PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
-add_library(mujoco::platform_ui_adapter ALIAS platform_ui_adapter)
+# Build MuJoCo's simulate application and make it available for linking, if not available
+if(NOT TARGET mujoco::libmujoco_simulate)
+  add_library(platform_ui_adapter OBJECT)
+  set_target_properties(platform_ui_adapter PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+  )
+  target_sources(
+    platform_ui_adapter
+    PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.h ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.h ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.h
+    PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.cc ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.cc ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.cc
+  )
+  target_include_directories(platform_ui_adapter PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
+  target_link_libraries(platform_ui_adapter PRIVATE ${MUJOCO_LIB} glfw)
+  target_compile_options(platform_ui_adapter PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
+  add_library(mujoco::platform_ui_adapter ALIAS platform_ui_adapter)
 
-add_library(libsimulate STATIC $<TARGET_OBJECTS:platform_ui_adapter>)
-add_library(mujoco::libsimulate ALIAS libsimulate)
-set_target_properties(libsimulate PROPERTIES
-  OUTPUT_NAME simulate
-  POSITION_INDEPENDENT_CODE ON
-)
-target_sources(
-  libsimulate
-  PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.h
-  PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.cc ${MUJOCO_SIMULATE_DIR}/array_safety.h
-)
-target_include_directories(libsimulate PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
-target_link_libraries(libsimulate PRIVATE lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
-target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
+  add_library(libsimulate STATIC $<TARGET_OBJECTS:platform_ui_adapter>)
+  add_library(mujoco::libmujoco_simulate ALIAS libsimulate)
+  set_target_properties(libsimulate PROPERTIES
+    OUTPUT_NAME simulate
+    POSITION_INDEPENDENT_CODE ON
+  )
+  target_sources(
+    libsimulate
+    PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.h
+    PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.cc ${MUJOCO_SIMULATE_DIR}/array_safety.h
+  )
+  target_include_directories(libsimulate PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
+  target_link_libraries(libsimulate PRIVATE lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
+  target_compile_options(libsimulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
 
-# We set these after creating the targets to avoid propagating them to other third-party targets
-set_compiler_options()
-export_windows_symbols()
+  # We set these after creating the targets to avoid propagating them to other third-party targets
+  set_compiler_options()
+  export_windows_symbols()
+  install(TARGETS libsimulate
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+  )
+endif()
 
 # MuJoCo ROS 2 control system interface (this package)
 add_library(mujoco_ros2_control SHARED
@@ -142,7 +153,7 @@ PUBLIC
   control_toolbox::control_toolbox
   Eigen3::Eigen
 PRIVATE
-  mujoco::libsimulate
+  mujoco::libmujoco_simulate
   Threads::Threads
   lodepng
   glfw
@@ -167,11 +178,6 @@ install(TARGETS mujoco_ros2_control ${MUJOCO_EXPORT_TARGETS}
   RUNTIME DESTINATION bin
 )
 
-# Install runtime deps
-install(TARGETS libsimulate lodepng
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-)
 install(DIRECTORY include/ DESTINATION include)
 
 # Install the ROS 2 control node
