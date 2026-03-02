@@ -243,4 +243,17 @@ ament_python_install_package(mujoco_ros2_control
 )
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+ament_export_dependencies(
+  hardware_interface
+  transmission_interface
+  rclcpp
+  rclcpp_lifecycle
+  nav_msgs
+  sensor_msgs
+  mujoco_ros2_control_msgs
+  pluginlib
+  control_toolbox
+  Eigen3
+  mujoco_vendor
+)
 ament_package()
