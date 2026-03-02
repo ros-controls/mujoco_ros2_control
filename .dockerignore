@@ -6,3 +6,10 @@ docker/Dockerfile
 docker-compose.yaml
 
 README.md
+
+# Ignore local build and pixi artifacts
+build/*
+install/*
+log/*
+.pixi/*
+!.pixi/config.toml
