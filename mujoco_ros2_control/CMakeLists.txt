@@ -193,8 +193,10 @@ target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
   $<BUILD_INTERFACE:${MUJOCO_SIMULATE_DIR}>
 )
 
-# Export MuJoCo alongside the interface to provide access to data.
-install(TARGETS mujoco_ros2_control ${MUJOCO_EXPORT_TARGETS}
+# Note: mujoco::mujoco is an IMPORTED target owned by mujoco_vendor and cannot be
+# co-installed here. Downstream packages must find_package(mujoco_vendor) directly,
+# which is ensured via ament_export_dependencies below.
+install(TARGETS mujoco_ros2_control
   EXPORT export_${PROJECT_NAME}
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
