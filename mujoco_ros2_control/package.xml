@@ -25,9 +25,6 @@
   <depend>hardware_interface</depend>
   <depend>nav_msgs</depend>
   <depend>libglfw3-dev</depend>
-  <!-- mujoco_vendor is optional - MuJoCo can also be provided via MUJOCO_INSTALL_DIR env or auto-download -->
-  <!-- Until it is available from pixi/robostack, we exclude it from the dependencies list. -->
-  <depend condition="$PIXI_PROJECT_ROOT == ''">mujoco_vendor</depend>
   <depend>mujoco_vendor</depend>
   <depend>pluginlib</depend>
   <depend>python3-pykdl</depend>
