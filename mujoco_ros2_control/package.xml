@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>mujoco_ros2_control</name>
-  <version>0.0.0</version>
+  <version>0.0.1</version>
   <description>ros2_control wrapper for the MuJoCo Simulate application</description>
   <maintainer email="nathan.b.dunkelberger@nasa.gov">Nathan Dunkelberger</maintainer>
   <maintainer email="erik.holum@nasa.gov">Erik Holum</maintainer>
@@ -12,9 +12,11 @@
   <maintainer email="christoph.froehlich@ait.ac.at">Christoph Froehlich</maintainer>
   <maintainer email="sai.kishor@pal-robotics.com">Sai Kishor Kothakota</maintainer>
 
-  <license>Apache License, Version 2.0</license>
+  <license>Apache License 2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <buildtool_depend>git</buildtool_depend>
   <build_depend>ros2_control_cmake</build_depend>
 
   <depend>backward_ros</depend>
@@ -35,6 +37,7 @@
   <depend>transmission_interface</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
 
   <exec_depend>python3-venv</exec_depend>
   <exec_depend>python3-pip</exec_depend>
