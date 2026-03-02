@@ -14,8 +14,7 @@ CMAKE_INSTALL_MODE          = "SYMLINK"
 COLCON_DEFAULT_OUTPUT_STYLE = "catkin_tools"
 LIBRARY_PATH = "${CONDA_PREFIX}/lib:${LIBRARY_PATH}"
 LD_LIBRARY_PATH = "${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}"
-LDFLAGS = "-L${CONDA_PREFIX}/lib -Wl,-rpath,${CONDA_PREFIX}/lib"
-CXXFLAGS = "-fuse-ld=mold"
+LDFLAGS = "-L${CONDA_PREFIX}/lib -Wl,-rpath,${CONDA_PREFIX}/lib -fuse-ld=mold"
 
 [tasks]
 # Setup tasks
