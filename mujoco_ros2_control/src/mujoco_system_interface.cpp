@@ -1103,9 +1103,8 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   if (free_joint_id_ != -1)
   {
     // Odometry publisher
-    const std::string odom_topic_name =
-        get_param(get_logger(), get_hardware_info(), params_->odom_topic, is_not_empty, "odom_topic",
-                  std::string("/simulator/floating_base_state"));
+    const std::string odom_topic_name = get_param(get_logger(), get_hardware_info(), params_->odom_topic, is_not_empty,
+                                                  "odom_topic", std::string("/simulator/floating_base_state"));
 
     RCLCPP_DEBUG(get_logger(), "Requested to publish floating base state on topic '%s'.", odom_topic_name.c_str());
     floating_base_publisher_ = get_node()->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
