@@ -165,7 +165,6 @@ PUBLIC
   ${nav_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
-  transmission_interface::transmission_interface
   pluginlib::pluginlib
   ${MUJOCO_LIB}
   control_toolbox::control_toolbox
@@ -176,11 +175,17 @@ PRIVATE
   lodepng
   glfw
 )
+# Note: the transmissions_interface must NOT be statically linked against the library, only headers
+# should be used. Otherwise it will be loaded by the linker at process startup and its
+# PLUGINLIB_EXPORT_CLASS static constructors will have run before the ClassLoaders exist. This
+# can cause problems when pluginlib calls dlopen, as a previously-loaded handle will be
+# returned that will prevent registration of a factory for the transmission type.
 target_include_directories(mujoco_ros2_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
   $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
   $<INSTALL_INTERFACE:${MUJOCO_INSTALL_SIMULATE_DIR}>
+  $<TARGET_PROPERTY:transmission_interface::transmission_interface,INTERFACE_INCLUDE_DIRECTORIES>
 )
 # Mark MuJoCo source as system to avoid compiler warnings
 target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
