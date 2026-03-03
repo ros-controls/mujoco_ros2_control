@@ -69,6 +69,7 @@ def launch_setup(context, *args, **kwargs):
     robot_description = {"robot_description": ParameterValue(value=robot_description_str, value_type=str)}
 
     parameters_file = PathJoinSubstitution([pkg_share, "config", "controllers.yaml"])
+    mujoco_plugins_file = PathJoinSubstitution([pkg_share, "config", "mujoco_ros2_control_plugins.yaml"])
 
     nodes = []
 
@@ -92,6 +93,7 @@ def launch_setup(context, *args, **kwargs):
             parameters=[
                 {"use_sim_time": True},
                 ParameterFile(parameters_file),
+                ParameterFile(mujoco_plugins_file),
             ],
             remappings=(
                 [("~/robot_description", "/robot_description")] if os.environ.get("ROS_DISTRO") == "humble" else []
