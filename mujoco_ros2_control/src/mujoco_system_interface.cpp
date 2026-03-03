@@ -1077,7 +1077,10 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       // find the motion key: after 'motions.', and before the next '.'
       const auto plugin_key = param.substr(init_position, param.find_first_of('.', init_position) - init_position);
       // Add the motion to the set of unique values
-      ros2_control::add_item(plugins_ns, plugin_key);
+      if (std::find(plugins_ns.begin(), plugins_ns.end(), plugin_key) == plugins_ns.end())
+      {
+        plugins_ns.push_back(plugin_key);
+      }
     }
     RCLCPP_INFO_EXPRESSION(get_logger(), plugins_ns.empty(), "No 'mujoco_plugins' parameter found!");
     RCLCPP_INFO_EXPRESSION(get_logger(), !plugins_ns.empty(),
