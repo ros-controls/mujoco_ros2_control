@@ -6,6 +6,10 @@ This package provides a plugin interface for extending the functionality of `muj
 
 The `mujoco_ros2_control_plugins` package is designed to contain plugins that extend the capabilities of the main `mujoco_ros2_control` package. This separation allows for modular development and optional features without adding complexity to the core package.
 
+> [!NOTE]
+> This interface provides flexibility for accessing information from the MuJoCo model and data.
+> Users are responsible for handling that data correctly and avoiding changes to critical information.
+
 ## Available Plugins
 
 ### HeartbeatPublisherPlugin
@@ -37,8 +41,8 @@ Plugins are loaded from ROS 2 parameters under `mujoco_plugins`.
 
 Each plugin must have:
 
-- a unique key (for example `heart_beat_plugin`)
-- a `type` field with the pluginlib class name
+- A unique key (for example `heart_beat_plugin`)
+- A `type` field with the pluginlib class name
 
 Use a parameters file like this:
 
@@ -170,7 +174,3 @@ pluginlib_export_plugin_description_file(
 1. **Initialization** (`init`): Called once when the hardware interface is initialized
 2. **Update** (`update`): Called every control loop iteration
 3. **Cleanup** (`cleanup`): Called when shutting down
-
-## License
-
-Apache License 2.0
