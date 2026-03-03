@@ -853,7 +853,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
   RCLCPP_INFO(get_logger(), "Constructing node and executor...");
   executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>();
-  mujoco_node_ = std::make_shared<rclcpp::Node>("mujoco_node", node_options);
+  mujoco_node_ = std::make_shared<rclcpp::Node>("mujoco_ros2_control_node", node_options);
   executor_->add_node(mujoco_node_);
   executor_thread_ = std::thread([this]() { executor_->spin(); });
   RCLCPP_INFO(get_logger(), "Executor thread started.");

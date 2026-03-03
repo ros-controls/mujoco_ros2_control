@@ -348,7 +348,7 @@ class TestFixture(unittest.TestCase):
         self.node.get_logger().info(f"Clock before reset: {clock_before_reset}")
 
         # Now call the reset_world service
-        reset_client = self.node.create_client(ResetWorld, "/mujoco_node/reset_world")
+        reset_client = self.node.create_client(ResetWorld, "/mujoco_ros2_control_node/reset_world")
 
         # Wait for service to be available
         if not reset_client.wait_for_service(timeout_sec=10.0):
