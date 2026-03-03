@@ -23,6 +23,7 @@
   <depend>control_toolbox</depend>
   <depend>controller_manager</depend>
   <depend>hardware_interface</depend>
+  <depend>fmt</depend>
   <depend>nav_msgs</depend>
   <depend>libglfw3-dev</depend>
   <depend>mujoco_vendor</depend>

@@ -8,6 +8,7 @@ find_package(ros2_control_cmake REQUIRED)
 find_package(ament_cmake REQUIRED)
 find_package(controller_manager REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(fmt REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(control_toolbox REQUIRED)
 find_package(hardware_interface REQUIRED)
@@ -171,6 +172,7 @@ PUBLIC
   ${mujoco_ros2_control_msgs_TARGETS}
   ${mujoco_ros2_control_plugins_TARGETS}
   pluginlib::pluginlib
+  fmt::fmt
   ${MUJOCO_LIB}
   control_toolbox::control_toolbox
   Eigen3::Eigen
