@@ -125,8 +125,21 @@ class TestFixture(unittest.TestCase):
         except ValueError:
             return False
 
+    def check_controllers_running_with_retry(self, controller_names, timeout=15.0):
+        """Calls check_controllers_running with a retry to give the check more time to succeed."""
+
+        def call_check_controllers_running():
+            try:
+                check_controllers_running(self.node, controller_names)
+                return True
+            except Exception:
+                return False
+
+        if not self.spin_until(call_check_controllers_running, timeout=timeout):
+            self.fail(f"Controllers not running after {timeout}s: {controller_names}")
+
     def wait_for_joint_positions(
-        self, expected_positions, delta=0.05, timeout=20.0, verify_efforts=True, topic="joint_states"
+        self, expected_positions, delta=0.05, timeout=15.0, verify_efforts=True, topic="joint_states"
     ):
         """Helper function to poll until the joint states reach the desired position."""
 
@@ -203,7 +216,7 @@ class TestFixture(unittest.TestCase):
 
         # Check if the controllers are running
         cnames = ["gripper_controller", "position_controller", "joint_state_broadcaster"]
-        check_controllers_running(self.node, cnames)
+        self.check_controllers_running_with_retry(cnames)
 
         # Create a publisher to send commands to the position controller
         pub = self.node.create_publisher(Float64MultiArray, "/position_controller/commands", 10)
@@ -242,7 +255,7 @@ class TestFixture(unittest.TestCase):
 
         # Check if the controllers are running
         cnames = ["gripper_controller", "position_controller", "joint_state_broadcaster"]
-        check_controllers_running(self.node, cnames)
+        self.check_controllers_running_with_retry(cnames)
 
         # Create a publisher to send commands to the gripper controller
         pub = self.node.create_publisher(Float64MultiArray, "/gripper_controller/commands", 10)
@@ -293,7 +306,7 @@ class TestFixture(unittest.TestCase):
         """Test that the reset_world service resets robot to initial position."""
         # Check if controllers are running
         cnames = ["gripper_controller", "position_controller", "joint_state_broadcaster"]
-        check_controllers_running(self.node, cnames)
+        self.check_controllers_running_with_retry(cnames)
 
         # Create a publisher to send commands
         pub = self.node.create_publisher(Float64MultiArray, "/position_controller/commands", 10)
