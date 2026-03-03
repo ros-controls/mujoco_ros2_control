@@ -17,6 +17,7 @@ find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(mujoco_ros2_control_msgs REQUIRED)
+find_package(mujoco_ros2_control_plugins REQUIRED)
 find_package(Threads REQUIRED)
 find_package(transmission_interface REQUIRED)
 find_package(backward_ros REQUIRED)
@@ -168,6 +169,7 @@ PUBLIC
   ${nav_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
+  ${mujoco_ros2_control_plugins_TARGETS}
   pluginlib::pluginlib
   ${MUJOCO_LIB}
   control_toolbox::control_toolbox

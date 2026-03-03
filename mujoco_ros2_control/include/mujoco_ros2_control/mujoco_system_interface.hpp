@@ -52,6 +52,7 @@
 
 #include <pluginlib/class_list_macros.hpp>
 #include <pluginlib/class_loader.hpp>
+#include "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
 #include "transmission_interface/transmission.hpp"
 #include "transmission_interface/transmission_interface_exception.hpp"
 #include "transmission_interface/transmission_loader.hpp"
@@ -376,6 +377,11 @@ private:
   // Transmission instances
   std::unique_ptr<pluginlib::ClassLoader<transmission_interface::TransmissionLoader>> transmission_loader_ = nullptr;
   std::vector<std::shared_ptr<transmission_interface::Transmission>> transmission_instances_;
+
+  // Plugin loader and instances
+  std::unique_ptr<pluginlib::ClassLoader<mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase>> plugin_loader_ =
+      nullptr;
+  std::vector<std::shared_ptr<mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase>> plugin_instances_;
 
   std::vector<FTSensorData> ft_sensor_data_;
   std::vector<IMUSensorData> imu_sensor_data_;
