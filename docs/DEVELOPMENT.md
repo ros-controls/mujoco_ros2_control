@@ -7,7 +7,9 @@ This ensure consistency with the supported workflows, and obviates the need to i
 ## Pixi Development Workflow
 
 A [pixi](https://pixi.sh/latest/installation/) and [robostack](https://robostack.github.io) workflow is also provided.
-The environment is currently only compatible with Jazzy.
+The workflow uses the [pixi-build-ros](https://prefix-dev.github.io/pixi-build-backends/backends/pixi-build-ros/) backend, and installs
+all dependencies (including ROS) in an isolated virtual environment.
+The workflow is currently only compatible with Jazzy.
 
 To run ensure pixi is installed.
 Then from the the repo root,
