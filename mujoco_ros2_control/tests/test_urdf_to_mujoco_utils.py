@@ -1786,7 +1786,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertTrue(result["complex_mesh"]["is_pre_generated"])
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
-            assert f"{mesh_file}" in result["complex_mesh"]["filename"]
+            self.assertEqual(f"{decomposed_dir}/complex_mesh.obj", result["complex_mesh"]["filename"])
 
             # The updated_xml differs from urdf only for the new path
             assert f"{mesh_file}" in updated_xml
@@ -1824,7 +1824,6 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertFalse(result["complex_mesh"]["is_pre_generated"])
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
-            assert "complex_mesh.stl" in result["complex_mesh"]["filename"]
             self.assertEqual("package://test_package/meshes/complex_mesh.stl", result["complex_mesh"]["filename"])
 
             self.assertEqual(urdf, updated_xml)
@@ -1853,7 +1852,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertTrue(result["complex_mesh"]["is_pre_generated"])
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
-            assert f"{mesh_file}" in result["complex_mesh"]["filename"]
+            self.assertEqual(f"{composed_dir}/complex_mesh.obj", result["complex_mesh"]["filename"])
 
             # The updated_xml differs from urdf only for the new path
             assert f"{mesh_file}" in updated_xml
