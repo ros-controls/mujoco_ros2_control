@@ -21,6 +21,7 @@
 #include "array_safety.h"
 
 #include <fmt/compile.h>
+#include <fmt/ranges.h>
 
 #include <unistd.h>
 #include <cerrno>
