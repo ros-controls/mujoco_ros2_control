@@ -20,6 +20,7 @@
 #include "mujoco_ros2_control/mujoco_system_interface.hpp"
 #include "array_safety.h"
 
+#include <unistd.h>
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
@@ -459,8 +460,8 @@ mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::string& top
       mj_deleteSpec(spec);
     }
     mj_deleteSpec(spec);
-    RCLCPP_INFO(node->get_logger(), "Model body count: %d", mnew->nbody);
-    RCLCPP_INFO(node->get_logger(), "Model geom count: %d", mnew->ngeom);
+    RCLCPP_INFO(node->get_logger(), "Model body count: %ld", static_cast<long>(mnew->nbody));
+    RCLCPP_INFO(node->get_logger(), "Model geom count: %ld", static_cast<long>(mnew->ngeom));
   }
   return mnew;
 }
@@ -853,7 +854,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
   RCLCPP_INFO(get_logger(), "Constructing node and executor...");
   executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>();
-  mujoco_node_ = std::make_shared<rclcpp::Node>("mujoco_node", node_options);
+  mujoco_node_ = std::make_shared<rclcpp::Node>("mujoco_ros2_control_node", node_options);
   executor_->add_node(mujoco_node_);
   executor_thread_ = std::thread([this]() { executor_->spin(); });
   RCLCPP_INFO(get_logger(), "Executor thread started.");
@@ -1631,7 +1632,8 @@ bool MujocoSystemInterface::register_mujoco_actuators()
 
   for (int i = 0; i < mj_model_->nu; i++)
   {
-    RCLCPP_DEBUG(get_logger(), "Registering MuJoCo actuator %d/%d", i + 1, mj_model_->nu);
+    RCLCPP_DEBUG(get_logger(), "Registering MuJoCo actuator %ld/%ld", static_cast<long>(i + 1),
+                 static_cast<long>(mj_model_->nu));
     MuJoCoActuatorData& actuator_data = mujoco_actuator_data_.at(i);
 
     // Get the name of the joint/tendon corresponding to the actuator ID
@@ -2706,8 +2708,8 @@ void MujocoSystemInterface::PhysicsLoop()
             sim_->speed_changed = false;
 
             // Copy data to the control
-            mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, mj_model_->nu);
-            mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, mj_model_->nu);
+            mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, static_cast<int>(mj_model_->nu));
+            mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, static_cast<int>(mj_model_->nu));
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
 
@@ -2757,8 +2759,8 @@ void MujocoSystemInterface::PhysicsLoop()
 #endif
 
               // Copy data to the control
-              mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, mj_model_->nu);
-              mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, mj_model_->nu);
+              mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, static_cast<int>(mj_model_->nu));
+              mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, static_cast<int>(mj_model_->nu));
               // call mj_step
               mj_step(mj_model_, mj_data_);
 

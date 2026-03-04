@@ -12,20 +12,19 @@
   <maintainer email="christoph.froehlich@ait.ac.at">Christoph Froehlich</maintainer>
   <maintainer email="sai.kishor@pal-robotics.com">Sai Kishor Kothakota</maintainer>
 
-  <license>Apache License, Version 2.0</license>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <buildtool_depend>git</buildtool_depend>
   <build_depend>ros2_control_cmake</build_depend>
 
-  <depend>git</depend>
   <depend>backward_ros</depend>
   <depend>control_toolbox</depend>
   <depend>controller_manager</depend>
   <depend>hardware_interface</depend>
   <depend>nav_msgs</depend>
   <depend>libglfw3-dev</depend>
-  <!-- mujoco_vendor is optional - MuJoCo can also be provided via MUJOCO_INSTALL_DIR env or auto-download -->
   <depend>mujoco_vendor</depend>
   <depend>pluginlib</depend>
   <depend>python3-pykdl</depend>

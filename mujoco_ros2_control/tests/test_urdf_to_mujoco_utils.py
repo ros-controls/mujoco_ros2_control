@@ -1074,10 +1074,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         camera_elem = minidom.parseString('<camera name="camera"/>').documentElement
         cameras_dict["camera_site"] = camera_elem
 
-        result_dom = add_cameras_from_sites(dom, cameras_dict)
-        result_xml = result_dom.toxml()
-        assert 'name="camera"' not in result_xml
-        self.assertEqual(dom.toxml(), result_dom.toxml())  # DOM should be unchanged
+        with self.assertRaises(ValueError) as context:
+            add_cameras_from_sites(dom, cameras_dict)
+        assert "camera_site" in str(context.exception)
 
     def test_add_links_as_sites_basic(self):
         urdf = """<?xml version="1.0"?>
@@ -1505,6 +1504,96 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             assert "Root tag" in str(context.exception)
         finally:
             os.unlink(invalid_path)
+
+    def test_parse_inputs_xml_duplicate_raw_inputs_standalone(self):
+        inputs_xml = """<?xml version="1.0"?>
+<mujoco_inputs>
+  <raw_inputs>
+    <option integrator="implicitfast"/>
+  </raw_inputs>
+  <raw_inputs>
+    <option integrator="Euler"/>
+  </raw_inputs>
+</mujoco_inputs>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
+            f.write(inputs_xml)
+            inputs_path = f.name
+
+        try:
+            with self.assertRaises(ValueError) as context:
+                parse_inputs_xml(inputs_path)
+            assert "raw_inputs" in str(context.exception)
+        finally:
+            os.unlink(inputs_path)
+
+    def test_parse_inputs_xml_duplicate_processed_inputs_standalone(self):
+        inputs_xml = """<?xml version="1.0"?>
+<mujoco_inputs>
+  <processed_inputs>
+    <decompose_mesh mesh_name="mesh_a"/>
+  </processed_inputs>
+  <processed_inputs>
+    <decompose_mesh mesh_name="mesh_b"/>
+  </processed_inputs>
+</mujoco_inputs>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
+            f.write(inputs_xml)
+            inputs_path = f.name
+
+        try:
+            with self.assertRaises(ValueError) as context:
+                parse_inputs_xml(inputs_path)
+            assert "processed_inputs" in str(context.exception)
+        finally:
+            os.unlink(inputs_path)
+
+    def test_parse_inputs_xml_duplicate_raw_inputs_in_urdf(self):
+        urdf_with_duplicate = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+  <mujoco_inputs>
+    <raw_inputs>
+      <option integrator="implicitfast"/>
+    </raw_inputs>
+    <raw_inputs>
+      <option integrator="Euler"/>
+    </raw_inputs>
+  </mujoco_inputs>
+</robot>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".urdf", delete=False) as f:
+            f.write(urdf_with_duplicate)
+            urdf_path = f.name
+
+        try:
+            with self.assertRaises(ValueError) as context:
+                parse_inputs_xml(urdf_path)
+            assert "raw_inputs" in str(context.exception)
+        finally:
+            os.unlink(urdf_path)
+
+    def test_parse_inputs_xml_duplicate_processed_inputs_in_urdf(self):
+        urdf_with_duplicate = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+  <mujoco_inputs>
+    <processed_inputs>
+      <camera site="cam_site" name="cam1" fovy="58"/>
+    </processed_inputs>
+    <processed_inputs>
+      <camera site="cam_site" name="cam2" fovy="90"/>
+    </processed_inputs>
+  </mujoco_inputs>
+</robot>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".urdf", delete=False) as f:
+            f.write(urdf_with_duplicate)
+            urdf_path = f.name
+
+        try:
+            with self.assertRaises(ValueError) as context:
+                parse_inputs_xml(urdf_path)
+            assert "processed_inputs" in str(context.exception)
+        finally:
+            os.unlink(urdf_path)
 
     def test_parse_scene_xml_none(self):
         result = parse_scene_xml(None)
