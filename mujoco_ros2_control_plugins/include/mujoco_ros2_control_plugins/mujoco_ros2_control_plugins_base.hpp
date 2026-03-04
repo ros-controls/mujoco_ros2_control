@@ -39,6 +39,8 @@ public:
    * @param model Pointer to the MuJoCo model
    * @param data Pointer to the MuJoCo data
    * @return true if initialization was successful
+   * @note This method will be called once when the plugin is loaded. It can be used to read parameters, set up publishers/subscribers,
+   * etc. The node will be a child of the main mujoco_ros2_control node, so parameters should be namespaced accordingly.
    */
   virtual bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) = 0;
 
@@ -46,6 +48,11 @@ public:
    * @brief Update the plugin (called every simulation step)
    * @param model Pointer to the MuJoCo model
    * @param data Pointer to the MuJoCo data
+   * @note This method will be called at the end of the mujoco_ros2_control read loop, before the update loop of
+   * controllers and the write loop. This means that changes to the data here will be visible to controllers and will
+   * affect the next simulation step.
+   * @note This method will be called in a real-time thread, so it should avoid blocking operations and should be
+   * efficient.
    */
   virtual void update(const mjModel* model, mjData* data) = 0;
 
