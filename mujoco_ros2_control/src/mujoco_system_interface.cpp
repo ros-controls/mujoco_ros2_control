@@ -1075,7 +1075,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     const auto init_position = mujoco_plugins_param_prefix.size() + 1;  // +1 for the dot
     for (const auto& param : list_parameters.names)
     {
-      // find the plugin key: after 'motions.', and before the next '.'
+      // find the plugin key: after 'mujoco_plugins.', and before the next '.'
       const auto plugin_key = param.substr(init_position, param.find_first_of('.', init_position) - init_position);
       // Add the plugin to the set of unique values
       if (std::find(plugins_ns.begin(), plugins_ns.end(), plugin_key) == plugins_ns.end())
@@ -1087,11 +1087,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     RCLCPP_INFO_EXPRESSION(get_logger(), !plugins_ns.empty(),
                            "Found 'mujoco_plugins' parameter with the following plugins: %s",
                            fmt::format("{}", fmt::join(plugins_ns, ", ")).c_str());
-    if (plugins_ns.empty())
-    {
-      // Default: load the heartbeat publisher plugin
-      RCLCPP_INFO(get_logger(), "No 'mujoco_plugins' parameter found, loading default HeartbeatPublisherPlugin");
-    }
 
     // Load and initialize each plugin
     for (const auto& plugin_name : plugins_ns)
