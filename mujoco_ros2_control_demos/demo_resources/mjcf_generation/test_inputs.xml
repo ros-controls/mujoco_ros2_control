@@ -38,7 +38,7 @@
   <!-- Specific inputs that require processing from the conversion script-->
   <processed_inputs>
     <!-- Specifying decompose_mesh will set the `decompose` flag when using obj2mjcf -->
-    <decompose_mesh mesh_name="shoulder_link" threshold="0.05"/>
+    <!-- <decompose_mesh mesh_name="forearm" threshold="0.05"/> -->
 
     <!-- The camera with the specified values will be added at the specified site name. -->
     <!-- The position and quaterinion will be filled in by the converter -->
