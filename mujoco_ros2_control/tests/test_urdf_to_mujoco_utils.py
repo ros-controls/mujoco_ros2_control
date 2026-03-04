@@ -1736,6 +1736,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
             assert "complex_mesh.stl" in result["complex_mesh"]["filename"]
+            self.assertEqual("package://test_package/meshes/complex_mesh.stl", result["complex_mesh"]["filename"])
 
             self.assertEqual(urdf, updated_xml)
 
@@ -1802,6 +1803,58 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertTrue(os.path.exists(expected_dst))
             with open(expected_dst) as f:
                 self.assertEqual(f.read(), "# OBJ content")
+            expected_json = os.path.join(output_dir, "assets", DECOMPOSED_PATH_NAME, "metadata.json")
+            self.assertTrue(os.path.exists(expected_json))
+            with open(expected_json) as f:
+                updated_data = json.load(f)
+                self.assertEqual(len(updated_data), 1)
+                assert "mesh_name" in updated_data
+                self.assertEqual(updated_data["mesh_name"], 0.05)
+
+    def test_copy_pre_generated_meshes_decomposed_not_empty_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = os.path.join(tmpdir, "source")
+            output_dir = os.path.join(tmpdir, "output") + "/"
+            os.makedirs(source_dir)
+
+            mesh_source_dir = os.path.join(source_dir, "mesh_name", "mesh_name")
+            os.makedirs(mesh_source_dir)
+            mesh_file = os.path.join(mesh_source_dir, "mesh_name.obj")
+            with open(mesh_file, "w") as f:
+                f.write("# OBJ content")
+
+            metadata_dir = os.path.join(output_dir, "assets", DECOMPOSED_PATH_NAME)
+            os.makedirs(metadata_dir)
+            metadata_file = os.path.join(metadata_dir, "metadata.json")
+            initial_data = {"previous_mesh_name": 0.05}
+            with open(metadata_file, "w") as f:
+                json.dump(initial_data, f)
+
+            mesh_info_dict = {
+                "mesh_name": {
+                    "is_pre_generated": True,
+                    "filename": os.path.join(source_dir, "mesh_name", "mesh_name", "mesh_name.obj"),
+                    "scale": "1.0 1.0 1.0",
+                    "color": (1.0, 1.0, 1.0, 1.0),
+                }
+            }
+            decompose_dict = {"mesh_name": "0.10"}
+
+            copy_pre_generated_meshes(output_dir, mesh_info_dict, decompose_dict)
+
+            expected_dst = os.path.join(
+                output_dir, "assets", DECOMPOSED_PATH_NAME, "mesh_name", "mesh_name", "mesh_name.obj"
+            )
+            self.assertTrue(os.path.exists(expected_dst))
+            with open(expected_dst) as f:
+                self.assertEqual(f.read(), "# OBJ content")
+            expected_json = os.path.join(output_dir, "assets", DECOMPOSED_PATH_NAME, "metadata.json")
+            self.assertTrue(os.path.exists(expected_json))
+            with open(metadata_file) as f:
+                updated_data = json.load(f)
+                self.assertEqual(len(updated_data), 2)
+                self.assertEqual(updated_data["previous_mesh_name"], 0.05)
+                self.assertEqual(updated_data["mesh_name"], 0.10)
 
     def test_copy_pre_generated_meshes_composed(self):
         with tempfile.TemporaryDirectory() as tmpdir:
