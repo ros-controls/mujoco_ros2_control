@@ -35,6 +35,7 @@ ros-jazzy-mujoco-ros2-control-msgs = { path = "./mujoco_ros2_control_msgs/packag
 ros-jazzy-mujoco-ros2-control = { path = "./mujoco_ros2_control/package.xml" }
 ros-jazzy-mujoco-ros2-control-demos = { path = "./mujoco_ros2_control_demos/package.xml" }
 ros-jazzy-mujoco-ros2-control-tests = { path = "./mujoco_ros2_control_tests/package.xml" }
+ros-jazzy-mujoco-ros2-control-plugins = { path = "./mujoco_ros2_control_plugins/package.xml" }
 
 [dependencies]
 python = ">=3.11,<3.13"
