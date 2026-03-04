@@ -1075,9 +1075,9 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     const auto init_position = mujoco_plugins_param_prefix.size() + 1;  // +1 for the dot
     for (const auto& param : list_parameters.names)
     {
-      // find the motion key: after 'motions.', and before the next '.'
+      // find the plugin key: after 'motions.', and before the next '.'
       const auto plugin_key = param.substr(init_position, param.find_first_of('.', init_position) - init_position);
-      // Add the motion to the set of unique values
+      // Add the plugin to the set of unique values
       if (std::find(plugins_ns.begin(), plugins_ns.end(), plugin_key) == plugins_ns.end())
       {
         plugins_ns.push_back(plugin_key);
