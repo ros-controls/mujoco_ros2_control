@@ -170,7 +170,6 @@ PUBLIC
   ${nav_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
-  ${mujoco_ros2_control_plugins_TARGETS}
   pluginlib::pluginlib
   fmt::fmt
   ${MUJOCO_LIB}
@@ -193,6 +192,7 @@ target_include_directories(mujoco_ros2_control PUBLIC
   $<INSTALL_INTERFACE:${MUJOCO_INSTALL_INCLUDE_DIR}>
   $<INSTALL_INTERFACE:${MUJOCO_INSTALL_SIMULATE_DIR}>
   $<TARGET_PROPERTY:transmission_interface::transmission_interface,INTERFACE_INCLUDE_DIRECTORIES>
+  $<TARGET_PROPERTY:mujoco_ros2_control_plugins::mujoco_ros2_control_plugins,INTERFACE_INCLUDE_DIRECTORIES>
 )
 # Mark MuJoCo source as system to avoid compiler warnings
 target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
