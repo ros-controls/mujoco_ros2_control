@@ -227,7 +227,7 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
     return xml_data
 
 
-def run_obj2mjcf(output_filepath, decompose_dict):
+def run_obj2mjcf(output_filepath, decompose_dict, mesh_info_dict):
     # remove the folders in the asset directory so that we are clean to run obj2mjcf
     with os.scandir(f"{output_filepath}assets/{mrc.COMPOSED_PATH_NAME}") as entries:
         for entry in entries:
@@ -265,27 +265,24 @@ def run_obj2mjcf(output_filepath, decompose_dict):
                 raise
 
     thresholds_file = os.path.join(f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}", "metadata.json")
-
-    if os.path.exists(thresholds_file):
-        with open(thresholds_file) as f:
-            thresholds_data = json.load(f)
-    else:
-        thresholds_data = {}
+    thresholds_data = {}
 
     # run obj2mjcf to generate folders of processed objs with decompose option for decomposed components
     for mesh_name, threshold in decompose_dict.items():
-        cmd = [
-            "obj2mjcf",
-            "--obj-dir",
-            f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}",
-            "--save-mjcf",
-            "--decompose",
-            "--coacd-args.threshold",
-            threshold,
-        ]
-        subprocess.run(cmd)
+        mesh_item = mesh_info_dict[mesh_name]
+        if not mesh_item["is_pre_generated"]:
+            cmd = [
+                "obj2mjcf",
+                "--obj-dir",
+                f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}",
+                "--save-mjcf",
+                "--decompose",
+                "--coacd-args.threshold",
+                threshold,
+            ]
+            subprocess.run(cmd)
 
-        thresholds_data[mesh_name] = float(threshold)
+            thresholds_data[mesh_name] = float(threshold)
 
     with open(thresholds_file, "w") as f:
         json.dump(thresholds_data, f, indent=4)
@@ -312,7 +309,7 @@ def fix_mujoco_description(
     # shutil.copy2(full_filepath, destination_file)
 
     # Run conversions for mjcf
-    run_obj2mjcf(output_filepath, decompose_dict)
+    run_obj2mjcf(output_filepath, decompose_dict, mesh_info_dict)
 
     # Copy pre-geerated mesh folders to the final directory
     mrc.copy_pre_generated_meshes(output_filepath, mesh_info_dict, decompose_dict)

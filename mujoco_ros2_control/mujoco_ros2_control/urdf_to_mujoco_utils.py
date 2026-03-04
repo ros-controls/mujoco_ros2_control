@@ -1064,6 +1064,14 @@ def copy_pre_generated_meshes(output_filepath, mesh_info_dict, decompose_dict):
     """
     Copies pre-generated mesh folders into the final MJCF assets structure.
     """
+    thresholds_file = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/metadata.json"
+    thresholds_data = {}
+    if os.path.exists(thresholds_file):
+        try:
+            with open(thresholds_file) as f:
+                thresholds_data = json.load(f)
+        except json.JSONDecodeError:
+            thresholds_data = {}
 
     for mesh_name in mesh_info_dict:
         mesh_item = mesh_info_dict[mesh_name]
@@ -1074,11 +1082,17 @@ def copy_pre_generated_meshes(output_filepath, mesh_info_dict, decompose_dict):
 
         if mesh_item["is_pre_generated"]:
             if filename_no_ext in decompose_dict:
+                threshold = decompose_dict[filename_no_ext]
                 dst_base = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{filename_no_ext}/{filename_no_ext}/"
+                thresholds_data[filename_no_ext] = float(threshold)
             else:
                 dst_base = f"{output_filepath}assets/{COMPOSED_PATH_NAME}/{filename_no_ext}"
 
             shutil.copytree(mesh_dir, dst_base, dirs_exist_ok=True)
+
+    if thresholds_data:
+        with open(thresholds_file, "w") as f:
+            json.dump(thresholds_data, f, indent=4)
 
 
 def get_urdf_from_rsp(args=None):
