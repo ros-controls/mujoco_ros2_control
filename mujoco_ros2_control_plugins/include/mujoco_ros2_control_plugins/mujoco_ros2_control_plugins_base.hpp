@@ -39,8 +39,9 @@ public:
    * @param model Pointer to the MuJoCo model
    * @param data Pointer to the MuJoCo data
    * @return true if initialization was successful
-   * @note This method will be called once when the plugin is loaded. It can be used to read parameters, set up publishers/subscribers,
-   * etc. The node will be a child of the main mujoco_ros2_control node, so parameters should be namespaced accordingly.
+   * @note This method will be called once when the plugin is loaded. It can be used to read parameters, set up
+   * publishers/subscribers, etc. The node will be a child of the main mujoco_ros2_control node, so parameters should be
+   * namespaced accordingly.
    */
   virtual bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) = 0;
 

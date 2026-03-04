@@ -15,7 +15,6 @@
 #ifndef MUJOCO_ROS2_CONTROL_PLUGINS__HEARTBEAT_PUBLISHER_PLUGIN_HPP_
 #define MUJOCO_ROS2_CONTROL_PLUGINS__HEARTBEAT_PUBLISHER_PLUGIN_HPP_
 
-#include <chrono>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
 #include "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
@@ -50,8 +49,9 @@ public:
 private:
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr heartbeat_publisher_;
   rclcpp::Node::SharedPtr node_;
-  std::chrono::steady_clock::time_point last_publish_time_;
-  std::chrono::seconds publish_period_{ 1 };  // Publish every 1 second
+  rclcpp::Logger logger_ = rclcpp::get_logger("HeartbeatPublisherPlugin");
+  rclcpp::Time last_publish_time_;
+  rclcpp::Duration publish_period_{ 1, 0 };  // Publish every 1 second
   uint64_t message_count_{ 0 };
 };
 
