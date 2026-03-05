@@ -400,12 +400,79 @@ regardless of whether their interfaces are exposed via `ros2_control`.
 
 ### Services
 
-* `~/reset_world` (`std_srvs/srv/Empty`): Resets the simulation to the robot's initial spawning state.
+* `~/reset_world` (`mujoco_ros2_control_msgs/srv/ResetWorld`): Resets the simulation state.
+  * If the optional `keyframe` string field is empty, the simulation is restored to the state captured at startup (initial joint positions, velocities, and control values).
+  * If a `keyframe` name is provided, that named keyframe from the MJCF is applied instead.
+  * Returns `success` and a human-readable `message`.
 
-> [!IMPORTANT]
-> If controllers are active during the service call, the robot may reset to the initial state and then immediately
-> snap back to its previous commanded position. To avoid this, it is recommended to deactivate any active joint
-> controllers before calling this service.
+  ```bash
+  # Reset to startup state
+  ros2 service call /ros2_control_node/reset_world mujoco_ros2_control_msgs/srv/ResetWorld "{}"
+
+  # Reset to a named MJCF keyframe
+  ros2 service call /ros2_control_node/reset_world mujoco_ros2_control_msgs/srv/ResetWorld "{keyframe: 'home'}"
+  ```
+
+  > [!IMPORTANT]
+  > If controllers are active during the service call, the robot may reset to the initial state and then immediately
+  > snap back to its previous commanded position. To avoid this, it is recommended to deactivate any active joint
+  > controllers before calling this service.
+
+* `~/step_simulation` (`mujoco_ros2_control_msgs/srv/StepSimulation`): Advances the paused simulation by an exact
+  number of physics steps and blocks until all steps have completed.
+  * The `steps` field (`uint32`) specifies how many physics steps to execute. Must be ≥ 1.
+  * The call returns only after all requested steps are finished (or a timeout/divergence is detected).
+  * Returns `success` and a human-readable `message`.
+  * **The simulation must be paused** before calling this service. If `sim_->run` is true the call returns immediately with `success = false`.
+  * Timeout: whichever is larger — 30 s, or 10 ms × `steps`.
+
+  ```bash
+  # Step the simulation forward by 100 physics steps
+  ros2 service call /ros2_control_node/step_simulation mujoco_ros2_control_msgs/srv/StepSimulation "{steps: 100}"
+  ```
+
+## Debugging
+
+The simulator provides several mechanisms for pausing execution and advancing it in a controlled, step-by-step fashion.
+This is useful for inspecting robot state, verifying controller output, or reproducing intermittent issues.
+
+### Pausing the Simulation
+
+Click the **Pause** button in the MuJoCo Simulate window (or press **Space**) to pause the physics loop.
+When paused, the simulation clock stops advancing and no physics steps are executed until explicitly requested.
+
+### Single-Stepping via the Keyboard
+
+While the simulation window is focused and the simulation is **paused**, press **`S`** to advance the simulation
+by exactly one physics step. Holding `S` down will advance the simulation continuously one step at a time,
+allowing slow, frame-by-frame inspection of the robot's motion.
+
+The status overlay in the top-right corner of the simulation window shows the current state
+(`Running` / `Paused`) and the total number of physics steps executed.
+
+### Single-Stepping via ROS 2 Service
+
+The `~/step_simulation` service allows programmatic step-by-step control from the command line or
+from test/debug scripts. This is particularly useful for automated testing scenarios where a
+reproducible sequence of physics steps is needed.
+
+```bash
+# Pause the simulation first (from the UI or via another mechanism), then:
+
+# Advance by a single physics step
+ros2 service call /ros2_control_node/step_simulation mujoco_ros2_control_msgs/srv/StepSimulation "{steps: 1}"
+
+# Advance by 500 steps (blocks until complete)
+ros2 service call /ros2_control_node/step_simulation mujoco_ros2_control_msgs/srv/StepSimulation "{steps: 500}"
+```
+
+The service call **blocks** until all requested steps have been executed, the simulation diverges, or a
+timeout is reached. This makes it safe to pipeline service calls sequentially without additional
+synchronisation (e.g. send a command → step N times → read state → repeat).
+
+> [!NOTE]
+> `~/step_simulation` requires the simulation to be **paused**. Calling it while the simulation is running
+> returns `success: false` immediately without executing any steps.
 
 ## Test Robot System
 

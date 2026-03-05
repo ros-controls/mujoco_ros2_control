@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -26,11 +27,13 @@
 #include <vector>
 
 #include <hardware_interface/version.h>
+#include <atomic>
 #include <hardware_interface/handle.hpp>
 #include <hardware_interface/hardware_info.hpp>
 #include <hardware_interface/system_interface.hpp>
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
 #include <mujoco_ros2_control_msgs/srv/reset_world.hpp>
+#include <mujoco_ros2_control_msgs/srv/step_simulation.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/macros.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -279,6 +282,9 @@ private:
   void reset_world_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Request> request,
                             std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Response> response);
 
+  void step_simulation_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Request> request,
+                                std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Response> response);
+
   /**
    * @brief Spins the physics simulation for the Simulate Application
    */
@@ -290,6 +296,13 @@ private:
    * This enables pausing and restarting of the simulation through the application window.
    */
   void publish_clock();
+
+  /**
+   * @brief Updates the Simulate Application's display.
+   *
+   * This should be called after any changes to the simulation state to ensure the display is up to date.
+   */
+  void update_sim_display();
 
   /// Get the node of the MuJoCoSystemInterface.
   /**
@@ -400,6 +413,17 @@ private:
 
   // Reset world service
   rclcpp::Service<mujoco_ros2_control_msgs::srv::ResetWorld>::SharedPtr reset_world_service_;
+
+  // Step simulation service
+  rclcpp::Service<mujoco_ros2_control_msgs::srv::StepSimulation>::SharedPtr step_simulation_service_;
+
+  // Pending steps to execute while paused, and synchronization for blocking callers
+  std::atomic<uint32_t> pending_steps_{ 0 };
+  std::atomic<bool> step_diverged_{ false };
+  std::atomic<bool> keyboard_step_requested_{ false };
+  std::atomic<uint64_t> step_count_{ 0 };
+  std::mutex steps_cv_mutex_;
+  std::condition_variable steps_cv_;
 
   // Storage for initial state (used for reset_world)
   std::vector<mjtNum> initial_qpos_;
