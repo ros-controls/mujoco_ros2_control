@@ -1,4 +1,4 @@
-int32 steps
+uint32 steps
 ---
 bool success
 string message

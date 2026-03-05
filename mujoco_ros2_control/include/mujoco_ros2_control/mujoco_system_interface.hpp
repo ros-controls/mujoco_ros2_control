@@ -410,7 +410,7 @@ private:
   rclcpp::Service<mujoco_ros2_control_msgs::srv::StepSimulation>::SharedPtr step_simulation_service_;
 
   // Pending steps to execute while paused
-  std::atomic<int32_t> pending_steps_{ 0 };
+  std::atomic<uint32_t> pending_steps_{ 0 };
 
   // Storage for initial state (used for reset_world)
   std::vector<mjtNum> initial_qpos_;

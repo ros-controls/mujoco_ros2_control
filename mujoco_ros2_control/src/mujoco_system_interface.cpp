@@ -2665,10 +2665,10 @@ void MujocoSystemInterface::step_simulation_callback(
     return;
   }
 
-  if (request->steps <= 0)
+  if (request->steps == 0)
   {
     response->success = false;
-    response->message = "Number of steps must be positive, got: " + std::to_string(request->steps);
+    response->message = "Number of steps must be positive, got: 0";
     RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
     return;
   }
