@@ -245,8 +245,9 @@ protected:
     // Forward all keys so normal UI behaviour is preserved.
     mj::GlfwAdapter::OnKey(key, scancode, act);
 
-    // On each individual key-press of 'S', queue one physics step.
-    if (key == GLFW_KEY_S && act == GLFW_PRESS)
+    // Queue one physics step on each press or key-repeat event for 'S',
+    // so holding the key advances the simulation continuously.
+    if (key == GLFW_KEY_S && (act == GLFW_PRESS || act == GLFW_REPEAT))
     {
       step_requested_.store(true);
     }
