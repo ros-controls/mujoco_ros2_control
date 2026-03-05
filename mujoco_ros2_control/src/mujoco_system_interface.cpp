@@ -2944,6 +2944,7 @@ void MujocoSystemInterface::load_mujoco_plugins()
       catch (const pluginlib::PluginlibException& ex)
       {
         RCLCPP_ERROR(get_logger(), "Failed to load plugin '%s': %s", plugin_name.c_str(), ex.what());
+        throw;  // re-throw to be caught by the outer catch block
       }
     }
   }
