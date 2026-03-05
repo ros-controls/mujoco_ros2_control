@@ -227,6 +227,35 @@ public:
   }
 };
 
+/**
+ * GlfwAdapter subclass that intercepts the 'S' key to request a single
+ * simulation step while the simulation is paused.  All other keys are
+ * forwarded to the parent class unchanged.
+ */
+class ROS2ControlGlfwAdapter : public mj::GlfwAdapter
+{
+public:
+  explicit ROS2ControlGlfwAdapter(std::atomic<bool>& step_requested) : step_requested_(step_requested)
+  {
+  }
+
+protected:
+  void OnKey(int key, int scancode, int act) override
+  {
+    // Forward all keys so normal UI behaviour is preserved.
+    mj::GlfwAdapter::OnKey(key, scancode, act);
+
+    // On each individual key-press of 'S', queue one physics step.
+    if (key == GLFW_KEY_S && act == GLFW_PRESS)
+    {
+      step_requested_.store(true);
+    }
+  }
+
+private:
+  std::atomic<bool>& step_requested_;
+};
+
 // Clamps v to the lo or high value
 double clamp(double v, double lo, double hi)
 {
@@ -780,7 +809,8 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   {
     // Launch the UI loop in the background
     ui_thread_ = std::thread([this, sim_ready]() {
-      sim_ = std::make_unique<mj::Simulate>(std::make_unique<mj::GlfwAdapter>(), &cam_, &opt_, &pert_,
+      sim_ = std::make_unique<mj::Simulate>(std::make_unique<ROS2ControlGlfwAdapter>(keyboard_step_requested_), &cam_,
+                                            &opt_, &pert_,
                                             /* is_passive = */ false);
 
       // Add ros2 control icon for the taskbar
@@ -2882,6 +2912,13 @@ void MujocoSystemInterface::PhysicsLoop()
         // paused
         else
         {
+          // Translate keyboard 'S' presses into single pending steps.
+          if (keyboard_step_requested_.exchange(false))
+          {
+            step_diverged_.store(false);
+            pending_steps_.fetch_add(1);
+          }
+
           // Execute one pending step per physics loop iteration so the clock publisher
           // (try_publish) has time to flush between steps, matching play mode behavior.
           if (pending_steps_.load() > 0)
