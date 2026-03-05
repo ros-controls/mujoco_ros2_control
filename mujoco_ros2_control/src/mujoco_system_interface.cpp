@@ -1000,6 +1000,14 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       std::bind(&MujocoSystemInterface::reset_world_callback, this, std::placeholders::_1, std::placeholders::_2));
   RCLCPP_INFO(get_logger(), "Created reset_world service at: %s/reset_world", get_node()->get_fully_qualified_name());
 
+  // Create step_simulation service
+  step_simulation_service_ = get_node()->create_service<mujoco_ros2_control_msgs::srv::StepSimulation>(
+      "~/step_simulation",
+      std::bind(&MujocoSystemInterface::step_simulation_callback, this, std::placeholders::_1,
+                std::placeholders::_2));
+  RCLCPP_INFO(get_logger(), "Created step_simulation service at: %s/step_simulation",
+              get_node()->get_fully_qualified_name());
+
   // Ready cameras
   RCLCPP_INFO(get_logger(), "Initializing cameras...");
   cameras_ = std::make_unique<MujocoCameras>(get_node(), sim_mutex_, mj_data_, mj_model_, camera_publish_rate);
@@ -2646,6 +2654,32 @@ void MujocoSystemInterface::reset_world_callback(
   RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
 }
 
+void MujocoSystemInterface::step_simulation_callback(
+    const std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Request> request,
+    std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Response> response)
+{
+  if (sim_->run)
+  {
+    response->success = false;
+    response->message = "Cannot step simulation: simulation is not paused.";
+    RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
+    return;
+  }
+
+  if (request->steps <= 0)
+  {
+    response->success = false;
+    response->message = "Number of steps must be positive, got: " + std::to_string(request->steps);
+    RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
+    return;
+  }
+
+  pending_steps_.fetch_add(request->steps);
+  response->success = true;
+  response->message = "Queued " + std::to_string(request->steps) + " simulation step(s).";
+  RCLCPP_DEBUG(get_logger(), "%s", response->message.c_str());
+}
+
 // simulate in background thread (while rendering in main thread)
 void MujocoSystemInterface::PhysicsLoop()
 {
@@ -2823,11 +2857,39 @@ void MujocoSystemInterface::PhysicsLoop()
         // paused
         else
         {
-          mj_copyData(mj_data_control_, mj_model_, mj_data_);
+          // Execute any pending steps requested via the step_simulation service
+          if (pending_steps_.load() > 0)
+          {
+            while (pending_steps_.load() > 0)
+            {
+              mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, static_cast<int>(mj_model_->nu));
+              mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, static_cast<int>(mj_model_->nu));
+              mj_step(mj_model_, mj_data_);
+              publish_clock();
 
-          // run mj_forward, to update rendering and joint sliders
-          mj_forward(mj_model_, mj_data_);
-          sim_->speed_changed = true;
+              const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
+              if (message)
+              {
+                pending_steps_.store(0);
+                mju::strcpy_arr(sim_->load_error, message);
+                break;
+              }
+
+              mj_copyData(mj_data_control_, mj_model_, mj_data_);
+              sim_->AddToHistory();
+              pending_steps_.fetch_sub(1);
+            }
+            // Force timing re-sync when/if simulation is resumed
+            sim_->speed_changed = true;
+          }
+          else
+          {
+            mj_copyData(mj_data_control_, mj_model_, mj_data_);
+
+            // run mj_forward, to update rendering and joint sliders
+            mj_forward(mj_model_, mj_data_);
+            sim_->speed_changed = true;
+          }
         }
 
         // Update previous simulation time for next iteration
