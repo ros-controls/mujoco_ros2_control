@@ -31,6 +31,7 @@ import trimesh  # Added trimesh
 
 from xml.dom import minidom
 import mujoco_ros2_control as mrc
+import pathlib
 
 
 def extract_rgba(visual):
@@ -69,8 +70,6 @@ def extract_rgba(visual):
 def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, decompose_dict):
     # keep track of files we have already processed so we don't do it again
     converted_filenames = []
-    # keep track of what material number we are on to get unique materials
-    mtl_num = 0
 
     # clean assets directory and remake required paths
     if os.path.exists(f"{directory}assets/"):
@@ -112,15 +111,11 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                     # trimesh expects 0-255 uint8 for colors
                     rgba = mesh_item["color"]
                     # make a material for the rgba values and export it
-                    mtl_modifier = f"m{mtl_num}"
-                    mtl_name = "mtl_" + mtl_modifier
+                    mtl_name = "mtl_" + mesh_name
                     material = trimesh.visual.material.SimpleMaterial(
                         name=mtl_name, diffuse=rgba, glossiness=1000, specular=[0.2, 0.2, 0.2]
                     )  # RGBA
                     mesh.visual = trimesh.visual.TextureVisuals(material=material)
-
-                    # increment material number
-                    mtl_num = mtl_num + 1
 
                 # Export to OBJ
                 mesh.export(output_path, include_color=True, mtl_name=mtl_name)
@@ -187,7 +182,7 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                         visual.material = new_mat
 
                 # give the material a unique name so that it can be properly referenced
-                mtl_modifier = f"m{mtl_num}"
+                mtl_modifier = f"{mesh_name}"
                 mtl_name = "mtl_" + mtl_modifier
                 mtl_filepath = os.path.dirname(output_path) + f"/{mtl_name}"
 
@@ -200,9 +195,9 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                 #   usemtl material_0
                 # and all of the mtl files will have a line that looks like
                 #   newmtl material_0
-                # We will modify both of them to be numberd by mtl_num like so
-                #   usemtl material_{mtl_num}_0
-                #   newmtl material_{mtl_num}_0
+                # We will modify both of them to be like so
+                #   usemtl material_{mesh_name}_0
+                #   newmtl material_{mesh_name}_0
 
                 if os.path.exists(mtl_filepath):
                     for filepath in [mtl_filepath, output_path]:
@@ -211,8 +206,6 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                         data = data.replace("material_", f"material_{mtl_modifier}_")
                         with open(filepath, "w") as f:
                             f.write(data)
-                # increment
-                mtl_num = mtl_num + 1
             finally:
                 if os.path.exists(temp_filepath):
                     os.remove(temp_filepath)
@@ -234,7 +227,7 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
     return xml_data
 
 
-def run_obj2mjcf(output_filepath, decompose_dict):
+def run_obj2mjcf(output_filepath, decompose_dict, mesh_info_dict):
     # remove the folders in the asset directory so that we are clean to run obj2mjcf
     with os.scandir(f"{output_filepath}assets/{mrc.COMPOSED_PATH_NAME}") as entries:
         for entry in entries:
@@ -255,29 +248,41 @@ def run_obj2mjcf(output_filepath, decompose_dict):
     # run obj2mjcf to generate folders of processed objs
     cmd = ["obj2mjcf", "--obj-dir", f"{output_filepath}assets/{mrc.COMPOSED_PATH_NAME}", "--save-mjcf"]
     subprocess.run(cmd)
+    composed_base_path = f"{output_filepath}assets/{mrc.COMPOSED_PATH_NAME}"
+    for file in os.listdir(composed_base_path):
+        if file.lower().endswith(".obj"):
+            mesh_name = pathlib.Path(file).stem
+            mesh_subfolder = os.path.join(composed_base_path, mesh_name)
+
+            target_path = os.path.join(mesh_subfolder, file)
+            source_path = os.path.join(composed_base_path, file)
+
+            try:
+                if not os.path.exists(target_path):
+                    shutil.copy2(source_path, target_path)
+            except Exception as e:
+                print(f"Error while running the obj2mjcf command for {mesh_name}:{e}")
+                raise
 
     thresholds_file = os.path.join(f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}", "metadata.json")
-
-    if os.path.exists(thresholds_file):
-        with open(thresholds_file) as f:
-            thresholds_data = json.load(f)
-    else:
-        thresholds_data = {}
+    thresholds_data = {}
 
     # run obj2mjcf to generate folders of processed objs with decompose option for decomposed components
     for mesh_name, threshold in decompose_dict.items():
-        cmd = [
-            "obj2mjcf",
-            "--obj-dir",
-            f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}",
-            "--save-mjcf",
-            "--decompose",
-            "--coacd-args.threshold",
-            threshold,
-        ]
-        subprocess.run(cmd)
+        mesh_item = mesh_info_dict[mesh_name]
+        if not mesh_item["is_pre_generated"]:
+            cmd = [
+                "obj2mjcf",
+                "--obj-dir",
+                f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}",
+                "--save-mjcf",
+                "--decompose",
+                "--coacd-args.threshold",
+                threshold,
+            ]
+            subprocess.run(cmd)
 
-        thresholds_data[mesh_name] = float(threshold)
+            thresholds_data[mesh_name] = float(threshold)
 
     with open(thresholds_file, "w") as f:
         json.dump(thresholds_data, f, indent=4)
@@ -304,7 +309,7 @@ def fix_mujoco_description(
     # shutil.copy2(full_filepath, destination_file)
 
     # Run conversions for mjcf
-    run_obj2mjcf(output_filepath, decompose_dict)
+    run_obj2mjcf(output_filepath, decompose_dict, mesh_info_dict)
 
     # Copy pre-geerated mesh folders to the final directory
     mrc.copy_pre_generated_meshes(output_filepath, mesh_info_dict, decompose_dict)
@@ -482,7 +487,7 @@ def main(args=None):
     xml_data = mrc.remove_tag(xml_data, "collision")
 
     xml_data = mrc.replace_package_names(xml_data)
-    mesh_info_dict = mrc.extract_mesh_info(xml_data, parsed_args.asset_dir, decompose_dict)
+    mesh_info_dict, xml_data = mrc.extract_mesh_info(xml_data, parsed_args.asset_dir, decompose_dict)
     xml_data = convert_to_objs(mesh_info_dict, output_filepath, xml_data, convert_stl_to_obj, decompose_dict)
 
     print("writing data to robot_description_formatted.urdf")

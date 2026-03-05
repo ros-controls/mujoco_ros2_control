@@ -1693,13 +1693,14 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
     </visual>
   </link>
 </robot>"""
-        result = extract_mesh_info(urdf, None, {})
+        result, updated_xml = extract_mesh_info(urdf, None, {})
         self.assertEqual(len(result), 1)
         assert "model" in result
         self.assertEqual(result["model"]["filename"], "package://test_package/meshes/model.dae")
         self.assertEqual(result["model"]["scale"], "1.0 1.0 1.0")
         self.assertEqual(result["model"]["color"], (1.0, 1.0, 1.0, 1.0))
         self.assertFalse(result["model"]["is_pre_generated"])
+        assert "package://test_package/meshes/model.dae" in updated_xml
 
     def test_extract_mesh_info_with_material_color(self):
         urdf = """<?xml version="1.0"?>
@@ -1716,12 +1717,13 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
     </visual>
   </link>
 </robot>"""
-        result = extract_mesh_info(urdf, None, {})
+        result, updated_xml = extract_mesh_info(urdf, None, {})
         self.assertEqual(len(result), 1)
         self.assertEqual(result["model"]["filename"], "package://test_package/meshes/model.dae")
         self.assertEqual(result["model"]["color"], (1.0, 0.0, 0.0, 1.0))
         self.assertEqual(result["model"]["scale"], "1.0 1.0 1.0")
         self.assertFalse(result["model"]["is_pre_generated"])
+        assert "package://test_package/meshes/model.dae" in updated_xml
 
     def test_extract_mesh_info_with_scale(self):
         urdf = """<?xml version="1.0"?>
@@ -1734,11 +1736,12 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
     </visual>
   </link>
 </robot>"""
-        result = extract_mesh_info(urdf, None, {})
+        result, updated_xml = extract_mesh_info(urdf, None, {})
         self.assertEqual(result["model"]["scale"], "2.0 3.0 4.0")
         self.assertFalse(result["model"]["is_pre_generated"])
         self.assertEqual(result["model"]["color"], (1.0, 1.0, 1.0, 1.0))
         self.assertEqual(result["model"]["filename"], "package://test_package/meshes/model.stl")
+        assert "package://test_package/meshes/model.stl" in updated_xml
 
     def test_extract_mesh_info_no_mesh_geometry(self):
         urdf = """<?xml version="1.0"?>
@@ -1751,8 +1754,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
     </visual>
   </link>
 </robot>"""
-        result = extract_mesh_info(urdf, None, {})
+        result, updated_xml = extract_mesh_info(urdf, None, {})
         self.assertEqual(len(result), 0)
+        self.assertEqual(updated_xml, urdf)
 
     def test_extract_mesh_info_with_decompose_dict(self):
         urdf = """<?xml version="1.0"?>
@@ -1776,13 +1780,86 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             with open(metadata_file, "w") as f:
                 json.dump({"complex_mesh": "0.05"}, f)
 
-            result = extract_mesh_info(urdf, tmpdir, {"complex_mesh": "0.05"})
+            result, updated_xml = extract_mesh_info(urdf, tmpdir, {"complex_mesh": "0.05"})
             self.assertEqual(len(result), 1)
             assert "complex_mesh" in result
             self.assertTrue(result["complex_mesh"]["is_pre_generated"])
             self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
             self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
-            assert "complex_mesh.obj" in result["complex_mesh"]["filename"]
+            self.assertEqual(f"{decomposed_dir}/complex_mesh.obj", result["complex_mesh"]["filename"])
+
+            # The updated_xml differs from urdf only for the new path
+            assert f"{mesh_file}" in updated_xml
+            reverted_xml = updated_xml.replace(
+                result["complex_mesh"]["filename"], "package://test_package/meshes/complex_mesh.stl"
+            )
+            self.assertEqual(urdf, reverted_xml)
+
+    def test_extract_mesh_different_threshold(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/complex_mesh.stl"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            decomposed_dir = os.path.join(tmpdir, DECOMPOSED_PATH_NAME, "complex_mesh", "complex_mesh")
+            os.makedirs(decomposed_dir)
+            mesh_file = os.path.join(decomposed_dir, "complex_mesh.obj")
+            with open(mesh_file, "w") as f:
+                f.write("# OBJ file")
+
+            metadata_file = os.path.join(tmpdir, DECOMPOSED_PATH_NAME, "metadata.json")
+            with open(metadata_file, "w") as f:
+                json.dump({"complex_mesh": "0.05"}, f)
+
+            # The pregenerated object has a different threshold than the one required
+            result, updated_xml = extract_mesh_info(urdf, tmpdir, {"complex_mesh": "0.02"})
+            self.assertEqual(len(result), 1)
+            assert "complex_mesh" in result
+            self.assertFalse(result["complex_mesh"]["is_pre_generated"])
+            self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
+            self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
+            self.assertEqual("package://test_package/meshes/complex_mesh.stl", result["complex_mesh"]["filename"])
+
+            self.assertEqual(urdf, updated_xml)
+
+    def test_extract_mesh_with_compose_dict(self):
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/complex_mesh.stl"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            composed_dir = os.path.join(tmpdir, COMPOSED_PATH_NAME, "complex_mesh")
+            os.makedirs(composed_dir)
+            mesh_file = os.path.join(composed_dir, "complex_mesh.obj")
+            with open(mesh_file, "w") as f:
+                f.write("# OBJ file")
+
+            result, updated_xml = extract_mesh_info(urdf, tmpdir, {})
+            self.assertEqual(len(result), 1)
+            assert "complex_mesh" in result
+            self.assertTrue(result["complex_mesh"]["is_pre_generated"])
+            self.assertEqual(result["complex_mesh"]["scale"], "1.0 1.0 1.0")
+            self.assertEqual(result["complex_mesh"]["color"], (1.0, 1.0, 1.0, 1.0))
+            self.assertEqual(f"{composed_dir}/complex_mesh.obj", result["complex_mesh"]["filename"])
+
+            # The updated_xml differs from urdf only for the new path
+            assert f"{mesh_file}" in updated_xml
+            reverted_xml = updated_xml.replace(
+                result["complex_mesh"]["filename"], "package://test_package/meshes/complex_mesh.stl"
+            )
+            self.assertEqual(urdf, reverted_xml)
 
     def test_copy_pre_generated_meshes_decomposed(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1814,6 +1891,58 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertTrue(os.path.exists(expected_dst))
             with open(expected_dst) as f:
                 self.assertEqual(f.read(), "# OBJ content")
+            expected_json = os.path.join(output_dir, "assets", DECOMPOSED_PATH_NAME, "metadata.json")
+            self.assertTrue(os.path.exists(expected_json))
+            with open(expected_json) as f:
+                updated_data = json.load(f)
+                self.assertEqual(len(updated_data), 1)
+                assert "mesh_name" in updated_data
+                self.assertEqual(updated_data["mesh_name"], 0.05)
+
+    def test_copy_pre_generated_meshes_decomposed_not_empty_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = os.path.join(tmpdir, "source")
+            output_dir = os.path.join(tmpdir, "output") + "/"
+            os.makedirs(source_dir)
+
+            mesh_source_dir = os.path.join(source_dir, "mesh_name", "mesh_name")
+            os.makedirs(mesh_source_dir)
+            mesh_file = os.path.join(mesh_source_dir, "mesh_name.obj")
+            with open(mesh_file, "w") as f:
+                f.write("# OBJ content")
+
+            metadata_dir = os.path.join(output_dir, "assets", DECOMPOSED_PATH_NAME)
+            os.makedirs(metadata_dir)
+            metadata_file = os.path.join(metadata_dir, "metadata.json")
+            initial_data = {"previous_mesh_name": 0.05}
+            with open(metadata_file, "w") as f:
+                json.dump(initial_data, f)
+
+            mesh_info_dict = {
+                "mesh_name": {
+                    "is_pre_generated": True,
+                    "filename": os.path.join(source_dir, "mesh_name", "mesh_name", "mesh_name.obj"),
+                    "scale": "1.0 1.0 1.0",
+                    "color": (1.0, 1.0, 1.0, 1.0),
+                }
+            }
+            decompose_dict = {"mesh_name": "0.10"}
+
+            copy_pre_generated_meshes(output_dir, mesh_info_dict, decompose_dict)
+
+            expected_dst = os.path.join(
+                output_dir, "assets", DECOMPOSED_PATH_NAME, "mesh_name", "mesh_name", "mesh_name.obj"
+            )
+            self.assertTrue(os.path.exists(expected_dst))
+            with open(expected_dst) as f:
+                self.assertEqual(f.read(), "# OBJ content")
+            expected_json = os.path.join(output_dir, "assets", DECOMPOSED_PATH_NAME, "metadata.json")
+            self.assertTrue(os.path.exists(expected_json))
+            with open(metadata_file) as f:
+                updated_data = json.load(f)
+                self.assertEqual(len(updated_data), 2)
+                self.assertEqual(updated_data["previous_mesh_name"], 0.05)
+                self.assertEqual(updated_data["mesh_name"], 0.10)
 
     def test_copy_pre_generated_meshes_composed(self):
         with tempfile.TemporaryDirectory() as tmpdir:
