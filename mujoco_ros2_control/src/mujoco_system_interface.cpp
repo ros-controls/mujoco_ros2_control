@@ -20,6 +20,9 @@
 #include "mujoco_ros2_control/mujoco_system_interface.hpp"
 #include "array_safety.h"
 
+#include <fmt/compile.h>
+#include <fmt/ranges.h>
+
 #include <unistd.h>
 #include <cerrno>
 #include <chrono>
@@ -663,6 +666,13 @@ MujocoSystemInterface::~MujocoSystemInterface()
   mujoco_actuator_data_.clear();
   urdf_joint_data_.clear();
 
+  // Cleanup plugins
+  for (auto& plugin : plugin_instances_)
+  {
+    plugin->cleanup();
+  }
+  plugin_instances_.clear();
+
   // Cleanup data and the model, if they haven't been
   if (mj_data_)
   {
@@ -831,6 +841,8 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   const auto pids_config_file = get_hardware_parameter(get_hardware_info(), "pids_config_file");
   rclcpp::NodeOptions node_options;
   node_options.append_parameter_override("use_sim_time", rclcpp::ParameterValue(true));
+  node_options.automatically_declare_parameters_from_overrides(true);
+  node_options.allow_undeclared_parameters(true);
   if (pids_config_file.has_value())
   {
     std::string pids_config_file_path = pids_config_file.value();
@@ -1049,6 +1061,9 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   {
     actuator_state_msg_.name.push_back(actuator.joint_name);
   }
+
+  // Load MuJoCo ROS2 Control plugins
+  this->load_mujoco_plugins();
 
   RCLCPP_INFO(get_logger(), "on_init complete.");
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -1467,6 +1482,12 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
 #else
     floating_base_realtime_publisher_->try_publish(floating_base_msg_);
 #endif
+  }
+
+  // Update plugins
+  for (auto& plugin : plugin_instances_)
+  {
+    plugin->update(mj_model_, mj_data_control_);
   }
 
   return hardware_interface::return_type::OK;
@@ -2866,6 +2887,68 @@ rclcpp::Logger MujocoSystemInterface::get_logger() const
 rclcpp::Node::SharedPtr MujocoSystemInterface::get_node() const
 {
   return mujoco_node_;
+}
+
+void MujocoSystemInterface::load_mujoco_plugins()
+{
+  try
+  {
+    plugin_loader_ = std::make_unique<pluginlib::ClassLoader<mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase>>(
+        "mujoco_ros2_control_plugins", "mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase");
+
+    // Get list of plugins from parameter (if specified)
+    const std::string mujoco_plugins_param_prefix = "mujoco_plugins";
+    std::vector<std::string> plugins_ns;
+    const auto list_parameters = get_node()->list_parameters({ mujoco_plugins_param_prefix }, 0u);
+    const auto init_position = mujoco_plugins_param_prefix.size() + 1;  // +1 for the dot
+    for (const auto& param : list_parameters.names)
+    {
+      // find the plugin key: after 'mujoco_plugins.', and before the next '.'
+      const auto plugin_key = param.substr(init_position, param.find_first_of('.', init_position) - init_position);
+      // Add the plugin to the set of unique values
+      if (std::find(plugins_ns.begin(), plugins_ns.end(), plugin_key) == plugins_ns.end())
+      {
+        plugins_ns.push_back(plugin_key);
+      }
+    }
+    RCLCPP_INFO_EXPRESSION(get_logger(), plugins_ns.empty(), "No 'mujoco_plugins' parameter found!");
+    RCLCPP_INFO_EXPRESSION(get_logger(), !plugins_ns.empty(),
+                           "Found 'mujoco_plugins' parameter with the following plugins: %s",
+                           fmt::format("{}", fmt::join(plugins_ns, ", ")).c_str());
+
+    // Load and initialize each plugin
+    for (const auto& plugin_name : plugins_ns)
+    {
+      try
+      {
+        const std::string plugin_type_param = mujoco_plugins_param_prefix + "." + plugin_name + ".type";
+        if (!get_node()->has_parameter(plugin_type_param))
+        {
+          RCLCPP_WARN(get_logger(), "Plugin parameter '%s' not found, skipping plugin.", plugin_type_param.c_str());
+          continue;
+        }
+        const std::string plugin_type = get_node()->get_parameter(plugin_type_param).as_string();
+        auto plugin = plugin_loader_->createSharedInstance(plugin_type);
+        if (plugin->init(get_node()->create_sub_node(plugin_name), mj_model_, mj_data_))
+        {
+          plugin_instances_.push_back(plugin);
+          RCLCPP_INFO(get_logger(), "Successfully loaded and initialized plugin: %s", plugin_name.c_str());
+        }
+        else
+        {
+          RCLCPP_ERROR(get_logger(), "Failed to initialize plugin: %s. Skipping it.", plugin_name.c_str());
+        }
+      }
+      catch (const pluginlib::PluginlibException& ex)
+      {
+        RCLCPP_ERROR(get_logger(), "Failed to load plugin '%s': %s", plugin_name.c_str(), ex.what());
+      }
+    }
+  }
+  catch (const pluginlib::PluginlibException& ex)
+  {
+    RCLCPP_ERROR(get_logger(), "Failed to create plugin loader: %s", ex.what());
+  }
 }
 
 }  // namespace mujoco_ros2_control

@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>mujoco_ros2_control</name>
+  <name>mujoco_ros2_control_plugins</name>
   <version>0.0.1</version>
-  <description>ros2_control wrapper for the MuJoCo Simulate application</description>
+  <description>Plugin package for mujoco_ros2_control</description>
   <maintainer email="nathan.b.dunkelberger@nasa.gov">Nathan Dunkelberger</maintainer>
   <maintainer email="erik.holum@nasa.gov">Erik Holum</maintainer>
 
@@ -12,35 +12,19 @@
   <maintainer email="christoph.froehlich@ait.ac.at">Christoph Froehlich</maintainer>
   <maintainer email="sai.kishor@pal-robotics.com">Sai Kishor Kothakota</maintainer>
 
+  <author email="sai.kishor@pal-robotics.com">Sai Kishor Kothakota</author>
+
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-  <buildtool_depend>ament_cmake_python</buildtool_depend>
-  <buildtool_depend>git</buildtool_depend>
-  <build_depend>ros2_control_cmake</build_depend>
 
-  <depend>backward_ros</depend>
-  <depend>control_toolbox</depend>
-  <depend>controller_manager</depend>
-  <depend>hardware_interface</depend>
-  <depend>fmt</depend>
-  <depend>nav_msgs</depend>
-  <depend>libglfw3-dev</depend>
   <depend>mujoco_vendor</depend>
-  <depend>pluginlib</depend>
-  <depend>python3-pykdl</depend>
-  <depend>rclcpp_lifecycle</depend>
   <depend>rclcpp</depend>
-  <depend>sensor_msgs</depend>
-  <depend>mujoco_ros2_control_msgs</depend>
-  <depend>mujoco_ros2_control_plugins</depend>
-  <depend>transmission_interface</depend>
+  <depend>ros2_control_cmake</depend>
+  <depend>pluginlib</depend>
+  <depend>std_msgs</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
-  <test_depend>ament_cmake_pytest</test_depend>
-
-  <exec_depend>python3-venv</exec_depend>
-  <exec_depend>python3-pip</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

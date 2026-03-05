@@ -1,0 +1,9 @@
+<library path="mujoco_ros2_control_plugins">
+  <class name="mujoco_ros2_control_plugins/HeartbeatPublisherPlugin"
+         type="mujoco_ros2_control_plugins::HeartbeatPublisherPlugin"
+         base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
+    <description>
+      A simple plugin that publishes a heartbeat message every second to demonstrate the plugin system.
+    </description>
+  </class>
+</library>
