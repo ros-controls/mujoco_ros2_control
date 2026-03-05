@@ -296,6 +296,12 @@ private:
    * This enables pausing and restarting of the simulation through the application window.
    */
   void publish_clock();
+
+  /**
+   * @brief Updates the Simulate Application's display.
+   *
+   * This should be called after any changes to the simulation state to ensure the display is up to date.
+   */
   void update_sim_display();
 
   /// Get the node of the MuJoCoSystemInterface.
