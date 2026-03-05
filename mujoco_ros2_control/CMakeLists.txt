@@ -41,6 +41,9 @@ set(MUJOCO_SIMULATE_DIR "${MUJOCO_ROOT}/simulate")
 if(NOT EXISTS "${MUJOCO_SIMULATE_DIR}/simulate.h")
   set(MUJOCO_SIMULATE_DIR "${MUJOCO_ROOT}/include/simulate")
 endif()
+# So downstream packages that include our headers can find glfw_adapter.h etc.
+set(MUJOCO_INSTALL_INCLUDE_DIR "${MUJOCO_INCLUDE_DIR}")
+set(MUJOCO_INSTALL_SIMULATE_DIR "${MUJOCO_SIMULATE_DIR}")
 
 # Fetch lodepng dependency, if not available
 find_package(lodepng QUIET)
