@@ -2836,6 +2836,7 @@ void MujocoSystemInterface::PhysicsLoop()
             else
             {
               stepped = true;
+              step_count_.fetch_add(1);
             }
           }
 
@@ -2887,6 +2888,7 @@ void MujocoSystemInterface::PhysicsLoop()
               else
               {
                 stepped = true;
+                step_count_.fetch_add(1);
               }
 
               // break if reset
@@ -2907,6 +2909,7 @@ void MujocoSystemInterface::PhysicsLoop()
             mj_copyData(mj_data_control_, mj_model_, mj_data_);
 
             sim_->AddToHistory();
+            update_sim_display();
           }
         }
 
@@ -2942,7 +2945,9 @@ void MujocoSystemInterface::PhysicsLoop()
               mj_copyData(mj_data_control_, mj_model_, mj_data_);
               sim_->AddToHistory();
               pending_steps_.fetch_sub(1);
+              step_count_.fetch_add(1);
               steps_cv_.notify_all();
+              update_sim_display();
             }
 
             // Force timing re-sync when/if simulation is resumed
@@ -2958,6 +2963,7 @@ void MujocoSystemInterface::PhysicsLoop()
             // run mj_forward, to update rendering and joint sliders
             mj_forward(mj_model_, mj_data_);
             sim_->speed_changed = true;
+            update_sim_display();
           }
         }
 
@@ -2986,6 +2992,15 @@ void MujocoSystemInterface::publish_clock()
 #else
   clock_realtime_publisher_->try_publish(sim_time_msg);
 #endif
+}
+
+void MujocoSystemInterface::update_sim_display()
+{
+  const std::string status = sim_->run ? "Running" : "Paused";
+  sim_->user_texts_new_.clear();
+  sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, "Status\nSteps",
+                                     status + "\n" + std::to_string(step_count_.load()));
+  sim_->newtextrequest.store(1);
 }
 
 void MujocoSystemInterface::get_model(mjModel*& dest)

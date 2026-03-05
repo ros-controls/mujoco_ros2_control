@@ -296,6 +296,7 @@ private:
    * This enables pausing and restarting of the simulation through the application window.
    */
   void publish_clock();
+  void update_sim_display();
 
   /// Get the node of the MuJoCoSystemInterface.
   /**
@@ -414,6 +415,7 @@ private:
   std::atomic<uint32_t> pending_steps_{ 0 };
   std::atomic<bool> step_diverged_{ false };
   std::atomic<bool> keyboard_step_requested_{ false };
+  std::atomic<uint64_t> step_count_{ 0 };
   std::mutex steps_cv_mutex_;
   std::condition_variable steps_cv_;
 
