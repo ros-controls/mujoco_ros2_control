@@ -2996,11 +2996,22 @@ void MujocoSystemInterface::publish_clock()
 
 void MujocoSystemInterface::update_sim_display()
 {
+  // Only write user_texts_new_ when the render thread has consumed the previous
+  // update (newtextrequest == 0). Use compare_exchange to atomically claim the
+  // slot: if it fails, the render thread hasn't swapped yet, so skip this
+  // update — the display will be refreshed on the next physics step instead.
+  // This avoids a data race: the render thread swaps user_texts_new_ (without
+  // holding any mutex) while we clear/populate it.
+  int expected = 0;
+  if (!sim_->newtextrequest.compare_exchange_strong(expected, 1))
+  {
+    return;  // render thread hasn't consumed the last update yet, skip
+  }
+
   const std::string status = sim_->run ? "Running" : "Paused";
   sim_->user_texts_new_.clear();
   sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, "Status\nSteps",
                                      status + "\n" + std::to_string(step_count_.load()));
-  sim_->newtextrequest.store(1);
 }
 
 void MujocoSystemInterface::get_model(mjModel*& dest)
