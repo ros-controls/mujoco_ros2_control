@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -409,8 +410,11 @@ private:
   // Step simulation service
   rclcpp::Service<mujoco_ros2_control_msgs::srv::StepSimulation>::SharedPtr step_simulation_service_;
 
-  // Pending steps to execute while paused
+  // Pending steps to execute while paused, and synchronization for blocking callers
   std::atomic<uint32_t> pending_steps_{ 0 };
+  std::atomic<bool> step_diverged_{ false };
+  std::mutex steps_cv_mutex_;
+  std::condition_variable steps_cv_;
 
   // Storage for initial state (used for reset_world)
   std::vector<mjtNum> initial_qpos_;

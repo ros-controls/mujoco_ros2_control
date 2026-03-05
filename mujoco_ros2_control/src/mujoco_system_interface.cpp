@@ -2673,10 +2673,36 @@ void MujocoSystemInterface::step_simulation_callback(
     return;
   }
 
+  // Reset the divergence flag and queue steps.
+  step_diverged_.store(false);
   pending_steps_.fetch_add(request->steps);
-  response->success = true;
-  response->message = "Queued " + std::to_string(request->steps) + " simulation step(s).";
-  RCLCPP_DEBUG(get_logger(), "%s", response->message.c_str());
+
+  // Block until all steps are executed or the timeout expires.
+  // Timeout: at least 30 s, or 10 ms per step (whichever is larger).
+  const auto timeout =
+      std::chrono::milliseconds(std::max(static_cast<uint64_t>(30000), static_cast<uint64_t>(request->steps) * 10));
+
+  std::unique_lock<std::mutex> lock(steps_cv_mutex_);
+  const bool completed = steps_cv_.wait_for(lock, timeout, [this] { return pending_steps_.load() == 0; });
+
+  if (!completed)
+  {
+    response->success = false;
+    response->message = "Timeout waiting for " + std::to_string(request->steps) + " simulation step(s).";
+    RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
+  }
+  else if (step_diverged_.load())
+  {
+    response->success = false;
+    response->message = "Steps aborted: simulation diverged.";
+    RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
+  }
+  else
+  {
+    response->success = true;
+    response->message = "Completed " + std::to_string(request->steps) + " simulation step(s).";
+    RCLCPP_DEBUG(get_logger(), "%s", response->message.c_str());
+  }
 }
 
 // simulate in background thread (while rendering in main thread)
@@ -2869,13 +2895,16 @@ void MujocoSystemInterface::PhysicsLoop()
             if (message)
             {
               pending_steps_.store(0);
+              step_diverged_.store(true);
               mju::strcpy_arr(sim_->load_error, message);
+              steps_cv_.notify_all();
             }
             else
             {
               mj_copyData(mj_data_control_, mj_model_, mj_data_);
               sim_->AddToHistory();
               pending_steps_.fetch_sub(1);
+              steps_cv_.notify_all();
             }
 
             // Force timing re-sync when/if simulation is resumed
