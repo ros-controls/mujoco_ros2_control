@@ -1003,8 +1003,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // Create step_simulation service
   step_simulation_service_ = get_node()->create_service<mujoco_ros2_control_msgs::srv::StepSimulation>(
       "~/step_simulation",
-      std::bind(&MujocoSystemInterface::step_simulation_callback, this, std::placeholders::_1,
-                std::placeholders::_2));
+      std::bind(&MujocoSystemInterface::step_simulation_callback, this, std::placeholders::_1, std::placeholders::_2));
   RCLCPP_INFO(get_logger(), "Created step_simulation service at: %s/step_simulation",
               get_node()->get_fully_qualified_name());
 
@@ -2857,30 +2856,33 @@ void MujocoSystemInterface::PhysicsLoop()
         // paused
         else
         {
-          // Execute any pending steps requested via the step_simulation service
+          // Execute one pending step per physics loop iteration so the clock publisher
+          // (try_publish) has time to flush between steps, matching play mode behavior.
           if (pending_steps_.load() > 0)
           {
-            while (pending_steps_.load() > 0)
+            mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, static_cast<int>(mj_model_->nu));
+            mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, static_cast<int>(mj_model_->nu));
+            mj_step(mj_model_, mj_data_);
+            publish_clock();
+
+            const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
+            if (message)
             {
-              mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, static_cast<int>(mj_model_->nu));
-              mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, static_cast<int>(mj_model_->nu));
-              mj_step(mj_model_, mj_data_);
-              publish_clock();
-
-              const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
-              if (message)
-              {
-                pending_steps_.store(0);
-                mju::strcpy_arr(sim_->load_error, message);
-                break;
-              }
-
+              pending_steps_.store(0);
+              mju::strcpy_arr(sim_->load_error, message);
+            }
+            else
+            {
               mj_copyData(mj_data_control_, mj_model_, mj_data_);
               sim_->AddToHistory();
               pending_steps_.fetch_sub(1);
             }
+
             // Force timing re-sync when/if simulation is resumed
-            sim_->speed_changed = true;
+            if (pending_steps_.load() == 0)
+            {
+              sim_->speed_changed = true;
+            }
           }
           else
           {

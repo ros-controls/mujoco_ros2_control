@@ -26,11 +26,11 @@
 #include <vector>
 
 #include <hardware_interface/version.h>
+#include <atomic>
 #include <hardware_interface/handle.hpp>
 #include <hardware_interface/hardware_info.hpp>
 #include <hardware_interface/system_interface.hpp>
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
-#include <atomic>
 #include <mujoco_ros2_control_msgs/srv/reset_world.hpp>
 #include <mujoco_ros2_control_msgs/srv/step_simulation.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -281,9 +281,8 @@ private:
   void reset_world_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Request> request,
                             std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Response> response);
 
-  void step_simulation_callback(
-      const std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Request> request,
-      std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Response> response);
+  void step_simulation_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Request> request,
+                                std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Response> response);
 
   /**
    * @brief Spins the physics simulation for the Simulate Application
