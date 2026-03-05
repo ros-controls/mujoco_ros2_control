@@ -258,6 +258,7 @@ ament_export_dependencies(
   nav_msgs
   sensor_msgs
   mujoco_ros2_control_msgs
+  mujoco_ros2_control_plugins
   pluginlib
   control_toolbox
   Eigen3
