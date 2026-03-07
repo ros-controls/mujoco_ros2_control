@@ -383,6 +383,10 @@ class TestFixture(unittest.TestCase):
         )
         self.node.get_logger().info("Clock continuity verified - clock was NOT reset")
 
+        # Sleep is needed here for a bit to allow the reset to take effect in the simulation (or)
+        # to see if the internal PIDs have a good setpoint after reset
+        time.sleep(1.0)
+
         # Poll until joints return to zero (replaces time.sleep + verify)
         self.wait_for_joint_positions({"joint1": 0.0, "joint2": 0.0}, delta=0.05, timeout=15.0, verify_efforts=False)
 
