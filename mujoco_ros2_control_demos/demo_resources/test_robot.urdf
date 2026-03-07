@@ -39,7 +39,7 @@
     </collision>
   </link>
   <joint name="joint1" type="revolute">
-    <axis rpy="0 0 0" xyz="0 0 1"/>
+    <axis rpy="0 0 0" xyz="0 1 0"/>
     <parent link="base"/>
     <child link="upperarm"/>
     <limit lower="-3.14" upper="3.14" velocity="3.14" effort="1000" />
@@ -68,7 +68,7 @@
     </collision>
   </link>
   <joint name="joint2" type="revolute">
-    <axis rpy="0 0 0" xyz="0 0 1"/>
+    <axis rpy="0 0 0" xyz="0 1 0"/>
     <parent link="upperarm"/>
     <child link="forearm"/>
     <origin rpy="0 0 0" xyz="1 0 0"/>
@@ -231,8 +231,8 @@
           </default>
 
           <actuator>
-            <position name="joint1" joint="joint1" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
-            <position name="joint2" joint="joint2" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
+            <position name="joint1" joint="joint1" kp="25000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
+            <position name="joint2" joint="joint2" kp="25000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
             <position tendon="split" name="gripper_left_finger_joint" kp="1000" dampratio="3.0" ctrlrange="-0.09 0.005" />
           </actuator>
 
