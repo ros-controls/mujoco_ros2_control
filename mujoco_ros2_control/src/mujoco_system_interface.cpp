@@ -2936,12 +2936,15 @@ void MujocoSystemInterface::load_mujoco_plugins()
         }
         else
         {
-          RCLCPP_ERROR(get_logger(), "Failed to initialize plugin: %s. Skipping it.", plugin_name.c_str());
+          RCLCPP_ERROR(get_logger(), "Failed to initialize plugin: %s of type: %s", plugin_name.c_str(),
+                       plugin_type.c_str());
+          throw std::runtime_error("Failed to initialize plugin: " + plugin_name + " of type: " + plugin_type);
         }
       }
       catch (const pluginlib::PluginlibException& ex)
       {
         RCLCPP_ERROR(get_logger(), "Failed to load plugin '%s': %s", plugin_name.c_str(), ex.what());
+        throw;  // re-throw to be caught by the outer catch block
       }
     }
   }
