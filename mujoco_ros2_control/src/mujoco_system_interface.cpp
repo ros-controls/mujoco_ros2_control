@@ -2591,6 +2591,14 @@ void MujocoSystemInterface::reset_simulation_state(bool fill_initial_state)
 
     if (actuator.actuator_type != ActuatorType::PASSIVE)
     {
+      actuator.is_position_pid_control_enabled = actuator.has_pos_pid;
+      actuator.is_position_control_enabled = !actuator.has_pos_pid && actuator.actuator_type == ActuatorType::POSITION;
+      actuator.is_velocity_pid_control_enabled = !actuator.has_pos_pid && actuator.has_vel_pid;
+      actuator.is_velocity_control_enabled =
+          !actuator.has_pos_pid && !actuator.has_vel_pid && actuator.actuator_type == ActuatorType::VELOCITY;
+      actuator.is_effort_control_enabled =
+          !actuator.has_pos_pid && !actuator.has_vel_pid &&
+          (actuator.actuator_type == ActuatorType::MOTOR || actuator.actuator_type == ActuatorType::CUSTOM);
       // Set command to initial position to maintain position control at reset position
       actuator.position_interface.command_ = actuator.position_interface.state_;
       actuator.velocity_interface.command_ = 0.0;
