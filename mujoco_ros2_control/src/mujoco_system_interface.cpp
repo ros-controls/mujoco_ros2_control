@@ -1357,24 +1357,19 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
     }
     else
     {
-      if (interface_type == hardware_interface::HW_IF_POSITION)
-      {
-        actuator_it->is_position_control_enabled = false;
-        actuator_it->is_position_pid_control_enabled = false;
-        joint_it->is_position_control_enabled = false;
-      }
-      else if (interface_type == hardware_interface::HW_IF_VELOCITY)
-      {
-        actuator_it->is_velocity_control_enabled = false;
-        actuator_it->is_velocity_pid_control_enabled = false;
-        joint_it->is_velocity_control_enabled = false;
-      }
-      else if (interface_type == hardware_interface::HW_IF_EFFORT ||
-               interface_type == hardware_interface::HW_IF_TORQUE || interface_type == hardware_interface::HW_IF_FORCE)
-      {
-        actuator_it->is_effort_control_enabled = false;
-        joint_it->is_effort_control_enabled = false;
-      }
+      // Clear all control flags on stop, regardless of interface type.
+      // This mirrors the enabled=true path and ensures no stale flag can keep a
+      // write() branch active after the controller has been deactivated.
+      joint_it->is_position_control_enabled = false;
+      joint_it->is_velocity_control_enabled = false;
+      joint_it->is_effort_control_enabled = false;
+
+      actuator_it->is_position_control_enabled = false;
+      actuator_it->is_velocity_control_enabled = false;
+      actuator_it->is_effort_control_enabled = false;
+      actuator_it->is_position_pid_control_enabled = false;
+      actuator_it->is_velocity_pid_control_enabled = false;
+
       RCLCPP_INFO(get_logger(), "Joint %s: %s control disabled", joint_name.c_str(), interface_type.c_str());
     }
   };
@@ -2591,6 +2586,14 @@ void MujocoSystemInterface::reset_simulation_state(bool fill_initial_state)
 
     if (actuator.actuator_type != ActuatorType::PASSIVE)
     {
+      actuator.is_position_pid_control_enabled = actuator.has_pos_pid;
+      actuator.is_position_control_enabled = !actuator.has_pos_pid && actuator.actuator_type == ActuatorType::POSITION;
+      actuator.is_velocity_pid_control_enabled = !actuator.has_pos_pid && actuator.has_vel_pid;
+      actuator.is_velocity_control_enabled =
+          !actuator.has_pos_pid && !actuator.has_vel_pid && actuator.actuator_type == ActuatorType::VELOCITY;
+      actuator.is_effort_control_enabled =
+          !actuator.has_pos_pid && !actuator.has_vel_pid &&
+          (actuator.actuator_type == ActuatorType::MOTOR || actuator.actuator_type == ActuatorType::CUSTOM);
       // Set command to initial position to maintain position control at reset position
       actuator.position_interface.command_ = actuator.position_interface.state_;
       actuator.velocity_interface.command_ = 0.0;
