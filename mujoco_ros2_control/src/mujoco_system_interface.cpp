@@ -46,7 +46,12 @@
 #include <std_msgs/msg/string.hpp>
 #include <unordered_map>
 
+#include "ament_index_cpp/version.h"
+#if AMENT_INDEX_CPP_VERSION_MINOR >= 13
 #include <ament_index_cpp/get_package_share_path.hpp>
+#else
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#endif
 #if !ROS_DISTRO_HUMBLE
 #include <hardware_interface/helpers.hpp>
 #endif
@@ -784,8 +789,13 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
                                             /* is_passive = */ false);
 
       // Add ros2 control icon for the taskbar
+#if AMENT_INDEX_CPP_VERSION_MINOR >= 13
       std::string icon_location =
           ament_index_cpp::get_package_share_path("mujoco_ros2_control") / "resources/mujoco_logo.png";
+#else
+      std::string icon_location =
+          ament_index_cpp::get_package_share_directory("mujoco_ros2_control") + "/resources/mujoco_logo.png";
+#endif
       std::vector<unsigned char> image;
       unsigned width, height;
       unsigned error = lodepng::decode(image, width, height, icon_location);
