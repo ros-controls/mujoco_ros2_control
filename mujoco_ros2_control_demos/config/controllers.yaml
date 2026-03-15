@@ -9,13 +9,15 @@ joint_state_broadcaster:
 
 position_controller:
   ros__parameters:
-    type: position_controllers/JointGroupPositionController
+    type: forward_command_controller/ForwardCommandController
+    interface_name: position
     joints:
       - joint1
       - joint2
 
 gripper_controller:
   ros__parameters:
-    type: position_controllers/JointGroupPositionController
+    type: forward_command_controller/ForwardCommandController
+    interface_name: position
     joints:
       - gripper_left_finger_joint
