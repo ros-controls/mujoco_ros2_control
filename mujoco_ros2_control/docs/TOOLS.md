@@ -61,7 +61,7 @@ options:
   --scene SCENE         Optionally pass an existing xml for the scene
 ```
 
-A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_demos/demo_resources/test_inputs.xml).
+A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml).
 
 <!-- TODO: Updates test paths -->
 
@@ -72,7 +72,7 @@ To convert the URDF, run the following from the repo root
 ros2 run mujoco_ros2_control robot_description_to_mjcf.sh \
   --save_only \
   -u mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf \
-  -m mujoco_ros2_control_demos/demo_resources/test_inputs.xml \
+  -m mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml \
   -o /tmp/output/
 ```
 
