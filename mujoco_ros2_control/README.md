@@ -16,7 +16,7 @@ This includes adding actuators, sensors, and cameras as needed to the MJCF XML.
 
 This conversion can be done either offline or at run time.
 We have built a *highly experimental* tool to automate URDF conversion.
-For more information refer to the [documentation](docs/TOOLS.md).
+For more information refer to the [documentation](https://github.com/ros-controls/mujoco_ros2_control/blob/main/mujoco_ros2_control/docs/TOOLS.md).
 
 ## Hardware Interface Setup
 
@@ -100,7 +100,7 @@ Just specify the plugin and point to a valid MJCF on launch:
   ...
 ```
 
-Due to compatibility issues, we use a [slightly modified ROS 2 control node](src/mujoco_ros2_control_node.cpp).
+Due to compatibility issues, we use a [slightly modified ROS 2 control node](https://github.com/ros-controls/mujoco_ros2_control/blob/main/mujoco_ros2_control/src/mujoco_ros2_control_node.cpp).
 It is the same executable and parameters as the upstream, but requires updating the launchfile:
 
 ```python
