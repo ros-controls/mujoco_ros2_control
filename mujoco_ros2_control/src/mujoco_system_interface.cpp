@@ -2707,8 +2707,9 @@ void MujocoSystemInterface::step_simulation_callback(
     return;
   }
 
-  // Reset the divergence flag and queue steps.
+  // Reset the divergence/interrupt flags and queue steps.
   step_diverged_.store(false);
+  steps_interrupted_.store(false);
   pending_steps_.fetch_add(request->steps);
 
   // Block until all steps are executed or the timeout expires.
@@ -2723,6 +2724,12 @@ void MujocoSystemInterface::step_simulation_callback(
   {
     response->success = false;
     response->message = "Timeout waiting for " + std::to_string(request->steps) + " simulation step(s).";
+    RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
+  }
+  else if (steps_interrupted_.load())
+  {
+    response->success = false;
+    response->message = "Steps aborted: simulation was resumed while steps were pending.";
     RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
   }
   else if (step_diverged_.load())
@@ -2793,6 +2800,17 @@ void MujocoSystemInterface::PhysicsLoop()
         // running
         if (sim_->run)
         {
+          // If the sim was unpaused while a StepSimulation call was in progress,
+          // abort the remaining pending steps so the service call unblocks cleanly.
+          if (pending_steps_.load() > 0)
+          {
+            RCLCPP_WARN(get_logger(), "Simulation resumed while %u step(s) were still pending; aborting.",
+                        pending_steps_.load());
+            pending_steps_.store(0);
+            steps_interrupted_.store(true);
+            steps_cv_.notify_all();
+          }
+
           bool stepped = false;
 
           // record cpu time at start of iteration

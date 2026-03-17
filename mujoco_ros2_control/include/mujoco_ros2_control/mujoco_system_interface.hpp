@@ -420,6 +420,7 @@ private:
   // Pending steps to execute while paused, and synchronization for blocking callers
   std::atomic<uint32_t> pending_steps_{ 0 };
   std::atomic<bool> step_diverged_{ false };
+  std::atomic<bool> steps_interrupted_{ false };
   std::atomic<bool> keyboard_step_requested_{ false };
   std::atomic<uint64_t> step_count_{ 0 };
   std::mutex steps_cv_mutex_;
