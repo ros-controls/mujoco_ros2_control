@@ -341,6 +341,9 @@ private:
   // attempt to loop at whatever this is set to. If this is <0, then we use the value from the app.
   double sim_speed_factor_;
 
+  // True when running without a display (no GLFW window)
+  bool headless_{ false };
+
   // Primary simulate object
   std::unique_ptr<mujoco::Simulate> sim_;
 

@@ -773,9 +773,8 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       std::stod(get_hardware_parameter(get_hardware_info(), "lidar_publish_rate").value_or("5.0"));
 
   // Check for headless mode
-  bool headless =
-      hardware_interface::parse_bool(get_hardware_parameter(get_hardware_info(), "headless").value_or("false"));
-  RCLCPP_INFO_EXPRESSION(get_logger(), headless, "Running in HEADLESS mode.");
+  headless_ = hardware_interface::parse_bool(get_hardware_parameter(get_hardware_info(), "headless").value_or("false"));
+  RCLCPP_INFO_EXPRESSION(get_logger(), headless_, "Running in HEADLESS mode.");
 
   // We essentially reconstruct the 'simulate.cc::main()' function here, and
   // launch a Simulate object with all necessary rendering process/options
@@ -3017,6 +3016,11 @@ void MujocoSystemInterface::publish_clock()
 
 void MujocoSystemInterface::update_sim_display()
 {
+  if (headless_)
+  {
+    return;
+  }
+
   // Only write user_texts_new_ when the render thread has consumed the previous
   // update (newtextrequest == 0). Use compare_exchange to atomically claim the
   // slot: if it fails, the render thread hasn't swapped yet, so skip this
