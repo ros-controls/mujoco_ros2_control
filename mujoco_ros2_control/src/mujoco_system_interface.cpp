@@ -797,7 +797,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   auto sim_ready = std::make_shared<std::promise<void>>();
   std::future<void> sim_ready_future = sim_ready->get_future();
 
-  if (headless)
+  if (headless_)
   {
     sim_ = std::make_unique<mj::Simulate>(std::make_unique<HeadlessAdapter>(), &cam_, &opt_, &pert_,
                                           /* is_passive = */ false);
@@ -1076,10 +1076,10 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
 #endif
 
   // When the interface is activated, we start the physics engine.
-  physics_thread_ = std::thread([this, headless]() {
+  physics_thread_ = std::thread([this]() {
     // Load the simulation and do an initial forward pass
     RCLCPP_INFO(get_logger(), "Starting the MuJoCo physics thread...");
-    if (headless)
+    if (this->headless_)
     {
       const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
       sim_->m_ = mj_model_;
