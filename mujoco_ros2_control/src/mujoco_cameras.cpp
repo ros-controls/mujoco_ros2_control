@@ -165,7 +165,7 @@ void MujocoCameras::update_loop()
 
   // Turn rangefinder rendering off so we don't get rays in camera images
   mjv_opt_.flags[mjtVisFlag::mjVIS_RANGEFINDER] = 0;
-  // Turn off site rendering so that visualization is more realistc in cameras for testing perception.
+  // Turn off site rendering so that visualization is more realistic in cameras for testing perception.
   for (int i = 0; i < mjNGROUP; i++)
   {
     mjv_opt_.sitegroup[i] = 0;
