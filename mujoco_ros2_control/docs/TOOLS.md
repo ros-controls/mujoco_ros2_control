@@ -61,7 +61,7 @@ options:
   --scene SCENE         Optionally pass an existing xml for the scene
 ```
 
-A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_demos/demo_resources/test_inputs.xml).
+A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml).
 
 <!-- TODO: Updates test paths -->
 
@@ -71,8 +71,8 @@ To convert the URDF, run the following from the repo root
 # Dependencies are installed on the fly, if needed
 ros2 run mujoco_ros2_control robot_description_to_mjcf.sh \
   --save_only \
-  -u mujoco_ros2_control_demos/demo_resources/test_robot.urdf \
-  -m mujoco_ros2_control_demos/demo_resources/test_inputs.xml \
+  -u mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf \
+  -m mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml \
   -o /tmp/output/
 ```
 
@@ -117,7 +117,7 @@ Of note, the test robot has a good chunk of supported functionality, and we reco
 
 You can embed MuJoCo-specific information directly inside a URDF (typically inside a xacro)
 so the URDF -> MJCF conversion script can pick it up and inject the corresponding tags into
-the generated MJCF. See [mujoco_ros2_control_demos/demo_resources/test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/test_robot.urdf) for a complete example.
+the generated MJCF. See [mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf) for a complete example.
 
 ### Top-level container
 - Use a `<mujoco_inputs>` element inside your xacro/URDF. The converter looks for this element
@@ -175,7 +175,7 @@ the generated MJCF. See [mujoco_ros2_control_demos/demo_resources/test_robot.urd
   how runtime mapping and topics are resolved.
 
 **Where to look**
-- Example usage in repo: [mujoco_ros2_control_demos/demo_resources/test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/test_robot.urdf).
+- Example usage in repo: [mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf).
 - The conversion inputs file used by the demo: [mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml](../../mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml).
 
 

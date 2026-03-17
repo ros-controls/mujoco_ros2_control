@@ -14,8 +14,8 @@
     </default>
 
     <actuator>
-      <position name="joint1" joint="joint1" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
-      <position name="joint2" joint="joint2" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
+      <position name="joint1" joint="joint1" kp="25000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
+      <position name="joint2" joint="joint2" kp="25000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
       <position tendon="split" name="gripper_left_finger_joint" kp="1000" dampratio="3.0" ctrlrange="-0.09 0.005" />
     </actuator>
 
