@@ -1018,7 +1018,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // We can still turn this on manually if desired.
   sim_->opt.flags[mjVIS_RANGEFINDER] = false;
   // Turn off site rendering so that the visualization is more realistic.
-  // These can still be turned on in the visalizer.
+  // These can still be turned on in the visualizer.
   for (int i = 0; i < mjNGROUP; i++)
   {
     sim_->opt.sitegroup[i] = 0;
