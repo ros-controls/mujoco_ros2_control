@@ -400,6 +400,19 @@ regardless of whether their interfaces are exposed via `ros2_control`.
 
 ### Services
 
+* `~/set_pause` (`mujoco_ros2_control_msgs/srv/SetPause`): Pauses or resumes the simulation.
+  * Set `paused` to `true` to pause, or `false` to resume.
+  * Returns immediately — no blocking. Returns `success = true` even if the simulation is already in the requested state.
+  * When resuming, the physics loop automatically re-syncs its wall-clock reference so no catch-up steps are executed.
+
+  ```bash
+  # Pause the simulation
+  ros2 service call /ros2_control_node/set_pause mujoco_ros2_control_msgs/srv/SetPause "{paused: true}"
+
+  # Resume the simulation
+  ros2 service call /ros2_control_node/set_pause mujoco_ros2_control_msgs/srv/SetPause "{paused: false}"
+  ```
+
 * `~/reset_world` (`mujoco_ros2_control_msgs/srv/ResetWorld`): Resets the simulation state.
   * If the optional `keyframe` string field is empty, the simulation is restored to the state captured at startup (initial joint positions, velocities, and control values).
   * If a `keyframe` name is provided, that named keyframe from the MJCF is applied instead.

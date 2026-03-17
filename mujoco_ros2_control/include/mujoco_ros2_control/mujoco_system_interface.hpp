@@ -33,6 +33,7 @@
 #include <hardware_interface/system_interface.hpp>
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
 #include <mujoco_ros2_control_msgs/srv/reset_world.hpp>
+#include <mujoco_ros2_control_msgs/srv/set_pause.hpp>
 #include <mujoco_ros2_control_msgs/srv/step_simulation.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/macros.hpp>
@@ -282,6 +283,9 @@ private:
   void reset_world_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Request> request,
                             std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Response> response);
 
+  void set_pause_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::SetPause::Request> request,
+                          std::shared_ptr<mujoco_ros2_control_msgs::srv::SetPause::Response> response);
+
   void step_simulation_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Request> request,
                                 std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Response> response);
 
@@ -416,6 +420,9 @@ private:
 
   // Reset world service
   rclcpp::Service<mujoco_ros2_control_msgs::srv::ResetWorld>::SharedPtr reset_world_service_;
+
+  // Set pause service
+  rclcpp::Service<mujoco_ros2_control_msgs::srv::SetPause>::SharedPtr set_pause_service_;
 
   // Step simulation service
   rclcpp::Service<mujoco_ros2_control_msgs::srv::StepSimulation>::SharedPtr step_simulation_service_;

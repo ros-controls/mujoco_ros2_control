@@ -1030,6 +1030,12 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       std::bind(&MujocoSystemInterface::reset_world_callback, this, std::placeholders::_1, std::placeholders::_2));
   RCLCPP_INFO(get_logger(), "Created reset_world service at: %s/reset_world", get_node()->get_fully_qualified_name());
 
+  // Create set_pause service
+  set_pause_service_ = get_node()->create_service<mujoco_ros2_control_msgs::srv::SetPause>(
+      "~/set_pause",
+      std::bind(&MujocoSystemInterface::set_pause_callback, this, std::placeholders::_1, std::placeholders::_2));
+  RCLCPP_INFO(get_logger(), "Created set_pause service at: %s/set_pause", get_node()->get_fully_qualified_name());
+
   // Create step_simulation service
   step_simulation_service_ = get_node()->create_service<mujoco_ros2_control_msgs::srv::StepSimulation>(
       "~/step_simulation",
@@ -2689,6 +2695,33 @@ void MujocoSystemInterface::reset_world_callback(
   const std::string keyframe_str = fill_initial_state ? "initial" : ("'" + request->keyframe + "'");
   response->message = "Successfully reset the MuJoCo world to the " + keyframe_str + " state.";
 
+  RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
+}
+
+void MujocoSystemInterface::set_pause_callback(
+    const std::shared_ptr<mujoco_ros2_control_msgs::srv::SetPause::Request> request,
+    std::shared_ptr<mujoco_ros2_control_msgs::srv::SetPause::Response> response)
+{
+  const bool currently_paused = !sim_->run;
+  if (currently_paused == request->paused)
+  {
+    response->success = true;
+    response->message = std::string("Simulation is already ") + (request->paused ? "paused." : "running.");
+    RCLCPP_DEBUG(get_logger(), "%s", response->message.c_str());
+    return;
+  }
+
+  sim_->run = !request->paused;
+
+  if (!request->paused)
+  {
+    // Force timing re-sync so the physics loop doesn't try to catch up on
+    // accumulated wall-clock time that elapsed while paused.
+    sim_->speed_changed = true;
+  }
+
+  response->success = true;
+  response->message = std::string("Simulation ") + (request->paused ? "paused." : "resumed.");
   RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
 }
 
