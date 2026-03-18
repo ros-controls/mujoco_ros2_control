@@ -30,7 +30,7 @@ import pytest
 import rclpy
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from rosgraph_msgs.msg import Clock
-from mujoco_ros2_control_msgs.srv import ResetWorld
+from mujoco_ros2_control_msgs.srv import ResetWorld, SetPause, StepSimulation
 from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState, Image, CameraInfo
 from controller_manager_msgs.srv import ListHardwareInterfaces, SwitchController
@@ -408,6 +408,129 @@ class TestFixture(unittest.TestCase):
         # Poll until joints converge again
         self.wait_for_joint_positions({"joint1": -0.5, "joint2": 0.5}, delta=0.05, timeout=15.0)
         wait_for_clock.shutdown()
+
+    def test_set_pause_and_step_simulation(self):
+        """Test set_pause and step_simulation services interact correctly."""
+        # MuJoCo default timestep used by the test model
+        MUJOCO_TIMESTEP = 0.002  # seconds
+        N_STEPS = 100
+        EXPECTED_DELTA_SEC = N_STEPS * MUJOCO_TIMESTEP  # 0.2 s
+
+        mujoco_sim_node = "/mujoco_ros2_control_node"
+
+        pause_client = self.node.create_client(SetPause, f"{mujoco_sim_node}/set_pause")
+        self.assertTrue(pause_client.wait_for_service(timeout_sec=10.0), "set_pause service not available")
+
+        step_client = self.node.create_client(StepSimulation, f"{mujoco_sim_node}/step_simulation")
+        self.assertTrue(step_client.wait_for_service(timeout_sec=10.0), "step_simulation service not available")
+
+        # Subscribe to /clock early so we never miss messages published while running.
+        latest_clock = []
+
+        def clock_cb(msg):
+            latest_clock.append(msg)
+            if len(latest_clock) > 10:
+                latest_clock.pop(0)
+
+        clock_sub = self.node.create_subscription(Clock, "/clock", clock_cb, 10)
+
+        # Wait for the sim to be publishing /clock before we do anything
+        self.assertTrue(self.spin_until(lambda: len(latest_clock) > 0, timeout=10.0), "No /clock messages received")
+
+        # step_simulation must fail while the simulation is running
+        step_req = StepSimulation.Request()
+        step_req.steps = N_STEPS
+        future = step_client.call_async(step_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        result = future.result()
+        self.assertIsNotNone(result, "step_simulation returned None")
+        self.assertFalse(result.success, "step_simulation should fail when simulation is running")
+
+        # Now Pause the simulation
+        pause_req = SetPause.Request()
+        pause_req.paused = True
+        future = pause_client.call_async(pause_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        result = future.result()
+        self.assertIsNotNone(result, "set_pause returned None")
+        self.assertTrue(result.success, f"set_pause(paused=True) failed: {result.message}")
+
+        # Setting the simulation to paused again should still succeed
+        future = pause_client.call_async(pause_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        result = future.result()
+        self.assertTrue(result.success, "set_pause(paused=True) a second time should still succeed")
+
+        # /clock must NOT be published while paused
+        latest_clock.clear()
+        clock_published_while_paused = self.spin_until(lambda: len(latest_clock) > 0, timeout=1.5)
+        self.assertFalse(clock_published_while_paused, "/clock should not be published while simulation is paused")
+
+        # --- Step N_STEPS physics steps and capture clock before/after ---
+        # Record the last known timestamp (from before the pause) as our baseline.
+        # Re-subscribe after clearing so any message we receive is genuinely post-step.
+        latest_clock.clear()
+
+        step_req.steps = N_STEPS
+        future = step_client.call_async(step_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=30.0)
+        result = future.result()
+        self.assertIsNotNone(result, "step_simulation returned None")
+        self.assertTrue(result.success, f"step_simulation failed: {result.message}")
+
+        # Collect the clock message(s) published for these steps
+        self.assertTrue(
+            self.spin_until(lambda: len(latest_clock) > 0, timeout=5.0),
+            "No /clock messages published after step_simulation",
+        )
+
+        clock_after_step_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
+
+        # We don't have the pre-step clock directly, we can verify the delta
+        # by calling step_simulation a second time and measuring the difference.
+        clock_before_second_step_sec = clock_after_step_sec
+        latest_clock.clear()
+
+        future = step_client.call_async(step_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=30.0)
+        result = future.result()
+        self.assertTrue(result.success, f"second step_simulation failed: {result.message}")
+
+        self.assertTrue(
+            self.spin_until(lambda: len(latest_clock) > 0, timeout=5.0),
+            "No /clock messages after second step_simulation",
+        )
+        clock_after_second_step_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
+
+        actual_delta = clock_after_second_step_sec - clock_before_second_step_sec
+        # Check that the clock advanced by the expected amount (N_STEPS * dt) with some tolerance
+        self.assertAlmostEqual(
+            actual_delta,
+            EXPECTED_DELTA_SEC,
+            delta=2.0 * MUJOCO_TIMESTEP,  # allow some tolerance for scheduling delays
+            msg=f"Clock advanced by {actual_delta:.6f}s, expected {EXPECTED_DELTA_SEC:.6f}s "
+            f"({N_STEPS} steps × {MUJOCO_TIMESTEP}s)",
+        )
+
+        pause_req.paused = False
+        future = pause_client.call_async(pause_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        result = future.result()
+        self.assertIsNotNone(result, "set_pause returned None on resume")
+        self.assertTrue(result.success, f"set_pause(paused=False) failed: {result.message}")
+
+        # Verify /clock is ticking again after resume
+        latest_clock.clear()
+        self.assertTrue(
+            self.spin_until(
+                lambda: len(latest_clock) > 0
+                and latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9 > clock_after_second_step_sec,
+                timeout=5.0,
+            ),
+            "Clock did not resume ticking after set_pause(paused=False)",
+        )
+
+        self.node.destroy_subscription(clock_sub)
 
 
 class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
