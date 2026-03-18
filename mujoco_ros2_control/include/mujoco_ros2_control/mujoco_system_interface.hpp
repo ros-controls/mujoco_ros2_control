@@ -419,12 +419,15 @@ private:
   bool override_urdf_joint_positions_{ false };
 
   // Reset world service
+  rclcpp::CallbackGroup::SharedPtr reset_world_cb_group_;
   rclcpp::Service<mujoco_ros2_control_msgs::srv::ResetWorld>::SharedPtr reset_world_service_;
 
   // Set pause service
+  rclcpp::CallbackGroup::SharedPtr set_pause_cb_group_;
   rclcpp::Service<mujoco_ros2_control_msgs::srv::SetPause>::SharedPtr set_pause_service_;
 
   // Step simulation service
+  rclcpp::CallbackGroup::SharedPtr step_simulation_cb_group_;
   rclcpp::Service<mujoco_ros2_control_msgs::srv::StepSimulation>::SharedPtr step_simulation_service_;
 
   // Pending steps to execute while paused, and synchronization for blocking callers

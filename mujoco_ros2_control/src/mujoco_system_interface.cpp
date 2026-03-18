@@ -50,6 +50,7 @@
 #if !ROS_DISTRO_HUMBLE
 #include <hardware_interface/helpers.hpp>
 #endif
+#include <rclcpp/version.h>
 #include <hardware_interface/lexical_casts.hpp>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -1024,22 +1025,45 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     initial_ctrl_.assign(mj_data_->ctrl, mj_data_->ctrl + mj_model_->nu);
   }
 
+  // Changed services history QoS to keep all so we don't lose any client service calls
+  // \note The versions conditioning is added here to support the source-compatibility with Humble
+#if RCLCPP_VERSION_MAJOR >= 17
+  rclcpp::QoS qos_services =
+      rclcpp::QoS(rclcpp::QoSInitialization(RMW_QOS_POLICY_HISTORY_KEEP_ALL, 1)).reliable().durability_volatile();
+#else
+  const rmw_qos_profile_t qos_services = { RMW_QOS_POLICY_HISTORY_KEEP_ALL,
+                                           1,  // message queue depth
+                                           RMW_QOS_POLICY_RELIABILITY_RELIABLE,
+                                           RMW_QOS_POLICY_DURABILITY_VOLATILE,
+                                           RMW_QOS_DEADLINE_DEFAULT,
+                                           RMW_QOS_LIFESPAN_DEFAULT,
+                                           RMW_QOS_POLICY_LIVELINESS_SYSTEM_DEFAULT,
+                                           RMW_QOS_LIVELINESS_LEASE_DURATION_DEFAULT,
+                                           false };
+#endif
+  reset_world_cb_group_ = get_node()->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  set_pause_cb_group_ = get_node()->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  step_simulation_cb_group_ = get_node()->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+
   // Create reset_world service
   reset_world_service_ = get_node()->create_service<mujoco_ros2_control_msgs::srv::ResetWorld>(
       "~/reset_world",
-      std::bind(&MujocoSystemInterface::reset_world_callback, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&MujocoSystemInterface::reset_world_callback, this, std::placeholders::_1, std::placeholders::_2),
+      qos_services, reset_world_cb_group_);
   RCLCPP_INFO(get_logger(), "Created reset_world service at: %s/reset_world", get_node()->get_fully_qualified_name());
 
   // Create set_pause service
   set_pause_service_ = get_node()->create_service<mujoco_ros2_control_msgs::srv::SetPause>(
       "~/set_pause",
-      std::bind(&MujocoSystemInterface::set_pause_callback, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&MujocoSystemInterface::set_pause_callback, this, std::placeholders::_1, std::placeholders::_2),
+      qos_services, set_pause_cb_group_);
   RCLCPP_INFO(get_logger(), "Created set_pause service at: %s/set_pause", get_node()->get_fully_qualified_name());
 
   // Create step_simulation service
   step_simulation_service_ = get_node()->create_service<mujoco_ros2_control_msgs::srv::StepSimulation>(
       "~/step_simulation",
-      std::bind(&MujocoSystemInterface::step_simulation_callback, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&MujocoSystemInterface::step_simulation_callback, this, std::placeholders::_1, std::placeholders::_2),
+      qos_services, step_simulation_cb_group_);
   RCLCPP_INFO(get_logger(), "Created step_simulation service at: %s/step_simulation",
               get_node()->get_fully_qualified_name());
 
@@ -2718,6 +2742,19 @@ void MujocoSystemInterface::set_pause_callback(
     // Force timing re-sync so the physics loop doesn't try to catch up on
     // accumulated wall-clock time that elapsed while paused.
     sim_->speed_changed = true;
+
+    // If step_simulation is currently blocking with pending steps, abort those steps
+    // immediately rather than waiting for the physics loop to detect the transition.
+    // This ensures step_simulation_callback unblocks and frees its executor thread
+    // without any additional latency.
+    const uint32_t pending = pending_steps_.load();
+    if (pending > 0)
+    {
+      RCLCPP_WARN(get_logger(), "Resuming simulation while %u step(s) were pending; aborting.", pending);
+      pending_steps_.store(0);
+      steps_interrupted_.store(true);
+      steps_cv_.notify_all();
+    }
   }
 
   response->success = true;
