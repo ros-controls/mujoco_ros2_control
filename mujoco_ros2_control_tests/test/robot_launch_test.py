@@ -409,6 +409,76 @@ class TestFixture(unittest.TestCase):
         self.wait_for_joint_positions({"joint1": -0.5, "joint2": 0.5}, delta=0.05, timeout=15.0)
         wait_for_clock.shutdown()
 
+    def test_step_simulation_zero_steps_rejected(self):
+        """step_simulation with steps=0 must be rejected even when the simulation is paused."""
+        mujoco_sim_node = "/mujoco_ros2_control_node"
+
+        pause_client = self.node.create_client(SetPause, f"{mujoco_sim_node}/set_pause")
+        self.assertTrue(pause_client.wait_for_service(timeout_sec=10.0), "set_pause service not available")
+
+        step_client = self.node.create_client(StepSimulation, f"{mujoco_sim_node}/step_simulation")
+        self.assertTrue(step_client.wait_for_service(timeout_sec=10.0), "step_simulation service not available")
+
+        # Pause so the steps=0 validation is reached
+        pause_req = SetPause.Request()
+        pause_req.paused = True
+        future = pause_client.call_async(pause_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        self.assertTrue(future.result().success, "set_pause(paused=True) failed")
+
+        step_req = StepSimulation.Request()
+        step_req.steps = 0
+        future = step_client.call_async(step_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        result = future.result()
+        self.assertIsNotNone(result, "step_simulation returned None")
+        self.assertFalse(result.success, "step_simulation with steps=0 should fail")
+
+        # Leave the simulation running again
+        pause_req.paused = False
+        future = pause_client.call_async(pause_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        self.assertTrue(future.result().success, "set_pause(paused=False) failed after zero-steps test")
+
+    def test_step_simulation_interrupted_by_resume(self):
+        """Resuming the simulation while step_simulation is counting down must abort the call."""
+        # Use enough steps that the physics loop cannot drain them all before we call resume.
+        # 50 000 steps × 0.002 s = 100 s of sim time — far more than the ~0.2 s it takes
+        # to spin, send the resume request, and have the physics loop react.
+
+        mujoco_sim_node = "/mujoco_ros2_control_node"
+
+        pause_client = self.node.create_client(SetPause, f"{mujoco_sim_node}/set_pause")
+        self.assertTrue(pause_client.wait_for_service(timeout_sec=10.0), "set_pause service not available")
+
+        step_client = self.node.create_client(StepSimulation, f"{mujoco_sim_node}/step_simulation")
+        self.assertTrue(step_client.wait_for_service(timeout_sec=10.0), "step_simulation service not available")
+
+        # Pause the simulation
+        pause_req = SetPause.Request()
+        pause_req.paused = True
+        future = pause_client.call_async(pause_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        self.assertTrue(future.result().success, "set_pause(paused=True) failed")
+
+        step_req = StepSimulation.Request()
+        step_req.steps = 50000
+        step_future = step_client.call_async(step_req)
+
+        # Spin briefly so the service request is triggered
+        self.spin_until(lambda: False, timeout=0.2)
+
+        # Resume the simulation to trigger the physics loop to abort the pending steps
+        pause_req.paused = False
+        future = pause_client.call_async(pause_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=5.0)
+        self.assertTrue(future.result().success, "set_pause(paused=False) failed")
+
+        rclpy.spin_until_future_complete(self.node, step_future, timeout_sec=5.0)
+        result = step_future.result()
+        self.assertIsNotNone(result, "step_simulation returned None")
+        self.assertFalse(result.success, "step_simulation should fail when simulation is resumed mid-countdown")
+
     def test_set_pause_and_step_simulation(self):
         """Test set_pause and step_simulation services interact correctly."""
         # MuJoCo default timestep used by the test model
