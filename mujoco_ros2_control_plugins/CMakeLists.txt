@@ -28,6 +28,7 @@ endif()
 add_library(mujoco_ros2_control_plugins SHARED
   src/heartbeat_publisher_plugin.cpp
   src/constraint_violations_publisher_plugin.cpp
+  src/external_wrench_plugin.cpp
 )
 target_include_directories(mujoco_ros2_control_plugins PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

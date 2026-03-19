@@ -24,6 +24,7 @@
   <depend>ros2_control_cmake</depend>
   <depend>pluginlib</depend>
   <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
   <depend>mujoco_ros2_control_msgs</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
