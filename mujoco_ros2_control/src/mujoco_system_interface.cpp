@@ -229,9 +229,20 @@ public:
 };
 
 /**
- * GlfwAdapter subclass that intercepts the 'S' key to request a single
- * simulation step while the simulation is paused.  All other keys are
- * forwarded to the parent class unchanged.
+ * GlfwAdapter subclass that overrides right-arrow-key handling so that a single
+ * simulation step is driven exclusively by the ROS control loop rather than by
+ * MuJoCo's built-in viewer.
+ *
+ * When the simulation is paused, MuJoCo's default GlfwAdapter advances the
+ * physics by one step (mj_step) on each right-arrow press or key-repeat event.
+ * This class suppresses that native behaviour and instead sets step_requested_,
+ * which the ROS control loop polls to advance the simulation.  This ensures
+ * that ros2_controller read/update/write cycles are executed for every step and
+ * that controller state remains consistent with the physics.
+ *
+ * All other keys are forwarded to the parent class unchanged so that the rest
+ * of the MuJoCo viewer UI (play/pause, reset, rendering options, etc.) works
+ * as normal.
  */
 class ROS2ControlGlfwAdapter : public mj::GlfwAdapter
 {
@@ -243,15 +254,19 @@ public:
 protected:
   void OnKey(int key, int scancode, int act) override
   {
-    // Forward all keys so normal UI behaviour is preserved.
-    mj::GlfwAdapter::OnKey(key, scancode, act);
-
-    // Queue one physics step on each press or key-repeat event for 'S',
-    // so holding the key advances the simulation continuously.
-    if (key == GLFW_KEY_S && (act == GLFW_PRESS || act == GLFW_REPEAT))
+    // Intercept the right arrow key so only the ROS loop advances the physics,
+    // preventing double-stepping (MuJoCo's native handler would also call mj_step).
+    if (key == GLFW_KEY_RIGHT)
     {
-      step_requested_.store(true);
+      if (act == GLFW_PRESS || act == GLFW_REPEAT)
+      {
+        step_requested_.store(true);
+      }
+      return;
     }
+
+    // Forward all other keys so normal UI behaviour is preserved.
+    mj::GlfwAdapter::OnKey(key, scancode, act);
   }
 
 private:

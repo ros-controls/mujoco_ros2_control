@@ -456,9 +456,9 @@ When paused, the simulation clock stops advancing and no physics steps are execu
 
 ### Single-Stepping via the Keyboard
 
-While the simulation window is focused and the simulation is **paused**, press **`S`** to advance the simulation
-by exactly one physics step. Holding `S` down will advance the simulation continuously one step at a time,
-allowing slow, frame-by-frame inspection of the robot's motion.
+While the simulation window is focused and the simulation is **paused**, press the **right arrow key** (`→`) to
+advance the simulation by exactly one physics step. Holding the key down will advance the simulation continuously
+one step at a time, allowing slow, frame-by-frame inspection of the robot's motion.
 
 The status overlay in the top-right corner of the simulation window shows the current state
 (`Running` / `Paused`) and the total number of physics steps executed.
