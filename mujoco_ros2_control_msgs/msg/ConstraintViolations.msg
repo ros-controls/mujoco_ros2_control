@@ -19,4 +19,9 @@ string[] types
 
 # Maximum absolute position-level residual (efc_pos) for each constraint.
 # Values close to zero mean the constraint is well satisfied.
+# Units depend on the constraint type:
+#   connect  -> meters (m)         [3 translational rows]
+#   weld     -> max(meters, radians) [3 translational + 3 rotational rows mixed]
+#   joint    -> radians (revolute) or meters (prismatic)
+#   tendon   -> meters (m)
 float64[] violations

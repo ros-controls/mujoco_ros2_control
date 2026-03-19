@@ -82,18 +82,30 @@ void ConstraintViolationsPublisherPlugin::update(const mjModel * model, mjData *
   }
   last_publish_time_ = now;
 
+  // Cache efc pointers from the struct *once* before dereferencing.
+  // mj_data_control_ is written by the sim thread (mj_copyData) without
+  // read() holding sim_mutex_, so the pointer fields can change concurrently.
+  const int     nefc     = data->nefc;
+  const int*    efc_type = data->efc_type;
+  const int*    efc_id   = data->efc_id;
+  const mjtNum* efc_pos  = data->efc_pos;
+
+  if (nefc == 0 || !efc_type || !efc_id || !efc_pos) {
+    return;
+  }
+
   // Accumulate the maximum absolute position-level residual (efc_pos) for
   // each active equality constraint.  A single equality constraint may span
   // multiple consecutive rows in the efc arrays (e.g. weld = 6 rows).
   // efc_id[i] holds the index into model->eq_* for equality rows.
   std::unordered_map<int, double> max_violation;  // eq_id -> max |efc_pos|
 
-  for (int i = 0; i < data->nefc; ++i) {
-    if (data->efc_type[i] != mjCNSTR_EQUALITY) {
+  for (int i = 0; i < nefc; ++i) {
+    if (efc_type[i] != mjCNSTR_EQUALITY) {
       continue;
     }
-    const int eq_id = data->efc_id[i];
-    const double viol = std::abs(data->efc_pos[i]);
+    const int eq_id = efc_id[i];
+    const double viol = std::abs(efc_pos[i]);
     auto it = max_violation.find(eq_id);
     if (it == max_violation.end()) {
       max_violation[eq_id] = viol;
