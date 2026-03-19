@@ -17,8 +17,8 @@
 
 #include <string>
 
-#include <rclcpp/rclcpp.hpp>
 #include <mujoco_ros2_control_msgs/msg/constraint_violations.hpp>
+#include <rclcpp/rclcpp.hpp>
 #include <realtime_tools/realtime_publisher.hpp>
 
 #include "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
@@ -50,20 +50,20 @@ public:
   ConstraintViolationsPublisherPlugin() = default;
   ~ConstraintViolationsPublisherPlugin() override = default;
 
-  bool init(rclcpp::Node::SharedPtr node, const mjModel * model, mjData * data) override;
-  void update(const mjModel * model, mjData * data) override;
+  bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
+  void update(const mjModel* model, mjData* data) override;
   void cleanup() override;
 
 private:
   /// Build a human-readable name for equality constraint \p eq_id.
-  std::string buildConstraintName(const mjModel * model, int eq_id) const;
+  std::string buildConstraintName(const mjModel* model, int eq_id) const;
 
   /// Return the type string for equality constraint \p eq_id.
-  std::string constraintTypeString(const mjModel * model, int eq_id) const;
+  std::string constraintTypeString(const mjModel* model, int eq_id) const;
 
   rclcpp::Publisher<mujoco_ros2_control_msgs::msg::ConstraintViolations>::SharedPtr publisher_;
   std::shared_ptr<realtime_tools::RealtimePublisher<mujoco_ros2_control_msgs::msg::ConstraintViolations>>
-    realtime_publisher_;
+      realtime_publisher_;
   mujoco_ros2_control_msgs::msg::ConstraintViolations constraint_violations_msg_;
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_ = rclcpp::get_logger("ConstraintViolationsPublisherPlugin");
