@@ -1,0 +1,30 @@
+# Apply an external wrench to a named body/link in the MuJoCo simulation
+# for a given duration.
+
+# Standard ROS header (stamp, frame_id)
+std_msgs/Header             header
+
+# Name of the MuJoCo body to apply the wrench to (must match the MJCF body name)
+string                      link_name
+
+# Wrench expressed in the world frame.
+#   force  [N]   – linear force  (x, y, z)
+#   torque [N·m] – angular moment (x, y, z)
+geometry_msgs/Wrench        wrench
+
+# Point of force application expressed in the body's local frame
+# (relative to the body frame origin, in metres).
+# A zero vector applies the force at the body frame origin.
+geometry_msgs/Point         application_point
+
+# How long the wrench remains active.
+# A zero duration applies the wrench for a single simulation step.
+builtin_interfaces/Duration duration
+
+---
+
+# True if the wrench was accepted and scheduled.
+bool    success
+
+# Human-readable status message (e.g. error description when success is false).
+string  message
