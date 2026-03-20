@@ -337,8 +337,6 @@ private:
   mjvCamera cam_;
   mjvOption opt_;
   mjvPerturb pert_;
-  mjvScene plugin_user_scn_{};  ///< User scene for plugin visualizations (backed by sim_->user_scn)
-
   // Logger
   rclcpp::Logger logger_ = rclcpp::get_logger("MujocoSystemInterface");
 

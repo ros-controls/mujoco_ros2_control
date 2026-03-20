@@ -20,8 +20,8 @@
 #include <string>
 #include <vector>
 
-#include <rclcpp/rclcpp.hpp>
 #include <mujoco_ros2_control_msgs/srv/apply_external_wrench.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 #include "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
 
@@ -68,9 +68,8 @@ public:
   ExternalWrenchPlugin() = default;
   ~ExternalWrenchPlugin() override = default;
 
-  bool init(rclcpp::Node::SharedPtr node, const mjModel * model, mjData * data) override;
-  void update(const mjModel * model, mjData * data) override;
-  void visualize(const mjModel * model, mjData * data, mjvScene * scene) override;
+  bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
+  void update(const mjModel* model, mjData* data) override;
   void cleanup() override;
 
 private:
@@ -79,25 +78,24 @@ private:
   /// Internal representation of a single active wrench request.
   struct ActiveWrench
   {
-    int body_id{-1};
-    mjtNum force[3]{0.0, 0.0, 0.0};
-    mjtNum torque[3]{0.0, 0.0, 0.0};
-    mjtNum application_point[3]{0.0, 0.0, 0.0};  ///< body-local frame
-    rclcpp::Time end_time{0, 0, RCL_ROS_TIME};
+    int body_id{ -1 };
+    mjtNum force[3]{ 0.0, 0.0, 0.0 };
+    mjtNum torque[3]{ 0.0, 0.0, 0.0 };
+    mjtNum application_point[3]{ 0.0, 0.0, 0.0 };  ///< body-local frame
+    rclcpp::Time end_time{ 0, 0, RCL_ROS_TIME };
   };
 
   /// Service callback — runs in a ROS executor thread.
-  void handleApplyWrench(
-    const ApplyExternalWrench::Request::SharedPtr request,
-    ApplyExternalWrench::Response::SharedPtr response);
+  void handleApplyWrench(const ApplyExternalWrench::Request::SharedPtr request,
+                         ApplyExternalWrench::Response::SharedPtr response);
 
   // ── ROS interfaces ────────────────────────────────────────────────────────
   rclcpp::Node::SharedPtr node_;
-  rclcpp::Logger logger_{rclcpp::get_logger("ExternalWrenchPlugin")};
+  rclcpp::Logger logger_{ rclcpp::get_logger("ExternalWrenchPlugin") };
   rclcpp::Service<ApplyExternalWrench>::SharedPtr service_;
 
   // ── Model pointer (const, valid for simulation lifetime) ─────────────────
-  const mjModel * model_{nullptr};
+  const mjModel* model_{ nullptr };
 
   // ── Pending queue written by service callback, drained in update() ───────
   std::mutex pending_mutex_;
@@ -107,15 +105,9 @@ private:
   std::vector<ActiveWrench> active_wrenches_;
 
   // ── qfrc_applied bookkeeping ──────────────────────────────────────────────
-  int nv_{0};
+  int nv_{ 0 };
   std::vector<mjtNum> qfrc_temp_;               ///< scratch buffer (nv elements)
   std::vector<mjtNum> qfrc_prev_contribution_;  ///< our last delta on qfrc_applied
-
-  // ── Visualization scaling ─────────────────────────────────────────────────
-  /// Arrow length per unit force [m/N]. Parameter: "force_arrow_scale".
-  double force_arrow_scale_{0.01};
-  /// Arrow length per unit torque [m/(N·m)]. Parameter: "torque_arrow_scale".
-  double torque_arrow_scale_{0.1};
 };
 
 }  // namespace mujoco_ros2_control_plugins

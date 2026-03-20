@@ -719,16 +719,6 @@ MujocoSystemInterface::~MujocoSystemInterface()
   }
   plugin_instances_.clear();
 
-  // Release the plugin visualization scene and unregister it from the viewer
-  if (plugin_user_scn_.maxgeom > 0)
-  {
-    if (sim_)
-    {
-      sim_->user_scn = nullptr;
-    }
-    mjv_freeScene(&plugin_user_scn_);
-  }
-
   // Cleanup data and the model, if they haven't been
   if (mj_data_)
   {
@@ -1577,12 +1567,10 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
 #endif
   }
 
-  // Update plugins and collect visualization geometry
-  plugin_user_scn_.ngeom = 0;  // clear previous frame's custom geoms
+  // Update plugins
   for (auto& plugin : plugin_instances_)
   {
     plugin->update(mj_model_, mj_data_control_);
-    plugin->visualize(mj_model_, mj_data_control_, &plugin_user_scn_);
   }
 
   return hardware_interface::return_type::OK;
@@ -3176,14 +3164,6 @@ rclcpp::Node::SharedPtr MujocoSystemInterface::get_node() const
 
 void MujocoSystemInterface::load_mujoco_plugins()
 {
-  // Allocate a dedicated mjvScene for plugin visualizations and register it
-  // with the viewer so geoms added by plugins appear in the native window.
-  mjv_makeScene(mj_model_, &plugin_user_scn_, 1000);
-  if (sim_)
-  {
-    sim_->user_scn = &plugin_user_scn_;
-  }
-
   try
   {
     plugin_loader_ = std::make_unique<pluginlib::ClassLoader<mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase>>(

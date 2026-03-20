@@ -58,22 +58,6 @@ public:
   virtual void update(const mjModel* model, mjData* data) = 0;
 
   /**
-   * @brief Visualize the plugin state into the native MuJoCo viewer scene.
-   * @param model Pointer to the MuJoCo model
-   * @param data  Pointer to the MuJoCo data
-   * @param scene Pointer to the user scene managed by the system interface.
-   *              Add custom mjvGeom entries here (up to scene->maxgeom).
-   *              The scene is cleared (ngeom = 0) before every call, so each
-   *              plugin should re-add its geoms every frame.
-   * @note Default implementation is a no-op.  Override only when the plugin
-   *       has geometry to display in the native viewer.
-   * @note Called from the physics thread immediately after update().
-   */
-  virtual void visualize(const mjModel* /*model*/, mjData* /*data*/, mjvScene* /*scene*/)
-  {
-  }
-
-  /**
    * @brief Cleanup the plugin
    */
   virtual void cleanup() = 0;
