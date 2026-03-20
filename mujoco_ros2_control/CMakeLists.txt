@@ -239,6 +239,11 @@ install(
   USE_SOURCE_PERMISSIONS
 )
 
+install(
+  FILES scripts/requirements.txt
+  DESTINATION share/${PROJECT_NAME}
+)
+
 pluginlib_export_plugin_description_file(hardware_interface mujoco_system_interface_plugin.xml)
 
 if(BUILD_TESTING)
