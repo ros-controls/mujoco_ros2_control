@@ -4,7 +4,6 @@ docstring_parser==0.17.0
 etils==1.13.0
 fsspec==2026.2.0
 glfw==2.10.0
-importlib_resources==6.5.2
 lxml==6.0.2
 mujoco==3.6.0
 obj2mjcf==0.0.25
