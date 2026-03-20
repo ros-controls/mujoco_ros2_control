@@ -17,7 +17,9 @@
 #include <algorithm>
 #include <string>
 
+#include <geometry_msgs/msg/point.hpp>
 #include <pluginlib/class_list_macros.hpp>
+#include <visualization_msgs/msg/marker.hpp>
 
 namespace mujoco_ros2_control_plugins
 {
@@ -31,6 +33,26 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
 
   qfrc_temp_.assign(nv_, 0.0);
   qfrc_prev_contribution_.assign(nv_, 0.0);
+
+  // Visualization parameters
+  if (!node_->has_parameter("force_arrow_scale"))
+  {
+    node_->declare_parameter("force_arrow_scale", force_arrow_scale_);
+  }
+  if (!node_->has_parameter("torque_arrow_scale"))
+  {
+    node_->declare_parameter("torque_arrow_scale", torque_arrow_scale_);
+  }
+  if (!node_->has_parameter("marker_frame_id"))
+  {
+    node_->declare_parameter("marker_frame_id", marker_frame_id_);
+  }
+  force_arrow_scale_ = node_->get_parameter("force_arrow_scale").as_double();
+  torque_arrow_scale_ = node_->get_parameter("torque_arrow_scale").as_double();
+  marker_frame_id_ = node_->get_parameter("marker_frame_id").as_string();
+
+  marker_pub_raw_ = node_->create_publisher<MarkerArray>("~/wrench_markers", rclcpp::SystemDefaultsQoS());
+  marker_pub_ = std::make_unique<realtime_tools::RealtimePublisher<MarkerArray>>(marker_pub_raw_);
 
   service_ = node_->create_service<ApplyExternalWrench>("apply_wrench",
                                                         std::bind(&ExternalWrenchPlugin::handleApplyWrench, this,
@@ -70,13 +92,17 @@ void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
                                         [&now](const ActiveWrench& w) { return now >= w.end_time; }),
                          active_wrenches_.end());
 
+  // Step 4 – publish RViz markers for all currently active wrenches.
+  publishMarkers(data);
+
   if (active_wrenches_.empty())
   {
     return;
   }
 
-  // Step 4 – apply each active wrench into a scratch buffer so we can
+  // Step 5 – apply each active wrench into a scratch buffer so we can
   //          track exactly what we contribute to qfrc_applied.
+  // (step numbering preserved for clarity; step 4 is publishMarkers above)
   std::fill(qfrc_temp_.begin(), qfrc_temp_.end(), 0.0);
 
   for (const auto& w : active_wrenches_)
@@ -112,7 +138,122 @@ void ExternalWrenchPlugin::cleanup()
 {
   RCLCPP_INFO(node_->get_logger(), "ExternalWrenchPlugin cleanup.");
   service_.reset();
+  marker_pub_.reset();
+  marker_pub_raw_.reset();
   node_.reset();
+}
+
+// ---------------------------------------------------------------------------
+// Marker visualization
+// ---------------------------------------------------------------------------
+
+void ExternalWrenchPlugin::publishMarkers(mjData* data)
+{
+  if (!marker_pub_->trylock())
+  {
+    return;
+  }
+
+  auto& msg = marker_pub_->msg_;
+  msg.markers.clear();
+
+  if (active_wrenches_.empty())
+  {
+    // Clear any markers that may still be displayed in RViz.
+    visualization_msgs::msg::Marker del;
+    del.header.frame_id = marker_frame_id_;
+    del.action = visualization_msgs::msg::Marker::DELETEALL;
+    msg.markers.push_back(del);
+    marker_pub_->unlockAndPublish();
+    return;
+  }
+
+  const auto stamp = node_->get_clock()->now();
+
+  // Shaft diameter and arrowhead diameter for ARROW markers defined by points.
+  static constexpr double kShaftDiam = 0.02;
+  static constexpr double kHeadDiam = 0.04;
+
+  int id = 0;
+  for (const auto& w : active_wrenches_)
+  {
+    // World-frame application point: p = xpos + xmat * application_point_local
+    const mjtNum* xpos = data->xpos + w.body_id * 3;
+    const mjtNum* xmat = data->xmat + w.body_id * 9;
+
+    const double px = xpos[0] + xmat[0] * w.application_point[0] + xmat[1] * w.application_point[1] +
+                      xmat[2] * w.application_point[2];
+    const double py = xpos[1] + xmat[3] * w.application_point[0] + xmat[4] * w.application_point[1] +
+                      xmat[5] * w.application_point[2];
+    const double pz = xpos[2] + xmat[6] * w.application_point[0] + xmat[7] * w.application_point[1] +
+                      xmat[8] * w.application_point[2];
+
+    // Force arrow (red) — skip if negligible.
+    const double f_sq = w.force[0] * w.force[0] + w.force[1] * w.force[1] + w.force[2] * w.force[2];
+    if (f_sq > 1e-18)
+    {
+      visualization_msgs::msg::Marker m;
+      m.header.stamp = stamp;
+      m.header.frame_id = marker_frame_id_;
+      m.ns = "force";
+      m.id = id++;
+      m.type = visualization_msgs::msg::Marker::ARROW;
+      m.action = visualization_msgs::msg::Marker::ADD;
+
+      geometry_msgs::msg::Point start, end;
+      start.x = px;
+      start.y = py;
+      start.z = pz;
+      end.x = px + w.force[0] * force_arrow_scale_;
+      end.y = py + w.force[1] * force_arrow_scale_;
+      end.z = pz + w.force[2] * force_arrow_scale_;
+      m.points = { start, end };
+
+      m.scale.x = kShaftDiam;  // shaft diameter
+      m.scale.y = kHeadDiam;   // head diameter
+      m.scale.z = 0.0;         // head length (auto)
+
+      m.color.r = 1.0f;
+      m.color.g = 0.0f;
+      m.color.b = 0.0f;
+      m.color.a = 0.8f;
+      msg.markers.push_back(m);
+    }
+
+    // Torque arrow (cyan) — skip if negligible.
+    const double t_sq = w.torque[0] * w.torque[0] + w.torque[1] * w.torque[1] + w.torque[2] * w.torque[2];
+    if (t_sq > 1e-18)
+    {
+      visualization_msgs::msg::Marker m;
+      m.header.stamp = stamp;
+      m.header.frame_id = marker_frame_id_;
+      m.ns = "torque";
+      m.id = id++;
+      m.type = visualization_msgs::msg::Marker::ARROW;
+      m.action = visualization_msgs::msg::Marker::ADD;
+
+      geometry_msgs::msg::Point start, end;
+      start.x = px;
+      start.y = py;
+      start.z = pz;
+      end.x = px + w.torque[0] * torque_arrow_scale_;
+      end.y = py + w.torque[1] * torque_arrow_scale_;
+      end.z = pz + w.torque[2] * torque_arrow_scale_;
+      m.points = { start, end };
+
+      m.scale.x = kShaftDiam;
+      m.scale.y = kHeadDiam;
+      m.scale.z = 0.0;
+
+      m.color.r = 0.0f;
+      m.color.g = 0.7f;
+      m.color.b = 0.9f;
+      m.color.a = 0.8f;
+      msg.markers.push_back(m);
+    }
+  }
+
+  marker_pub_->unlockAndPublish();
 }
 
 // ---------------------------------------------------------------------------

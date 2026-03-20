@@ -22,6 +22,8 @@
 
 #include <mujoco_ros2_control_msgs/srv/apply_external_wrench.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <realtime_tools/realtime_publisher.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
 
@@ -89,10 +91,17 @@ private:
   void handleApplyWrench(const ApplyExternalWrench::Request::SharedPtr request,
                          ApplyExternalWrench::Response::SharedPtr response);
 
+  /// Publish RViz arrow markers for all active wrenches. Called from update().
+  void publishMarkers(mjData* data);
+
   // ── ROS interfaces ────────────────────────────────────────────────────────
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_{ rclcpp::get_logger("ExternalWrenchPlugin") };
   rclcpp::Service<ApplyExternalWrench>::SharedPtr service_;
+
+  using MarkerArray = visualization_msgs::msg::MarkerArray;
+  rclcpp::Publisher<MarkerArray>::SharedPtr marker_pub_raw_;
+  std::unique_ptr<realtime_tools::RealtimePublisher<MarkerArray>> marker_pub_;
 
   // ── Model pointer (const, valid for simulation lifetime) ─────────────────
   const mjModel* model_{ nullptr };
@@ -108,6 +117,14 @@ private:
   int nv_{ 0 };
   std::vector<mjtNum> qfrc_temp_;               ///< scratch buffer (nv elements)
   std::vector<mjtNum> qfrc_prev_contribution_;  ///< our last delta on qfrc_applied
+
+  // ── Marker visualization scaling ──────────────────────────────────────────
+  /// Arrow length per unit force [m/N]. Parameter: "force_arrow_scale".
+  double force_arrow_scale_{ 0.01 };
+  /// Arrow length per unit torque [m/(N·m)]. Parameter: "torque_arrow_scale".
+  double torque_arrow_scale_{ 0.1 };
+  /// TF frame in which markers are published. Parameter: "marker_frame_id".
+  std::string marker_frame_id_{ "base_link" };
 };
 
 }  // namespace mujoco_ros2_control_plugins

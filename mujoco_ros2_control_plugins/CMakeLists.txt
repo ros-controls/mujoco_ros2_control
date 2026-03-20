@@ -11,6 +11,7 @@ find_package(rclcpp REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(mujoco_ros2_control_msgs REQUIRED)
 
 # Attempt to link MuJoCo via the vendor package, if available
@@ -44,6 +45,7 @@ target_link_libraries(mujoco_ros2_control_plugins PUBLIC
   realtime_tools::realtime_tools
   pluginlib::pluginlib
   ${std_msgs_TARGETS}
+  ${visualization_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
 )
 
@@ -70,7 +72,7 @@ install(DIRECTORY include/
 pluginlib_export_plugin_description_file(mujoco_ros2_control_plugins mujoco_ros2_control_plugins.xml)
 
 ament_export_include_directories(include)
-ament_export_dependencies(mujoco_vendor rclcpp realtime_tools pluginlib std_msgs mujoco_ros2_control_msgs ros2_control_cmake)
+ament_export_dependencies(mujoco_vendor rclcpp realtime_tools pluginlib std_msgs visualization_msgs mujoco_ros2_control_msgs ros2_control_cmake)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 
 ament_package()
