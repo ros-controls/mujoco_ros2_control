@@ -230,7 +230,6 @@ install(PROGRAMS
   scripts/find_missing_inertias.py
   scripts/make_mjcf_from_robot_description.py
   scripts/robot_description_to_mjcf.sh
-  scripts/requirements.txt
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -238,6 +237,11 @@ install(
   DIRECTORY resources scripts
   DESTINATION share/${PROJECT_NAME}
   USE_SOURCE_PERMISSIONS
+)
+
+install(
+  FILES scripts/requirements.txt
+  DESTINATION share/${PROJECT_NAME}
 )
 
 pluginlib_export_plugin_description_file(hardware_interface mujoco_system_interface_plugin.xml)
