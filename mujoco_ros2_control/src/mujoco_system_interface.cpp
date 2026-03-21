@@ -1788,6 +1788,10 @@ bool MujocoSystemInterface::register_mujoco_actuators()
         return false;
       }
     }
+    else if (trn_type == mjTRN_SITE)
+    {
+      actuator_data.joint_name = std::string(act_name);
+    }
     else
     {
       RCLCPP_ERROR(get_logger(), "Unsupported transmission type '%d' for actuator '%s'", trn_type, act_name);
