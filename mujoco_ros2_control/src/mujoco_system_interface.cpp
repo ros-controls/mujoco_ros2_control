@@ -954,14 +954,15 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   for (int i = 0; i < mj_model_->njnt; ++i)
   {
     const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
-    if (!joint_name)
+    const int joint_type = mj_model_->jnt_type[i];
+    if (!joint_name && joint_type != mjJNT_FREE)
     {
       num_joints_without_name++;
     }
   }
   if (num_joints_without_name)
   {
-    RCLCPP_FATAL(get_logger(), "%d joints in the mjcf don't have names. All joints must have names.",
+    RCLCPP_FATAL(get_logger(), "%d joints in the mjcf don't have names. All non-free joints must have names.",
                  num_joints_without_name);
     return hardware_interface::CallbackReturn::FAILURE;
   }
@@ -981,7 +982,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   {
     const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
 
-    if (odom_free_joint_name == joint_name)
+    if (joint_name && (odom_free_joint_name == joint_name))
     {
       if (mj_model_->jnt_type[i] == mjJNT_FREE)
       {
