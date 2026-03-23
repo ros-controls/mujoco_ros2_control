@@ -102,7 +102,7 @@ TEST_F(ConstraintViolationsPublisherPluginTest, PublishesConstraintViolationForE
 
   auto node = std::make_shared<rclcpp::Node>("constraint_violations_plugin_test_node");
   auto plugin_node = node->create_sub_node("constraint_violations_plugin");
-  plugin_node->declare_parameter("publish_rate", 1000.0);
+  plugin_node->declare_parameter("publish_rate", 1000);
 
   mujoco_ros2_control_plugins::ConstraintViolationsPublisherPlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node, model, data));

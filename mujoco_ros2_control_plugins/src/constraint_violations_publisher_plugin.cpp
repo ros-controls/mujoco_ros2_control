@@ -42,18 +42,18 @@ bool ConstraintViolationsPublisherPlugin::init(rclcpp::Node::SharedPtr node, con
   logger_ = node_->get_logger().get_child(node->get_sub_namespace());
 
   // Optional publish-rate parameter (Hz)
-  double rate_hz = 50.0;
+  int rate_hz = 50;
   if (!node_->has_parameter("publish_rate"))
   {
     node_->declare_parameter("publish_rate", rate_hz);
   }
-  rate_hz = node_->get_parameter("publish_rate").as_double();
-  if (rate_hz <= 0.0)
+  rate_hz = static_cast<int>(node_->get_parameter("publish_rate").as_int());
+  if (rate_hz <= 0)
   {
-    RCLCPP_WARN(node_->get_logger(), "publish_rate must be > 0, ignoring value %.1f and using 50 Hz.", rate_hz);
-    rate_hz = 50.0;
+    RCLCPP_WARN(node_->get_logger(), "publish_rate must be > 0, ignoring value %d and using 50 Hz.", rate_hz);
+    rate_hz = 50;
   }
-  publish_period_ = rclcpp::Duration::from_seconds(1.0 / rate_hz);
+  publish_period_ = rclcpp::Duration::from_seconds(1.0 / static_cast<double>(rate_hz));
 
   publisher_ =
       node_->create_publisher<mujoco_ros2_control_msgs::msg::ConstraintViolations>("constraint_violations", 10);
@@ -65,7 +65,7 @@ bool ConstraintViolationsPublisherPlugin::init(rclcpp::Node::SharedPtr node, con
 
   RCLCPP_INFO(node_->get_logger(),
               "ConstraintViolationsPublisherPlugin initialised. "
-              "Model has %d equality constraint(s). Publishing at %.1f Hz on '%s'.",
+              "Model has %d equality constraint(s). Publishing at %d Hz on '%s'.",
               model->neq, rate_hz, publisher_->get_topic_name());
 
   return true;
