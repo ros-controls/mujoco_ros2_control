@@ -26,6 +26,13 @@
 namespace mujoco_ros2_control_plugins
 {
 
+/// Precomputed metadata for an equality constraint
+struct ConstraintMetadata
+{
+  std::string name;
+  std::string type;
+};
+
 /**
  * @brief Plugin that reads MuJoCo equality-constraint violations every step and
  *        publishes them as a ConstraintViolations message.
@@ -69,7 +76,9 @@ private:
   rclcpp::Logger logger_ = rclcpp::get_logger("ConstraintViolationsPublisherPlugin");
 
   rclcpp::Time last_publish_time_;
-  rclcpp::Duration publish_period_{ 0, 20000000 };  // 50 Hz default
+  rclcpp::Duration publish_period_{ 0, 20000000 };       // 50 Hz default
+  int max_constraints_ = 0;                              // Max number of equality constraints in model
+  std::vector<ConstraintMetadata> constraint_metadata_;  // Precomputed name and type for each eq constraint
 };
 
 }  // namespace mujoco_ros2_control_plugins

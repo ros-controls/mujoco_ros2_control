@@ -63,6 +63,19 @@ bool ConstraintViolationsPublisherPlugin::init(rclcpp::Node::SharedPtr node, con
 
   last_publish_time_ = node_->get_clock()->now();
 
+  // Preallocate message vectors and precompute constraint metadata
+  max_constraints_ = model->neq;
+  constraint_violations_msg_.names.reserve(max_constraints_);
+  constraint_violations_msg_.types.reserve(max_constraints_);
+  constraint_violations_msg_.violations.reserve(max_constraints_);
+
+  constraint_metadata_.resize(max_constraints_);
+  for (int eq_id = 0; eq_id < max_constraints_; ++eq_id)
+  {
+    constraint_metadata_[eq_id].name = buildConstraintName(model, eq_id);
+    constraint_metadata_[eq_id].type = constraintTypeString(model, eq_id);
+  }
+
   RCLCPP_INFO(node_->get_logger(),
               "ConstraintViolationsPublisherPlugin initialised. "
               "Model has %d equality constraint(s). Publishing at %d Hz on '%s'.",
@@ -73,6 +86,11 @@ bool ConstraintViolationsPublisherPlugin::init(rclcpp::Node::SharedPtr node, con
 
 void ConstraintViolationsPublisherPlugin::update(const mjModel* model, mjData* data)
 {
+  if (max_constraints_ == 0)
+  {
+    return;  // no equality constraints in the model
+  }
+
   const auto now = node_->get_clock()->now();
   if (now - last_publish_time_ < publish_period_)
   {
@@ -129,19 +147,19 @@ void ConstraintViolationsPublisherPlugin::update(const mjModel* model, mjData* d
   }
 
   constraint_violations_msg_.stamp = now;
-  constraint_violations_msg_.names.clear();
-  constraint_violations_msg_.types.clear();
-  constraint_violations_msg_.violations.clear();
+  // Resize to actual violation count; vectors were preallocated in init()
+  constraint_violations_msg_.names.resize(max_violation.size());
+  constraint_violations_msg_.types.resize(max_violation.size());
+  constraint_violations_msg_.violations.resize(max_violation.size());
 
-  constraint_violations_msg_.names.reserve(max_violation.size());
-  constraint_violations_msg_.types.reserve(max_violation.size());
-  constraint_violations_msg_.violations.reserve(max_violation.size());
-
+  // Fill data into preallocated vectors using precomputed metadata (name and type are static)
+  int idx = 0;
   for (const auto& [eq_id, violation] : max_violation)
   {
-    constraint_violations_msg_.names.push_back(buildConstraintName(model, eq_id));
-    constraint_violations_msg_.types.push_back(constraintTypeString(model, eq_id));
-    constraint_violations_msg_.violations.push_back(violation);
+    constraint_violations_msg_.names[idx] = constraint_metadata_[eq_id].name;
+    constraint_violations_msg_.types[idx] = constraint_metadata_[eq_id].type;
+    constraint_violations_msg_.violations[idx] = violation;
+    ++idx;
   }
 
 #if RCLCPP_VERSION_MAJOR >= 16
