@@ -59,6 +59,18 @@ install(TARGETS mujoco_ros2_control_plugins
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+
+  ament_add_gtest(test_constraint_violations_publisher_plugin
+    test/test_constraint_violations_publisher_plugin.cpp
+  )
+  target_link_libraries(test_constraint_violations_publisher_plugin
+    mujoco_ros2_control_plugins
+  )
+  ament_target_dependencies(test_constraint_violations_publisher_plugin
+    rclcpp
+    mujoco_ros2_control_msgs
+  )
+
   # find_package(ament_lint_auto REQUIRED)
   # ament_lint_auto_find_test_dependencies()
 endif()
