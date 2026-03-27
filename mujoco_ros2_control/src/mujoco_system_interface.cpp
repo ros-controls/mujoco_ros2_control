@@ -2492,13 +2492,30 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.angular_velocity_covariance.resize(9, 0.0);
       sensor_data.linear_acceleration_covariance.resize(9, 0.0);
 
-      int quat_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.orientation.name.c_str());
-      int gyro_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.angular_velocity.name.c_str());
-      int accel_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.linear_acceleration.name.c_str());
+      const int quat_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.orientation.name.c_str());
+      const int gyro_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.angular_velocity.name.c_str());
+      const int accel_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.linear_acceleration.name.c_str());
+
+      if (quat_id == -1)
+      {
+        RCLCPP_ERROR_STREAM(get_logger(),
+                            "Failed to find IMU sensor '" << sensor_data.orientation.name << "' in MuJoCo model");
+      }
+
+      if (gyro_id == -1)
+      {
+        RCLCPP_ERROR_STREAM(get_logger(),
+                            "Failed to find IMU sensor '" << sensor_data.angular_velocity.name << "' in MuJoCo model");
+      }
+
+      if (accel_id == -1)
+      {
+        RCLCPP_ERROR_STREAM(get_logger(), "Failed to find IMU sensor '" << sensor_data.linear_acceleration.name
+                                                                        << "' in MuJoCo model");
+      }
 
       if (quat_id == -1 || gyro_id == -1 || accel_id == -1)
       {
-        RCLCPP_ERROR_STREAM(get_logger(), "Failed to find IMU sensor in MuJoCo model, sensor name: " << sensor.name);
         continue;
       }
 
