@@ -554,6 +554,8 @@ class TestFixture(unittest.TestCase):
             "No /clock messages published after step_simulation",
         )
 
+        # Flush any remaining in-flight clock messages while still paused
+        self.spin_until(lambda: False, timeout=0.5)
         clock_after_step_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
 
         # We don't have the pre-step clock directly, we can verify the delta
@@ -570,6 +572,9 @@ class TestFixture(unittest.TestCase):
             self.spin_until(lambda: len(latest_clock) > 0, timeout=5.0),
             "No /clock messages after second step_simulation",
         )
+
+        # Flush again while still paused
+        self.spin_until(lambda: False, timeout=0.5)
         clock_after_second_step_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
 
         actual_delta = clock_after_second_step_sec - clock_before_second_step_sec
