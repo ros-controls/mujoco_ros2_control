@@ -1367,7 +1367,7 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
                                                    const std::vector<std::string>& stop_interfaces)
 {
   auto update_joint_interface = [this](const std::string& interface_name, bool enabled) {
-    size_t delimiter_pos = interface_name.find('/');
+    const size_t delimiter_pos = interface_name.rfind('/');
     if (delimiter_pos == std::string::npos)
     {
       RCLCPP_ERROR(get_logger(), "Invalid interface name format: %s", interface_name.c_str());
