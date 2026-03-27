@@ -545,6 +545,9 @@ class TestFixture(unittest.TestCase):
         # --- Step N_STEPS physics steps and capture clock before/after ---
         # Record the last known timestamp (from before the pause) as our baseline.
         # Re-subscribe after clearing so any message we receive is genuinely post-step.
+        # Flush and record the baseline clock while paused
+        self.spin_until(clock_settled, timeout=1.0)
+        clock_before_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
         latest_clock.clear()
 
         step_req.steps = N_STEPS
@@ -559,34 +562,12 @@ class TestFixture(unittest.TestCase):
             self.spin_until(lambda: len(latest_clock) > 0, timeout=5.0),
             "No /clock messages published after step_simulation",
         )
-
-        # Flush any remaining in-flight clock messages while still paused
         self.spin_until(clock_settled, timeout=1.0)
-        clock_after_step_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
+        clock_after_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
 
-        # We don't have the pre-step clock directly, we can verify the delta
-        # by calling step_simulation a second time and measuring the difference.
-        clock_before_second_step_sec = clock_after_step_sec
-        latest_clock.clear()
-
-        future = step_client.call_async(step_req)
-        rclpy.spin_until_future_complete(self.node, future, timeout_sec=30.0)
-        result = future.result()
-        self.assertTrue(result.success, f"second step_simulation failed: {result.message}")
-
-        self.assertTrue(
-            self.spin_until(lambda: len(latest_clock) > 0, timeout=5.0),
-            "No /clock messages after second step_simulation",
-        )
-
-        # Flush again while still paused
-        self.spin_until(clock_settled, timeout=1.0)
-        clock_after_second_step_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
-
-        actual_delta = clock_after_second_step_sec - clock_before_second_step_sec
-        # Check that the clock advanced by the expected amount, which should be exactly the requested
-        # number of steps up to floating point addition. We add a grace period of one time step in case
-        # of delays.
+        # Sim is paused so clock should advance by exactly N_STEPS * dt, but allow one
+        # timestep of error to account for floating point arithmetic
+        actual_delta = clock_after_sec - clock_before_sec
         self.assertAlmostEqual(
             actual_delta,
             EXPECTED_DELTA_SEC,
@@ -607,7 +588,7 @@ class TestFixture(unittest.TestCase):
         self.assertTrue(
             self.spin_until(
                 lambda: len(latest_clock) > 0
-                and latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9 > clock_after_second_step_sec,
+                and latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9 > clock_after_sec,
                 timeout=5.0,
             ),
             "Clock did not resume ticking after set_pause(paused=False)",
