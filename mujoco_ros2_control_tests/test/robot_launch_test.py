@@ -504,6 +504,12 @@ class TestFixture(unittest.TestCase):
 
         clock_sub = self.node.create_subscription(Clock, "/clock", clock_cb, 10)
 
+        # Helper function to ensure the clock has stopped progressing
+        def clock_settled():
+            n = len(latest_clock)
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+            return len(latest_clock) == n
+
         # Wait for the sim to be publishing /clock before we do anything
         self.assertTrue(self.spin_until(lambda: len(latest_clock) > 0, timeout=10.0), "No /clock messages received")
 
@@ -555,7 +561,7 @@ class TestFixture(unittest.TestCase):
         )
 
         # Flush any remaining in-flight clock messages while still paused
-        self.spin_until(lambda: False, timeout=0.5)
+        self.spin_until(clock_settled, timeout=1.0)
         clock_after_step_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
 
         # We don't have the pre-step clock directly, we can verify the delta
@@ -574,15 +580,17 @@ class TestFixture(unittest.TestCase):
         )
 
         # Flush again while still paused
-        self.spin_until(lambda: False, timeout=0.5)
+        self.spin_until(clock_settled, timeout=1.0)
         clock_after_second_step_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
 
         actual_delta = clock_after_second_step_sec - clock_before_second_step_sec
-        # Check that the clock advanced by the expected amount (N_STEPS * dt) with some tolerance
+        # Check that the clock advanced by the expected amount, which should be exactly the requested
+        # number of steps up to floating point addition. We add a grace period of one time step in case
+        # of delays.
         self.assertAlmostEqual(
             actual_delta,
             EXPECTED_DELTA_SEC,
-            delta=2.0 * MUJOCO_TIMESTEP,  # allow some tolerance for scheduling delays
+            delta=MUJOCO_TIMESTEP,
             msg=f"Clock advanced by {actual_delta:.6f}s, expected {EXPECTED_DELTA_SEC:.6f}s "
             f"({N_STEPS} steps × {MUJOCO_TIMESTEP}s)",
         )
