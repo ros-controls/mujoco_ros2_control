@@ -465,7 +465,7 @@ mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::string& top
 
   rclcpp::QoS qos_profile(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
   qos_profile.reliable().transient_local().keep_last(1);
-  RCLCPP_INFO(node->get_logger(), "Trying to get the MuJoCo model from topic");
+  RCLCPP_INFO_STREAM(node->get_logger(), "Trying to get the MuJoCo model from topic '" << topic_name << "'");
 
   // Try to get mujoco_model via topic
   auto mujoco_model_sub = node->create_subscription<std_msgs::msg::String>(
@@ -954,14 +954,15 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   for (int i = 0; i < mj_model_->njnt; ++i)
   {
     const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
-    if (!joint_name)
+    const int joint_type = mj_model_->jnt_type[i];
+    if (!joint_name && joint_type != mjJNT_FREE)
     {
       num_joints_without_name++;
     }
   }
   if (num_joints_without_name)
   {
-    RCLCPP_FATAL(get_logger(), "%d joints in the mjcf don't have names. All joints must have names.",
+    RCLCPP_FATAL(get_logger(), "%d joints in the mjcf don't have names. All non-free joints must have names.",
                  num_joints_without_name);
     return hardware_interface::CallbackReturn::FAILURE;
   }
@@ -979,23 +980,21 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       get_hardware_parameter_or(get_hardware_info(), "odom_free_joint_name", "floating_base_joint");
   for (int i = 0; i < mj_model_->njnt; ++i)
   {
-    const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
-
-    if (odom_free_joint_name == joint_name)
+    if (mj_model_->jnt_type[i] == mjJNT_FREE)
     {
-      if (mj_model_->jnt_type[i] == mjJNT_FREE)
-      {
-        free_joint_id_ = i;
-        free_joint_qpos_adr_ = mj_model_->jnt_qposadr[i];
-        free_joint_qvel_adr_ = mj_model_->jnt_dofadr[i];
-      }
-      else
+      const char* joint_name = mj_id2name(mj_model_, mjtObj::mjOBJ_JOINT, i);
+
+      if (joint_name && (odom_free_joint_name != joint_name))
       {
         RCLCPP_FATAL(get_logger(),
                      "Unable to use joint '%s' to publish the floating base state since it is not a free joint.",
                      odom_free_joint_name.c_str());
         return hardware_interface::CallbackReturn::FAILURE;
       }
+
+      free_joint_id_ = i;
+      free_joint_qpos_adr_ = mj_model_->jnt_qposadr[i];
+      free_joint_qvel_adr_ = mj_model_->jnt_dofadr[i];
     }
   }
 
@@ -1367,7 +1366,7 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
                                                    const std::vector<std::string>& stop_interfaces)
 {
   auto update_joint_interface = [this](const std::string& interface_name, bool enabled) {
-    size_t delimiter_pos = interface_name.find('/');
+    const size_t delimiter_pos = interface_name.rfind('/');
     if (delimiter_pos == std::string::npos)
     {
       RCLCPP_ERROR(get_logger(), "Invalid interface name format: %s", interface_name.c_str());
@@ -1788,6 +1787,10 @@ bool MujocoSystemInterface::register_mujoco_actuators()
                      act_name);
         return false;
       }
+    }
+    else if (trn_type == mjTRN_SITE)
+    {
+      actuator_data.joint_name = std::string(act_name);
     }
     else
     {
@@ -2489,13 +2492,30 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.angular_velocity_covariance.resize(9, 0.0);
       sensor_data.linear_acceleration_covariance.resize(9, 0.0);
 
-      int quat_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.orientation.name.c_str());
-      int gyro_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.angular_velocity.name.c_str());
-      int accel_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.linear_acceleration.name.c_str());
+      const int quat_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.orientation.name.c_str());
+      const int gyro_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.angular_velocity.name.c_str());
+      const int accel_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.linear_acceleration.name.c_str());
+
+      if (quat_id == -1)
+      {
+        RCLCPP_ERROR_STREAM(get_logger(),
+                            "Failed to find IMU sensor '" << sensor_data.orientation.name << "' in MuJoCo model");
+      }
+
+      if (gyro_id == -1)
+      {
+        RCLCPP_ERROR_STREAM(get_logger(),
+                            "Failed to find IMU sensor '" << sensor_data.angular_velocity.name << "' in MuJoCo model");
+      }
+
+      if (accel_id == -1)
+      {
+        RCLCPP_ERROR_STREAM(get_logger(), "Failed to find IMU sensor '" << sensor_data.linear_acceleration.name
+                                                                        << "' in MuJoCo model");
+      }
 
       if (quat_id == -1 || gyro_id == -1 || accel_id == -1)
       {
-        RCLCPP_ERROR_STREAM(get_logger(), "Failed to find IMU sensor in MuJoCo model, sensor name: " << sensor.name);
         continue;
       }
 
