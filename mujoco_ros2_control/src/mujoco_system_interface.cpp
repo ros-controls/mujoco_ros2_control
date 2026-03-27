@@ -465,7 +465,7 @@ mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::string& top
 
   rclcpp::QoS qos_profile(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
   qos_profile.reliable().transient_local().keep_last(1);
-  RCLCPP_INFO(node->get_logger(), "Trying to get the MuJoCo model from topic");
+  RCLCPP_INFO_STREAM(node->get_logger(), "Trying to get the MuJoCo model from topic '" << topic_name << "'");
 
   // Try to get mujoco_model via topic
   auto mujoco_model_sub = node->create_subscription<std_msgs::msg::String>(
