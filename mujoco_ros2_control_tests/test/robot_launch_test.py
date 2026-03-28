@@ -572,6 +572,17 @@ class TestFixture(unittest.TestCase):
             f"({N_STEPS} steps × {MUJOCO_TIMESTEP}s)",
         )
 
+        # Ensure we can step again, and that the clock has progressed
+        future = step_client.call_async(step_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=30.0)
+        result = future.result()
+        self.assertIsNotNone(result, "step_simulation returned None")
+        self.assertTrue(result.success, f"step_simulation failed: {result.message}")
+        self.spin_until(clock_settled, timeout=1.0)
+        clock_after_sec2 = clock_time
+        self.assertTrue(clock_after_sec2 > clock_after_sec)
+
+        # Unpause the simulation and verify the clock restarts
         pause_req.paused = False
         future = pause_client.call_async(pause_req)
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
