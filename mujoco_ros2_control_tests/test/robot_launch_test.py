@@ -530,16 +530,17 @@ class TestFixture(unittest.TestCase):
         self.assertIsNotNone(result, "set_pause returned None")
         self.assertTrue(result.success, f"set_pause(paused=True) failed: {result.message}")
 
+        # Ensure all messages are pulled off the clock topic, and the clock has settled during the pause.
+        self.spin_until(clock_settled, timeout=1.0)
+        paused_clock_time = clock_time
+
         # Setting the simulation to paused again should still succeed
         future = pause_client.call_async(pause_req)
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
         result = future.result()
         self.assertTrue(result.success, "set_pause(paused=True) a second time should still succeed")
-
-        # /clock must NOT advance while paused
-        clock_at_pause = clock_time
-        self.spin_until(lambda: False, timeout=1.5)
-        self.assertEqual(clock_time, clock_at_pause, "/clock should not advance while simulation is paused")
+        # Assert the clock as not progressed
+        self.assertAlmostEqual(paused_clock_time, clock_time)
 
         # --- Step N_STEPS physics steps and capture clock before/after ---
         # Flush and record the baseline clock while paused
