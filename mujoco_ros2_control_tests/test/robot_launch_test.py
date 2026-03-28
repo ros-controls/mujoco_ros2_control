@@ -561,13 +561,16 @@ class TestFixture(unittest.TestCase):
         self.spin_until(clock_settled, timeout=1.0)
         clock_after_sec = clock_time
 
-        # Sim is paused so clock should advance by exactly N_STEPS * dt, but allow one
-        # timestep of error to account for floating point arithmetic
+        # Sim is paused so clock should advance by exactly N_STEPS * dt, but allow two
+        # timesteps of error to account for async message processing, and for floating
+        # point arithmetic issues. It is possible that a clock message from the boundary
+        # of the pause is delivered during the settle flush, shifting the baseline by
+        # one step.
         actual_delta = clock_after_sec - clock_before_sec
         self.assertAlmostEqual(
             actual_delta,
             EXPECTED_DELTA_SEC,
-            delta=MUJOCO_TIMESTEP,
+            delta=2.0 * MUJOCO_TIMESTEP,
             msg=f"Clock advanced by {actual_delta:.6f}s, expected {EXPECTED_DELTA_SEC:.6f}s "
             f"({N_STEPS} steps × {MUJOCO_TIMESTEP}s)",
         )
