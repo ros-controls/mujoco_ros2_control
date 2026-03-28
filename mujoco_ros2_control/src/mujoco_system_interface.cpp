@@ -788,8 +788,12 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   const auto lidar_publish_rate =
       std::stod(get_hardware_parameter(get_hardware_info(), "lidar_publish_rate").value_or("5.0"));
 
-  // Check for headless mode
+  // Check for headless mode (URDF hardware param or environment variable)
   headless_ = hardware_interface::parse_bool(get_hardware_parameter(get_hardware_info(), "headless").value_or("false"));
+  if (!headless_ && std::getenv("MUJOCO_HEADLESS"))
+  {
+    headless_ = true;
+  }
   RCLCPP_INFO_EXPRESSION(get_logger(), headless_, "Running in HEADLESS mode.");
 
   // We essentially reconstruct the 'simulate.cc::main()' function here, and
