@@ -465,7 +465,7 @@ mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::string& top
 
   rclcpp::QoS qos_profile(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
   qos_profile.reliable().transient_local().keep_last(1);
-  RCLCPP_INFO(node->get_logger(), "Trying to get the MuJoCo model from topic");
+  RCLCPP_INFO_STREAM(node->get_logger(), "Trying to get the MuJoCo model from topic '" << topic_name << "'");
 
   // Try to get mujoco_model via topic
   auto mujoco_model_sub = node->create_subscription<std_msgs::msg::String>(
@@ -2489,13 +2489,21 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.angular_velocity_covariance.resize(9, 0.0);
       sensor_data.linear_acceleration_covariance.resize(9, 0.0);
 
-      int quat_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.orientation.name.c_str());
-      int gyro_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.angular_velocity.name.c_str());
-      int accel_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.linear_acceleration.name.c_str());
+      const int quat_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.orientation.name.c_str());
+      const int gyro_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.angular_velocity.name.c_str());
+      const int accel_id = mj_name2id(mj_model_, mjOBJ_SENSOR, sensor_data.linear_acceleration.name.c_str());
+
+      RCLCPP_ERROR_EXPRESSION(get_logger(), quat_id == -1, "Failed to find IMU sensor '%s' in MuJoCo model",
+                              sensor_data.orientation.name.c_str());
+
+      RCLCPP_ERROR_EXPRESSION(get_logger(), gyro_id == -1, "Failed to find IMU sensor '%s' in MuJoCo model",
+                              sensor_data.angular_velocity.name.c_str());
+
+      RCLCPP_ERROR_EXPRESSION(get_logger(), accel_id == -1, "Failed to find IMU sensor '%s' in MuJoCo model",
+                              sensor_data.linear_acceleration.name.c_str());
 
       if (quat_id == -1 || gyro_id == -1 || accel_id == -1)
       {
-        RCLCPP_ERROR_STREAM(get_logger(), "Failed to find IMU sensor in MuJoCo model, sensor name: " << sensor.name);
         continue;
       }
 
