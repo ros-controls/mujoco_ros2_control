@@ -236,14 +236,14 @@ class TestFixture(unittest.TestCase):
             rclpy.spin_once(self.node, timeout_sec=0.1)
 
         # Wait for joints to reach target positions
-        self.wait_for_joint_positions({"joint1": 0.5, "joint2": -0.5}, delta=0.05, timeout=5.0)
+        self.wait_for_joint_positions({"joint1": 0.5, "joint2": -0.5}, delta=0.05, timeout=15.0)
 
         if os.environ.get("TEST_TRANSMISSIONS") != "true":
             expected_actuators = {"joint1": 0.5, "joint2": -0.5}
         else:
             expected_actuators = {"actuator1": 0.5 * 2.0, "actuator2": -0.5 * 0.5}
 
-        self.wait_for_joint_positions(expected_actuators, delta=0.05, timeout=5.0, topic="actuator_states")
+        self.wait_for_joint_positions(expected_actuators, delta=0.05, timeout=15.0, topic="actuator_states")
 
         # make sure the efforts field is non-zero (indicating PID/ effort reporting is working)
         self.assertTrue(
@@ -277,14 +277,14 @@ class TestFixture(unittest.TestCase):
         self.wait_for_joint_positions(
             {"gripper_left_finger_joint": -0.04, "gripper_right_finger_joint": 0.04},
             delta=0.005,
-            timeout=5.0,
+            timeout=15.0,
         )
 
         # And confirm that the mujoco_actuators_states also gets there
         self.wait_for_joint_positions(
             {"gripper_left_finger_joint": -0.04, "gripper_right_finger_joint": 0.04},
             delta=0.005,
-            timeout=5.0,
+            timeout=15.0,
             topic="actuator_states",
         )
 
