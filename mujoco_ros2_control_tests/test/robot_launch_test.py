@@ -536,6 +536,12 @@ class TestFixture(unittest.TestCase):
         self.spin_until(lambda: False, timeout=1.5)
         self.assertAlmostEqual(paused_clock_time, clock_time, delta=MUJOCO_TIMESTEP)
 
+        # Setting the simulation to paused again should still succeed
+        future = pause_client.call_async(pause_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        result = future.result()
+        self.assertTrue(result.success, "set_pause(paused=True) a second time should still succeed")
+
         # --- Step N_STEPS physics steps and capture clock before/after ---
         # Flush and record the baseline clock while paused
         clock_before_sec = clock_time
