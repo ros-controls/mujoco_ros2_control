@@ -2515,7 +2515,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     }
     else
     {
-      RCLCPP_ERROR(get_logger(), "Invalid mujoco_type passed to the MuJoCo hardware interface: '%s'", mujoco_type.c_str());
+      RCLCPP_ERROR(get_logger(), "Invalid mujoco_type passed to the MuJoCo hardware interface: '%s'",
+                   mujoco_type.c_str());
     }
   }
 }
@@ -2525,7 +2526,8 @@ bool MujocoSystemInterface::set_override_start_positions(const std::string& over
   tinyxml2::XMLDocument doc;
   if (doc.LoadFile(override_start_position_file.c_str()) != tinyxml2::XML_SUCCESS)
   {
-    RCLCPP_ERROR(get_logger(), "Failed to load override start position file : '%s'.", override_start_position_file.c_str());
+    RCLCPP_ERROR(get_logger(), "Failed to load override start position file : '%s'.",
+                 override_start_position_file.c_str());
     return false;
   }
 
