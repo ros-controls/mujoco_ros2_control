@@ -149,7 +149,7 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
     const auto [lidar_name, idx] = parse_lidar_name(sensor_name);
     if (idx == -1)
     {
-      RCLCPP_WARN(node_->get_logger(), "Failed to parse lidar sensor name: %s, skipping!", sensor_name.c_str());
+      RCLCPP_WARN(node_->get_logger(), "Failed to parse lidar sensor name: '%s', skipping!", sensor_name.c_str());
       continue;
     }
 
@@ -162,7 +162,7 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
       auto new_data_maybe = get_lidar_data(hardware_info, lidar_name);
       if (!new_data_maybe.has_value())
       {
-        RCLCPP_ERROR(node_->get_logger(), "Failed to parse required configuration from ros2_control xacro: %s",
+        RCLCPP_ERROR(node_->get_logger(), "Failed to parse required configuration from ros2_control xacro: '%s'",
                      lidar_name.c_str());
         return false;
       }
@@ -175,8 +175,8 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
       lidar.laser_scan_msg.scan_time = 1.0f / static_cast<float>(lidar_publish_rate_);
 
       // Note that we have added the sensor
-      RCLCPP_INFO(node_->get_logger(), "Adding lidar sensor: %s, idx: %d", lidar.name.c_str(), idx);
-      RCLCPP_INFO(node_->get_logger(), "    frame_name: %s", lidar.frame_name.c_str());
+      RCLCPP_INFO(node_->get_logger(), "Adding lidar sensor: '%s', idx: %d", lidar.name.c_str(), idx);
+      RCLCPP_INFO(node_->get_logger(), "    frame_name: '%s'", lidar.frame_name.c_str());
       RCLCPP_INFO(node_->get_logger(), "    num_rangefinders: %d", lidar.num_rangefinders);
       RCLCPP_INFO(node_->get_logger(), "    min_angle: %f", lidar.min_angle);
       RCLCPP_INFO(node_->get_logger(), "    max_angle: %f", lidar.max_angle);
@@ -199,7 +199,7 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
   // TODO: Verify that everything actually got filled in correctly...
   for (const auto& lidar : lidar_sensors_)
   {
-    RCLCPP_DEBUG(node_->get_logger(), "Lidar Sensor: %s", lidar.name.c_str());
+    RCLCPP_DEBUG(node_->get_logger(), "Lidar Sensor: '%s'", lidar.name.c_str());
     for (size_t j = 0; j < lidar.sensor_indexes.size(); ++j)
     {
       RCLCPP_DEBUG(node_->get_logger(), "  sensor_indexes[%zu] = %d", j, lidar.sensor_indexes[j]);
@@ -254,7 +254,7 @@ void MujocoLidar::update()
   //       as is, and it is objectively more flexible. Leaving it for now.
   for (auto& lidar : lidar_sensors_)
   {
-    RCLCPP_DEBUG(node_->get_logger(), "Lidar Sensor: %s", lidar.name.c_str());
+    RCLCPP_DEBUG(node_->get_logger(), "Lidar Sensor: '%s'", lidar.name.c_str());
     for (size_t idx = 0; idx < lidar.sensor_indexes.size(); ++idx)
     {
       const auto& i = lidar.sensor_indexes[idx];

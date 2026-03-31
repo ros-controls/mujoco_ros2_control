@@ -903,7 +903,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       RCLCPP_FATAL(get_logger(), "PID config file '%s' does not exist!", pids_config_file->c_str());
       return hardware_interface::CallbackReturn::ERROR;
     }
-    RCLCPP_INFO(get_logger(), "Loading PID config from file: %s", pids_config_file.value().c_str());
+    RCLCPP_INFO(get_logger(), "Loading PID config from file: '%s'", pids_config_file.value().c_str());
     auto node_options_arguments = node_options.arguments();
     node_options_arguments.push_back(RCL_ROS_ARGS_FLAG);
     node_options_arguments.push_back(RCL_PARAM_FILE_FLAG);
@@ -2423,7 +2423,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
     if (sensor.parameters.count("mujoco_type") == 0)
     {
-      RCLCPP_INFO(get_logger(), "Not adding hardware interface for sensor in ros2_control xacro: %s",
+      RCLCPP_INFO(get_logger(), "Not adding hardware interface for sensor in ros2_control xacro: '%s'",
                   sensor_name.c_str());
       continue;
     }
@@ -2441,7 +2441,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       mujoco_sensor_name = sensor.parameters.at("mujoco_sensor_name");
     }
 
-    RCLCPP_INFO(get_logger(), "Adding sensor named: %s, of type: %s, mapping to the MJCF sensor: %s",
+    RCLCPP_INFO(get_logger(), "Adding sensor named: '%s', of type: '%s', mapping to the MJCF sensor: '%s'",
                 sensor_name.c_str(), mujoco_type.c_str(), mujoco_sensor_name.c_str());
 
     // Add to the sensor hw information map
@@ -2461,7 +2461,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
       if (force_sensor_id == -1 || torque_sensor_id == -1)
       {
-        RCLCPP_ERROR(get_logger(), "Failed to find force/torque sensor in MuJoCo model, sensor name: %s",
+        RCLCPP_ERROR(get_logger(), "Failed to find force/torque sensor in MuJoCo model, sensor name: '%s'",
                      sensor.name.c_str());
         continue;
       }
@@ -2515,7 +2515,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     }
     else
     {
-      RCLCPP_ERROR(get_logger(), "Invalid mujoco_type passed to the MuJoCo hardware interface: %s", mujoco_type.c_str());
+      RCLCPP_ERROR(get_logger(), "Invalid mujoco_type passed to the MuJoCo hardware interface: '%s'", mujoco_type.c_str());
     }
   }
 }
@@ -2525,7 +2525,7 @@ bool MujocoSystemInterface::set_override_start_positions(const std::string& over
   tinyxml2::XMLDocument doc;
   if (doc.LoadFile(override_start_position_file.c_str()) != tinyxml2::XML_SUCCESS)
   {
-    RCLCPP_ERROR(get_logger(), "Failed to load override start position file %s.", override_start_position_file.c_str());
+    RCLCPP_ERROR(get_logger(), "Failed to load override start position file : '%s'.", override_start_position_file.c_str());
     return false;
   }
 
