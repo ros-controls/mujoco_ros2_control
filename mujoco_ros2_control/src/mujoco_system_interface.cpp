@@ -965,7 +965,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     });
   }
 
-  if (sim_ready_future.wait_for(2s) == std::future_status::timeout)
+  if (sim_ready_future.wait_for(10s) == std::future_status::timeout)
   {
     RCLCPP_FATAL(get_logger(), "Timed out waiting to start simulation rendering!");
     return hardware_interface::CallbackReturn::ERROR;
