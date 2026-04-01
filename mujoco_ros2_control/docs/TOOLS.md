@@ -127,6 +127,7 @@ the generated MJCF. See [mujoco_ros2_control_demos/demo_resources/robot/test_rob
 - `raw_inputs`: arbitrary MJCF XML fragments that will get copied into the generated
   MJCF. Use this for elements that don't require conversion (for example `option`, `default`,
   `actuator`, `tendon`, `equality`, simple `sensor` definitions, etc.). See `test_robot.urdf`.
+  - Can also exclude contacts between bodies (using the `contact` tag). For an external example, refer to the [CLR robot](https://github.com/NASA-JSC-Robotics/chonkur_l_raile/blob/jazzy-devel/clr_mujoco_config/urdf/clr_mujoco_raw_inputs.xacro#L93) (within NASA Johnson Space Center's [iMETRO facility](https://ntrs.nasa.gov/citations/20230015485)).
 
 - `processed_inputs`: convenience tags that the converter understands and processes into valid
   MJCF entries. Use these when the converter must transform (or) generate MJCF elements (for
@@ -135,6 +136,7 @@ the generated MJCF. See [mujoco_ros2_control_demos/demo_resources/robot/test_rob
   - `decompose_mesh` (attributes: `mesh_name`, `threshold`) — request mesh decomposition when
     running `obj2mjcf`/decompose step; useful when large meshes must be split for more robust
     collision hull generation.
+    This is particularly useful for gripper fingers and anything a robot will interact with like object handles.
   - `camera` (attributes: `site`, `name`, `fovy`, `mode`, `resolution`) — instructs the
     converter to add a camera in the MJCF attached to the given URDF site (frame). The
     converter will fill position/quaternion from the URDF link pose. `resolution` is two
@@ -149,12 +151,27 @@ the generated MJCF. See [mujoco_ros2_control_demos/demo_resources/robot/test_rob
   - `modify_element` (attributes: `type`, `name`, ...any MJCF attributes...) — finds the
     generated MJCF element by `type` (for example `joint` or `body`) and `name` and set or
     overwrite the provided attributes. This is useful to tweak physics properties like
-    `frictionloss`, `damping`, `gravcomp`, etc.
+    `frictionloss`, `stiffness`, `damping`, `gravcomp`, etc.
+    - An aside on gravity: `gravcomp` describes the control of joints relative to the gravity set in the scene file.  Most of the time, `gravcomp` will be set to 1.0 (as in [`test_robot.urdf`](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf) and iMETRO robots like [CLR](https://github.com/NASA-JSC-Robotics/chonkur_l_raile/blob/jazzy-devel/clr_mujoco_config/urdf/clr_mujoco_processed_inputs.xacro) and [Phoebe](https://github.com/NASA-JSC-Robotics/phoebe_bridgeback/blob/humble-devel/phoebe_mujoco_config/description/mujoco_inputs.xml)).
 
 - `scene`: scene-level MJCF fragments such as `asset`, `worldbody`, `visual` and small scene
   parameters. If present the converter will merge/insert it into the MJCF scene (camera
   lighting, ground textures, skybox definitions, etc.). Example: the `scene` block in
   `test_robot.urdf` adds a `groundplane` texture and a light in the MJCF. On the other hand, `scene.xml` can be parsed to the script using `--scene` arg to the script, inorder to generate the model including the scene configuration.
+  - Another aside on gravity: gravity can be changed in the MuJoCo `scene`.
+    - For example, iMETRO robots (such as [Phoebe](https://github.com/NASA-JSC-Robotics/phoebe_bridgeback/blob/humble-devel/phoebe_mujoco_config/description/scene.xml#L8)) default to Earth gravity:
+      ```xml
+      <option gravity="0 0 -9.81">
+        <flag contact="enable" />
+      </option>
+      ```
+    - If we wanted to experiment in Lunar gravity (one-sixth Earth gravity):
+      ```xml
+      <option gravity="0 0 -1.63">
+        <flag contact="enable" />
+      </option>
+      ```
+    - Changing the simulated gravity does not affect gravity compensation in the `processed_inputs` described above.
 
 ### Sensor and ROS mapping notes
 - Define ROS-facing sensors inside the `ros2_control` tag (or anywhere in the URDF that your
