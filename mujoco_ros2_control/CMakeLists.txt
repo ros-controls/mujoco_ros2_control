@@ -11,6 +11,7 @@ find_package(Eigen3 REQUIRED)
 find_package(fmt REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(control_toolbox REQUIRED)
+find_package(generate_parameter_library REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -143,6 +144,10 @@ else()
   )
 endif()
 
+generate_parameter_library(mujoco_ros2_control_parameters
+  src/mujoco_ros2_control_parameters.yaml
+)
+
 # MuJoCo ROS 2 control system interface (this package)
 add_library(mujoco_ros2_control SHARED
     src/mujoco_system_interface.cpp
@@ -178,6 +183,7 @@ PUBLIC
   ${MUJOCO_LIB}
   control_toolbox::control_toolbox
   Eigen3::Eigen
+  mujoco_ros2_control_parameters
 PRIVATE
   mujoco_simulate
   Threads::Threads
@@ -206,7 +212,7 @@ target_include_directories(mujoco_ros2_control SYSTEM PUBLIC
 # Note: mujoco::mujoco is an IMPORTED target owned by mujoco_vendor and cannot be
 # co-installed here. Downstream packages must find_package(mujoco_vendor) directly,
 # which is ensured via ament_export_dependencies below.
-install(TARGETS mujoco_ros2_control
+install(TARGETS mujoco_ros2_control mujoco_ros2_control_parameters
   EXPORT export_${PROJECT_NAME}
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
