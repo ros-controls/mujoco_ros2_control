@@ -28,7 +28,6 @@
   <depend>libglfw3-dev</depend>
   <depend>mujoco_vendor</depend>
   <depend>pluginlib</depend>
-  <depend>python3-pykdl</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
@@ -39,6 +38,11 @@
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
 
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>python3-importlib-resources</exec_depend>
+  <exec_depend>python3-pykdl</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>urdfdom_py</exec_depend>
   <exec_depend>python3-venv</exec_depend>
   <exec_depend>python3-pip</exec_depend>
 
