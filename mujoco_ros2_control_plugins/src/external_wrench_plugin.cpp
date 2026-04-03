@@ -96,8 +96,22 @@ void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
   //          track exactly what we contribute to qfrc_applied.
   std::fill(qfrc_temp_.begin(), qfrc_temp_.end(), 0.0);
 
-  for (const auto& w : active_wrenches_)
+  const rclcpp::Time now_apply = node_->get_clock()->now();
+
+  for (auto& w : active_wrenches_)
   {
+    // Compute ramp-down scale: linearly ramp from 1 → 0 over the last
+    // ramp_down_duration seconds of the wrench lifetime.
+    w.current_scale = 1.0;
+    if (w.ramp_down_duration.nanoseconds() > 0)
+    {
+      const rclcpp::Duration remaining = w.end_time - now_apply;
+      if (remaining < w.ramp_down_duration)
+      {
+        w.current_scale = std::max(0.0, remaining.seconds() / w.ramp_down_duration.seconds());
+      }
+    }
+
     // Transform application_point from body-local frame to world frame.
     //   point_world = xpos + xmat * point_local
     // MuJoCo stores xmat as a row-major 3×3 rotation matrix.
@@ -110,10 +124,13 @@ void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
       xpos[2] + xmat[6] * w.application_point[0] + xmat[7] * w.application_point[1] + xmat[8] * w.application_point[2]
     };
 
-    // mj_applyFT computes the generalised force from a Cartesian force+torque
-    // applied at point_world on body w.body_id, and adds the result to the
-    // supplied qfrc_target array (our scratch buffer).
-    mj_applyFT(model, data, w.force, w.torque, point_world, w.body_id, qfrc_temp_.data());
+    // Scale force and torque, then accumulate into the scratch buffer.
+    const mjtNum scaled_force[3] = { w.force[0] * w.current_scale, w.force[1] * w.current_scale,
+                                     w.force[2] * w.current_scale };
+    const mjtNum scaled_torque[3] = { w.torque[0] * w.current_scale, w.torque[1] * w.current_scale,
+                                      w.torque[2] * w.current_scale };
+
+    mj_applyFT(model, data, scaled_force, scaled_torque, point_world, w.body_id, qfrc_temp_.data());
   }
 
   // Step 3 (cont.) – add our computed contribution to qfrc_applied and save it
@@ -197,13 +214,14 @@ void ExternalWrenchPlugin::publishMarkers()
       m.type = visualization_msgs::msg::Marker::ARROW;
       m.action = visualization_msgs::msg::Marker::ADD;
 
+      const double fs = force_arrow_scale_ * w.current_scale;
       geometry_msgs::msg::Point start, end;
       start.x = px;
       start.y = py;
       start.z = pz;
-      end.x = px + w.force[0] * force_arrow_scale_;
-      end.y = py + w.force[1] * force_arrow_scale_;
-      end.z = pz + w.force[2] * force_arrow_scale_;
+      end.x = px + w.force[0] * fs;
+      end.y = py + w.force[1] * fs;
+      end.z = pz + w.force[2] * fs;
       m.points = { start, end };
 
       m.scale.x = kShaftDiam;  // shaft diameter
@@ -229,13 +247,14 @@ void ExternalWrenchPlugin::publishMarkers()
       m.type = visualization_msgs::msg::Marker::ARROW;
       m.action = visualization_msgs::msg::Marker::ADD;
 
+      const double ts = torque_arrow_scale_ * w.current_scale;
       geometry_msgs::msg::Point start, end;
       start.x = px;
       start.y = py;
       start.z = pz;
-      end.x = px + w.torque[0] * torque_arrow_scale_;
-      end.y = py + w.torque[1] * torque_arrow_scale_;
-      end.z = pz + w.torque[2] * torque_arrow_scale_;
+      end.x = px + w.torque[0] * ts;
+      end.y = py + w.torque[1] * ts;
+      end.z = pz + w.torque[2] * ts;
       m.points = { start, end };
 
       m.scale.x = kShaftDiam;
@@ -284,6 +303,7 @@ void ExternalWrenchPlugin::handleApplyWrench(const ApplyExternalWrench::Request:
 
   const rclcpp::Duration duration(request->duration.sec, request->duration.nanosec);
   w.end_time = node_->get_clock()->now() + duration;
+  w.ramp_down_duration = rclcpp::Duration(request->ramp_down_duration.sec, request->ramp_down_duration.nanosec);
 
   {
     std::lock_guard<std::mutex> lock(pending_mutex_);
@@ -291,11 +311,12 @@ void ExternalWrenchPlugin::handleApplyWrench(const ApplyExternalWrench::Request:
   }
 
   RCLCPP_INFO(logger_,
-              "Applying wrench on body '%s' (id=%d) for %.3f s. "
+              "Applying wrench on body '%s' (id=%d) for %.3f s (ramp-down %.3f s). "
               "Force [%.2f, %.2f, %.2f] N, Torque [%.2f, %.2f, %.2f] N·m, "
               "Application point [%.3f, %.3f, %.3f] m (body frame).",
-              request->link_name.c_str(), body_id, duration.seconds(), w.force[0], w.force[1], w.force[2], w.torque[0],
-              w.torque[1], w.torque[2], w.application_point[0], w.application_point[1], w.application_point[2]);
+              request->link_name.c_str(), body_id, duration.seconds(), w.ramp_down_duration.seconds(), w.force[0],
+              w.force[1], w.force[2], w.torque[0], w.torque[1], w.torque[2], w.application_point[0],
+              w.application_point[1], w.application_point[2]);
 
   // Block the service thread until the wrench duration has elapsed so that
   // the response is sent only after the force has been fully applied.

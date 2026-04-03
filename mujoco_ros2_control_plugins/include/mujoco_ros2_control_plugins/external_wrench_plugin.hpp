@@ -85,6 +85,8 @@ private:
     mjtNum torque[3]{ 0.0, 0.0, 0.0 };
     mjtNum application_point[3]{ 0.0, 0.0, 0.0 };  ///< body-local frame
     rclcpp::Time end_time{ 0, 0, RCL_ROS_TIME };
+    rclcpp::Duration ramp_down_duration{ 0, 0 };
+    double current_scale{ 1.0 };  // to be used by the markers for publishing
   };
 
   /// Service callback — runs in a ROS executor thread.
