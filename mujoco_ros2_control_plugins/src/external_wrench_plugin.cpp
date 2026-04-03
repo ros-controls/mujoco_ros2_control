@@ -86,23 +86,14 @@ void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
     pending_mutex_.unlock();
   }
 
-  // Step 3 – remove expired wrenches.
-  const rclcpp::Time now = node_->get_clock()->now();
-  active_wrenches_.erase(std::remove_if(active_wrenches_.begin(), active_wrenches_.end(),
-                                        [&now](const ActiveWrench& w) { return now >= w.end_time; }),
-                         active_wrenches_.end());
-
-  // Step 4 – publish RViz markers for all currently active wrenches.
-  publishMarkers(data);
-
   if (active_wrenches_.empty())
   {
+    publishMarkers(data);
     return;
   }
 
-  // Step 5 – apply each active wrench into a scratch buffer so we can
+  // Step 3 – apply each active wrench into a scratch buffer so we can
   //          track exactly what we contribute to qfrc_applied.
-  // (step numbering preserved for clarity; step 4 is publishMarkers above)
   std::fill(qfrc_temp_.begin(), qfrc_temp_.end(), 0.0);
 
   for (const auto& w : active_wrenches_)
@@ -125,13 +116,24 @@ void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
     mj_applyFT(model, data, w.force, w.torque, point_world, w.body_id, qfrc_temp_.data());
   }
 
-  // Step 5 – add our computed contribution to qfrc_applied and save it so
-  //          we can undo it at the next step.
+  // Step 3 (cont.) – add our computed contribution to qfrc_applied and save it
+  //                  so we can undo it at the next step.
   for (int i = 0; i < nv_; ++i)
   {
     data->qfrc_applied[i] += qfrc_temp_[i];
   }
   qfrc_prev_contribution_ = qfrc_temp_;
+
+  // Step 4 – remove expired wrenches.  Expiry is checked AFTER applying so
+  //          that zero-duration wrenches are applied for exactly one simulation
+  //          step before being discarded (as documented in the header).
+  const rclcpp::Time now = node_->get_clock()->now();
+  active_wrenches_.erase(std::remove_if(active_wrenches_.begin(), active_wrenches_.end(),
+                                        [&now](const ActiveWrench& w) { return now >= w.end_time; }),
+                         active_wrenches_.end());
+
+  // Step 5 – publish RViz markers for all currently active (non-expired) wrenches.
+  publishMarkers(data);
 }
 
 void ExternalWrenchPlugin::cleanup()
