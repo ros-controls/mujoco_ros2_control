@@ -130,7 +130,8 @@ the generated MJCF. See [mujoco_ros2_control_demos/demo_resources/robot/test_rob
 - `raw_inputs`: arbitrary MJCF XML fragments that will get copied into the generated
   MJCF. Use this for elements that don't require conversion (for example `option`, `default`,
   `actuator`, `tendon`, `equality`, simple `sensor` definitions, etc.). See `test_robot.urdf`.
-  - Can also exclude contacts between bodies (using the `contact` tag). For an external example, refer to the [CLR robot](https://github.com/NASA-JSC-Robotics/chonkur_l_raile/blob/jazzy-devel/clr_mujoco_config/urdf/clr_mujoco_raw_inputs.xacro#L93) (within NASA Johnson Space Center's [iMETRO facility](https://ntrs.nasa.gov/citations/20230015485)).
+  - Can also exclude contacts between bodies (using the `contact` tag).
+  For an external example, refer to the [CLR robot](https://github.com/NASA-JSC-Robotics/chonkur_l_raile/blob/jazzy-devel/clr_mujoco_config/urdf/clr_mujoco_raw_inputs.xacro#L93).
 
 - `processed_inputs`: convenience tags that the converter understands and processes into valid
   MJCF entries. Use these when the converter must transform (or) generate MJCF elements (for
