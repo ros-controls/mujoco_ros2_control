@@ -198,7 +198,9 @@ void ExternalWrenchPlugin::publishMarkers()
       m.action = visualization_msgs::msg::Marker::ADD;
 
       geometry_msgs::msg::Point start, end;
-      start.x = px; start.y = py; start.z = pz;
+      start.x = px;
+      start.y = py;
+      start.z = pz;
       end.x = px + w.force[0] * force_arrow_scale_;
       end.y = py + w.force[1] * force_arrow_scale_;
       end.z = pz + w.force[2] * force_arrow_scale_;
@@ -228,7 +230,9 @@ void ExternalWrenchPlugin::publishMarkers()
       m.action = visualization_msgs::msg::Marker::ADD;
 
       geometry_msgs::msg::Point start, end;
-      start.x = px; start.y = py; start.z = pz;
+      start.x = px;
+      start.y = py;
+      start.z = pz;
       end.x = px + w.torque[0] * torque_arrow_scale_;
       end.y = py + w.torque[1] * torque_arrow_scale_;
       end.z = pz + w.torque[2] * torque_arrow_scale_;
