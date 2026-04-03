@@ -156,13 +156,12 @@ the generated MJCF. See [mujoco_ros2_control_demos/demo_resources/robot/test_rob
     generated MJCF element by `type` (for example `joint` or `body`) and `name` and set or
     overwrite the provided attributes. This is useful to tweak physics properties like
     `frictionloss`, `stiffness`, `damping`, `gravcomp`, etc.
-    - An aside on gravity: `gravcomp` describes the control of joints relative to the gravity set in the scene file.  Most of the time, `gravcomp` will be set to 1.0 (as in [`test_robot.urdf`](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf) and iMETRO robots like [CLR](https://github.com/NASA-JSC-Robotics/chonkur_l_raile/blob/jazzy-devel/clr_mujoco_config/urdf/clr_mujoco_processed_inputs.xacro) and [Phoebe](https://github.com/NASA-JSC-Robotics/phoebe_bridgeback/blob/humble-devel/phoebe_mujoco_config/description/mujoco_inputs.xml)).
 
 - `scene`: scene-level MJCF fragments such as `asset`, `worldbody`, `visual` and small scene
   parameters. If present the converter will merge/insert it into the MJCF scene (camera
   lighting, ground textures, skybox definitions, etc.). Example: the `scene` block in
   `test_robot.urdf` adds a `groundplane` texture and a light in the MJCF. On the other hand, `scene.xml` can be parsed to the script using `--scene` arg to the script, inorder to generate the model including the scene configuration.
-  - Another aside on gravity: gravity can be changed in the MuJoCo `scene`.
+  - An aside on gravity: gravity can be changed in the MuJoCo `scene`.
     - For example, iMETRO robots (such as [Phoebe](https://github.com/NASA-JSC-Robotics/phoebe_bridgeback/blob/humble-devel/phoebe_mujoco_config/description/scene.xml#L8)) default to Earth gravity:
       ```xml
       <option gravity="0 0 -9.81">
