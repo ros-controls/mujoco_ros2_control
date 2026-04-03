@@ -1,6 +1,7 @@
 # Tips for Modeling Environment Objects
 
-General tips for modeling environment objects in MuJoCo.  These lessons learned are largely based on use cases explored within the NASA Johnson Space Center [iMETRO facility](https://ntrs.nasa.gov/citations/20230015485).
+General tips for modeling environment objects in MuJoCo.
+These lessons learned are largely based on use cases explored within the NASA Johnson Space Center [iMETRO facility](https://ntrs.nasa.gov/citations/20230015485).
 
 ## Object URDFs
 
