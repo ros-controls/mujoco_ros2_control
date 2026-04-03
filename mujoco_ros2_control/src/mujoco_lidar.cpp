@@ -139,7 +139,7 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
     const auto sensor_name_maybe = mj_id2name(mj_model_, mjtObj::mjOBJ_SENSOR, i);
     if (sensor_name_maybe == nullptr)
     {
-      RCLCPP_WARN_STREAM(node_->get_logger(), "Cannot find a name for lidar sensor at index: " << i << ", skipping!");
+      RCLCPP_WARN(node_->get_logger(), "Cannot find a name for lidar sensor at index: '%d' skipping!", i);
       continue;
     }
     const std::string sensor_name(sensor_name_maybe);
@@ -149,7 +149,7 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
     const auto [lidar_name, idx] = parse_lidar_name(sensor_name);
     if (idx == -1)
     {
-      RCLCPP_WARN_STREAM(node_->get_logger(), "Failed to parse lidar sensor name: " << sensor_name << ", skipping!");
+      RCLCPP_WARN(node_->get_logger(), "Failed to parse lidar sensor name: '%s', skipping!", sensor_name.c_str());
       continue;
     }
 
@@ -162,8 +162,8 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
       auto new_data_maybe = get_lidar_data(hardware_info, lidar_name);
       if (!new_data_maybe.has_value())
       {
-        RCLCPP_ERROR_STREAM(node_->get_logger(),
-                            "Failed to parse required configuration from ros2_control xacro: " << lidar_name);
+        RCLCPP_ERROR(node_->get_logger(), "Failed to parse required configuration from ros2_control xacro: '%s'",
+                     lidar_name.c_str());
         return false;
       }
 
@@ -175,14 +175,14 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
       lidar.laser_scan_msg.scan_time = 1.0f / static_cast<float>(lidar_publish_rate_);
 
       // Note that we have added the sensor
-      RCLCPP_INFO_STREAM(node_->get_logger(), "Adding lidar sensor: " << lidar.name << ", idx: " << idx);
-      RCLCPP_INFO_STREAM(node_->get_logger(), "    frame_name: " << lidar.frame_name);
-      RCLCPP_INFO_STREAM(node_->get_logger(), "    num_rangefinders: " << lidar.num_rangefinders);
-      RCLCPP_INFO_STREAM(node_->get_logger(), "    min_angle: " << lidar.min_angle);
-      RCLCPP_INFO_STREAM(node_->get_logger(), "    max_angle: " << lidar.max_angle);
-      RCLCPP_INFO_STREAM(node_->get_logger(), "    angle_increment: " << lidar.angle_increment);
-      RCLCPP_INFO_STREAM(node_->get_logger(), "    range_min: " << lidar.range_min);
-      RCLCPP_INFO_STREAM(node_->get_logger(), "    range_max: " << lidar.range_max);
+      RCLCPP_INFO(node_->get_logger(), "Adding lidar sensor: '%s', idx: %d", lidar.name.c_str(), idx);
+      RCLCPP_INFO(node_->get_logger(), "    frame_name: '%s'", lidar.frame_name.c_str());
+      RCLCPP_INFO(node_->get_logger(), "    num_rangefinders: %d", lidar.num_rangefinders);
+      RCLCPP_INFO(node_->get_logger(), "    min_angle: %f", lidar.min_angle);
+      RCLCPP_INFO(node_->get_logger(), "    max_angle: %f", lidar.max_angle);
+      RCLCPP_INFO(node_->get_logger(), "    angle_increment: %f", lidar.angle_increment);
+      RCLCPP_INFO(node_->get_logger(), "    range_min: %f", lidar.range_min);
+      RCLCPP_INFO(node_->get_logger(), "    range_max: %f", lidar.range_max);
 
       // Add it to relevant containers
       lidar_sensors_.push_back(std::move(lidar));
@@ -199,10 +199,10 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
   // TODO: Verify that everything actually got filled in correctly...
   for (const auto& lidar : lidar_sensors_)
   {
-    RCLCPP_DEBUG_STREAM(node_->get_logger(), "Lidar Sensor: " << lidar.name);
+    RCLCPP_DEBUG(node_->get_logger(), "Lidar Sensor: '%s'", lidar.name.c_str());
     for (size_t j = 0; j < lidar.sensor_indexes.size(); ++j)
     {
-      RCLCPP_DEBUG_STREAM(node_->get_logger(), "  sensor_indexes[" << j << "] = " << lidar.sensor_indexes[j]);
+      RCLCPP_DEBUG(node_->get_logger(), "  sensor_indexes[%zu] = %d", j, lidar.sensor_indexes[j]);
     }
   }
 
@@ -230,8 +230,7 @@ void MujocoLidar::update_loop()
   // Setup container for lidar data.
   mj_lidar_data_.resize(mj_model_->nsensordata);
 
-  RCLCPP_INFO_STREAM(node_->get_logger(),
-                     "Starting the lidar processing loop, publishing at " << lidar_publish_rate_ << " Hz");
+  RCLCPP_INFO(node_->get_logger(), "Starting the lidar processing loop, publishing at %f Hz", lidar_publish_rate_);
 
   rclcpp::Rate rate(lidar_publish_rate_);
   while (rclcpp::ok() && publish_lidar_)
@@ -255,14 +254,14 @@ void MujocoLidar::update()
   //       as is, and it is objectively more flexible. Leaving it for now.
   for (auto& lidar : lidar_sensors_)
   {
-    RCLCPP_DEBUG_STREAM(node_->get_logger(), "Lidar Sensor: " << lidar.name);
+    RCLCPP_DEBUG(node_->get_logger(), "Lidar Sensor: '%s'", lidar.name.c_str());
     for (size_t idx = 0; idx < lidar.sensor_indexes.size(); ++idx)
     {
       const auto& i = lidar.sensor_indexes[idx];
       auto range = mj_lidar_data_[i];
       lidar.laser_scan_msg.ranges[idx] = static_cast<float>(range);
-      RCLCPP_DEBUG_STREAM(node_->get_logger(), "  sensor_indexes[" << idx << "] = " << lidar.sensor_indexes[idx]
-                                                                   << " - " << mj_lidar_data_[i]);
+      RCLCPP_DEBUG(node_->get_logger(), "  sensor_indexes[%zu] = %d - %f", idx, lidar.sensor_indexes[idx],
+                   mj_lidar_data_[i]);
     }
 
     // Apply range limits to the copied data

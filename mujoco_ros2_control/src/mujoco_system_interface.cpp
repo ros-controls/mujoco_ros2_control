@@ -465,7 +465,7 @@ mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::string& top
 
   rclcpp::QoS qos_profile(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
   qos_profile.reliable().transient_local().keep_last(1);
-  RCLCPP_INFO_STREAM(node->get_logger(), "Trying to get the MuJoCo model from topic '" << topic_name << "'");
+  RCLCPP_INFO(node->get_logger(), "Trying to get the MuJoCo model from topic '%s'", topic_name.c_str());
 
   // Try to get mujoco_model via topic
   auto mujoco_model_sub = node->create_subscription<std_msgs::msg::String>(
@@ -839,8 +839,8 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       // Only process the icon if we successfully loaded it. Otherwise, just proceed without
       if (error)
       {
-        RCLCPP_WARN_STREAM(get_logger(), "LodePNG error " << error << ": " << lodepng_error_text(error)
-                                                          << ". Icon file not loaded: " << icon_location);
+        RCLCPP_WARN(get_logger(), "LodePNG error %u: %s. Icon file not loaded: %s", error, lodepng_error_text(error),
+                    icon_location.c_str());
       }
       else
       {
@@ -903,7 +903,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       RCLCPP_FATAL(get_logger(), "PID config file '%s' does not exist!", pids_config_file->c_str());
       return hardware_interface::CallbackReturn::ERROR;
     }
-    RCLCPP_INFO_STREAM(get_logger(), "Loading PID config from file: " << pids_config_file.value());
+    RCLCPP_INFO(get_logger(), "Loading PID config from file: '%s'", pids_config_file.value().c_str());
     auto node_options_arguments = node_options.arguments();
     node_options_arguments.push_back(RCL_ROS_ARGS_FLAG);
     node_options_arguments.push_back(RCL_PARAM_FILE_FLAG);
@@ -2423,8 +2423,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
     if (sensor.parameters.count("mujoco_type") == 0)
     {
-      RCLCPP_INFO_STREAM(get_logger(),
-                         "Not adding hardware interface for sensor in ros2_control xacro: " << sensor_name);
+      RCLCPP_INFO(get_logger(), "Not adding hardware interface for sensor in ros2_control xacro: '%s'",
+                  sensor_name.c_str());
       continue;
     }
     const auto mujoco_type = sensor.parameters.at("mujoco_type");
@@ -2441,8 +2441,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       mujoco_sensor_name = sensor.parameters.at("mujoco_sensor_name");
     }
 
-    RCLCPP_INFO_STREAM(get_logger(), "Adding sensor named: " << sensor_name << ", of type: " << mujoco_type
-                                                             << ", mapping to the MJCF sensor: " << mujoco_sensor_name);
+    RCLCPP_INFO(get_logger(), "Adding sensor named: '%s', of type: '%s', mapping to the MJCF sensor: '%s'",
+                sensor_name.c_str(), mujoco_type.c_str(), mujoco_sensor_name.c_str());
 
     // Add to the sensor hw information map
     sensors_hw_info_.insert(std::make_pair(sensor_name, sensor));
@@ -2461,8 +2461,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
       if (force_sensor_id == -1 || torque_sensor_id == -1)
       {
-        RCLCPP_ERROR_STREAM(get_logger(),
-                            "Failed to find force/torque sensor in MuJoCo model, sensor name: " << sensor.name);
+        RCLCPP_ERROR(get_logger(), "Failed to find force/torque sensor in MuJoCo model, sensor name: '%s'",
+                     sensor.name.c_str());
         continue;
       }
 
@@ -2515,7 +2515,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     }
     else
     {
-      RCLCPP_ERROR_STREAM(get_logger(), "Invalid mujoco_type passed to the MuJoCo hardware interface: " << mujoco_type);
+      RCLCPP_ERROR(get_logger(), "Invalid mujoco_type passed to the MuJoCo hardware interface: '%s'",
+                   mujoco_type.c_str());
     }
   }
 }
@@ -2525,8 +2526,8 @@ bool MujocoSystemInterface::set_override_start_positions(const std::string& over
   tinyxml2::XMLDocument doc;
   if (doc.LoadFile(override_start_position_file.c_str()) != tinyxml2::XML_SUCCESS)
   {
-    RCLCPP_ERROR_STREAM(get_logger(),
-                        "Failed to load override start position file " << override_start_position_file.c_str() << ".");
+    RCLCPP_ERROR(get_logger(), "Failed to load override start position file : '%s'.",
+                 override_start_position_file.c_str());
     return false;
   }
 
@@ -2534,7 +2535,7 @@ bool MujocoSystemInterface::set_override_start_positions(const std::string& over
   tinyxml2::XMLElement* keyElem = doc.FirstChildElement("key");
   if (!keyElem)
   {
-    RCLCPP_ERROR_STREAM(get_logger(), "<key> element not found in override start position file.");
+    RCLCPP_ERROR(get_logger(), "<key> element not found in override start position file.");
     return false;
   }
 
@@ -2544,7 +2545,7 @@ bool MujocoSystemInterface::set_override_start_positions(const std::string& over
     const char* text = elem->Attribute(attrName);
     if (!text)
     {
-      RCLCPP_ERROR_STREAM(get_logger(), "Attribute '" << attrName << "' not found in override start position file.");
+      RCLCPP_ERROR(get_logger(), "Attribute '%s' not found in override start position file.", attrName);
       return result;  // return empty vector
     }
 
@@ -2571,11 +2572,12 @@ bool MujocoSystemInterface::set_override_start_positions(const std::string& over
   if ((qpos.size() != static_cast<size_t>(mj_model_->nq)) || (qvel.size() != static_cast<size_t>(mj_model_->nv)) ||
       (ctrl.size() != static_cast<size_t>(mj_model_->nu)))
   {
-    RCLCPP_ERROR_STREAM(
-        get_logger(), "Mismatch in data types in override starting positions. Numbers are:\n\t"
-                          << "qpos size in file: " << qpos.size() << ", qpos size in model: " << mj_model_->nq << "\n\t"
-                          << "qvel size in file: " << qvel.size() << ", qvel size in model: " << mj_model_->nv << "\n\t"
-                          << "ctrl size in file: " << ctrl.size() << ", ctrl size in model: " << mj_model_->nu);
+    RCLCPP_ERROR(get_logger(),
+                 "Mismatch in data types in override starting positions. Numbers are:\n\t"
+                 "qpos size in file: %zu, qpos size in model: %d\n\t"
+                 "qvel size in file: %zu, qvel size in model: %d\n\t"
+                 "ctrl size in file: %zu, ctrl size in model: %d",
+                 qpos.size(), mj_model_->nq, qvel.size(), mj_model_->nv, ctrl.size(), mj_model_->nu);
     return false;
   }
 

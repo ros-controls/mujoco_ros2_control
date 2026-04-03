@@ -74,11 +74,11 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
       camera.depth_topic = camera.name + "/depth";
     }
 
-    RCLCPP_INFO_STREAM(node_->get_logger(), "Adding camera: " << cam_name);
-    RCLCPP_INFO_STREAM(node_->get_logger(), "    frame_name: " << camera.frame_name);
-    RCLCPP_INFO_STREAM(node_->get_logger(), "    info_topic: " << camera.info_topic);
-    RCLCPP_INFO_STREAM(node_->get_logger(), "    image_topic: " << camera.image_topic);
-    RCLCPP_INFO_STREAM(node_->get_logger(), "    depth_topic: " << camera.depth_topic);
+    RCLCPP_INFO(node_->get_logger(), "Adding camera: '%s'", cam_name);
+    RCLCPP_INFO(node_->get_logger(), "    frame_name: '%s'", camera.frame_name.c_str());
+    RCLCPP_INFO(node_->get_logger(), "    info_topic: '%s'", camera.info_topic.c_str());
+    RCLCPP_INFO(node_->get_logger(), "    image_topic: '%s'", camera.image_topic.c_str());
+    RCLCPP_INFO(node_->get_logger(), "    depth_topic: '%s'", camera.depth_topic.c_str());
 
     // Configure publishers
     camera.camera_info_pub = node_->create_publisher<sensor_msgs::msg::CameraInfo>(camera.info_topic, 1);
