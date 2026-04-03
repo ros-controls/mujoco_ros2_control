@@ -8,7 +8,7 @@ This process is very similar to the process for [generating a robot MJCF](./TOOL
     See [tips for modeling environment objects](./MODELING_ENVIRONMENTS.md) for additional helpful information.
     2.  Create URDFs for the moveable objects.
     The moveable objects will not require a special URDF using the [MuJoCo `ros2_control` hardware interface plugin](../README.md#plugin), since the robot is expected to interact with and move these objects.
-    Instead, conversion can be performed directly on the environment/mockups URDFs or these URDFs can be xacro included into the top-level MuJoCo URDF (as is done with the [cargo back in the CLR demo](https://github.com/NASA-JSC-Robotics/chonkur_l_raile/blob/jazzy-devel/clr_mujoco_config/urdf/clr_mujoco_xacro.urdf#L19)).
+    Instead, conversion can be performed directly on the environment/mockups URDFs or these URDFs can be xacro included into the top-level MuJoCo URDF.
 2.  Create input(s) for the conversion process; each moveable object can be converted separately or as part of a top-level MuJoCo inputs file.
 Most important is decomposing any object sub-parts the robot will need to interact with.
 This decomposition ensures the conves hulls for collision checking on these interactable sub-parts are accurate.
