@@ -1,6 +1,6 @@
 # Generate Moveable Object MJCFs
 
-Moveable objects (such as the cargo bag in the [CLR pick-and-place demo](https://github.com/NASA-JSC-Robotics/clr_sim_demos/blob/humble-devel/clr_pick_and_place_demo/README.md)) that are not modeled as part of the environment need to be incorporated into the MuJoCo scene as separate MJCFs.
+Moveable objects that are not modeled as part of the environment need to be incorporated into the MuJoCo scene as separate MJCFs.
 This process is very similar to the process for [generating a robot MJCF](./TOOLS.md).
 
 1.  If not already done in an environments/mockups package:
