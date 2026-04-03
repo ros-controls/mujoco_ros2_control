@@ -27,6 +27,9 @@ We can see an example of how a low-fidelity lunar habitat concept is modeled in 
 > [!WARNING]
 > This depiction of a lunar habitat concept does not constitute an official design or official endorsement, either expressed or implied, by NASA.
 
+The low-fidelity lunar habitat concept in MuJoCo:
+![Habitat Visual](./images/habitat.png "The low-fidelity lunar habitat concept")
+
 An example of a convex hull around a low-fidelity lunar habitat concept modeled as a singular asset is depicted below; the robot is unable to reach onto the habitat porch because of how the convex hull is drawn around this asset.
 ![Poor Convex Hull](./images/habitat-convex-hull-bad.png "Convex hull around object modeled as singular asset")
 
