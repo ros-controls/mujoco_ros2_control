@@ -41,11 +41,11 @@ namespace mujoco_ros2_control_plugins
  * ----------------------
  *   header            – ROS stamp / frame_id (informational)
  *   link_name         – Name of the MuJoCo body (must match MJCF body name)
- *   wrench.force      – Linear force  [N]   expressed in **world frame**
- *   wrench.torque     – Angular moment [N·m] expressed in **world frame**
- *   application_point – Point of force application in the **body's local frame**
- *                       (relative to body frame origin, metres).
- *                       A zero vector applies at the body frame origin.
+ *   wrench.force      – Linear force  [N]   expressed in **marker_frame_id frame** (default: base_link)
+ *   wrench.torque     – Angular moment [N·m] expressed in **marker_frame_id frame** (default: base_link)
+ *   application_point – Point of force application expressed in **marker_frame_id frame**
+ *                       (relative to that frame's origin, metres).
+ *                       A zero vector applies at the frame origin.
  *   duration          – How long the wrench remains active.
  *                       A zero duration applies it for one simulation step.
  *
@@ -92,7 +92,7 @@ private:
                          ApplyExternalWrench::Response::SharedPtr response);
 
   /// Publish RViz arrow markers for all active wrenches. Called from update().
-  void publishMarkers(mjData* data);
+  void publishMarkers();
 
   // ── ROS interfaces ────────────────────────────────────────────────────────
   rclcpp::Node::SharedPtr node_;
@@ -123,7 +123,8 @@ private:
   double force_arrow_scale_{ 0.01 };
   /// Arrow length per unit torque [m/(N·m)]. Parameter: "torque_arrow_scale".
   double torque_arrow_scale_{ 0.1 };
-  /// TF frame in which markers are published. Parameter: "marker_frame_id".
+  /// TF frame in which markers are published and in which the service caller
+  /// must express application_point, force, and torque. Parameter: "marker_frame_id".
   std::string marker_frame_id_{ "base_link" };
 };
 

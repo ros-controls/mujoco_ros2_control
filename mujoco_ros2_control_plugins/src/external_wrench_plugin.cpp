@@ -88,7 +88,7 @@ void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
 
   if (active_wrenches_.empty())
   {
-    publishMarkers(data);
+    publishMarkers();
     return;
   }
 
@@ -133,7 +133,7 @@ void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
                          active_wrenches_.end());
 
   // Step 5 – publish RViz markers for all currently active (non-expired) wrenches.
-  publishMarkers(data);
+  publishMarkers();
 }
 
 void ExternalWrenchPlugin::cleanup()
@@ -149,7 +149,7 @@ void ExternalWrenchPlugin::cleanup()
 // Marker visualization
 // ---------------------------------------------------------------------------
 
-void ExternalWrenchPlugin::publishMarkers(mjData* data)
+void ExternalWrenchPlugin::publishMarkers()
 {
   if (!marker_pub_->trylock())
   {
@@ -179,16 +179,11 @@ void ExternalWrenchPlugin::publishMarkers(mjData* data)
   int id = 0;
   for (const auto& w : active_wrenches_)
   {
-    // World-frame application point: p = xpos + xmat * application_point_local
-    const mjtNum* xpos = data->xpos + w.body_id * 3;
-    const mjtNum* xmat = data->xmat + w.body_id * 9;
-
-    const double px = xpos[0] + xmat[0] * w.application_point[0] + xmat[1] * w.application_point[1] +
-                      xmat[2] * w.application_point[2];
-    const double py = xpos[1] + xmat[3] * w.application_point[0] + xmat[4] * w.application_point[1] +
-                      xmat[5] * w.application_point[2];
-    const double pz = xpos[2] + xmat[6] * w.application_point[0] + xmat[7] * w.application_point[1] +
-                      xmat[8] * w.application_point[2];
+    // Use the application_point and force/torque exactly as supplied in the
+    // service request — no MuJoCo feedback lookup needed.
+    const double px = w.application_point[0];
+    const double py = w.application_point[1];
+    const double pz = w.application_point[2];
 
     // Force arrow (red) — skip if negligible.
     const double f_sq = w.force[0] * w.force[0] + w.force[1] * w.force[1] + w.force[2] * w.force[2];
@@ -203,9 +198,7 @@ void ExternalWrenchPlugin::publishMarkers(mjData* data)
       m.action = visualization_msgs::msg::Marker::ADD;
 
       geometry_msgs::msg::Point start, end;
-      start.x = px;
-      start.y = py;
-      start.z = pz;
+      start.x = px; start.y = py; start.z = pz;
       end.x = px + w.force[0] * force_arrow_scale_;
       end.y = py + w.force[1] * force_arrow_scale_;
       end.z = pz + w.force[2] * force_arrow_scale_;
@@ -235,9 +228,7 @@ void ExternalWrenchPlugin::publishMarkers(mjData* data)
       m.action = visualization_msgs::msg::Marker::ADD;
 
       geometry_msgs::msg::Point start, end;
-      start.x = px;
-      start.y = py;
-      start.z = pz;
+      start.x = px; start.y = py; start.z = pz;
       end.x = px + w.torque[0] * torque_arrow_scale_;
       end.y = py + w.torque[1] * torque_arrow_scale_;
       end.z = pz + w.torque[2] * torque_arrow_scale_;
