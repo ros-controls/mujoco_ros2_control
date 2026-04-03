@@ -81,6 +81,7 @@ private:
   struct ActiveWrench
   {
     int body_id{ -1 };
+    std::string link_name;
     mjtNum force[3]{ 0.0, 0.0, 0.0 };
     mjtNum torque[3]{ 0.0, 0.0, 0.0 };
     mjtNum application_point[3]{ 0.0, 0.0, 0.0 };  ///< body-local frame

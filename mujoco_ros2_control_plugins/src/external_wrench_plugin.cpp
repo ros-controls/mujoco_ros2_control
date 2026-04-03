@@ -208,7 +208,7 @@ void ExternalWrenchPlugin::publishMarkers()
     {
       visualization_msgs::msg::Marker m;
       m.header.stamp = stamp;
-      m.header.frame_id = marker_frame_id_;
+      m.header.frame_id = w.link_name;
       m.ns = "force";
       m.id = id++;
       m.type = visualization_msgs::msg::Marker::ARROW;
@@ -241,7 +241,7 @@ void ExternalWrenchPlugin::publishMarkers()
     {
       visualization_msgs::msg::Marker m;
       m.header.stamp = stamp;
-      m.header.frame_id = marker_frame_id_;
+      m.header.frame_id = w.link_name;
       m.ns = "torque";
       m.id = id++;
       m.type = visualization_msgs::msg::Marker::ARROW;
@@ -291,6 +291,7 @@ void ExternalWrenchPlugin::handleApplyWrench(const ApplyExternalWrench::Request:
 
   ActiveWrench w;
   w.body_id = body_id;
+  w.link_name = request->link_name;
   w.force[0] = request->wrench.force.x;
   w.force[1] = request->wrench.force.y;
   w.force[2] = request->wrench.force.z;
