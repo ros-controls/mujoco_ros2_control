@@ -161,7 +161,7 @@ the generated MJCF. See [mujoco_ros2_control_demos/demo_resources/robot/test_rob
   lighting, ground textures, skybox definitions, etc.). Example: the `scene` block in
   `test_robot.urdf` adds a `groundplane` texture and a light in the MJCF. On the other hand, `scene.xml` can be parsed to the script using `--scene` arg to the script, inorder to generate the model including the scene configuration.
   - Gravity can also be changed in the MuJoCo `scene`.
-    - For example, iMETRO robots (such as [Phoebe](https://github.com/NASA-JSC-Robotics/phoebe_bridgeback/blob/humble-devel/phoebe_mujoco_config/description/scene.xml#L8)) default to Earth gravity:
+    - For example, for Earth gravity:
       ```xml
       <option gravity="0 0 -9.81">
         <flag contact="enable" />
