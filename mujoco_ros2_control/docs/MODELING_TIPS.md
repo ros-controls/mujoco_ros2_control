@@ -1,11 +1,11 @@
-# Tips for Modeling Environment Objects
+# Tips for Modeling Complex Geometries
 
-General tips for modeling environment objects in MuJoCo.
+General tips for modeling complex geometries in MuJoCo.
 These lessons learned are largely based on use cases explored within the NASA Johnson Space Center [iMETRO facility](https://github.com/NASA-JSC-Robotics/iMETRO).
 
 ## Object URDFs
 
-It is helpful to create a URDF to combine an object's sub-parts and keep these environment object URDFs in an environment/mockups package (such as the [surface mockups description](https://github.com/NASA-JSC-Robotics/surface_robotics_mockups_description/tree/main) package used in the [CLR workspace](https://github.com/NASA-JSC-Robotics/clr_ws)).
+It is helpful to create a URDF to combine an object's sub-parts and keep these object URDFs in an environment/mockups package (such as the [surface mockups description](https://github.com/NASA-JSC-Robotics/surface_robotics_mockups_description/tree/main) package used in the [CLR workspace](https://github.com/NASA-JSC-Robotics/clr_ws)).
 
 Having the object URDFs will make it easier to convert these objects to MJCFs later, as described in the [MJCF conversion documentation](./TOOLS.md).
 
@@ -17,7 +17,7 @@ ASCII STL files can be converted to binary using the Python command line tool [`
 
 ## Interactions with Convex Hulls in MuJoCo
 
-Determining how to model environment objects depends on how the robot (or anything in the simulation) will interact with the objects.
+Determining how to model complex geometries depends on how the robot (or anything in the simulation) will interact with the objects.
 When the STL files exported from CAD are run through the [conversion process](./TOOLS.md), MuJoCo draws convex hulls for collision checking around the model.
 If an object is modeled as a singular asset, the convex hull will prevent the robot from interacting with any meaningful features of the object.
 Instead, objects should be modeled as separate sub-parts that are brought together in the [object URDF](#object-urdfs).
@@ -39,4 +39,4 @@ The convex hull for the object with modeled sub-parts is depicted below.
 ![Convex Hull](./images/habitat-convex-hull.png "Convex hull around object modeled with sub-parts")
 
 Note that with this object breakdown, the robot *cannot* reach into the module itself, since the convex hull around the model closes any openings into the module.
-Be aware that how objects are broken into sub-parts will depend on the application and any expected interactions with the environment object.
+Be aware that how objects are broken into sub-parts will depend on the application and any expected interactions with the object.

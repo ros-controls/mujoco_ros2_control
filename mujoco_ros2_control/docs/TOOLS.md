@@ -89,7 +89,7 @@ Of note, the test robot has a good chunk of supported functionality, and we reco
 > The `make_mjcf_from_robot_description.py` script requires `trimesh`, `mujoco`, and `obj2mjcf`. These must either be installed system-wide or available within a virtual environment that is sourced before running the command.
 
 > [!NOTE]
-> This page focuses on generating MJCFs for robots.  Please see additional documentation on [modeling environments in MuJoCo](./MODELING_ENVIRONMENTS.md) and [generating MJCFs for moveable objects](./MOVEABLE_OBJECTS.md).
+> This page focuses on generating MJCFs for robots.  Please see additional documentation on [modeling complex geometries in MuJoCo](./MODELING_TIPS.md) and [generating MJCFs for moveable objects](./MOVEABLE_OBJECTS.md).
 
 ## Notes
 
