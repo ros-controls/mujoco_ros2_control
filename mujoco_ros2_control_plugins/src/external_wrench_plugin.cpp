@@ -124,13 +124,19 @@ void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
       xpos[2] + xmat[6] * w.application_point[0] + xmat[7] * w.application_point[1] + xmat[8] * w.application_point[2]
     };
 
-    // Scale force and torque, then accumulate into the scratch buffer.
-    const mjtNum scaled_force[3] = { w.force[0] * w.current_scale, w.force[1] * w.current_scale,
-                                     w.force[2] * w.current_scale };
-    const mjtNum scaled_torque[3] = { w.torque[0] * w.current_scale, w.torque[1] * w.current_scale,
-                                      w.torque[2] * w.current_scale };
+    // Scale force and torque (body frame), then rotate to world frame before
+    // passing to mj_applyFT, which expects world-frame vectors.
+    const mjtNum sf[3] = { w.force[0] * w.current_scale, w.force[1] * w.current_scale, w.force[2] * w.current_scale };
+    const mjtNum st[3] = { w.torque[0] * w.current_scale, w.torque[1] * w.current_scale, w.torque[2] * w.current_scale };
 
-    mj_applyFT(model, data, scaled_force, scaled_torque, point_world, w.body_id, qfrc_temp_.data());
+    const mjtNum force_world[3] = { xmat[0] * sf[0] + xmat[1] * sf[1] + xmat[2] * sf[2],
+                                    xmat[3] * sf[0] + xmat[4] * sf[1] + xmat[5] * sf[2],
+                                    xmat[6] * sf[0] + xmat[7] * sf[1] + xmat[8] * sf[2] };
+    const mjtNum torque_world[3] = { xmat[0] * st[0] + xmat[1] * st[1] + xmat[2] * st[2],
+                                     xmat[3] * st[0] + xmat[4] * st[1] + xmat[5] * st[2],
+                                     xmat[6] * st[0] + xmat[7] * st[1] + xmat[8] * st[2] };
+
+    mj_applyFT(model, data, force_world, torque_world, point_world, w.body_id, qfrc_temp_.data());
   }
 
   // Step 3 (cont.) – add our computed contribution to qfrc_applied and save it

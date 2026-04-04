@@ -41,11 +41,11 @@ namespace mujoco_ros2_control_plugins
  * ----------------------
  *   header            – ROS stamp / frame_id (informational)
  *   link_name         – Name of the MuJoCo body (must match MJCF body name)
- *   wrench.force      – Linear force  [N]   expressed in **marker_frame_id frame** (default: base_link)
- *   wrench.torque     – Angular moment [N·m] expressed in **marker_frame_id frame** (default: base_link)
- *   application_point – Point of force application expressed in **marker_frame_id frame**
- *                       (relative to that frame's origin, metres).
- *                       A zero vector applies at the frame origin.
+ *   wrench.force      – Linear force  [N]   expressed in the **body (link) frame**
+ *   wrench.torque     – Angular moment [N·m] expressed in the **body (link) frame**
+ *   application_point – Point of force application expressed in the **body (link) frame**
+ *                       (relative to the link frame origin, metres).
+ *                       A zero vector applies at the link frame origin.
  *   duration          – How long the wrench remains active.
  *                       A zero duration applies it for one simulation step.
  *
