@@ -78,6 +78,14 @@ if(BUILD_TESTING)
     ${visualization_msgs_TARGETS}
   )
 
+  # FastDDS probes /dev/shm during DDS participant init, which is restricted in
+  # Docker-based CI and causes a SIGSEGV. Disable SHM transport for these tests.
+  set_tests_properties(
+    test_constraint_violations_publisher_plugin
+    test_external_wrench_plugin
+    PROPERTIES ENVIRONMENT "FASTDDS_BUILTIN_TRANSPORTS=UDPv4"
+  )
+
   # find_package(ament_lint_auto REQUIRED)
   # ament_lint_auto_find_test_dependencies()
 endif()
