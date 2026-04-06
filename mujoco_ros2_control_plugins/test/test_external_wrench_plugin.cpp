@@ -95,9 +95,11 @@ protected:
     std::cerr << "[ExternalWrench] calling mj_forward\n" << std::flush;
     mj_forward(model_, data_);
 
-    std::cerr << "[ExternalWrench] creating rclcpp nodes\n" << std::flush;
+    std::cerr << "[ExternalWrench] creating rclcpp node\n" << std::flush;
     node_ = std::make_shared<rclcpp::Node>("external_wrench_test_node");
+    std::cerr << "[ExternalWrench] rclcpp node created, calling create_sub_node\n" << std::flush;
     plugin_node_ = node_->create_sub_node("external_wrench_plugin");
+    std::cerr << "[ExternalWrench] sub_node created\n" << std::flush;
 
     // Use two executor threads so a blocking service callback (sleeping for
     // its wrench duration) does not prevent other callbacks (e.g. subscription

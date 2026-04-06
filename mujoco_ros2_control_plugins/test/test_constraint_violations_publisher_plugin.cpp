@@ -116,10 +116,13 @@ TEST_F(ConstraintViolationsPublisherPluginTest, PublishesConstraintViolationForE
   data->efc_pos[first_equality_row] = injected_equality_residual;
   const double expected_violation = injected_equality_residual;
 
-  std::cerr << "[ConstraintViolations] creating rclcpp nodes\n" << std::flush;
+  std::cerr << "[ConstraintViolations] creating rclcpp node\n" << std::flush;
   auto node = std::make_shared<rclcpp::Node>("constraint_violations_plugin_test_node");
+  std::cerr << "[ConstraintViolations] rclcpp node created, calling create_sub_node\n" << std::flush;
   auto plugin_node = node->create_sub_node("constraint_violations_plugin");
+  std::cerr << "[ConstraintViolations] sub_node created, declaring parameter\n" << std::flush;
   plugin_node->declare_parameter("publish_rate", 1000);
+  std::cerr << "[ConstraintViolations] parameter declared\n" << std::flush;
 
   std::cerr << "[ConstraintViolations] calling plugin.init()\n" << std::flush;
   mujoco_ros2_control_plugins::ConstraintViolationsPublisherPlugin plugin;
