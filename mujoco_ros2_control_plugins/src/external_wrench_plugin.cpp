@@ -185,13 +185,7 @@ void ExternalWrenchPlugin::cleanup()
 
 void ExternalWrenchPlugin::publishMarkers()
 {
-  if (!marker_pub_->trylock())
-  {
-    return;
-  }
-
-  auto& msg = marker_pub_->msg_;
-  msg.markers.clear();
+  MarkerArray msg;
 
   if (active_wrenches_.empty())
   {
@@ -200,7 +194,7 @@ void ExternalWrenchPlugin::publishMarkers()
     del.header.frame_id = marker_frame_id_;
     del.action = visualization_msgs::msg::Marker::DELETEALL;
     msg.markers.push_back(del);
-    marker_pub_->unlockAndPublish();
+    marker_pub_->try_publish(msg);
     return;
   }
 
@@ -288,7 +282,7 @@ void ExternalWrenchPlugin::publishMarkers()
     }
   }
 
-  marker_pub_->unlockAndPublish();
+  marker_pub_->try_publish(msg);
 }
 
 // ---------------------------------------------------------------------------
