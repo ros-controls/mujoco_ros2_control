@@ -45,6 +45,7 @@
 #include <tinyxml2.h>
 #include <std_msgs/msg/string.hpp>
 #include <unordered_map>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #if !ROS_DISTRO_HUMBLE
@@ -1571,6 +1572,35 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   for (auto& plugin : plugin_instances_)
   {
     plugin->update(mj_model_, mj_data_control_);
+  }
+
+  // Collect and publish visualization markers from all plugins at a controlled rate.
+  // Markers are given a finite lifetime (2x the publish period) so they auto-expire
+  // in RViz when a plugin stops contributing them.
+  if (plugin_marker_pub_ && (time - last_marker_publish_time_).seconds() >= marker_publish_period_)
+  {
+    visualization_markers_.markers.clear();
+    for (auto& plugin : plugin_instances_)
+    {
+      plugin->publish_markers(visualization_markers_);
+    }
+    if (!combined.markers.empty())
+    {
+      const rclcpp::Duration lifetime = rclcpp::Duration::from_seconds(2.0 * marker_publish_period_);
+      for (auto& m : combined.markers)
+      {
+        if (m.action == visualization_msgs::msg::Marker::ADD)
+        {
+          m.lifetime = lifetime;
+        }
+      }
+#if ROS_DISTRO_HUMBLE
+      plugin_marker_pub_->tryPublish(visualization_markers_);
+#else
+      plugin_marker_pub_->try_publish(visualization_markers_);
+#endif
+    }
+    last_marker_publish_time_ = time;
   }
 
   return hardware_interface::return_type::OK;
@@ -3224,6 +3254,21 @@ void MujocoSystemInterface::load_mujoco_plugins()
   catch (const pluginlib::PluginlibException& ex)
   {
     RCLCPP_ERROR(get_logger(), "Failed to create plugin loader: %s", ex.what());
+  }
+
+  // Create the ~/markers publisher only when at least one plugin was loaded.
+  if (!plugin_instances_.empty())
+  {
+    const double marker_publish_rate =
+        hardware_interface::stod(get_hardware_parameter_or(get_hardware_info(), "marker_publish_rate", "10.0"));
+    marker_publish_period_ = 1.0 / marker_publish_rate;
+    plugin_marker_pub_raw_ =
+        get_node()->create_publisher<visualization_msgs::msg::MarkerArray>("~/markers", rclcpp::SystemDefaultsQoS());
+    plugin_marker_pub_ = std::make_shared<realtime_tools::RealtimePublisher<visualization_msgs::msg::MarkerArray>>(
+        plugin_marker_pub_raw_);
+    RCLCPP_INFO(get_logger(), "Plugin marker publisher created on '~/markers' at %.1f Hz.", marker_publish_rate);
+    // Reserve memory ahead for all the markers that will be published by the plugins
+    visualization_markers_.markers.reserve(1000);
   }
 }
 

@@ -22,7 +22,6 @@
 
 #include <mujoco_ros2_control_msgs/srv/apply_external_wrench.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <realtime_tools/realtime_publisher.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
 #include "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
@@ -78,6 +77,7 @@ public:
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
   void update(const mjModel* model, mjData* data) override;
   void cleanup() override;
+  void publish_markers(visualization_msgs::msg::MarkerArray& markers) override;
 
 private:
   using ApplyExternalWrench = mujoco_ros2_control_msgs::srv::ApplyExternalWrench;
@@ -99,17 +99,12 @@ private:
   void handleApplyWrench(const ApplyExternalWrench::Request::SharedPtr request,
                          ApplyExternalWrench::Response::SharedPtr response);
 
-  /// Publish RViz arrow markers for all active wrenches. Called from update().
-  void publishMarkers();
-
   // ── ROS interfaces ────────────────────────────────────────────────────────
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_{ rclcpp::get_logger("ExternalWrenchPlugin") };
   rclcpp::Service<ApplyExternalWrench>::SharedPtr service_;
 
   using MarkerArray = visualization_msgs::msg::MarkerArray;
-  rclcpp::Publisher<MarkerArray>::SharedPtr marker_pub_raw_;
-  std::unique_ptr<realtime_tools::RealtimePublisher<MarkerArray>> marker_pub_;
 
   // ── Model pointer (const, valid for simulation lifetime) ─────────────────
   const mjModel* model_{ nullptr };

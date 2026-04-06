@@ -43,6 +43,7 @@
 #include <realtime_tools/realtime_publisher.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include <mujoco/mujoco.h>
 
@@ -373,6 +374,16 @@ private:
   std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::Odometry>> floating_base_publisher_ = nullptr;
   realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>::SharedPtr floating_base_realtime_publisher_ = nullptr;
   nav_msgs::msg::Odometry floating_base_msg_;
+
+  // Plugin marker publisher — created only when at least one plugin is loaded.
+  std::shared_ptr<rclcpp::Publisher<visualization_msgs::msg::MarkerArray>> plugin_marker_pub_raw_ = nullptr;
+  realtime_tools::RealtimePublisher<visualization_msgs::msg::MarkerArray>::SharedPtr plugin_marker_pub_ = nullptr;
+  /// Minimum interval between marker publishes [s]. Set from hardware parameter "marker_publish_rate" (default 10 Hz).
+  double marker_publish_period_{ 0.1 };
+  /// Timestamp of the last marker publish (used for rate limiting).
+  rclcpp::Time last_marker_publish_time_{ 0, 0, RCL_ROS_TIME };
+  /// Visualization marker array message
+  visualization_msgs::msg::MarkerArray visualization_markers_;
 
   // Free joint data
   int free_joint_id_ = -1;

@@ -20,6 +20,7 @@
 #include <geometry_msgs/msg/point.hpp>
 #include <pluginlib/class_list_macros.hpp>
 #include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 namespace mujoco_ros2_control_plugins
 {
@@ -52,9 +53,6 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
   force_arrow_scale_ = node_->get_parameter("force_arrow_scale").as_double();
   torque_arrow_scale_ = node_->get_parameter("torque_arrow_scale").as_double();
   marker_frame_id_ = node_->get_parameter("marker_frame_id").as_string();
-
-  marker_pub_raw_ = node_->create_publisher<MarkerArray>("~/wrench_markers", rclcpp::SystemDefaultsQoS());
-  marker_pub_ = std::make_unique<realtime_tools::RealtimePublisher<MarkerArray>>(marker_pub_raw_);
 
   service_ = node_->create_service<ApplyExternalWrench>("apply_wrench",
                                                         std::bind(&ExternalWrenchPlugin::handleApplyWrench, this,
@@ -90,7 +88,6 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 
   if (active_wrenches_.empty())
   {
-    publishMarkers();
     return;
   }
 
@@ -165,17 +162,12 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
   active_wrenches_.erase(std::remove_if(active_wrenches_.begin(), active_wrenches_.end(),
                                         [&now](const ActiveWrench& w) { return now >= w.end_time; }),
                          active_wrenches_.end());
-
-  // Step 5 – publish RViz markers for all currently active (non-expired) wrenches.
-  publishMarkers();
 }
 
 void ExternalWrenchPlugin::cleanup()
 {
   RCLCPP_INFO(node_->get_logger(), "ExternalWrenchPlugin cleanup.");
   service_.reset();
-  marker_pub_.reset();
-  marker_pub_raw_.reset();
   node_.reset();
 }
 
@@ -183,18 +175,13 @@ void ExternalWrenchPlugin::cleanup()
 // Marker visualization
 // ---------------------------------------------------------------------------
 
-void ExternalWrenchPlugin::publishMarkers()
+void ExternalWrenchPlugin::publish_markers(MarkerArray& markers)
 {
-  MarkerArray msg;
-
   if (active_wrenches_.empty())
   {
-    // Clear any markers that may still be displayed in RViz.
-    visualization_msgs::msg::Marker del;
-    del.header.frame_id = marker_frame_id_;
-    del.action = visualization_msgs::msg::Marker::DELETEALL;
-    msg.markers.push_back(del);
-    marker_pub_->try_publish(msg);
+    // No active wrenches. The system interface already sets a finite
+    // lifetime on all markers it publishes, so previously emitted
+    // markers will auto-expire in RViz when this plugin stops contributing.
     return;
   }
 
@@ -206,7 +193,10 @@ void ExternalWrenchPlugin::publishMarkers()
   static constexpr double kShaftDiam = 0.02;
   static constexpr double kHeadDiam = 0.04;
 
-  int id = 0;
+  // Base the marker IDs on the current size of the array so they are unique
+  // across plugins sharing the same ~/markers topic.
+  int id = static_cast<int>(markers.markers.size());
+
   for (const auto& w : active_wrenches_)
   {
     // Use the application_point and force/torque exactly as supplied in the
@@ -222,7 +212,7 @@ void ExternalWrenchPlugin::publishMarkers()
       visualization_msgs::msg::Marker m;
       m.header.stamp = stamp;
       m.header.frame_id = w.link_name;
-      m.ns = "force";
+      m.ns = "external_wrench/force";
       m.id = id++;
       m.type = visualization_msgs::msg::Marker::ARROW;
       m.action = visualization_msgs::msg::Marker::ADD;
@@ -245,7 +235,7 @@ void ExternalWrenchPlugin::publishMarkers()
       m.color.g = 0.0f;
       m.color.b = 0.0f;
       m.color.a = 0.8f;
-      msg.markers.push_back(m);
+      markers.markers.push_back(m);
     }
 
     // Torque arrow (cyan) — skip if negligible.
@@ -255,7 +245,7 @@ void ExternalWrenchPlugin::publishMarkers()
       visualization_msgs::msg::Marker m;
       m.header.stamp = stamp;
       m.header.frame_id = w.link_name;
-      m.ns = "torque";
+      m.ns = "external_wrench/torque";
       m.id = id++;
       m.type = visualization_msgs::msg::Marker::ARROW;
       m.action = visualization_msgs::msg::Marker::ADD;
@@ -278,11 +268,9 @@ void ExternalWrenchPlugin::publishMarkers()
       m.color.g = 0.7f;
       m.color.b = 0.9f;
       m.color.a = 0.8f;
-      msg.markers.push_back(m);
+      markers.markers.push_back(m);
     }
   }
-
-  marker_pub_->try_publish(msg);
 }
 
 // ---------------------------------------------------------------------------
