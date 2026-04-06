@@ -33,6 +33,8 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
 
   qfrc_temp_.assign(nv_, 0.0);
   qfrc_prev_contribution_.assign(nv_, 0.0);
+  jacp_.assign(3 * nv_, 0.0);
+  jacr_.assign(3 * nv_, 0.0);
 
   // Visualization parameters
   if (!node_->has_parameter("force_arrow_scale"))
@@ -64,7 +66,7 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
   return true;
 }
 
-void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
+void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 {
   // Step 1 – undo our previous contribution so other plugins / controllers
   //          that also write qfrc_applied are not permanently affected.
@@ -92,8 +94,11 @@ void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
     return;
   }
 
-  // Step 3 – apply each active wrench into a scratch buffer so we can
-  //          track exactly what we contribute to qfrc_applied.
+  // Step 3 – accumulate each active wrench into qfrc_temp_ via J^T * wrench.
+  //
+  // This replicates mj_applyFT() without touching the MuJoCo arena:
+  //   mj_jac() only reads persistent mjData arrays and is arena-safe.
+  //   qfrc_applied is what the PhysicsLoop copies into mjData before mj_step.
   std::fill(qfrc_temp_.begin(), qfrc_temp_.end(), 0.0);
 
   const rclcpp::Time now_apply = node_->get_clock()->now();
@@ -112,20 +117,18 @@ void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
       }
     }
 
-    // Transform application_point from body-local frame to world frame.
-    //   point_world = xpos + xmat * point_local
-    // MuJoCo stores xmat as a row-major 3×3 rotation matrix.
+    // Body pose in world frame. xmat is row-major 3×3 (body → world).
     const mjtNum* xpos = data->xpos + w.body_id * 3;
     const mjtNum* xmat = data->xmat + w.body_id * 9;
 
+    // Transform application_point from body-local to world frame.
     const mjtNum point_world[3] = {
       xpos[0] + xmat[0] * w.application_point[0] + xmat[1] * w.application_point[1] + xmat[2] * w.application_point[2],
       xpos[1] + xmat[3] * w.application_point[0] + xmat[4] * w.application_point[1] + xmat[5] * w.application_point[2],
       xpos[2] + xmat[6] * w.application_point[0] + xmat[7] * w.application_point[1] + xmat[8] * w.application_point[2]
     };
 
-    // Scale force and torque (body frame), then rotate to world frame before
-    // passing to mj_applyFT, which expects world-frame vectors.
+    // Scale and rotate force/torque from body frame to world frame.
     const mjtNum sf[3] = { w.force[0] * w.current_scale, w.force[1] * w.current_scale, w.force[2] * w.current_scale };
     const mjtNum st[3] = { w.torque[0] * w.current_scale, w.torque[1] * w.current_scale, w.torque[2] * w.current_scale };
 
@@ -136,11 +139,19 @@ void ExternalWrenchPlugin::update(const mjModel* model, mjData* data)
                                      xmat[3] * st[0] + xmat[4] * st[1] + xmat[5] * st[2],
                                      xmat[6] * st[0] + xmat[7] * st[1] + xmat[8] * st[2] };
 
-    mj_applyFT(model, data, force_world, torque_world, point_world, w.body_id, qfrc_temp_.data());
+    // Compute body-point Jacobian at point_world (arena-free: reads only persistent arrays).
+    mj_jac(model_, data, jacp_.data(), jacr_.data(), point_world, w.body_id);
+
+    // qfrc_temp += J^T * wrench  (jacp/jacr are row-major 3×nv)
+    for (int i = 0; i < nv_; ++i)
+    {
+      qfrc_temp_[i] += jacp_[0 * nv_ + i] * force_world[0] + jacp_[1 * nv_ + i] * force_world[1] +
+                       jacp_[2 * nv_ + i] * force_world[2] + jacr_[0 * nv_ + i] * torque_world[0] +
+                       jacr_[1 * nv_ + i] * torque_world[1] + jacr_[2 * nv_ + i] * torque_world[2];
+    }
   }
 
-  // Step 3 (cont.) – add our computed contribution to qfrc_applied and save it
-  //                  so we can undo it at the next step.
+  // Step 3 (cont.) – add our contribution to qfrc_applied and save for undo next step.
   for (int i = 0; i < nv_; ++i)
   {
     data->qfrc_applied[i] += qfrc_temp_[i];
@@ -193,7 +204,9 @@ void ExternalWrenchPlugin::publishMarkers()
     return;
   }
 
-  const auto stamp = node_->get_clock()->now();
+  // Use time 0 so RViz uses the latest available TF transform rather than
+  // looking up at the exact publish time, which can cause extrapolation errors.
+  const rclcpp::Time stamp(0, 0, node_->get_clock()->get_clock_type());
 
   // Shaft diameter and arrowhead diameter for ARROW markers defined by points.
   static constexpr double kShaftDiam = 0.02;

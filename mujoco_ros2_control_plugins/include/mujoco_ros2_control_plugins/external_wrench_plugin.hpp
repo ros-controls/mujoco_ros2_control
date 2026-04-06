@@ -59,10 +59,15 @@ namespace mujoco_ros2_control_plugins
  *
  * Implementation notes
  * --------------------
- * Forces are accumulated via mj_applyFT() into data->qfrc_applied.  To avoid
- * permanently contaminating that array the plugin tracks its own contribution
- * from the previous step and subtracts it before re-applying only the
- * currently-active wrenches.
+ * Forces are accumulated into data->qfrc_applied, which the PhysicsLoop copies
+ * into mjData before each mj_step().  mj_applyFT() is intentionally avoided:
+ * MuJoCo 3.x mprotects the arena read-only between steps, and mj_applyFT
+ * writes into it via mj_markStack, causing a segfault when called from
+ * update() (outside mj_step).  Instead the plugin replicates mj_applyFT's
+ * computation using pre-allocated Jacobian buffers (jacp_, jacr_) and calling
+ * mj_jac() directly, which only reads persistent mjData arrays and never
+ * touches the arena.  The plugin tracks its own contribution from the previous
+ * step and subtracts it before re-applying only the active wrenches.
  */
 class ExternalWrenchPlugin : public MuJoCoROS2ControlPluginBase
 {
@@ -118,8 +123,10 @@ private:
 
   // ── qfrc_applied bookkeeping ──────────────────────────────────────────────
   int nv_{ 0 };
-  std::vector<mjtNum> qfrc_temp_;               ///< scratch buffer (nv elements)
-  std::vector<mjtNum> qfrc_prev_contribution_;  ///< our last delta on qfrc_applied
+  std::vector<mjtNum> qfrc_temp_;               ///< scratch buffer for J^T * wrench (nv)
+  std::vector<mjtNum> qfrc_prev_contribution_;  ///< our last delta on qfrc_applied (nv)
+  std::vector<mjtNum> jacp_;                    ///< translational Jacobian buffer (3*nv)
+  std::vector<mjtNum> jacr_;                    ///< rotational Jacobian buffer (3*nv)
 
   // ── Marker visualization scaling ──────────────────────────────────────────
   /// Arrow length per unit force [m/N]. Parameter: "force_arrow_scale".
