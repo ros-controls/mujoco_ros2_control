@@ -75,10 +75,14 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_ = rclcpp::get_logger("ConstraintViolationsPublisherPlugin");
 
+  rclcpp::Clock::SharedPtr clock_;
   rclcpp::Time last_publish_time_;
   rclcpp::Duration publish_period_{ 0, 20000000 };       // 50 Hz default
   int max_constraints_ = 0;                              // Max number of equality constraints in model
   std::vector<ConstraintMetadata> constraint_metadata_;  // Precomputed name and type for each eq constraint
+  /// Scratch buffer for per-update violation accumulation; preallocated in init() to avoid
+  /// heap allocation in the realtime loop. Sentinel value -1.0 means "not yet seen this cycle".
+  std::vector<double> max_violation_scratch_;
 };
 
 }  // namespace mujoco_ros2_control_plugins

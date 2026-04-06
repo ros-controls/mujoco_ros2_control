@@ -14,9 +14,9 @@
 
 #include "mujoco_ros2_control_plugins/constraint_violations_publisher_plugin.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <string>
-#include <unordered_map>
 
 #include <rclcpp/version.h>
 #include <pluginlib/class_list_macros.hpp>
@@ -39,6 +39,7 @@ std::string safeObjName(const mjModel* model, int obj_type, int id, const std::s
 bool ConstraintViolationsPublisherPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* /*data*/)
 {
   node_ = node;
+  clock_ = node_->get_clock();
   logger_ = node_->get_logger().get_child(node->get_sub_namespace());
 
   // Optional publish-rate parameter (Hz)
@@ -56,12 +57,12 @@ bool ConstraintViolationsPublisherPlugin::init(rclcpp::Node::SharedPtr node, con
   publish_period_ = rclcpp::Duration::from_seconds(1.0 / static_cast<double>(rate_hz));
 
   publisher_ =
-      node_->create_publisher<mujoco_ros2_control_msgs::msg::ConstraintViolations>("constraint_violations", 10);
+      node_->create_publisher<mujoco_ros2_control_msgs::msg::ConstraintViolations>("~/constraint_violations", 10);
   realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<mujoco_ros2_control_msgs::msg::ConstraintViolations>>(
           publisher_);
 
-  last_publish_time_ = node_->get_clock()->now();
+  last_publish_time_ = clock_->now();
 
   // Preallocate message vectors and precompute constraint metadata
   max_constraints_ = model->neq;
@@ -76,6 +77,10 @@ bool ConstraintViolationsPublisherPlugin::init(rclcpp::Node::SharedPtr node, con
     constraint_metadata_[eq_id].type = constraintTypeString(model, eq_id);
   }
 
+  // Preallocate scratch buffer used in update() to avoid per-call heap allocation.
+  // Sentinel -1.0 means "constraint not yet seen this cycle".
+  max_violation_scratch_.assign(max_constraints_, -1.0);
+
   RCLCPP_INFO(node_->get_logger(),
               "ConstraintViolationsPublisherPlugin initialised. "
               "Model has %d equality constraint(s). Publishing at %d Hz on '%s'.",
@@ -84,14 +89,14 @@ bool ConstraintViolationsPublisherPlugin::init(rclcpp::Node::SharedPtr node, con
   return true;
 }
 
-void ConstraintViolationsPublisherPlugin::update(const mjModel* model, mjData* data)
+void ConstraintViolationsPublisherPlugin::update(const mjModel* /*model*/, mjData* data)
 {
   if (max_constraints_ == 0)
   {
     return;  // no equality constraints in the model
   }
 
-  const auto now = node_->get_clock()->now();
+  const auto now = clock_->now();
   if (now - last_publish_time_ < publish_period_)
   {
     return;
@@ -111,12 +116,14 @@ void ConstraintViolationsPublisherPlugin::update(const mjModel* model, mjData* d
     return;
   }
 
-  // Accumulate the maximum absolute position-level residual (efc_pos) for
-  // each active equality constraint.  A single equality constraint may span
-  // multiple consecutive rows in the efc arrays (e.g. weld = 6 rows).
-  // efc_id[i] holds the index into model->eq_* for equality rows.
-  std::unordered_map<int, double> max_violation;  // eq_id -> max |efc_pos|
+  // Accumulate the maximum absolute position-level residual (efc_pos) for each
+  // active equality constraint into a preallocated scratch vector (no heap allocation).
+  // A single equality constraint may span multiple consecutive rows in the efc arrays
+  // (e.g. weld = 6 rows). efc_id[i] holds the index into model->eq_* for equality rows.
+  // Sentinel -1.0 means "not yet seen this cycle"; std::abs(efc_pos[i]) is always >= 0.
+  std::fill(max_violation_scratch_.begin(), max_violation_scratch_.end(), -1.0);
 
+  int active_count = 0;
   for (int i = 0; i < nefc; ++i)
   {
     if (efc_type[i] != mjCNSTR_EQUALITY)
@@ -125,18 +132,19 @@ void ConstraintViolationsPublisherPlugin::update(const mjModel* model, mjData* d
     }
     const int eq_id = efc_id[i];
     const double viol = std::abs(efc_pos[i]);
-    auto it = max_violation.find(eq_id);
-    if (it == max_violation.end())
+    double& slot = max_violation_scratch_[eq_id];
+    if (slot < 0.0)
     {
-      max_violation[eq_id] = viol;
+      slot = viol;
+      ++active_count;
     }
     else
     {
-      it->second = std::max(it->second, viol);
+      slot = std::max(slot, viol);
     }
   }
 
-  if (max_violation.empty())
+  if (active_count == 0)
   {
     return;  // nothing active – skip publishing
   }
@@ -148,17 +156,22 @@ void ConstraintViolationsPublisherPlugin::update(const mjModel* model, mjData* d
 
   constraint_violations_msg_.stamp = now;
   // Resize to actual violation count; vectors were preallocated in init()
-  constraint_violations_msg_.names.resize(max_violation.size());
-  constraint_violations_msg_.types.resize(max_violation.size());
-  constraint_violations_msg_.violations.resize(max_violation.size());
+  constraint_violations_msg_.names.resize(active_count);
+  constraint_violations_msg_.types.resize(active_count);
+  constraint_violations_msg_.violations.resize(active_count);
 
   // Fill data into preallocated vectors using precomputed metadata (name and type are static)
   int idx = 0;
-  for (const auto& [eq_id, violation] : max_violation)
+  for (int eq_id = 0; eq_id < max_constraints_; ++eq_id)
   {
+    const double viol = max_violation_scratch_[eq_id];
+    if (viol < 0.0)
+    {
+      continue;
+    }
     constraint_violations_msg_.names[idx] = constraint_metadata_[eq_id].name;
     constraint_violations_msg_.types[idx] = constraint_metadata_[eq_id].type;
-    constraint_violations_msg_.violations[idx] = violation;
+    constraint_violations_msg_.violations[idx] = viol;
     ++idx;
   }
 
