@@ -117,12 +117,10 @@ protected:
   /// Sends a zero-duration wrench service request (no blocking sleep in the
   /// callback) and blocks until the response arrives or the timeout elapses.
   /// Returns nullptr on timeout.
-  ApplyExternalWrench::Response::SharedPtr callServiceZeroDuration(const std::string& link_name,
-                                                                    double fx = 0.0, double fy = 0.0,
-                                                                    double fz = 0.0, double tx = 0.0,
-                                                                    double ty = 0.0, double tz = 0.0,
-                                                                    double app_x = 0.0, double app_y = 0.0,
-                                                                    double app_z = 0.0)
+  ApplyExternalWrench::Response::SharedPtr callServiceZeroDuration(const std::string& link_name, double fx = 0.0,
+                                                                   double fy = 0.0, double fz = 0.0, double tx = 0.0,
+                                                                   double ty = 0.0, double tz = 0.0, double app_x = 0.0,
+                                                                   double app_y = 0.0, double app_z = 0.0)
   {
     return sendRequest(link_name, fx, fy, fz, tx, ty, tz, app_x, app_y, app_z, 0, 0);
   }
@@ -131,9 +129,8 @@ protected:
   /// blocks until the response arrives (i.e. until the wrench expires) or the
   /// timeout elapses.  Returns nullptr on timeout.
   ApplyExternalWrench::Response::SharedPtr callServiceWithDuration(const std::string& link_name, double duration_sec,
-                                                                    double fx = 0.0, double fy = 0.0,
-                                                                    double fz = 0.0, double tx = 0.0,
-                                                                    double ty = 0.0, double tz = 0.0)
+                                                                   double fx = 0.0, double fy = 0.0, double fz = 0.0,
+                                                                   double tx = 0.0, double ty = 0.0, double tz = 0.0)
   {
     const int32_t sec = static_cast<int32_t>(duration_sec);
     const uint32_t nanosec = static_cast<uint32_t>((duration_sec - sec) * 1e9);
@@ -147,8 +144,8 @@ protected:
 
 private:
   ApplyExternalWrench::Response::SharedPtr sendRequest(const std::string& link_name, double fx, double fy, double fz,
-                                                        double tx, double ty, double tz, double app_x, double app_y,
-                                                        double app_z, int32_t dur_sec, uint32_t dur_nsec)
+                                                       double tx, double ty, double tz, double app_x, double app_y,
+                                                       double app_z, int32_t dur_sec, uint32_t dur_nsec)
   {
     auto client = plugin_node_->create_client<ApplyExternalWrench>("apply_wrench");
     if (!client->wait_for_service(std::chrono::seconds(2)))
@@ -376,8 +373,8 @@ TEST_F(ExternalWrenchPluginTest, ForceMarkerPublishedForActiveWrench)
   MarkerArray received_msg;
   std::mutex msg_mutex;
   // The plugin publishes on "~/wrench_markers" relative to plugin_node_.
-  auto sub = plugin_node_->create_subscription<MarkerArray>(
-      "~/wrench_markers", 10, [&](const MarkerArray::SharedPtr msg) {
+  auto sub =
+      plugin_node_->create_subscription<MarkerArray>("~/wrench_markers", 10, [&](const MarkerArray::SharedPtr msg) {
         std::lock_guard<std::mutex> lock(msg_mutex);
         received_msg = *msg;
         received.store(true, std::memory_order_release);
@@ -439,8 +436,8 @@ TEST_F(ExternalWrenchPluginTest, DeleteAllMarkerPublishedWhenNoWrenchesActive)
 
   std::vector<MarkerArray> received;
   std::mutex received_mutex;
-  auto sub = plugin_node_->create_subscription<MarkerArray>(
-      "~/wrench_markers", 10, [&](const MarkerArray::SharedPtr msg) {
+  auto sub =
+      plugin_node_->create_subscription<MarkerArray>("~/wrench_markers", 10, [&](const MarkerArray::SharedPtr msg) {
         std::lock_guard<std::mutex> lock(received_mutex);
         received.push_back(*msg);
       });
