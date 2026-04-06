@@ -362,57 +362,34 @@ TEST_F(ExternalWrenchPluginTest, TorqueOnlyWrenchAppliesRotationalForce)
 // Marker visualisation
 // ---------------------------------------------------------------------------
 
-TEST_F(ExternalWrenchPluginTest, ForceMarkerPublishedForActiveWrench)
+TEST_F(ExternalWrenchPluginTest, PublishMarkersForActiveForceWrench)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
-  // Allow the publisher to be discovered by potential subscribers.
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-  std::atomic<bool> received{ false };
-  MarkerArray received_msg;
-  std::mutex msg_mutex;
-  // The plugin publishes on "~/wrench_markers" relative to plugin_node_.
-  auto sub =
-      plugin_node_->create_subscription<MarkerArray>("~/wrench_markers", 10, [&](const MarkerArray::SharedPtr msg) {
-        std::lock_guard<std::mutex> lock(msg_mutex);
-        received_msg = *msg;
-        received.store(true, std::memory_order_release);
-      });
 
   // Send a wrench with a 200 ms duration from a background thread so the
-  // sleeping service callback does not prevent update() from running in the
-  // main thread.  The MultiThreadedExecutor has 2 worker threads, so one can
-  // service the sleeping callback while the other delivers the marker message.
+  // sleeping service callback does not block update() in the main thread.
   std::thread svc_thread([this]() { callServiceWithDuration("test_body", 0.2, /*fx=*/10.0); });
 
-  // Wait briefly for the service request to reach the server and the wrench
-  // to be pushed into the pending queue.
+  // Wait briefly for the wrench to reach the pending queue.
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  // Call update() while the wrench is still active (end_time is 200 ms away).
+  // Run update() while the wrench is still active.
   plugin.update(model_, data_);
 
-  // Wait for the marker message; allow the full service duration to elapse
-  // so the second executor thread can deliver the subscription callback.
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-  while (!received.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline)
-  {
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-  }
+  // Collect markers via the new aggregation API.
+  MarkerArray markers;
+  plugin.publish_markers(markers);
 
   svc_thread.join();
 
-  ASSERT_TRUE(received.load()) << "No MarkerArray received after update with an active force wrench";
+  ASSERT_FALSE(markers.markers.empty()) << "Expected markers for an active force wrench";
 
-  std::lock_guard<std::mutex> lock(msg_mutex);
-  ASSERT_FALSE(received_msg.markers.empty());
-
-  // Expect at least one ARROW marker in the "force" namespace.
+  // Expect at least one ARROW marker in the "external_wrench/force" namespace.
   bool found_force_arrow = false;
-  for (const auto& m : received_msg.markers)
+  for (const auto& m : markers.markers)
   {
-    if (m.ns == "force" && m.type == visualization_msgs::msg::Marker::ARROW &&
+    if (m.ns == "external_wrench/force" && m.type == visualization_msgs::msg::Marker::ARROW &&
         m.action == visualization_msgs::msg::Marker::ADD)
     {
       found_force_arrow = true;
@@ -422,47 +399,50 @@ TEST_F(ExternalWrenchPluginTest, ForceMarkerPublishedForActiveWrench)
       break;
     }
   }
-  EXPECT_TRUE(found_force_arrow) << "Expected a red force ARROW marker";
+  EXPECT_TRUE(found_force_arrow) << "Expected a red force ARROW marker in the 'external_wrench/force' namespace";
 
   plugin.cleanup();
-  sub.reset();
 }
 
-TEST_F(ExternalWrenchPluginTest, DeleteAllMarkerPublishedWhenNoWrenchesActive)
+TEST_F(ExternalWrenchPluginTest, PublishMarkersContributesNothingWhenNoWrenchesActive)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-  std::vector<MarkerArray> received;
-  std::mutex received_mutex;
-  auto sub =
-      plugin_node_->create_subscription<MarkerArray>("~/wrench_markers", 10, [&](const MarkerArray::SharedPtr msg) {
-        std::lock_guard<std::mutex> lock(received_mutex);
-        received.push_back(*msg);
-      });
-
-  // Update with no active wrenches: must publish a single DELETEALL marker.
+  // No service calls — no active wrenches.
   plugin.update(model_, data_);
 
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-  bool got_msg = false;
-  while (!got_msg && std::chrono::steady_clock::now() < deadline)
-  {
-    {
-      std::lock_guard<std::mutex> lock(received_mutex);
-      got_msg = !received.empty();
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-  }
+  // publish_markers() must not append anything when there are no active wrenches.
+  // Marker lifetime-based expiry (managed by the system interface) handles cleanup
+  // in RViz; the plugin itself does not emit a DELETEALL.
+  MarkerArray markers;
+  plugin.publish_markers(markers);
 
-  ASSERT_TRUE(got_msg) << "No MarkerArray received after update with no active wrenches";
-
-  std::lock_guard<std::mutex> lock(received_mutex);
-  const auto& msg = received.back();
-  ASSERT_FALSE(msg.markers.empty());
-  EXPECT_EQ(msg.markers[0].action, visualization_msgs::msg::Marker::DELETEALL);
+  EXPECT_TRUE(markers.markers.empty()) << "Expected no markers when there are no active wrenches";
 
   plugin.cleanup();
-  sub.reset();
+}
+
+TEST_F(ExternalWrenchPluginTest, PublishMarkersAppendsToExistingArray)
+{
+  mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+
+  std::thread svc_thread([this]() { callServiceWithDuration("test_body", 0.2, /*fx=*/5.0, /*fy=*/0.0, /*fz=*/0.0); });
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  plugin.update(model_, data_);
+
+  // Pre-populate the array with a sentinel marker (simulates another plugin's contribution).
+  MarkerArray markers;
+  visualization_msgs::msg::Marker sentinel;
+  sentinel.ns = "other_plugin";
+  sentinel.id = 99;
+  markers.markers.push_back(sentinel);
+
+  plugin.publish_markers(markers);
+  svc_thread.join();
+
+  // The sentinel must still be present, and the plugin must have appended its own markers.
+  ASSERT_GT(markers.markers.size(), 1u) << "Plugin must append to, not replace, the existing array";
+  EXPECT_EQ(markers.markers.front().ns, "other_plugin") << "Sentinel marker must be preserved";
 }
