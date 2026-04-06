@@ -175,7 +175,7 @@ void ConstraintViolationsPublisherPlugin::update(const mjModel* /*model*/, mjDat
     ++idx;
   }
 
-#if RCLCPP_VERSION_MAJOR >= 16
+#if RCLCPP_VERSION_MAJOR > 16
   realtime_publisher_->try_publish(constraint_violations_msg_);
 #else
   realtime_publisher_->tryPublish(constraint_violations_msg_);

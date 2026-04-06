@@ -112,7 +112,7 @@ TEST_F(ConstraintViolationsPublisherPluginTest, PublishesConstraintViolationForE
   bool received = false;
   mujoco_ros2_control_msgs::msg::ConstraintViolations msg;
   auto subscription = plugin_node->create_subscription<mujoco_ros2_control_msgs::msg::ConstraintViolations>(
-      "constraint_violations", 10, [&](const mujoco_ros2_control_msgs::msg::ConstraintViolations::SharedPtr incoming) {
+      "~/constraint_violations", 10, [&](const mujoco_ros2_control_msgs::msg::ConstraintViolations::SharedPtr incoming) {
         msg = *incoming;
         received = true;
       });
