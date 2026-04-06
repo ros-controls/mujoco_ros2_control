@@ -52,7 +52,7 @@ protected:
   using ApplyExternalWrench = mujoco_ros2_control_msgs::srv::ApplyExternalWrench;
   using MarkerArray = visualization_msgs::msg::MarkerArray;
 
-  static void SetUpTestSuite()
+  static void SetUpTestCase()
   {
     if (!rclcpp::ok())
     {
@@ -60,7 +60,7 @@ protected:
     }
   }
 
-  static void TearDownTestSuite()
+  static void TearDownTestCase()
   {
     if (rclcpp::ok())
     {

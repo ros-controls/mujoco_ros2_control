@@ -28,7 +28,7 @@
 class ConstraintViolationsPublisherPluginTest : public ::testing::Test
 {
 protected:
-  static void SetUpTestSuite()
+  static void SetUpTestCase()
   {
     if (!rclcpp::ok())
     {
@@ -36,7 +36,7 @@ protected:
     }
   }
 
-  static void TearDownTestSuite()
+  static void TearDownTestCase()
   {
     if (rclcpp::ok())
     {
