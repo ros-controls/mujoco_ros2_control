@@ -64,11 +64,9 @@ if(BUILD_TESTING)
     test/test_constraint_violations_publisher_plugin.cpp
   )
   target_link_libraries(test_constraint_violations_publisher_plugin
-    mujoco_ros2_control_plugins
-  )
-  ament_target_dependencies(test_constraint_violations_publisher_plugin
     rclcpp
-    mujoco_ros2_control_msgs
+    mujoco_ros2_control_plugins
+    ${mujoco_ros2_control_msgs_TARGETS}
   )
 
   # find_package(ament_lint_auto REQUIRED)
