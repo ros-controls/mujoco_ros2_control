@@ -30,17 +30,14 @@ class ConstraintViolationsPublisherPluginTest : public ::testing::Test
 protected:
   static void SetUpTestSuite()
   {
-    std::cerr << "[ConstraintViolations] SetUpTestSuite\n" << std::flush;
     if (!rclcpp::ok())
     {
       rclcpp::init(0, nullptr);
     }
-    std::cerr << "[ConstraintViolations] rclcpp initialized\n" << std::flush;
   }
 
   static void TearDownTestSuite()
   {
-    std::cerr << "[ConstraintViolations] TearDownTestSuite\n" << std::flush;
     if (rclcpp::ok())
     {
       rclcpp::shutdown();
@@ -50,7 +47,6 @@ protected:
 
 TEST_F(ConstraintViolationsPublisherPluginTest, PublishesConstraintViolationForEqualityConstraint)
 {
-  std::cerr << "[ConstraintViolations] test body entered\n" << std::flush;
   constexpr auto kMjcf = R"(
 <mujoco model="constraint_violation_plugin_test">
   <worldbody>
@@ -70,11 +66,9 @@ TEST_F(ConstraintViolationsPublisherPluginTest, PublishesConstraintViolationForE
 )";
 
   char error[1024] = { 0 };
-  std::cerr << "[ConstraintViolations] calling mj_parseXMLString\n" << std::flush;
   mjSpec* spec = mj_parseXMLString(kMjcf, nullptr, error, sizeof(error));
   ASSERT_NE(spec, nullptr) << error;
 
-  std::cerr << "[ConstraintViolations] calling mj_compile\n" << std::flush;
   mjModel* model = mj_compile(spec, nullptr);
   if (model == nullptr)
   {
@@ -85,49 +79,33 @@ TEST_F(ConstraintViolationsPublisherPluginTest, PublishesConstraintViolationForE
   }
   mj_deleteSpec(spec);
 
-  std::cerr << "[ConstraintViolations] calling mj_makeData\n" << std::flush;
+  auto node = std::make_shared<rclcpp::Node>("constraint_violations_plugin_test_node");
+  auto plugin_node = node->create_sub_node("constraint_violations_plugin");
+  plugin_node->declare_parameter("publish_rate", 1000);
+
   mjData* data = mj_makeData(model);
   ASSERT_NE(data, nullptr);
 
-  std::cerr << "[ConstraintViolations] calling mj_forward\n" << std::flush;
   mj_forward(model, data);
-
-  std::cerr << "[ConstraintViolations] mj_forward done, nefc=" << data->nefc
-            << " efc_type=" << static_cast<void*>(data->efc_type) << " efc_id=" << static_cast<void*>(data->efc_id)
-            << " efc_pos=" << static_cast<void*>(data->efc_pos) << "\n"
-            << std::flush;
 
   int first_equality_row = -1;
   for (int i = 0; i < data->nefc; ++i)
   {
-    std::cerr << "[ConstraintViolations] efc row " << i << " type=" << data->efc_type[i] << "\n" << std::flush;
     if (data->efc_type[i] == mjCNSTR_EQUALITY)
     {
       first_equality_row = i;
       break;
     }
   }
-  std::cerr << "[ConstraintViolations] first_equality_row=" << first_equality_row << "\n" << std::flush;
   ASSERT_GE(first_equality_row, 0);
 
   const int eq_id = data->efc_id[first_equality_row];
-  std::cerr << "[ConstraintViolations] eq_id=" << eq_id << "\n" << std::flush;
   const double injected_equality_residual = 0.4321;
   data->efc_pos[first_equality_row] = injected_equality_residual;
   const double expected_violation = injected_equality_residual;
 
-  std::cerr << "[ConstraintViolations] creating rclcpp node\n" << std::flush;
-  auto node = std::make_shared<rclcpp::Node>("constraint_violations_plugin_test_node");
-  std::cerr << "[ConstraintViolations] rclcpp node created, calling create_sub_node\n" << std::flush;
-  auto plugin_node = node->create_sub_node("constraint_violations_plugin");
-  std::cerr << "[ConstraintViolations] sub_node created, declaring parameter\n" << std::flush;
-  plugin_node->declare_parameter("publish_rate", 1000);
-  std::cerr << "[ConstraintViolations] parameter declared\n" << std::flush;
-
-  std::cerr << "[ConstraintViolations] calling plugin.init()\n" << std::flush;
   mujoco_ros2_control_plugins::ConstraintViolationsPublisherPlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node, model, data));
-  std::cerr << "[ConstraintViolations] plugin.init() done, sleeping 100ms\n" << std::flush;
   plugin_node->get_clock()->sleep_for(
       std::chrono::milliseconds(100));  // give the plugin some time to initialize the publisher
 
@@ -139,9 +117,7 @@ TEST_F(ConstraintViolationsPublisherPluginTest, PublishesConstraintViolationForE
         received = true;
       });
 
-  std::cerr << "[ConstraintViolations] calling plugin.update()\n" << std::flush;
   plugin.update(model, data);
-  std::cerr << "[ConstraintViolations] plugin.update() done, waiting for message\n" << std::flush;
 
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
   while (!received && std::chrono::steady_clock::now() < deadline)

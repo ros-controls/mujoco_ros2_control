@@ -54,17 +54,14 @@ protected:
 
   static void SetUpTestSuite()
   {
-    std::cerr << "[ExternalWrench] SetUpTestSuite\n" << std::flush;
     if (!rclcpp::ok())
     {
       rclcpp::init(0, nullptr);
     }
-    std::cerr << "[ExternalWrench] rclcpp initialized\n" << std::flush;
   }
 
   static void TearDownTestSuite()
   {
-    std::cerr << "[ExternalWrench] TearDownTestSuite\n" << std::flush;
     if (rclcpp::ok())
     {
       rclcpp::shutdown();
@@ -73,13 +70,19 @@ protected:
 
   void SetUp() override
   {
-    std::cerr << "[ExternalWrench] SetUp() start\n" << std::flush;
+    node_ = std::make_shared<rclcpp::Node>("external_wrench_test_node");
+    plugin_node_ = node_->create_sub_node("external_wrench_plugin");
+
+    // Use two executor threads so a blocking service callback (sleeping for
+    // its wrench duration) does not prevent other callbacks (e.g. subscription
+    // delivery) from being dispatched.
+    executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>(rclcpp::ExecutorOptions{}, 2);
+    executor_->add_node(node_);
+    spin_thread_ = std::thread([this]() { executor_->spin(); });
     char error[1024] = { 0 };
-    std::cerr << "[ExternalWrench] calling mj_parseXMLString\n" << std::flush;
     mjSpec* spec = mj_parseXMLString(kMjcf, nullptr, error, sizeof(error));
     ASSERT_NE(spec, nullptr) << error;
 
-    std::cerr << "[ExternalWrench] calling mj_compile\n" << std::flush;
     model_ = mj_compile(spec, nullptr);
     if (model_ == nullptr)
     {
@@ -89,31 +92,13 @@ protected:
     }
     mj_deleteSpec(spec);
 
-    std::cerr << "[ExternalWrench] calling mj_makeData\n" << std::flush;
     data_ = mj_makeData(model_);
     ASSERT_NE(data_, nullptr);
-    std::cerr << "[ExternalWrench] calling mj_forward\n" << std::flush;
     mj_forward(model_, data_);
-
-    std::cerr << "[ExternalWrench] creating rclcpp node\n" << std::flush;
-    node_ = std::make_shared<rclcpp::Node>("external_wrench_test_node");
-    std::cerr << "[ExternalWrench] rclcpp node created, calling create_sub_node\n" << std::flush;
-    plugin_node_ = node_->create_sub_node("external_wrench_plugin");
-    std::cerr << "[ExternalWrench] sub_node created\n" << std::flush;
-
-    // Use two executor threads so a blocking service callback (sleeping for
-    // its wrench duration) does not prevent other callbacks (e.g. subscription
-    // delivery) from being dispatched.
-    std::cerr << "[ExternalWrench] creating executor and spin thread\n" << std::flush;
-    executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>(rclcpp::ExecutorOptions{}, 2);
-    executor_->add_node(node_);
-    spin_thread_ = std::thread([this]() { executor_->spin(); });
-    std::cerr << "[ExternalWrench] SetUp() done\n" << std::flush;
   }
 
   void TearDown() override
   {
-    std::cerr << "[ExternalWrench] TearDown() start\n" << std::flush;
     executor_->cancel();
     if (spin_thread_.joinable())
     {
@@ -122,13 +107,10 @@ protected:
     executor_.reset();
     plugin_node_.reset();
     node_.reset();
-    std::cerr << "[ExternalWrench] calling mj_deleteData\n" << std::flush;
     mj_deleteData(data_);
     data_ = nullptr;
-    std::cerr << "[ExternalWrench] calling mj_deleteModel\n" << std::flush;
     mj_deleteModel(model_);
     model_ = nullptr;
-    std::cerr << "[ExternalWrench] TearDown() done\n" << std::flush;
   }
 
   /// Sends a zero-duration wrench service request (no blocking sleep in the
@@ -210,13 +192,9 @@ private:
 
 TEST_F(ExternalWrenchPluginTest, InitSucceeds)
 {
-  std::cerr << "[ExternalWrench] InitSucceeds: constructing plugin\n" << std::flush;
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  std::cerr << "[ExternalWrench] InitSucceeds: calling plugin.init()\n" << std::flush;
   EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
-  std::cerr << "[ExternalWrench] InitSucceeds: calling plugin.cleanup()\n" << std::flush;
   plugin.cleanup();
-  std::cerr << "[ExternalWrench] InitSucceeds: done\n" << std::flush;
 }
 
 // ---------------------------------------------------------------------------
