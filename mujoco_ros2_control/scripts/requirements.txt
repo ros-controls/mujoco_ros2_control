@@ -1,0 +1,16 @@
+absl-py==2.4.0
+coacd==1.0.7
+docstring_parser==0.17.0
+etils==1.13.0
+fsspec==2026.2.0
+glfw==2.10.0
+lxml==6.0.2
+mujoco==3.6.0
+obj2mjcf==0.0.25
+pillow==12.1.1
+PyOpenGL==3.1.10
+termcolor==3.3.0
+trimesh==4.11.4
+typeguard==4.5.1
+typing_extensions==4.15.0
+tyro==1.0.10

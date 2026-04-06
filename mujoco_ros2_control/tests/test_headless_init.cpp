@@ -90,7 +90,7 @@ protected:
     </body>
 
     <body name="box2" pos="0.2 0 0.1">
-      <freejoint name="box2_joint"/>
+      <freejoint/>
       <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
       <geom name="box2_geom" type="box" size="0.05 0.05 0.05"
             contype="1" conaffinity="1" friction="0.6"/>

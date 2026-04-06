@@ -45,9 +45,9 @@ function check_dependencies() {
     fi
     # check if the dependencies trimesh, mujoco, obj2mjcf and scipy are installed, if not install them
     if ! python3 -c "import trimesh; import mujoco; import obj2mjcf" &> /dev/null; then
-        echo "Dependencies not found. Installing trimesh, mujoco, obj2mjcf, scipy...."
+        echo "Dependencies not found. Installing from requirements.txt...."
         start_time=$(date +%s)
-        pip3 install --no-input --no-cache-dir --disable-pip-version-check trimesh mujoco obj2mjcf
+        pip3 install --no-input --no-cache-dir --disable-pip-version-check -r "$(dirname "${BASH_SOURCE[0]}")/requirements.txt"
         end_time=$(date +%s)
         echo "Successfully installed dependencies in $((end_time - start_time)) seconds."
     fi
@@ -64,4 +64,4 @@ if [[ "$*" == *"--install-only"* ]]; then
 fi
 
 # Get all the arguments of the bash script and then forward it to the make_mjcf_from_robot_description.py script
-exec python3 "$(dirname "$0")/make_mjcf_from_robot_description.py" "$@"
+exec python3 "$(dirname "${BASH_SOURCE[0]}")/make_mjcf_from_robot_description.py" "$@"

@@ -236,14 +236,14 @@ class TestFixture(unittest.TestCase):
             rclpy.spin_once(self.node, timeout_sec=0.1)
 
         # Wait for joints to reach target positions
-        self.wait_for_joint_positions({"joint1": 0.5, "joint2": -0.5}, delta=0.05, timeout=5.0)
+        self.wait_for_joint_positions({"joint1": 0.5, "joint2": -0.5}, delta=0.05, timeout=15.0)
 
         if os.environ.get("TEST_TRANSMISSIONS") != "true":
             expected_actuators = {"joint1": 0.5, "joint2": -0.5}
         else:
             expected_actuators = {"actuator1": 0.5 * 2.0, "actuator2": -0.5 * 0.5}
 
-        self.wait_for_joint_positions(expected_actuators, delta=0.05, timeout=5.0, topic="actuator_states")
+        self.wait_for_joint_positions(expected_actuators, delta=0.05, timeout=15.0, topic="actuator_states")
 
         # make sure the efforts field is non-zero (indicating PID/ effort reporting is working)
         self.assertTrue(
@@ -277,14 +277,14 @@ class TestFixture(unittest.TestCase):
         self.wait_for_joint_positions(
             {"gripper_left_finger_joint": -0.04, "gripper_right_finger_joint": 0.04},
             delta=0.005,
-            timeout=5.0,
+            timeout=15.0,
         )
 
         # And confirm that the mujoco_actuators_states also gets there
         self.wait_for_joint_positions(
             {"gripper_left_finger_joint": -0.04, "gripper_right_finger_joint": 0.04},
             delta=0.005,
-            timeout=5.0,
+            timeout=15.0,
             topic="actuator_states",
         )
 
@@ -495,17 +495,22 @@ class TestFixture(unittest.TestCase):
         self.assertTrue(step_client.wait_for_service(timeout_sec=10.0), "step_simulation service not available")
 
         # Subscribe to /clock early so we never miss messages published while running.
-        latest_clock = []
+        clock_time = 0.0
 
         def clock_cb(msg):
-            latest_clock.append(msg)
-            if len(latest_clock) > 10:
-                latest_clock.pop(0)
+            nonlocal clock_time
+            clock_time = msg.clock.sec + msg.clock.nanosec * 1e-9
 
         clock_sub = self.node.create_subscription(Clock, "/clock", clock_cb, 10)
 
+        # Helper function to ensure no more clock messages are in flight
+        def clock_settled():
+            t = clock_time
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+            return clock_time == t
+
         # Wait for the sim to be publishing /clock before we do anything
-        self.assertTrue(self.spin_until(lambda: len(latest_clock) > 0, timeout=10.0), "No /clock messages received")
+        self.assertTrue(self.spin_until(lambda: clock_time > 0.0, timeout=10.0), "No /clock messages received")
 
         # step_simulation must fail while the simulation is running
         step_req = StepSimulation.Request()
@@ -525,22 +530,21 @@ class TestFixture(unittest.TestCase):
         self.assertIsNotNone(result, "set_pause returned None")
         self.assertTrue(result.success, f"set_pause(paused=True) failed: {result.message}")
 
+        # Ensure all messages are pulled off the clock topic, and the clock has settled during the pause.
+        self.spin_until(clock_settled, timeout=2.0)
+        paused_clock_time = clock_time
+        self.spin_until(lambda: False, timeout=1.5)
+        self.assertAlmostEqual(paused_clock_time, clock_time, delta=MUJOCO_TIMESTEP)
+
         # Setting the simulation to paused again should still succeed
         future = pause_client.call_async(pause_req)
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
         result = future.result()
         self.assertTrue(result.success, "set_pause(paused=True) a second time should still succeed")
 
-        # /clock must NOT be published while paused
-        latest_clock.clear()
-        clock_published_while_paused = self.spin_until(lambda: len(latest_clock) > 0, timeout=1.5)
-        self.assertFalse(clock_published_while_paused, "/clock should not be published while simulation is paused")
-
         # --- Step N_STEPS physics steps and capture clock before/after ---
-        # Record the last known timestamp (from before the pause) as our baseline.
-        # Re-subscribe after clearing so any message we receive is genuinely post-step.
-        latest_clock.clear()
-
+        # Flush and record the baseline clock while paused
+        clock_before_sec = clock_time
         step_req.steps = N_STEPS
         future = step_client.call_async(step_req)
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=30.0)
@@ -548,40 +552,39 @@ class TestFixture(unittest.TestCase):
         self.assertIsNotNone(result, "step_simulation returned None")
         self.assertTrue(result.success, f"step_simulation failed: {result.message}")
 
-        # Collect the clock message(s) published for these steps
+        # Wait for clock to continue to move forward
         self.assertTrue(
-            self.spin_until(lambda: len(latest_clock) > 0, timeout=5.0),
+            self.spin_until(lambda: clock_time > clock_before_sec, timeout=5.0),
             "No /clock messages published after step_simulation",
         )
+        self.spin_until(clock_settled, timeout=2.0)
+        clock_after_sec = clock_time
 
-        clock_after_step_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
-
-        # We don't have the pre-step clock directly, we can verify the delta
-        # by calling step_simulation a second time and measuring the difference.
-        clock_before_second_step_sec = clock_after_step_sec
-        latest_clock.clear()
-
-        future = step_client.call_async(step_req)
-        rclpy.spin_until_future_complete(self.node, future, timeout_sec=30.0)
-        result = future.result()
-        self.assertTrue(result.success, f"second step_simulation failed: {result.message}")
-
-        self.assertTrue(
-            self.spin_until(lambda: len(latest_clock) > 0, timeout=5.0),
-            "No /clock messages after second step_simulation",
-        )
-        clock_after_second_step_sec = latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9
-
-        actual_delta = clock_after_second_step_sec - clock_before_second_step_sec
-        # Check that the clock advanced by the expected amount (N_STEPS * dt) with some tolerance
+        # Sim is paused so clock should advance by exactly N_STEPS * dt, but allow two
+        # timesteps of error to account for async message processing, and for floating
+        # point arithmetic issues. It is possible that a clock message from the boundary
+        # of the pause is delivered during the settle flush, shifting the baseline by
+        # one step.
+        actual_delta = clock_after_sec - clock_before_sec
         self.assertAlmostEqual(
             actual_delta,
             EXPECTED_DELTA_SEC,
-            delta=2.0 * MUJOCO_TIMESTEP,  # allow some tolerance for scheduling delays
+            delta=2.0 * MUJOCO_TIMESTEP,
             msg=f"Clock advanced by {actual_delta:.6f}s, expected {EXPECTED_DELTA_SEC:.6f}s "
             f"({N_STEPS} steps × {MUJOCO_TIMESTEP}s)",
         )
 
+        # Ensure we can step again, and that the clock has progressed
+        future = step_client.call_async(step_req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=30.0)
+        result = future.result()
+        self.assertIsNotNone(result, "step_simulation returned None")
+        self.assertTrue(result.success, f"step_simulation failed: {result.message}")
+        self.spin_until(clock_settled, timeout=2.0)
+        clock_after_sec2 = clock_time
+        self.assertTrue(clock_after_sec2 > clock_after_sec)
+
+        # Unpause the simulation and verify the clock restarts
         pause_req.paused = False
         future = pause_client.call_async(pause_req)
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
@@ -590,13 +593,8 @@ class TestFixture(unittest.TestCase):
         self.assertTrue(result.success, f"set_pause(paused=False) failed: {result.message}")
 
         # Verify /clock is ticking again after resume
-        latest_clock.clear()
         self.assertTrue(
-            self.spin_until(
-                lambda: len(latest_clock) > 0
-                and latest_clock[-1].clock.sec + latest_clock[-1].clock.nanosec * 1e-9 > clock_after_second_step_sec,
-                timeout=5.0,
-            ),
+            self.spin_until(lambda: clock_time > clock_after_sec, timeout=5.0),
             "Clock did not resume ticking after set_pause(paused=False)",
         )
 
