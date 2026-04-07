@@ -68,6 +68,16 @@ if(BUILD_TESTING)
     mujoco_ros2_control_plugins
     ${mujoco_ros2_control_msgs_TARGETS}
   )
+  # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
+  # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
+  # Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
+  # TODO: Remove this after the following is resolved and the next ROS sync
+  # https://github.com/pal-robotics/mujoco_vendor/issues/2
+  target_link_options(test_constraint_violations_publisher_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
 
   ament_add_gtest(test_external_wrench_plugin
     test/test_external_wrench_plugin.cpp
@@ -77,9 +87,17 @@ if(BUILD_TESTING)
     ${mujoco_ros2_control_msgs_TARGETS}
     ${visualization_msgs_TARGETS}
   )
+  # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
+  # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
+  # Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
+  # TODO: Remove this after the following is resolved and the next ROS sync
+  # https://github.com/pal-robotics/mujoco_vendor/issues/2
+  target_link_options(test_external_wrench_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
 
-  # find_package(ament_lint_auto REQUIRED)
-  # ament_lint_auto_find_test_dependencies()
 endif()
 
 # Install include directory
