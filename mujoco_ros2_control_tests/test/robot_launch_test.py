@@ -534,7 +534,9 @@ class TestFixture(unittest.TestCase):
         self.spin_until(clock_settled, timeout=2.0)
         paused_clock_time = clock_time
         self.spin_until(lambda: False, timeout=1.5)
-        self.assertAlmostEqual(paused_clock_time, clock_time, delta=MUJOCO_TIMESTEP)
+        # Allow a small epsilon beyond MUJOCO_TIMESTEP to absorb floating-point
+        # rounding that accumulates when converting sec + nanosec * 1e-7.
+        self.assertAlmostEqual(paused_clock_time, clock_time, delta=MUJOCO_TIMESTEP + 1e-7)
 
         # Setting the simulation to paused again should still succeed
         future = pause_client.call_async(pause_req)
