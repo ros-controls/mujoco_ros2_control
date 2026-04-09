@@ -1585,10 +1585,10 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     {
       plugin->publish_markers(visualization_markers_);
     }
-    if (!visualization_markers_.markers.empty())
+    if (!combined.markers.empty())
     {
       const rclcpp::Duration lifetime = rclcpp::Duration::from_seconds(2.0 * marker_publish_period_);
-      for (auto& m : visualization_markers_.markers)
+      for (auto& m : combined.markers)
       {
         if (m.action == visualization_msgs::msg::Marker::ADD)
         {
