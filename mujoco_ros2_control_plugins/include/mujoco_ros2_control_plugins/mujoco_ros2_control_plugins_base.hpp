@@ -17,6 +17,7 @@
 
 #include <mujoco/mujoco.h>
 #include <rclcpp/rclcpp.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 namespace mujoco_ros2_control_plugins
 {
@@ -61,6 +62,22 @@ public:
    * @brief Cleanup the plugin
    */
   virtual void cleanup() = 0;
+
+  /**
+   * @brief Fill a MarkerArray with visualization markers for this plugin.
+   *
+   * Called by the system interface at a controlled rate (after update()) to collect
+   * markers from all plugins into a single array that is published on ~/markers.
+   * The default implementation does nothing, the plugins have to override to contribute markers.
+   *
+   * @param markers The MarkerArray to append markers to. Plugins should use a unique namespace (m.ns) to avoid
+   * collisions with other plugins.
+   * @note Prefer marker namespaces that include the plugin name (e.g."external_wrench/force") so that multiple plugins
+   * can coexist on the same topic without ID conflicts.
+   */
+  virtual void publish_markers(visualization_msgs::msg::MarkerArray& /*markers*/)
+  {
+  }
 };
 
 }  // namespace mujoco_ros2_control_plugins

@@ -16,16 +16,125 @@ The `mujoco_ros2_control_plugins` package is designed to contain plugins that ex
 
 A simple demonstration plugin that publishes a heartbeat message every second to the `/mujoco_heartbeat` topic.
 
-**Topic**: `mujoco_heartbeat` (std_msgs/String)
-**Rate**: 1 Hz (every 1 second)
-**Message Format**: "MuJoCo ROS2 Control Heartbeat #N | Simulation time: Xs"
+| | |
+|---|---|
+| **Topic** | `mujoco_heartbeat` (`std_msgs/String`) |
+| **Rate** | 1 Hz |
+| **Message format** | `"MuJoCo ROS2 Control Heartbeat #N \| Simulation time: Xs"` |
 
-## Dependencies
+---
 
-- `mujoco_vendor`: Provides the MuJoCo physics simulator library
-- `rclcpp`: ROS 2 C++ client library
-- `pluginlib`: Plugin loading framework
-- `std_msgs`: Standard ROS message types
+### ConstraintViolationsPublisherPlugin
+
+Monitors active MuJoCo equality constraints every simulation step and publishes the maximum absolute position-level residual (`efc_pos`) for each one.
+
+| | |
+|---|---|
+| **Topic** | `~/constraint_violations` (`mujoco_ros2_control_msgs/ConstraintViolations`) |
+| **Rate** | Configurable via parameter `publish_rate` (Hz, default 50 Hz) |
+
+Each message entry contains:
+- `name` — constraint name from MJCF, or synthesised as `<obj1>_<obj2>_{joint\|tendon\|weld\|connect}_constraint`
+- `type` — one of `joint`, `tendon`, `weld`, `connect`, `unknown`
+- `violation` — maximum absolute `efc_pos` across all rows of that constraint
+
+**Parameters**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `publish_rate` | `double` | `50.0` | Publish rate in Hz |
+
+**Example configuration**
+
+```yaml
+/**:
+  ros__parameters:
+    mujoco_plugins:
+      constraint_monitor:
+        type: "mujoco_ros2_control_plugins/ConstraintViolationsPublisherPlugin"
+        publish_rate: 100.0
+```
+
+---
+
+### ExternalWrenchPlugin
+
+Applies an external wrench (force + torque) to a named MuJoCo body for a configurable duration via a ROS 2 service.  Multiple concurrent wrenches on different — or the same — bodies are supported; each expires independently.
+
+| | |
+|---|---|
+| **Service** | `~/apply_wrench` (`mujoco_ros2_control_msgs/srv/ApplyExternalWrench`) |
+| **Topic** | `~/wrench_markers` (`visualization_msgs/msg/MarkerArray`) |
+
+**Service request fields**
+
+| Field | Type | Description |
+|---|---|---|
+| `header` | `std_msgs/Header` | Stamp and frame ID (informational) |
+| `link_name` | `string` | MuJoCo body name (must match the MJCF `<body name="...">`) |
+| `wrench.force` | `geometry_msgs/Vector3` | Linear force [N] in the **body (link) frame** |
+| `wrench.torque` | `geometry_msgs/Vector3` | Angular moment [N·m] in the **body (link) frame** |
+| `application_point` | `geometry_msgs/Point` | Force application point in the **body (link) frame** (relative to body frame origin, metres). Zero → apply at the body frame origin. |
+| `duration` | `builtin_interfaces/Duration` | How long the wrench remains active. Zero → single simulation step. |
+| `ramp_down_duration` | `builtin_interfaces/Duration` | Duration over which the wrench linearly ramps from full magnitude to zero at the end of `duration`. Zero → no ramp-down. |
+
+**Service response fields**
+
+| Field | Type | Description |
+|---|---|---|
+| `success` | `bool` | `false` if the body name was not found in the model |
+| `message` | `string` | Human-readable status or error description |
+
+**Example: apply a 10 N push along X for 2 seconds at a 10 cm offset, with a 0.5 s ramp-down**
+
+This applies constant force of 10N for 1.5 seconds and then this force decays linearly over the next 0.5 seconds.
+
+```bash
+ros2 service call /mujoco_ros2_control/my_plugin/apply_wrench \
+  mujoco_ros2_control_msgs/srv/ApplyExternalWrench \
+  "{
+    link_name: 'base_link',
+    wrench: {
+      force:  {x: 10.0, y: 0.0, z: 0.0},
+      torque: {x:  0.0, y: 0.0, z: 0.0}
+    },
+    application_point: {x: 0.1, y: 0.0, z: 0.0},
+    duration: {sec: 2, nanosec: 0},
+    ramp_down_duration: {sec: 0, nanosec: 500000000}
+  }"
+```
+
+> [!NOTE]
+> The service call **blocks** until the full `duration` has elapsed and then returns the response. For long-duration wrenches, call the service from a separate terminal or use an async client.
+
+**Visualization**
+
+While a wrench is active, arrow markers are published to `~/wrench_markers` for display in RViz:
+- **Red arrow** — force vector, originating at the application point (body frame)
+- **Cyan arrow** — torque vector, originating at the application point (body frame)
+
+Each marker is published in the body's TF frame (i.e. `header.frame_id = link_name`), so RViz will correctly follow the body as it moves. Add a `MarkerArray` display in RViz pointed at the topic and ensure the body's TF frame is being broadcast.
+
+**Parameters**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `force_arrow_scale` | `double` | `0.01` | Arrow length per unit force [m/N]. A 100 N force → 1 m arrow. |
+| `torque_arrow_scale` | `double` | `0.1` | Arrow length per unit torque [m/(N·m)]. A 10 N·m torque → 1 m arrow. |
+| `marker_frame_id` | `string` | `"base_link"` | TF frame ID used in the marker DELETEALL message sent when all wrenches expire. Active wrench markers always use the body's own TF frame (`link_name`). |
+
+**Example configuration**
+
+```yaml
+/**:
+  ros__parameters:
+    mujoco_plugins:
+      external_wrench:
+        type: "mujoco_ros2_control_plugins/ExternalWrenchPlugin"
+        force_arrow_scale: 0.01      # 100 N  → 1 m arrow
+        torque_arrow_scale: 0.1      # 10 N·m → 1 m arrow
+        marker_frame_id: "base_link"
+```
 
 ## Building
 
@@ -171,6 +280,6 @@ pluginlib_export_plugin_description_file(
 
 ## Plugin Lifecycle
 
-1. **Initialization** (`init`): Called once when the hardware interface is initialized
-2. **Update** (`update`): Called every control loop iteration
-3. **Cleanup** (`cleanup`): Called when shutting down
+1. **Initialization** (`init`): Called once when the plugin is loaded. Use this to read parameters and set up publishers, subscribers, and services.
+2. **Update** (`update`): Called every simulation step at the **end of the `read` loop**, before the controller update and `write` loops. Changes to `mjData` here are visible to controllers and affect the next simulation step. This runs in a real-time thread — avoid blocking operations.
+3. **Cleanup** (`cleanup`): Called when shutting down. Release any resources acquired in `init`.

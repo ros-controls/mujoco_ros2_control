@@ -6,4 +6,28 @@
       A simple plugin that publishes a heartbeat message every second to demonstrate the plugin system.
     </description>
   </class>
+  <class name="mujoco_ros2_control_plugins/ConstraintViolationsPublisherPlugin"
+         type="mujoco_ros2_control_plugins::ConstraintViolationsPublisherPlugin"
+         base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
+    <description>
+      Plugin that reads active MuJoCo equality-constraint violations every simulation step and
+      publishes them as a mujoco_ros2_control_msgs/ConstraintViolations message.
+      Each entry contains the constraint name (from MJCF or synthesised from connected
+      joint/tendon/body names) and the maximum absolute position-level residual across all
+      of its constraint rows.
+      Configurable parameter: publish_rate (Hz, default 50).
+    </description>
+  </class>
+  <class name="mujoco_ros2_control_plugins/ExternalWrenchPlugin"
+         type="mujoco_ros2_control_plugins::ExternalWrenchPlugin"
+         base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
+    <description>
+      Plugin that applies an external wrench (force + torque) to a named MuJoCo body for a
+      configurable duration via the ROS 2 service ~/apply_wrench
+      (mujoco_ros2_control_msgs/srv/ApplyExternalWrench).
+      The force and torque are expressed in the world frame; the application point is expressed
+      in the body's local frame (relative to the body frame origin).
+      Multiple concurrent wrenches on different or the same bodies are supported.
+    </description>
+  </class>
 </library>
