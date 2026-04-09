@@ -45,13 +45,8 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
   {
     node_->declare_parameter("torque_arrow_scale", torque_arrow_scale_);
   }
-  if (!node_->has_parameter("marker_frame_id"))
-  {
-    node_->declare_parameter("marker_frame_id", marker_frame_id_);
-  }
   force_arrow_scale_ = node_->get_parameter("force_arrow_scale").as_double();
   torque_arrow_scale_ = node_->get_parameter("torque_arrow_scale").as_double();
-  marker_frame_id_ = node_->get_parameter("marker_frame_id").as_string();
 
   marker_pub_raw_ = node_->create_publisher<MarkerArray>("~/wrench_markers", rclcpp::SystemDefaultsQoS());
   marker_pub_ = std::make_unique<realtime_tools::RealtimePublisher<MarkerArray>>(marker_pub_raw_);
@@ -191,7 +186,6 @@ void ExternalWrenchPlugin::publishMarkers()
   {
     // Clear any markers that may still be displayed in RViz.
     visualization_msgs::msg::Marker del;
-    del.header.frame_id = marker_frame_id_;
     del.action = visualization_msgs::msg::Marker::DELETEALL;
     msg.markers.push_back(del);
     marker_pub_->try_publish(msg);
