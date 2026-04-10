@@ -2,6 +2,7 @@
 
 Objects that are not modeled within the standard URDF process (for example, moveable objects not modeled as part of the environment) need to be incorporated into the MuJoCo scene.
 They can be integrated as:
+
 - Separate MJCFs, if not using on-the-fly MJCF conversion;
 or
 - Included into a top-level URDF for on-the-fly MJCF conversion.
