@@ -9,7 +9,7 @@ or
 
 Regardless of the approach for integrating these objects, the process is ultimately very similar to that for [generating a robot MJCF](./TOOLS.md).
 
-1.  If not already done in an environments/mockups package:
+1.  If not already done in a description package:
     1.  Create STL models for the objects.
     See [tips for modeling objects](./MODELING_TIPS.md) for additional helpful information.
     2.  Create URDFs for the objects.
