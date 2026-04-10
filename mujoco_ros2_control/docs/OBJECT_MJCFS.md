@@ -19,5 +19,7 @@ Regardless of the approach for integrating these objects, the process is ultimat
 Most important is decomposing any object sub-parts the robot will need to interact with.
 This decomposition ensures the conves hulls for collision checking on these interactable sub-parts are accurate.
     1.  It can often be useful to see what level of precision has been used to decompose interactable sub-parts in past applications, specifically the [`threshold` attribute](./TOOLS.md#processed-inputs-attribute-reference).
-1.  Run the conversion script.
-2.  Test the conversion process has been completed properly.
+3.  Run the conversion script.
+4.  Test the conversion process has been completed properly:
+    ```bash
+    ros2 run mujoco_vendor simulate <Converted Description File>
