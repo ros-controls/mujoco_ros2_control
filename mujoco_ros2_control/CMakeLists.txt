@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.16)
 
 project(mujoco_ros2_control)
 
+# Detect ROS2 Humble for API compatibility (get_hardware_info() shim)
+if("$ENV{ROS_DISTRO}" STREQUAL "humble")
+  add_definitions(-DROS_DISTRO_HUMBLE)
+endif()
+
 find_package(ros2_control_cmake REQUIRED)
 
 # find dependencies
