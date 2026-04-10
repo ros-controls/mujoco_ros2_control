@@ -5,7 +5,7 @@ These lessons learned are largely based on use cases explored within the NASA Jo
 
 ## Object URDFs
 
-It is helpful to create a URDF to combine an object's sub-parts and keep these object URDFs in an environment/mockups package (such as the [surface mockups description](https://github.com/NASA-JSC-Robotics/surface_robotics_mockups_description/tree/main) package used in the [CLR workspace](https://github.com/NASA-JSC-Robotics/clr_ws)).
+It is helpful to create a URDF to combine an object's sub-parts and keep these object URDFs in an environment/mockups package.
 
 Having the object URDFs will make it easier to convert these objects to MJCFs later, as described in the [MJCF conversion documentation](./TOOLS.md).
 
