@@ -28,6 +28,7 @@ We can see an example of how a low-fidelity lunar habitat concept is modeled in 
 > This depiction of a lunar habitat concept does not constitute an official design or official endorsement, either expressed or implied, by NASA.
 
 The low-fidelity lunar habitat concept in MuJoCo:
+
 ![Habitat Visual](./images/habitat.png "The low-fidelity lunar habitat concept")
 
 > [!NOTE]
@@ -37,12 +38,40 @@ The low-fidelity lunar habitat concept in MuJoCo:
 > - H (show convex hulls)
 
 An example of a convex hull around a low-fidelity lunar habitat concept modeled as a singular asset is depicted below; the robot is unable to reach onto the habitat porch because of how the convex hull is drawn around this asset.
+
 ![Poor Convex Hull](./images/habitat-convex-hull-bad.png "Convex hull around object modeled as singular asset")
 
 Instead, models should be exported from CAD based on the meaningful sub-parts the robot will interact with.
 The lunar habitat, for example, is exported as 3 sub-parts: the habitat module itself, the porch, and the stairs/ladder leading up to the porch.
 The convex hull for the object with modeled sub-parts is depicted below.
+
 ![Convex Hull](./images/habitat-convex-hull.png "Convex hull around object modeled with sub-parts")
 
 Note that with this object breakdown, the robot *cannot* reach into the module itself, since the convex hull around the model closes any openings into the module.
 Be aware that how objects are broken into sub-parts will depend on the application and any expected interactions with the object.
+
+## Generate Object MJCFs
+
+Objects that are not modeled within the standard URDF process (for example, moveable objects not modeled as part of the environment) need to be incorporated into the MuJoCo scene.
+They can be integrated as:
+
+- Separate MJCFs, if not using on-the-fly MJCF conversion;
+or
+- Included into a top-level URDF for on-the-fly MJCF conversion.
+
+Regardless of the approach for integrating these objects, the process is ultimately very similar to that for [generating a robot MJCF](./TOOLS.md).
+
+1.  If not already done in a description package:
+    1.  Create STL models for the objects.
+    2.  Create URDFs for the objects.
+    Some objects may not require a special URDF using the [MuJoCo `ros2_control` hardware interface plugin](../README.md#plugin), since the robot is expected to interact with and move these objects.
+    Instead, conversion can be performed directly on the environment/mockups URDFs or these URDFs can be xacro included into the top-level MuJoCo URDF.
+2.  Create input(s) for the conversion process; each object can be converted separately or as part of a top-level MuJoCo inputs file.
+Most important is decomposing any object sub-parts the robot will need to interact with.
+This decomposition ensures the conves hulls for collision checking on these interactable sub-parts are accurate.
+    1.  It can often be useful to see what level of precision has been used to decompose interactable sub-parts in past applications, specifically the [`threshold` attribute](./TOOLS.md#processed-inputs-attribute-reference).
+1.  Run the conversion script.
+2.  Test the conversion process has been completed properly:
+    ```bash
+    ros2 run mujoco_vendor simulate <Converted Description File>
+    ```
