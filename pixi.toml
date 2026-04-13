@@ -48,6 +48,9 @@ colcon-mixin = ">=0.2.3,<0.3"
 libcap = ">=2.76,<3"
 glfw = ">=3.4,<4"
 pip = "*"
+numpy = "*"
+ros-jazzy-python-orocos-kdl-vendor = "*"
+ros-jazzy-urdfdom-py = "*"
 
 # Not necessary for building, but for tests/running in isolated environments
 ros-jazzy-ros-base = "*"
