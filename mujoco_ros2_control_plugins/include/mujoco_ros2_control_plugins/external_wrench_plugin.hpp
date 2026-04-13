@@ -133,6 +133,8 @@ private:
   double force_arrow_scale_{ 0.01 };
   /// Arrow length per unit torque [m/(N·m)]. Parameter: "torque_arrow_scale".
   double torque_arrow_scale_{ 0.1 };
+
+  std::atomic_bool service_requested_{ false };
 };
 
 }  // namespace mujoco_ros2_control_plugins

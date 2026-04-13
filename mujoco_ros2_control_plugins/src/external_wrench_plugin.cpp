@@ -63,6 +63,11 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
 
 void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 {
+  if (!service_requested_.load(std::memory_order_acquire) && active_wrenches_.empty())
+  {
+    // no active wrenches and no new service requests since last update.
+    return;
+  }
   // Step 1 – undo our previous contribution so other plugins / controllers
   //          that also write qfrc_applied are not permanently affected.
   for (int i = 0; i < nv_; ++i)
@@ -160,6 +165,8 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
   active_wrenches_.erase(std::remove_if(active_wrenches_.begin(), active_wrenches_.end(),
                                         [&now](const ActiveWrench& w) { return now >= w.end_time; }),
                          active_wrenches_.end());
+
+  service_requested_.store(!active_wrenches_.empty(), std::memory_order_release);
 
   // Step 5 – publish RViz markers for all currently active (non-expired) wrenches.
   publishMarkers();
@@ -325,6 +332,8 @@ void ExternalWrenchPlugin::handleApplyWrench(const ApplyExternalWrench::Request:
               request->link_name.c_str(), body_id, duration.seconds(), w.ramp_down_duration.seconds(), w.force[0],
               w.force[1], w.force[2], w.torque[0], w.torque[1], w.torque[2], w.application_point[0],
               w.application_point[1], w.application_point[2]);
+
+  service_requested_.store(true, std::memory_order_release);
 
   // Block the service thread until the wrench duration has elapsed so that
   // the response is sent only after the force has been fully applied.
