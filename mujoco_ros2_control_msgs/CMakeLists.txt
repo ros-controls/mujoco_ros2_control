@@ -11,6 +11,8 @@ find_package(rosidl_default_generators REQUIRED)
 
 set(msg_files
   msg/ConstraintViolations.msg
+  msg/ExternalWrench.msg
+  msg/ExternalWrenchArray.msg
 )
 
 set(srv_files

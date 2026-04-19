@@ -1,34 +1,19 @@
-# Apply an external wrench to a named body/link in the MuJoCo simulation
-# for a given duration.
+# Apply one or more external wrenches to named bodies in the MuJoCo simulation.
+#
+# Each ExternalWrench in the array identifies its target body via
+# wrench.header.frame_id (must match the MJCF body name).  All wrenches
+# in a single call are validated atomically: if any body name is unknown
+# the entire request is rejected and nothing is applied.
+#
+# The service call blocks until the longest wrench duration in the array
+# has elapsed, then returns the response.
 
-# Standard ROS header (stamp, frame_id)
-std_msgs/Header             header
-
-# Name of the MuJoCo body to apply the wrench to (must match the MJCF body name)
-string                      link_name
-
-# Wrench expressed in the world frame.
-#   force  [N]   – linear force  (x, y, z)
-#   torque [N·m] – angular moment (x, y, z)
-geometry_msgs/Wrench        wrench
-
-# Point of force application expressed in the body's local frame
-# (relative to the body frame origin, in metres).
-# A zero vector applies the force at the body frame origin.
-geometry_msgs/Point         application_point
-
-# How long the wrench remains active.
-# A zero duration applies the wrench for a single simulation step.
-builtin_interfaces/Duration duration
-
-# Optional ramp-down window at the end of the duration over which the wrench
-# magnitude is linearly scaled from 1.0 to 0.0.  Must be <= duration.
-# A zero value (default) produces the original abrupt cut-off behaviour.
-builtin_interfaces/Duration ramp_down_duration
+# Array of wrenches to apply simultaneously.
+mujoco_ros2_control_msgs/ExternalWrenchArray wrenches
 
 ---
 
-# True if the wrench was accepted and scheduled.
+# True if all wrenches were accepted and scheduled.
 bool    success
 
 # Human-readable status message (e.g. error description when success is false).
