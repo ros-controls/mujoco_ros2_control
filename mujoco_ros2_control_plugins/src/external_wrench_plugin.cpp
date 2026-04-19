@@ -383,8 +383,7 @@ void ExternalWrenchPlugin::handleApplyWrench(const ApplyExternalWrench::Request:
   }
 
   response->success = true;
-  response->message =
-      "Applied " + std::to_string(wrenches.size()) + " wrench(es) successfully.";
+  response->message = "Applied " + std::to_string(wrenches.size()) + " wrench(es) successfully.";
 }
 
 }  // namespace mujoco_ros2_control_plugins
