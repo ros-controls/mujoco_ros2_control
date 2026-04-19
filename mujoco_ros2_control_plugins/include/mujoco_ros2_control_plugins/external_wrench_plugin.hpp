@@ -64,15 +64,25 @@ namespace mujoco_ros2_control_plugins
  *
  * Implementation notes
  * --------------------
- * Forces are accumulated into data->qfrc_applied, which the PhysicsLoop copies
- * into mjData before each mj_step().  mj_applyFT() is intentionally avoided:
- * MuJoCo 3.x mprotects the arena read-only between steps, and mj_applyFT
- * writes into it via mj_markStack, causing a segfault when called from
- * update() (outside mj_step).  Instead the plugin replicates mj_applyFT's
- * computation using pre-allocated Jacobian buffers (jacp_, jacr_) and calling
- * mj_jac() directly, which only reads persistent mjData arrays and never
- * touches the arena.  The plugin tracks its own contribution from the previous
- * step and subtracts it before re-applying only the active wrenches.
+ * Forces are written into data->xfrc_applied (Cartesian 6D force/torque per
+ * body, world frame, applied at the body's inertial CoM xipos).  MuJoCo reads
+ * this array during mj_step and both applies the force AND renders it as an
+ * arrow in the native viewer when "Perturb forces" is enabled.
+ *
+ * The service input is expressed in the body's local frame at an arbitrary
+ * application point.  The plugin converts this to the world-frame wrench at
+ * xipos using the standard wrench-transport formula:
+ *
+ *   F_world      = R * F_body
+ *   τ_world      = R * τ_body
+ *   τ_at_xipos   = τ_world + (p_world − xipos) × F_world
+ *
+ * where R = data->xmat (body → world rotation) and
+ *       p_world = data->xpos + R * application_point_body.
+ *
+ * The plugin tracks its own contribution from the previous step in
+ * xfrc_prev_contribution_ and subtracts it at the start of each update() so
+ * that contributions from other plugins writing to xfrc_applied are preserved.
  */
 class ExternalWrenchPlugin : public MuJoCoROS2ControlPluginBase
 {
@@ -109,8 +119,8 @@ private:
   {
     int body_id{ -1 };
     std::string link_name;
-    mjtNum force[3]{ 0.0, 0.0, 0.0 };
-    mjtNum torque[3]{ 0.0, 0.0, 0.0 };
+    mjtNum force[3]{ 0.0, 0.0, 0.0 };              ///< body-local frame
+    mjtNum torque[3]{ 0.0, 0.0, 0.0 };             ///< body-local frame
     mjtNum application_point[3]{ 0.0, 0.0, 0.0 };  ///< body-local frame
     rclcpp::Time end_time{ 0, 0, RCL_ROS_TIME };
     rclcpp::Duration ramp_down_duration{ 0, 0 };
@@ -142,20 +152,20 @@ private:
   // Active wrenches — only modified inside update()
   std::vector<ActiveWrench> active_wrenches_;
 
-  // qfrc_applied bookkeeping
-  int nv_{ 0 };
-  std::vector<mjtNum> qfrc_temp_;               ///< scratch buffer for J^T * wrench (nv)
-  std::vector<mjtNum> qfrc_prev_contribution_;  ///< our last delta on qfrc_applied (nv)
-  std::vector<mjtNum> jacp_;                    ///< translational Jacobian buffer (3*nv)
-  std::vector<mjtNum> jacr_;                    ///< rotational Jacobian buffer (3*nv)
+  // xfrc_applied bookkeeping
+  int nbody_{ 0 };
+  /// Our last contribution to data->xfrc_applied (nbody × 6, world frame at xipos).
+  /// Subtracted at the start of the next update() to undo the previous step's contribution.
+  std::vector<mjtNum> xfrc_prev_contribution_;
 
+  // Marker visualization scaling
   /// Arrow length per unit force [m/N]. Parameter: "force_arrow_scale".
   double force_arrow_scale_{ 0.01 };
   /// Arrow length per unit torque [m/(N·m)]. Parameter: "torque_arrow_scale".
   double torque_arrow_scale_{ 0.1 };
 
   std::atomic_bool service_requested_{ false };
-  /// True when qfrc_prev_contribution_ is non-zero and must be subtracted on the next update().
+  /// True when xfrc_prev_contribution_ is non-zero and must be subtracted on the next update().
   bool needs_undo_{ false };
 };
 

@@ -29,12 +29,10 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
   node_ = node;
   logger_ = node_->get_logger().get_child(node->get_sub_namespace());
   model_ = model;
-  nv_ = model->nv;
+  nbody_ = model->nbody;
 
-  qfrc_temp_.assign(nv_, 0.0);
-  qfrc_prev_contribution_.assign(nv_, 0.0);
-  jacp_.assign(3 * nv_, 0.0);
-  jacr_.assign(3 * nv_, 0.0);
+  // xfrc_applied is nbody × 6 (force[3] + torque[3] per body, world frame at xipos).
+  xfrc_prev_contribution_.assign(nbody_ * 6, 0.0);
 
   // Visualization parameters
   if (!node_->has_parameter("force_arrow_scale"))
@@ -65,18 +63,19 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 {
   if (!service_requested_.load(std::memory_order_acquire) && active_wrenches_.empty() && !needs_undo_)
   {
-    // no active wrenches, no new service requests, and nothing to undo.
+    // No active wrenches, no new service requests, and nothing to undo.
     return;
   }
-  // Step 1 - undo our previous contribution so other plugins / controllers
-  //          that also write qfrc_applied are not permanently affected.
+
+  // Step 1 - undo our previous contribution to xfrc_applied so that other
+  //          plugins writing to the same array are not permanently affected.
   if (needs_undo_)
   {
-    for (int i = 0; i < nv_; ++i)
+    for (int i = 0; i < nbody_ * 6; ++i)
     {
-      data->qfrc_applied[i] -= qfrc_prev_contribution_[i];
+      data->xfrc_applied[i] -= xfrc_prev_contribution_[i];
     }
-    std::fill(qfrc_prev_contribution_.begin(), qfrc_prev_contribution_.end(), 0.0);
+    std::fill(xfrc_prev_contribution_.begin(), xfrc_prev_contribution_.end(), 0.0);
     needs_undo_ = false;
   }
 
@@ -98,13 +97,13 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
     return;
   }
 
-  // Step 3 - accumulate each active wrench into qfrc_temp_ via J^T * wrench.
+  // Step 3 - accumulate each active wrench into xfrc_applied.
   //
-  // This replicates mj_applyFT() without touching the MuJoCo arena:
-  //   mj_jac() only reads persistent mjData arrays and is arena-safe.
-  //   qfrc_applied is what the PhysicsLoop copies into mjData before mj_step.
-  std::fill(qfrc_temp_.begin(), qfrc_temp_.end(), 0.0);
-
+  // xfrc_applied[body*6 .. body*6+5] = (force_world[3], torque_world_at_xipos[3])
+  // MuJoCo reads this during mj_step via mj_xfrcApplied → mj_applyFT, which
+  // computes J^T*f internally.  Writing directly to xfrc_applied avoids all
+  // arena interaction (no mj_markStack) and makes the forces visible in the
+  // native viewer ("Perturb forces").
   const rclcpp::Time now_apply = node_->get_clock()->now();
 
   for (auto& w : active_wrenches_)
@@ -124,6 +123,7 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
     // Body pose in world frame. xmat is row-major 3×3 (body → world).
     const mjtNum* xpos = data->xpos + w.body_id * 3;
     const mjtNum* xmat = data->xmat + w.body_id * 9;
+    const mjtNum* xipos = data->xipos + w.body_id * 3;  // inertial CoM in world frame
 
     // Transform application_point from body-local to world frame.
     const mjtNum point_world[3] = {
@@ -143,24 +143,25 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
                                      xmat[3] * st[0] + xmat[4] * st[1] + xmat[5] * st[2],
                                      xmat[6] * st[0] + xmat[7] * st[1] + xmat[8] * st[2] };
 
-    // Compute body-point Jacobian at point_world (arena-free: reads only persistent arrays).
-    mj_jac(model_, data, jacp_.data(), jacr_.data(), point_world, w.body_id);
+    // Transport the wrench from application_point to xipos (body CoM).
+    // xfrc_applied expects force+torque in world frame at the body's CoM (xipos).
+    //   τ_at_xipos = τ_world + (point_world − xipos) × force_world
+    const mjtNum r[3] = { point_world[0] - xipos[0], point_world[1] - xipos[1], point_world[2] - xipos[2] };
+    const mjtNum torque_at_xipos[3] = { torque_world[0] + r[1] * force_world[2] - r[2] * force_world[1],
+                                        torque_world[1] + r[2] * force_world[0] - r[0] * force_world[2],
+                                        torque_world[2] + r[0] * force_world[1] - r[1] * force_world[0] };
 
-    // qfrc_temp += J^T * wrench  (jacp/jacr are row-major 3×nv)
-    for (int i = 0; i < nv_; ++i)
+    // Accumulate into xfrc_applied and record contribution for undo next step.
+    const int base = w.body_id * 6;
+    for (int j = 0; j < 3; ++j)
     {
-      qfrc_temp_[i] += jacp_[0 * nv_ + i] * force_world[0] + jacp_[1 * nv_ + i] * force_world[1] +
-                       jacp_[2 * nv_ + i] * force_world[2] + jacr_[0 * nv_ + i] * torque_world[0] +
-                       jacr_[1 * nv_ + i] * torque_world[1] + jacr_[2 * nv_ + i] * torque_world[2];
+      data->xfrc_applied[base + j] += force_world[j];
+      data->xfrc_applied[base + 3 + j] += torque_at_xipos[j];
+      xfrc_prev_contribution_[base + j] += force_world[j];
+      xfrc_prev_contribution_[base + 3 + j] += torque_at_xipos[j];
     }
   }
 
-  // Step 3 (cont.) - add our contribution to qfrc_applied and save for undo next step.
-  for (int i = 0; i < nv_; ++i)
-  {
-    data->qfrc_applied[i] += qfrc_temp_[i];
-  }
-  qfrc_prev_contribution_ = qfrc_temp_;
   needs_undo_ = true;
 
   // Step 4 - remove expired wrenches.  Expiry is checked AFTER applying so
@@ -234,10 +235,9 @@ void ExternalWrenchPlugin::publish_markers(MarkerArray& markers) const
       end.z = pz + w.force[2] * fs;
       m.points = { start, end };
 
-      m.scale.x = kShaftDiam;  // shaft diameter
-      m.scale.y = kHeadDiam;   // head diameter
-      m.scale.z = 0.0;         // head length (auto)
-
+      m.scale.x = kShaftDiam;
+      m.scale.y = kHeadDiam;
+      m.scale.z = 0.0;
       m.color.r = 1.0f;
       m.color.g = 0.0f;
       m.color.b = 0.0f;
@@ -270,7 +270,6 @@ void ExternalWrenchPlugin::publish_markers(MarkerArray& markers) const
       m.scale.x = kShaftDiam;
       m.scale.y = kHeadDiam;
       m.scale.z = 0.0;
-
       m.color.r = 0.0f;
       m.color.g = 0.7f;
       m.color.b = 0.9f;

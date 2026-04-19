@@ -225,15 +225,15 @@ TEST_F(ExternalWrenchPluginTest, ServiceAcceptsValidBodyName)
   plugin.cleanup();
 }
 
-TEST_F(ExternalWrenchPluginTest, UpdateAppliesForceToQfrcApplied)
+TEST_F(ExternalWrenchPluginTest, UpdateAppliesForceToXfrcApplied)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
 
-  // All DOFs must start at zero.
-  for (int i = 0; i < model_->nv; ++i)
+  // All xfrc_applied entries must start at zero.
+  for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    EXPECT_DOUBLE_EQ(data_->qfrc_applied[i], 0.0);
+    EXPECT_DOUBLE_EQ(data_->xfrc_applied[i], 0.0);
   }
 
   // Apply 10 N in body-frame X (≡ world-frame X at identity orientation).
@@ -243,13 +243,13 @@ TEST_F(ExternalWrenchPluginTest, UpdateAppliesForceToQfrcApplied)
 
   plugin.update(model_, data_);
 
-  // At least one generalised coordinate must carry a non-zero force.
+  // At least one xfrc_applied entry must carry a non-zero value.
   double total = 0.0;
-  for (int i = 0; i < model_->nv; ++i)
+  for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    total += std::abs(data_->qfrc_applied[i]);
+    total += std::abs(data_->xfrc_applied[i]);
   }
-  EXPECT_GT(total, 0.0) << "qfrc_applied should be non-zero after applying a force";
+  EXPECT_GT(total, 0.0) << "xfrc_applied should be non-zero after applying a force";
 
   plugin.cleanup();
 }
@@ -269,9 +269,9 @@ TEST_F(ExternalWrenchPluginTest, UpdateUndoesPreviousContributionOnNextCall)
   // Second update: plugin subtracts its saved contribution; no active wrenches remain.
   plugin.update(model_, data_);
 
-  for (int i = 0; i < model_->nv; ++i)
+  for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    EXPECT_DOUBLE_EQ(data_->qfrc_applied[i], 0.0) << "DOF " << i << " not zeroed after wrench expiry";
+    EXPECT_DOUBLE_EQ(data_->xfrc_applied[i], 0.0) << "xfrc_applied[" << i << "] not zeroed after wrench expiry";
   }
 
   plugin.cleanup();
@@ -298,9 +298,9 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
   plugin.update(model_, data_);
 
   double total_both = 0.0;
-  for (int i = 0; i < model_->nv; ++i)
+  for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    total_both += std::abs(data_->qfrc_applied[i]);
+    total_both += std::abs(data_->xfrc_applied[i]);
   }
 
   // Second update clears state.
@@ -316,9 +316,9 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
   plugin.update(model_, data_);
 
   double total_one = 0.0;
-  for (int i = 0; i < model_->nv; ++i)
+  for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    total_one += std::abs(data_->qfrc_applied[i]);
+    total_one += std::abs(data_->xfrc_applied[i]);
   }
 
   ASSERT_GT(total_one, 0.0) << "Single wrench should produce non-zero qfrc_applied";
@@ -342,11 +342,11 @@ TEST_F(ExternalWrenchPluginTest, TorqueOnlyWrenchAppliesRotationalForce)
   plugin.update(model_, data_);
 
   double total = 0.0;
-  for (int i = 0; i < model_->nv; ++i)
+  for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    total += std::abs(data_->qfrc_applied[i]);
+    total += std::abs(data_->xfrc_applied[i]);
   }
-  EXPECT_GT(total, 0.0) << "qfrc_applied should be non-zero after applying a torque";
+  EXPECT_GT(total, 0.0) << "xfrc_applied should be non-zero after applying a torque";
 
   plugin.cleanup();
 }
@@ -385,11 +385,11 @@ TEST_F(ExternalWrenchPluginTest, SingleCallWithMultipleWrenchesAppliesAll)
   plugin.update(model_, data_);
 
   double total = 0.0;
-  for (int i = 0; i < model_->nv; ++i)
+  for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    total += std::abs(data_->qfrc_applied[i]);
+    total += std::abs(data_->xfrc_applied[i]);
   }
-  EXPECT_GT(total, 0.0) << "Both wrenches in the batch should produce non-zero qfrc_applied";
+  EXPECT_GT(total, 0.0) << "Both wrenches in the batch should produce non-zero xfrc_applied";
 
   plugin.cleanup();
 }
@@ -426,11 +426,11 @@ TEST_F(ExternalWrenchPluginTest, SingleCallRejectsIfAnyBodyNameInvalid)
   EXPECT_FALSE(resp->success) << "Request with one invalid body name must be rejected entirely";
   EXPECT_FALSE(resp->message.empty());
 
-  // No wrench should have been applied — qfrc_applied must remain zero.
+  // No wrench should have been applied — xfrc_applied must remain zero.
   plugin.update(model_, data_);
-  for (int i = 0; i < model_->nv; ++i)
+  for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    EXPECT_DOUBLE_EQ(data_->qfrc_applied[i], 0.0) << "DOF " << i << " must be zero after rejected batch";
+    EXPECT_DOUBLE_EQ(data_->xfrc_applied[i], 0.0) << "xfrc_applied[" << i << "] must be zero after rejected batch";
   }
 
   plugin.cleanup();
