@@ -31,28 +31,33 @@ namespace mujoco_ros2_control_plugins
 {
 
 /**
- * @brief Plugin that applies an external wrench (force + torque) to a named
- *        MuJoCo body for a configurable duration.
+ * @brief Plugin that applies one or more external wrenches (force + torque) to
+ *        named MuJoCo bodies for configurable durations.
  *
  * Exposes the ROS 2 service ~/apply_wrench of type
  * mujoco_ros2_control_msgs/srv/ApplyExternalWrench.
  *
- * Service request fields
- * ----------------------
- *   header            – ROS stamp / frame_id (informational)
- *   link_name         – Name of the MuJoCo body (must match MJCF body name)
- *   wrench.force      – Linear force  [N]   expressed in the **body (link) frame**
- *   wrench.torque     – Angular moment [N·m] expressed in the **body (link) frame**
- *   application_point – Point of force application expressed in the **body (link) frame**
- *                       (relative to the link frame origin, metres).
- *                       A zero vector applies at the link frame origin.
- *   duration          – How long the wrench remains active.
- *                       A zero duration applies it for one simulation step.
+ * The service accepts an array of ExternalWrench messages so that multiple
+ * wrenches can be submitted atomically in a single call.  All wrenches are
+ * validated before any are applied: if any body name is unknown the entire
+ * request is rejected.
+ *
+ * Each ExternalWrench fields
+ * --------------------------
+ *   wrench.header.frame_id  - Name of the MuJoCo body (must match MJCF body name)
+ *   wrench.wrench.force     - Linear force  [N]   expressed in the **body (link) frame**
+ *   wrench.wrench.torque    - Angular moment [N·m] expressed in the **body (link) frame**
+ *   application_point       - Point of force application in the **body (link) frame**
+ *                             (relative to the link frame origin, metres).
+ *                             A zero vector applies at the link frame origin.
+ *   duration                - How long the wrench remains active.
+ *                             A zero duration applies it for one simulation step.
+ *   ramp_down_duration      - Optional linear ramp-down window at the end of duration.
  *
  * Service response fields
  * -----------------------
- *   success  – false if the body name was not found in the model.
- *   message  – human-readable status / error description.
+ *   success  - false if any body name was not found in the model.
+ *   message  - human-readable status / error description.
  *
  * Multiple concurrent wrenches on different (or the same) bodies are
  * supported.  Each wrench is independent and expires at its own end-time.
@@ -79,8 +84,25 @@ public:
   void update(const mjModel* model, mjData* data) override;
   void cleanup() override;
 
+  /**
+   * @brief Append RViz arrow markers for all currently active wrenches to @p markers.
+   *
+   * This method is additive: existing entries in @p markers are preserved.
+   * It emits nothing when there are no active wrenches, so callers can call it
+   * unconditionally and aggregate contributions from multiple plugins before
+   * publishing a single MarkerArray.
+   *
+   * Marker namespaces:
+   *   "external_wrench/force"  – red arrows, one per active wrench with non-zero force
+   *   "external_wrench/torque" – cyan arrows, one per active wrench with non-zero torque
+   *
+   * @param markers  MarkerArray to append to.
+   */
+  void publish_markers(visualization_msgs::msg::MarkerArray& markers) const;
+
 private:
   using ApplyExternalWrench = mujoco_ros2_control_msgs::srv::ApplyExternalWrench;
+  using MarkerArray = visualization_msgs::msg::MarkerArray;
 
   /// Internal representation of a single active wrench request.
   struct ActiveWrench
@@ -92,49 +114,49 @@ private:
     mjtNum application_point[3]{ 0.0, 0.0, 0.0 };  ///< body-local frame
     rclcpp::Time end_time{ 0, 0, RCL_ROS_TIME };
     rclcpp::Duration ramp_down_duration{ 0, 0 };
-    double current_scale{ 1.0 };  // to be used by the markers for publishing
+    double current_scale{ 1.0 };  ///< ramp-down scale, used by markers too
   };
 
   /// Service callback — runs in a ROS executor thread.
   void handleApplyWrench(const ApplyExternalWrench::Request::SharedPtr request,
                          ApplyExternalWrench::Response::SharedPtr response);
 
-  /// Publish RViz arrow markers for all active wrenches. Called from update().
+  /// Publish the result of publish_markers() via the realtime publisher. Called from update().
   void publishMarkers();
 
-  // ── ROS interfaces ────────────────────────────────────────────────────────
+  // ROS interfaces
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_{ rclcpp::get_logger("ExternalWrenchPlugin") };
   rclcpp::Service<ApplyExternalWrench>::SharedPtr service_;
 
-  using MarkerArray = visualization_msgs::msg::MarkerArray;
   rclcpp::Publisher<MarkerArray>::SharedPtr marker_pub_raw_;
   std::unique_ptr<realtime_tools::RealtimePublisher<MarkerArray>> marker_pub_;
 
-  // ── Model pointer (const, valid for simulation lifetime) ─────────────────
+  // Model pointer (const, valid for simulation lifetime)
   const mjModel* model_{ nullptr };
 
-  // ── Pending queue written by service callback, drained in update() ───────
+  // Pending queue written by service callback, drained in update()
   std::mutex pending_mutex_;
   std::queue<ActiveWrench> pending_wrenches_;
 
-  // ── Active wrenches — only modified inside update() ───────────────────────
+  // Active wrenches — only modified inside update()
   std::vector<ActiveWrench> active_wrenches_;
 
-  // ── qfrc_applied bookkeeping ──────────────────────────────────────────────
+  // qfrc_applied bookkeeping
   int nv_{ 0 };
   std::vector<mjtNum> qfrc_temp_;               ///< scratch buffer for J^T * wrench (nv)
   std::vector<mjtNum> qfrc_prev_contribution_;  ///< our last delta on qfrc_applied (nv)
   std::vector<mjtNum> jacp_;                    ///< translational Jacobian buffer (3*nv)
   std::vector<mjtNum> jacr_;                    ///< rotational Jacobian buffer (3*nv)
 
-  // ── Marker visualization scaling ──────────────────────────────────────────
   /// Arrow length per unit force [m/N]. Parameter: "force_arrow_scale".
   double force_arrow_scale_{ 0.01 };
   /// Arrow length per unit torque [m/(N·m)]. Parameter: "torque_arrow_scale".
   double torque_arrow_scale_{ 0.1 };
 
   std::atomic_bool service_requested_{ false };
+  /// True when qfrc_prev_contribution_ is non-zero and must be subtracted on the next update().
+  bool needs_undo_{ false };
 };
 
 }  // namespace mujoco_ros2_control_plugins

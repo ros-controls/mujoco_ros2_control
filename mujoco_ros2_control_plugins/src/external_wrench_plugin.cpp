@@ -63,20 +63,24 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
 
 void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 {
-  if (!service_requested_.load(std::memory_order_acquire) && active_wrenches_.empty())
+  if (!service_requested_.load(std::memory_order_acquire) && active_wrenches_.empty() && !needs_undo_)
   {
-    // no active wrenches and no new service requests since last update.
+    // no active wrenches, no new service requests, and nothing to undo.
     return;
   }
-  // Step 1 – undo our previous contribution so other plugins / controllers
+  // Step 1 - undo our previous contribution so other plugins / controllers
   //          that also write qfrc_applied are not permanently affected.
-  for (int i = 0; i < nv_; ++i)
+  if (needs_undo_)
   {
-    data->qfrc_applied[i] -= qfrc_prev_contribution_[i];
+    for (int i = 0; i < nv_; ++i)
+    {
+      data->qfrc_applied[i] -= qfrc_prev_contribution_[i];
+    }
+    std::fill(qfrc_prev_contribution_.begin(), qfrc_prev_contribution_.end(), 0.0);
+    needs_undo_ = false;
   }
-  std::fill(qfrc_prev_contribution_.begin(), qfrc_prev_contribution_.end(), 0.0);
 
-  // Step 2 – drain pending wrenches queued by the service callback.
+  // Step 2 - drain pending wrenches queued by the service callback.
   //          Use try_lock to stay non-blocking in the real-time thread.
   if (pending_mutex_.try_lock())
   {
@@ -94,7 +98,7 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
     return;
   }
 
-  // Step 3 – accumulate each active wrench into qfrc_temp_ via J^T * wrench.
+  // Step 3 - accumulate each active wrench into qfrc_temp_ via J^T * wrench.
   //
   // This replicates mj_applyFT() without touching the MuJoCo arena:
   //   mj_jac() only reads persistent mjData arrays and is arena-safe.
@@ -151,14 +155,15 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
     }
   }
 
-  // Step 3 (cont.) – add our contribution to qfrc_applied and save for undo next step.
+  // Step 3 (cont.) - add our contribution to qfrc_applied and save for undo next step.
   for (int i = 0; i < nv_; ++i)
   {
     data->qfrc_applied[i] += qfrc_temp_[i];
   }
   qfrc_prev_contribution_ = qfrc_temp_;
+  needs_undo_ = true;
 
-  // Step 4 – remove expired wrenches.  Expiry is checked AFTER applying so
+  // Step 4 - remove expired wrenches.  Expiry is checked AFTER applying so
   //          that zero-duration wrenches are applied for exactly one simulation
   //          step before being discarded (as documented in the header).
   const rclcpp::Time now = node_->get_clock()->now();
@@ -168,7 +173,7 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 
   service_requested_.store(!active_wrenches_.empty(), std::memory_order_release);
 
-  // Step 5 – publish RViz markers for all currently active (non-expired) wrenches.
+  // Step 5 - publish RViz markers for all currently active (non-expired) wrenches.
   publishMarkers();
 }
 
@@ -185,17 +190,10 @@ void ExternalWrenchPlugin::cleanup()
 // Marker visualization
 // ---------------------------------------------------------------------------
 
-void ExternalWrenchPlugin::publishMarkers()
+void ExternalWrenchPlugin::publish_markers(MarkerArray& markers) const
 {
-  MarkerArray msg;
-
   if (active_wrenches_.empty())
   {
-    // Clear any markers that may still be displayed in RViz.
-    visualization_msgs::msg::Marker del;
-    del.action = visualization_msgs::msg::Marker::DELETEALL;
-    msg.markers.push_back(del);
-    marker_pub_->try_publish(msg);
     return;
   }
 
@@ -207,11 +205,9 @@ void ExternalWrenchPlugin::publishMarkers()
   static constexpr double kShaftDiam = 0.02;
   static constexpr double kHeadDiam = 0.04;
 
-  int id = 0;
+  int id = static_cast<int>(markers.markers.size());
   for (const auto& w : active_wrenches_)
   {
-    // Use the application_point and force/torque exactly as supplied in the
-    // service request — no MuJoCo feedback lookup needed.
     const double px = w.application_point[0];
     const double py = w.application_point[1];
     const double pz = w.application_point[2];
@@ -223,7 +219,7 @@ void ExternalWrenchPlugin::publishMarkers()
       visualization_msgs::msg::Marker m;
       m.header.stamp = stamp;
       m.header.frame_id = w.link_name;
-      m.ns = "force";
+      m.ns = "external_wrench/force";
       m.id = id++;
       m.type = visualization_msgs::msg::Marker::ARROW;
       m.action = visualization_msgs::msg::Marker::ADD;
@@ -246,7 +242,7 @@ void ExternalWrenchPlugin::publishMarkers()
       m.color.g = 0.0f;
       m.color.b = 0.0f;
       m.color.a = 0.8f;
-      msg.markers.push_back(m);
+      markers.markers.push_back(m);
     }
 
     // Torque arrow (cyan) — skip if negligible.
@@ -256,7 +252,7 @@ void ExternalWrenchPlugin::publishMarkers()
       visualization_msgs::msg::Marker m;
       m.header.stamp = stamp;
       m.header.frame_id = w.link_name;
-      m.ns = "torque";
+      m.ns = "external_wrench/torque";
       m.id = id++;
       m.type = visualization_msgs::msg::Marker::ARROW;
       m.action = visualization_msgs::msg::Marker::ADD;
@@ -279,10 +275,15 @@ void ExternalWrenchPlugin::publishMarkers()
       m.color.g = 0.7f;
       m.color.b = 0.9f;
       m.color.a = 0.8f;
-      msg.markers.push_back(m);
+      markers.markers.push_back(m);
     }
   }
+}
 
+void ExternalWrenchPlugin::publishMarkers()
+{
+  MarkerArray msg;
+  publish_markers(msg);
   marker_pub_->try_publish(msg);
 }
 
@@ -293,58 +294,97 @@ void ExternalWrenchPlugin::publishMarkers()
 void ExternalWrenchPlugin::handleApplyWrench(const ApplyExternalWrench::Request::SharedPtr request,
                                              ApplyExternalWrench::Response::SharedPtr response)
 {
-  // Validate body name against the cached model pointer.
-  const int body_id = mj_name2id(model_, mjOBJ_BODY, request->link_name.c_str());
-  if (body_id < 0)
+  const auto& wrenches = request->wrenches.external_wrenches;
+
+  if (wrenches.empty())
   {
-    response->success = false;
-    response->message = "Body '" + request->link_name + "' not found in MuJoCo model.";
-    RCLCPP_WARN(logger_, "%s", response->message.c_str());
+    response->success = true;
+    response->message = "No wrenches provided; nothing applied.";
     return;
   }
 
-  ActiveWrench w;
-  w.body_id = body_id;
-  w.link_name = request->link_name;
-  w.force[0] = request->wrench.force.x;
-  w.force[1] = request->wrench.force.y;
-  w.force[2] = request->wrench.force.z;
-  w.torque[0] = request->wrench.torque.x;
-  w.torque[1] = request->wrench.torque.y;
-  w.torque[2] = request->wrench.torque.z;
-  w.application_point[0] = request->application_point.x;
-  w.application_point[1] = request->application_point.y;
-  w.application_point[2] = request->application_point.z;
+  // --- Validate all body names before queuing any wrench (atomic apply) ---
+  std::vector<int> body_ids;
+  body_ids.reserve(wrenches.size());
+  for (const auto& ew : wrenches)
+  {
+    const std::string& link_name = ew.wrench.header.frame_id;
+    const int body_id = mj_name2id(model_, mjOBJ_BODY, link_name.c_str());
+    if (body_id < 0)
+    {
+      response->success = false;
+      response->message = "Body '" + link_name + "' not found in MuJoCo model.";
+      RCLCPP_WARN(logger_, "%s", response->message.c_str());
+      return;
+    }
+    body_ids.push_back(body_id);
+  }
 
-  const rclcpp::Duration duration(request->duration.sec, request->duration.nanosec);
-  w.end_time = node_->get_clock()->now() + duration;
-  w.ramp_down_duration = rclcpp::Duration(request->ramp_down_duration.sec, request->ramp_down_duration.nanosec);
+  // --- Build ActiveWrench entries and find the maximum duration to sleep ---
+  std::vector<ActiveWrench> new_wrenches;
+  new_wrenches.reserve(wrenches.size());
+
+  rclcpp::Duration max_duration{ 0, 0 };
+  const rclcpp::Time now = node_->get_clock()->now();
+
+  for (std::size_t i = 0; i < wrenches.size(); ++i)
+  {
+    const auto& ew = wrenches[i];
+    const std::string& link_name = ew.wrench.header.frame_id;
+    const rclcpp::Duration duration(ew.duration.sec, ew.duration.nanosec);
+
+    ActiveWrench w;
+    w.body_id = body_ids[i];
+    w.link_name = link_name;
+    w.force[0] = ew.wrench.wrench.force.x;
+    w.force[1] = ew.wrench.wrench.force.y;
+    w.force[2] = ew.wrench.wrench.force.z;
+    w.torque[0] = ew.wrench.wrench.torque.x;
+    w.torque[1] = ew.wrench.wrench.torque.y;
+    w.torque[2] = ew.wrench.wrench.torque.z;
+    w.application_point[0] = ew.application_point.x;
+    w.application_point[1] = ew.application_point.y;
+    w.application_point[2] = ew.application_point.z;
+    w.end_time = now + duration;
+    w.ramp_down_duration = rclcpp::Duration(ew.ramp_down_duration.sec, ew.ramp_down_duration.nanosec);
+
+    if (duration > max_duration)
+    {
+      max_duration = duration;
+    }
+
+    RCLCPP_INFO(logger_,
+                "Scheduling wrench on body '%s' (id=%d) for %.3f s (ramp-down %.3f s). "
+                "Force [%.2f, %.2f, %.2f] N, Torque [%.2f, %.2f, %.2f] N·m, "
+                "Application point [%.3f, %.3f, %.3f] m (body frame).",
+                link_name.c_str(), body_ids[i], duration.seconds(), w.ramp_down_duration.seconds(), w.force[0],
+                w.force[1], w.force[2], w.torque[0], w.torque[1], w.torque[2], w.application_point[0],
+                w.application_point[1], w.application_point[2]);
+
+    new_wrenches.push_back(std::move(w));
+  }
 
   {
     std::lock_guard<std::mutex> lock(pending_mutex_);
-    pending_wrenches_.push(w);
+    for (auto& w : new_wrenches)
+    {
+      pending_wrenches_.push(std::move(w));
+    }
   }
-
-  RCLCPP_INFO(logger_,
-              "Applying wrench on body '%s' (id=%d) for %.3f s (ramp-down %.3f s). "
-              "Force [%.2f, %.2f, %.2f] N, Torque [%.2f, %.2f, %.2f] N·m, "
-              "Application point [%.3f, %.3f, %.3f] m (body frame).",
-              request->link_name.c_str(), body_id, duration.seconds(), w.ramp_down_duration.seconds(), w.force[0],
-              w.force[1], w.force[2], w.torque[0], w.torque[1], w.torque[2], w.application_point[0],
-              w.application_point[1], w.application_point[2]);
 
   service_requested_.store(true, std::memory_order_release);
 
-  // Block the service thread until the wrench duration has elapsed so that
-  // the response is sent only after the force has been fully applied.
+  // Block the service thread until the longest wrench duration has elapsed so
+  // that the response is sent only after all forces have been fully applied.
   // Zero-duration wrenches apply for a single simulation step; no sleep needed.
-  if (duration.nanoseconds() > 0)
+  if (max_duration.nanoseconds() > 0)
   {
-    rclcpp::sleep_for(duration.to_chrono<std::chrono::nanoseconds>());
+    rclcpp::sleep_for(max_duration.to_chrono<std::chrono::nanoseconds>());
   }
 
   response->success = true;
-  response->message = "Wrench applied on body '" + request->link_name + "'.";
+  response->message =
+      "Applied " + std::to_string(wrenches.size()) + " wrench(es) successfully.";
 }
 
 }  // namespace mujoco_ros2_control_plugins
