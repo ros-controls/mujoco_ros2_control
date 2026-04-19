@@ -59,61 +59,94 @@ Each message entry contains:
 
 ### ExternalWrenchPlugin
 
-Applies an external wrench (force + torque) to a named MuJoCo body for a configurable duration via a ROS 2 service.  Multiple concurrent wrenches on different — or the same — bodies are supported; each expires independently.
+Applies one or more external wrenches (force + torque) to named MuJoCo bodies for configurable durations via a ROS 2 service.  Multiple wrenches can be submitted in a single call and each expires independently.
 
 | | |
 |---|---|
 | **Service** | `~/apply_wrench` (`mujoco_ros2_control_msgs/srv/ApplyExternalWrench`) |
 | **Topic** | `~/wrench_markers` (`visualization_msgs/msg/MarkerArray`) |
 
-**Service request fields**
+**Service request**
+
+The request contains a single `wrenches` field of type `mujoco_ros2_control_msgs/ExternalWrenchArray`, which holds an array of `ExternalWrench` messages.  All wrenches in the array are validated atomically — if any body name is unknown the entire request is rejected and nothing is applied.
+
+Each `ExternalWrench` in the array has:
 
 | Field | Type | Description |
 |---|---|---|
-| `header` | `std_msgs/Header` | Stamp and frame ID (informational) |
-| `link_name` | `string` | MuJoCo body name (must match the MJCF `<body name="...">`) |
-| `wrench.force` | `geometry_msgs/Vector3` | Linear force [N] in the **body (link) frame** |
-| `wrench.torque` | `geometry_msgs/Vector3` | Angular moment [N·m] in the **body (link) frame** |
+| `wrench.header.frame_id` | `string` | MuJoCo body name (must match the MJCF `<body name="...">`) |
+| `wrench.wrench.force` | `geometry_msgs/Vector3` | Linear force [N] — see `apply_in_body_frame` for reference frame |
+| `wrench.wrench.torque` | `geometry_msgs/Vector3` | Angular moment [N·m] — see `apply_in_body_frame` for reference frame |
 | `application_point` | `geometry_msgs/Point` | Force application point in the **body (link) frame** (relative to body frame origin, metres). Zero → apply at the body frame origin. |
 | `duration` | `builtin_interfaces/Duration` | How long the wrench remains active. Zero → single simulation step. |
 | `ramp_down_duration` | `builtin_interfaces/Duration` | Duration over which the wrench linearly ramps from full magnitude to zero at the end of `duration`. Zero → no ramp-down. |
+| `apply_in_body_frame` | `bool` | **`false` (default) — World frame**: force/torque direction is fixed in the world frame and does not change as the body rotates. Use this for gravity-like or globally-directed pushes. **`true` — Body frame**: force/torque is expressed in the body's local frame and rotates with the body every simulation step. Use this for body-fixed thrusters or actuators. |
 
 **Service response fields**
 
 | Field | Type | Description |
 |---|---|---|
-| `success` | `bool` | `false` if the body name was not found in the model |
+| `success` | `bool` | `false` if any body name was not found in the model |
 | `message` | `string` | Human-readable status or error description |
 
 **Example: apply a 10 N push along X for 2 seconds at a 10 cm offset, with a 0.5 s ramp-down**
 
-This applies constant force of 10N for 1.5 seconds and then this force decays linearly over the next 0.5 seconds.
+This applies a constant force of 10 N for 1.5 seconds and then decays linearly over the next 0.5 seconds.
+
+```bash
+ros2 service call /external_wrench/apply_wrench \
+  mujoco_ros2_control_msgs/srv/ApplyExternalWrench \
+  "{
+    wrenches: {
+      external_wrenches: [
+        {
+          wrench: {
+            header: {frame_id: 'base_link'},
+            wrench: {
+              force:  {x: 10.0, y: 0.0, z: 0.0},
+              torque: {x:  0.0, y: 0.0, z: 0.0}
+            }
+          },
+          application_point: {x: 0.1, y: 0.0, z: 0.0},
+          duration: {sec: 2, nanosec: 0},
+          ramp_down_duration: {sec: 0, nanosec: 500000000}
+        }
+      ]
+    }
+  }"
+```
+
+**Example: apply two simultaneous wrenches in a single call**
 
 ```bash
 ros2 service call /mujoco_ros2_control/my_plugin/apply_wrench \
   mujoco_ros2_control_msgs/srv/ApplyExternalWrench \
   "{
-    link_name: 'base_link',
-    wrench: {
-      force:  {x: 10.0, y: 0.0, z: 0.0},
-      torque: {x:  0.0, y: 0.0, z: 0.0}
-    },
-    application_point: {x: 0.1, y: 0.0, z: 0.0},
-    duration: {sec: 2, nanosec: 0},
-    ramp_down_duration: {sec: 0, nanosec: 500000000}
+    wrenches: {
+      external_wrenches: [
+        {
+          wrench: {header: {frame_id: 'link_a'}, wrench: {force: {x: 5.0, y: 0.0, z: 0.0}}},
+          duration: {sec: 1, nanosec: 0}
+        },
+        {
+          wrench: {header: {frame_id: 'link_b'}, wrench: {force: {x: 0.0, y: -3.0, z: 0.0}}},
+          duration: {sec: 1, nanosec: 0}
+        }
+      ]
+    }
   }"
 ```
 
 > [!NOTE]
-> The service call **blocks** until the full `duration` has elapsed and then returns the response. For long-duration wrenches, call the service from a separate terminal or use an async client.
+> The service call **blocks** until the longest `duration` in the array has elapsed, then returns the response. For long-duration wrenches, call the service from a separate terminal or use an async client.
 
 **Visualization**
 
-While a wrench is active, arrow markers are published to `~/wrench_markers` for display in RViz:
-- **Red arrow** — force vector, originating at the application point (body frame)
-- **Cyan arrow** — torque vector, originating at the application point (body frame)
+While wrenches are active, arrow markers are published to `~/wrench_markers` for display in RViz:
+- **Red arrow** (`external_wrench/force` namespace) — force vector, originating at the application point (body frame)
+- **Cyan arrow** (`external_wrench/torque` namespace) — torque vector, originating at the application point (body frame)
 
-Each marker is published in the body's TF frame (i.e. `header.frame_id = link_name`), so RViz will correctly follow the body as it moves. Add a `MarkerArray` display in RViz pointed at the topic and ensure the body's TF frame is being broadcast.
+Each marker uses the body's TF frame as `header.frame_id`, so RViz correctly follows the body as it moves. Add a `MarkerArray` display in RViz pointed at the topic and ensure the body's TF frames are being broadcast.
 
 **Parameters**
 
@@ -121,7 +154,6 @@ Each marker is published in the body's TF frame (i.e. `header.frame_id = link_na
 |---|---|---|---|
 | `force_arrow_scale` | `double` | `0.01` | Arrow length per unit force [m/N]. A 100 N force → 1 m arrow. |
 | `torque_arrow_scale` | `double` | `0.1` | Arrow length per unit torque [m/(N·m)]. A 10 N·m torque → 1 m arrow. |
-| `marker_frame_id` | `string` | `"base_link"` | TF frame ID used in the marker DELETEALL message sent when all wrenches expire. Active wrench markers always use the body's own TF frame (`link_name`). |
 
 **Example configuration**
 
@@ -133,7 +165,6 @@ Each marker is published in the body's TF frame (i.e. `header.frame_id = link_na
         type: "mujoco_ros2_control_plugins/ExternalWrenchPlugin"
         force_arrow_scale: 0.01      # 100 N  → 1 m arrow
         torque_arrow_scale: 0.1      # 10 N·m → 1 m arrow
-        marker_frame_id: "base_link"
 ```
 
 ## Building
