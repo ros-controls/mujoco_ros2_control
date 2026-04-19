@@ -23,6 +23,8 @@
 #include <vector>
 
 #include <mujoco/mujoco.h>
+#include <mujoco_ros2_control_msgs/msg/external_wrench.hpp>
+#include <mujoco_ros2_control_msgs/msg/external_wrench_array.hpp>
 #include <mujoco_ros2_control_msgs/srv/apply_external_wrench.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <visualization_msgs/msg/marker.hpp>
@@ -50,6 +52,7 @@ class ExternalWrenchPluginTest : public ::testing::Test
 {
 protected:
   using ApplyExternalWrench = mujoco_ros2_control_msgs::srv::ApplyExternalWrench;
+  using ExternalWrench = mujoco_ros2_control_msgs::msg::ExternalWrench;
   using MarkerArray = visualization_msgs::msg::MarkerArray;
 
   static void SetUpTestCase()
@@ -152,19 +155,22 @@ private:
       return nullptr;
     }
 
+    ExternalWrench ew;
+    ew.wrench.header.frame_id = link_name;
+    ew.wrench.wrench.force.x = fx;
+    ew.wrench.wrench.force.y = fy;
+    ew.wrench.wrench.force.z = fz;
+    ew.wrench.wrench.torque.x = tx;
+    ew.wrench.wrench.torque.y = ty;
+    ew.wrench.wrench.torque.z = tz;
+    ew.application_point.x = app_x;
+    ew.application_point.y = app_y;
+    ew.application_point.z = app_z;
+    ew.duration.sec = dur_sec;
+    ew.duration.nanosec = dur_nsec;
+
     auto req = std::make_shared<ApplyExternalWrench::Request>();
-    req->link_name = link_name;
-    req->wrench.force.x = fx;
-    req->wrench.force.y = fy;
-    req->wrench.force.z = fz;
-    req->wrench.torque.x = tx;
-    req->wrench.torque.y = ty;
-    req->wrench.torque.z = tz;
-    req->application_point.x = app_x;
-    req->application_point.y = app_y;
-    req->application_point.z = app_z;
-    req->duration.sec = dur_sec;
-    req->duration.nanosec = dur_nsec;
+    req->wrenches.external_wrenches.push_back(ew);
 
     auto future = client->async_send_request(req);
 
@@ -186,20 +192,12 @@ private:
   std::thread spin_thread_;
 };
 
-// ---------------------------------------------------------------------------
-// init / cleanup
-// ---------------------------------------------------------------------------
-
 TEST_F(ExternalWrenchPluginTest, InitSucceeds)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
   EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
   plugin.cleanup();
 }
-
-// ---------------------------------------------------------------------------
-// Service validation
-// ---------------------------------------------------------------------------
 
 TEST_F(ExternalWrenchPluginTest, ServiceRejectsUnknownBodyName)
 {
@@ -226,10 +224,6 @@ TEST_F(ExternalWrenchPluginTest, ServiceAcceptsValidBodyName)
 
   plugin.cleanup();
 }
-
-// ---------------------------------------------------------------------------
-// qfrc_applied bookkeeping
-// ---------------------------------------------------------------------------
 
 TEST_F(ExternalWrenchPluginTest, UpdateAppliesForceToQfrcApplied)
 {
@@ -357,9 +351,90 @@ TEST_F(ExternalWrenchPluginTest, TorqueOnlyWrenchAppliesRotationalForce)
   plugin.cleanup();
 }
 
-// ---------------------------------------------------------------------------
-// Marker visualisation
-// ---------------------------------------------------------------------------
+TEST_F(ExternalWrenchPluginTest, SingleCallWithMultipleWrenchesAppliesAll)
+{
+  mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+
+  // Send two wrenches in a single service call: 5 N in X and 5 N in Y.
+  auto client = plugin_node_->create_client<ApplyExternalWrench>("apply_wrench");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
+
+  ExternalWrench ew1;
+  ew1.wrench.header.frame_id = "test_body";
+  ew1.wrench.wrench.force.x = 5.0;
+
+  ExternalWrench ew2;
+  ew2.wrench.header.frame_id = "test_body";
+  ew2.wrench.wrench.force.y = 5.0;
+
+  auto req = std::make_shared<ApplyExternalWrench::Request>();
+  req->wrenches.external_wrenches = { ew1, ew2 };
+
+  auto future = client->async_send_request(req);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (future.wait_for(std::chrono::milliseconds(10)) != std::future_status::ready &&
+         std::chrono::steady_clock::now() < deadline)
+  {
+  }
+  ASSERT_EQ(future.wait_for(std::chrono::milliseconds(0)), std::future_status::ready);
+  auto resp = future.get();
+  ASSERT_NE(resp, nullptr);
+  ASSERT_TRUE(resp->success);
+
+  plugin.update(model_, data_);
+
+  double total = 0.0;
+  for (int i = 0; i < model_->nv; ++i)
+  {
+    total += std::abs(data_->qfrc_applied[i]);
+  }
+  EXPECT_GT(total, 0.0) << "Both wrenches in the batch should produce non-zero qfrc_applied";
+
+  plugin.cleanup();
+}
+
+TEST_F(ExternalWrenchPluginTest, SingleCallRejectsIfAnyBodyNameInvalid)
+{
+  mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+
+  auto client = plugin_node_->create_client<ApplyExternalWrench>("apply_wrench");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
+
+  // First wrench is valid, second has an unknown body name.
+  ExternalWrench ew1;
+  ew1.wrench.header.frame_id = "test_body";
+  ew1.wrench.wrench.force.x = 5.0;
+
+  ExternalWrench ew2;
+  ew2.wrench.header.frame_id = "nonexistent_body";
+  ew2.wrench.wrench.force.x = 5.0;
+
+  auto req = std::make_shared<ApplyExternalWrench::Request>();
+  req->wrenches.external_wrenches = { ew1, ew2 };
+
+  auto future = client->async_send_request(req);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (future.wait_for(std::chrono::milliseconds(10)) != std::future_status::ready &&
+         std::chrono::steady_clock::now() < deadline)
+  {
+  }
+  ASSERT_EQ(future.wait_for(std::chrono::milliseconds(0)), std::future_status::ready);
+  auto resp = future.get();
+  ASSERT_NE(resp, nullptr);
+  EXPECT_FALSE(resp->success) << "Request with one invalid body name must be rejected entirely";
+  EXPECT_FALSE(resp->message.empty());
+
+  // No wrench should have been applied — qfrc_applied must remain zero.
+  plugin.update(model_, data_);
+  for (int i = 0; i < model_->nv; ++i)
+  {
+    EXPECT_DOUBLE_EQ(data_->qfrc_applied[i], 0.0) << "DOF " << i << " must be zero after rejected batch";
+  }
+
+  plugin.cleanup();
+}
 
 TEST_F(ExternalWrenchPluginTest, PublishMarkersForActiveForceWrench)
 {
