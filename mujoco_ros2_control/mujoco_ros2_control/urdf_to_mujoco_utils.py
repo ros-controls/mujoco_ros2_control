@@ -157,7 +157,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
             rgba = resolve_color(vis)
 
             # The unique value for storing the mesh in the dictionary. It is possible for mesh
-            # files to have the same name (ie, all URs have idential link names - like shoulder.dae)
+            # files to have the same name (ie, all URs have identical link names - like shoulder.dae)
             # which causes issues in the resulting assets directory. To account for this, we will simply
             # apply an increasing index "_N" if the key already exists, and update accordingly.
             mesh_dict_value = {

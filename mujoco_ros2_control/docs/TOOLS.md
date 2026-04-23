@@ -108,8 +108,8 @@ Of note, the test robot has a good chunk of supported functionality, and we reco
 * reads a robot description URDF
 * add in mujoco tag that provides necessary info for conversion
 * replace package names from `package://` to absolute filepaths
-  * NOTE: duplicate mesh files will have a `_N` appended to them to avoid conflicts in the output `assets` folder
-  * E.g. if running multiple types of UR robots in one sim, there will be multipler `shoulder.dae` files
+  * NOTE: duplicate mesh files will have an `_N` appended to them to avoid conflicts in the output `assets` folder
+  * E.g. if running multiple types of UR robots in one sim, there will be multiple `shoulder.dae` files
 * read absolute filepaths of all meshes and convert either dae or stl to obj using trimesh
   * put all of these meshes into an `assets/` folder under `mjcf_data/` relative to current working dir
   * modify filepaths again in urdf to point to `assets/` folder
