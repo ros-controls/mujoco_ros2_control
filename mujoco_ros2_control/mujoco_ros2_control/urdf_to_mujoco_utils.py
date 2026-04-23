@@ -156,16 +156,47 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
             scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
             rgba = resolve_color(vis)
 
-            # If the same stem appears more than once, keep the first, or change as you prefer
-            mesh_info_dict.setdefault(
-                stem,
-                {
+            # The unique value for storing the mesh in the dictionary. It is possible for mesh
+            # files to have the same name (ie, all URs have idential link names - like shoulder.dae)
+            # which causes issues in the resulting assets directory. To account for this, we will simply
+            # apply an increasing index "_N" if the key already exists, and update accordingly.
+            mesh_dict_value = {
+                "is_pre_generated": is_pre_generated,
+                "filename": new_uri,
+                "scale": scale,
+                "color": rgba,
+            }
+
+            # check to see if the values we are trying to add already exist
+            existing_identifier = None
+            for key, value in mesh_info_dict.items():
+                if mesh_dict_value.items() <= value.items():
+                    existing_identifier = key
+                    break
+
+            # if the values we want to add are not in the dictionary yet, add them
+            if existing_identifier is None:
+                counter = 0
+                while stem in mesh_info_dict:
+                    counter = counter + 1
+                    stem = pathlib.Path(new_uri).stem + "__" + str(counter)
+
+                # get the name of the new file so that we can reference it later
+                path_obj = pathlib.Path(new_uri)
+                new_filepath = str(path_obj.parent / (stem + path_obj.suffix))
+
+                # add the unique name to the dictionary
+                mesh_info_dict[stem] = {
                     "is_pre_generated": is_pre_generated,
                     "filename": new_uri,
                     "scale": scale,
                     "color": rgba,
-                },
-            )
+                    "new_filepath": new_filepath,
+                }
+
+                # if we changed the identifier, make sure we update it in the underlying file
+                if stem != pathlib.Path(new_uri).stem:
+                    raw_xml = raw_xml.replace(new_uri, new_filepath)
 
     return mesh_info_dict, raw_xml
 
