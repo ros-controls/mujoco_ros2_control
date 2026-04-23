@@ -86,7 +86,7 @@ def remove_tag(xml_string, tag_to_remove):
 
 def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
     """
-    Builds a dictonary of all unique visual meshes in the URDF and rewrites the
+    Builds a dictionary of all unique visual meshes in the URDF and rewrites the
     raw_xml so every mesh filename points at a disambiguated path. There are some
     gotchas:
 
@@ -97,7 +97,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
       contains shoulder/ and shoulder__1/ from a prior run, the second source
       will grab shoulder__1.
     - stem_to_original_uri tracks which source uri claimed each stem slot, in
-      an effort to avoid unecessary copying.
+      an effort to avoid unnecessary copying.
     - A subset-equality check on (is_pre_generated, filename, scale, color) dedupes
       entries that genuinely match based on those criteria.
 
