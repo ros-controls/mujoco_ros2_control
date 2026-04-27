@@ -29,10 +29,6 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
   node_ = node;
   logger_ = node_->get_logger().get_child(node->get_sub_namespace());
   model_ = model;
-  nbody_ = model->nbody;
-
-  // xfrc_applied is nbody × 6 (force[3] + torque[3] per body, world frame at xipos).
-  xfrc_prev_contribution_.assign(nbody_ * 6, 0.0);
 
   // Visualization parameters
   if (!node_->has_parameter("force_arrow_scale"))
@@ -61,25 +57,13 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
 
 void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 {
-  if (!service_requested_.load(std::memory_order_acquire) && active_wrenches_.empty() && !needs_undo_)
+  if (!service_requested_.load(std::memory_order_acquire) && active_wrenches_.empty())
   {
-    // No active wrenches, no new service requests, and nothing to undo.
+    // No active wrenches and no pending service requests.
     return;
   }
 
-  // Step 1 - undo our previous contribution to xfrc_applied so that other
-  //          plugins writing to the same array are not permanently affected.
-  if (needs_undo_)
-  {
-    for (int i = 0; i < nbody_ * 6; ++i)
-    {
-      data->xfrc_applied[i] -= xfrc_prev_contribution_[i];
-    }
-    std::fill(xfrc_prev_contribution_.begin(), xfrc_prev_contribution_.end(), 0.0);
-    needs_undo_ = false;
-  }
-
-  // Step 2 - drain pending wrenches queued by the service callback.
+  // Step 1 - drain pending wrenches queued by the service callback.
   //          Use try_lock to stay non-blocking in the real-time thread.
   if (pending_mutex_.try_lock())
   {
@@ -97,13 +81,13 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
     return;
   }
 
-  // Step 3 - accumulate each active wrench into xfrc_applied.
+  // Step 2 - accumulate each active wrench into xfrc_applied.
+  //
+  // The system interface zeroed xfrc_applied before calling update(), so += here is equivalent
+  // to a fresh write.  No undo mechanism is needed: the zero before the next update() clears
+  // any previous contribution automatically.
   //
   // xfrc_applied[body*6 .. body*6+5] = (force_world[3], torque_world_at_xipos[3])
-  // MuJoCo reads this during mj_step via mj_xfrcApplied → mj_applyFT, which
-  // computes J^T*f internally.  Writing directly to xfrc_applied avoids all
-  // arena interaction (no mj_markStack) and makes the forces visible in the
-  // native viewer ("Perturb forces").
   const rclcpp::Time now_apply = node_->get_clock()->now();
 
   for (auto& w : active_wrenches_)
@@ -144,27 +128,21 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
                                      xmat[6] * st[0] + xmat[7] * st[1] + xmat[8] * st[2] };
 
     // Transport the wrench from application_point to xipos (body CoM).
-    // xfrc_applied expects force+torque in world frame at the body's CoM (xipos).
     //   τ_at_xipos = τ_world + (point_world − xipos) × force_world
     const mjtNum r[3] = { point_world[0] - xipos[0], point_world[1] - xipos[1], point_world[2] - xipos[2] };
     const mjtNum torque_at_xipos[3] = { torque_world[0] + r[1] * force_world[2] - r[2] * force_world[1],
                                         torque_world[1] + r[2] * force_world[0] - r[0] * force_world[2],
                                         torque_world[2] + r[0] * force_world[1] - r[1] * force_world[0] };
 
-    // Accumulate into xfrc_applied and record contribution for undo next step.
     const int base = w.body_id * 6;
     for (int j = 0; j < 3; ++j)
     {
       data->xfrc_applied[base + j] += force_world[j];
       data->xfrc_applied[base + 3 + j] += torque_at_xipos[j];
-      xfrc_prev_contribution_[base + j] += force_world[j];
-      xfrc_prev_contribution_[base + 3 + j] += torque_at_xipos[j];
     }
   }
 
-  needs_undo_ = true;
-
-  // Step 4 - remove expired wrenches.  Expiry is checked AFTER applying so
+  // Step 3 - remove expired wrenches.  Expiry is checked AFTER applying so
   //          that zero-duration wrenches are applied for exactly one simulation
   //          step before being discarded (as documented in the header).
   const rclcpp::Time now = node_->get_clock()->now();
@@ -174,7 +152,7 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 
   service_requested_.store(!active_wrenches_.empty(), std::memory_order_release);
 
-  // Step 5 - publish RViz markers for all currently active (non-expired) wrenches.
+  // Step 4 - publish RViz markers for all currently active (non-expired) wrenches.
   publishMarkers();
 }
 

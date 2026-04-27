@@ -80,9 +80,11 @@ namespace mujoco_ros2_control_plugins
  * where R = data->xmat (body → world rotation) and
  *       p_world = data->xpos + R * application_point_body.
  *
- * The plugin tracks its own contribution from the previous step in
- * xfrc_prev_contribution_ and subtracts it at the start of each update() so
- * that contributions from other plugins writing to xfrc_applied are preserved.
+ * The system interface (MujocoSystemInterface::read()) zeroes xfrc_applied
+ * before every plugin update() and snapshots the result into a dedicated
+ * xfrc_plugin_desired_ buffer afterwards.  The physics loop composes each
+ * mj_step as viewer_forces + xfrc_plugin_desired_, so native viewer drag
+ * forces and service-applied forces coexist without accumulation.
  */
 class ExternalWrenchPlugin : public MuJoCoROS2ControlPluginBase
 {
@@ -152,12 +154,6 @@ private:
   // Active wrenches — only modified inside update()
   std::vector<ActiveWrench> active_wrenches_;
 
-  // xfrc_applied bookkeeping
-  int nbody_{ 0 };
-  /// Our last contribution to data->xfrc_applied (nbody × 6, world frame at xipos).
-  /// Subtracted at the start of the next update() to undo the previous step's contribution.
-  std::vector<mjtNum> xfrc_prev_contribution_;
-
   // Marker visualization scaling
   /// Arrow length per unit force [m/N]. Parameter: "force_arrow_scale".
   double force_arrow_scale_{ 0.01 };
@@ -165,8 +161,6 @@ private:
   double torque_arrow_scale_{ 0.1 };
 
   std::atomic_bool service_requested_{ false };
-  /// True when xfrc_prev_contribution_ is non-zero and must be subtracted on the next update().
-  bool needs_undo_{ false };
 };
 
 }  // namespace mujoco_ros2_control_plugins
