@@ -47,7 +47,7 @@ function check_dependencies() {
     if ! python3 -c "import trimesh; import mujoco; import obj2mjcf" &> /dev/null; then
         echo "Dependencies not found. Installing from requirements.txt...."
         start_time=$(date +%s)
-        pip3 install --no-input --no-cache-dir --disable-pip-version-check -r "$(dirname "${BASH_SOURCE[0]}")/requirements.txt"
+        pip3 install --no-input --no-cache-dir --disable-pip-version-check -r "$(ros2 pkg prefix mujoco_ros2_control --share)/requirements.txt"
         end_time=$(date +%s)
         echo "Successfully installed dependencies in $((end_time - start_time)) seconds."
     fi

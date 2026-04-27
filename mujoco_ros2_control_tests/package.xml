@@ -24,7 +24,7 @@
   <test_depend>mujoco_ros2_control_demos</test_depend>
   <test_depend>mujoco_ros2_control_msgs</test_depend>
   <test_depend>pluginlib</test_depend>
-  <test_depend>position_controllers</test_depend>
+  <test_depend>forward_command_controller</test_depend>
   <test_depend>rclcpp</test_depend>
   <test_depend>robot_state_publisher</test_depend>
   <test_depend>rviz2</test_depend>
