@@ -80,11 +80,13 @@ namespace mujoco_ros2_control_plugins
  * where R = data->xmat (body → world rotation) and
  *       p_world = data->xpos + R * application_point_body.
  *
- * The system interface (MujocoSystemInterface::read()) zeroes xfrc_applied
- * before every plugin update() and snapshots the result into a dedicated
- * xfrc_plugin_desired_ buffer afterwards.  The physics loop composes each
- * mj_step as viewer_forces + xfrc_plugin_desired_, so native viewer drag
- * forces and service-applied forces coexist without accumulation.
+ * At the start of every update() call the plugin zeroes the xfrc_applied slots
+ * it wrote during the previous cycle before re-accumulating the current active
+ * wrenches.  This self-cleanup ensures the plugin leaves no stale contributions
+ * in xfrc_applied when all wrenches have expired.  When the surrounding system
+ * interface also zeroes xfrc_applied before calling update() (as
+ * MujocoSystemInterface::read() does), the plugin's undo step is a harmless
+ * no-op on already-zero values.
  */
 class ExternalWrenchPlugin : public MuJoCoROS2ControlPluginBase
 {
@@ -153,6 +155,10 @@ private:
 
   // Active wrenches — only modified inside update()
   std::vector<ActiveWrench> active_wrenches_;
+
+  // Body IDs whose xfrc_applied slots were written in the previous update() call.
+  // Zeroed at the start of the next update() before re-accumulating.
+  std::vector<int> prev_written_body_ids_;
 
   // Marker visualization scaling
   /// Arrow length per unit force [m/N]. Parameter: "force_arrow_scale".
