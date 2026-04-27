@@ -453,8 +453,8 @@ private:
   // thread uses this buffer (not mj_data_control_->xfrc_applied) when composing each mj_step.
   // Because this buffer is never touched by mj_copyData, it holds the last plugin contribution
   // cleanly until the next control cycle — no restore and no undo mechanism required.
-  std::vector<mjtNum> xfrc_viewer_capture_;   ///< viewer-only forces (drag), used per inner step
-  std::vector<mjtNum> xfrc_plugin_desired_;   ///< plugin forces, set once per control cycle
+  std::vector<mjtNum> xfrc_viewer_capture_;  ///< viewer-only forces (drag), used per inner step
+  std::vector<mjtNum> xfrc_plugin_desired_;  ///< plugin forces, set once per control cycle
   /// Last value written to mj_data_->xfrc_applied by the physics loop (viewer + plugin).
   /// Used at the start of each outer iteration to detect whether the render thread ran
   /// (and zeroed/re-applied drag) since the last physics step.  If mj_data_->xfrc_applied
