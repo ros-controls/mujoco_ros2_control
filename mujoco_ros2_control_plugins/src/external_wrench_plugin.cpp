@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <string>
 
+#include <rclcpp/version.h>
 #include <geometry_msgs/msg/point.hpp>
 #include <pluginlib/class_list_macros.hpp>
 #include <visualization_msgs/msg/marker.hpp>
