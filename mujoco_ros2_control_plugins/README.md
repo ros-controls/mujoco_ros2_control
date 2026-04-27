@@ -24,39 +24,6 @@ A simple demonstration plugin that publishes a heartbeat message every second to
 
 ---
 
-### ConstraintViolationsPublisherPlugin
-
-Monitors active MuJoCo equality constraints every simulation step and publishes the maximum absolute position-level residual (`efc_pos`) for each one.
-
-| | |
-|---|---|
-| **Topic** | `~/constraint_violations` (`mujoco_ros2_control_msgs/ConstraintViolations`) |
-| **Rate** | Configurable via parameter `publish_rate` (Hz, default 50 Hz) |
-
-Each message entry contains:
-- `name` — constraint name from MJCF, or synthesised as `<obj1>_<obj2>_{joint\|tendon\|weld\|connect}_constraint`
-- `type` — one of `joint`, `tendon`, `weld`, `connect`, `unknown`
-- `violation` — maximum absolute `efc_pos` across all rows of that constraint
-
-**Parameters**
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `publish_rate` | `double` | `50.0` | Publish rate in Hz |
-
-**Example configuration**
-
-```yaml
-/**:
-  ros__parameters:
-    mujoco_plugins:
-      constraint_monitor:
-        type: "mujoco_ros2_control_plugins/ConstraintViolationsPublisherPlugin"
-        publish_rate: 100.0
-```
-
----
-
 ### ExternalWrenchPlugin
 
 Applies one or more external wrenches (force + torque) to named MuJoCo bodies for configurable durations via a ROS 2 service.  Multiple wrenches can be submitted in a single call and each expires independently.
