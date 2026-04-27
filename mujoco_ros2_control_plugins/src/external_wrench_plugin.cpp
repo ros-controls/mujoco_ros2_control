@@ -261,7 +261,11 @@ void ExternalWrenchPlugin::publishMarkers()
 {
   MarkerArray msg;
   publish_markers(msg);
+#if RCLCPP_VERSION_MAJOR > 16
   marker_pub_->try_publish(msg);
+#else
+  marker_pub_->tryPublish(msg);
+#endif
 }
 
 // ---------------------------------------------------------------------------
