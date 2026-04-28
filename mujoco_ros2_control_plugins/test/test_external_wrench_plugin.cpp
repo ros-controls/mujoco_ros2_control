@@ -321,7 +321,7 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
     total_one += std::abs(data_->xfrc_applied[i]);
   }
 
-  ASSERT_GT(total_one, 0.0) << "Single wrench should produce non-zero qfrc_applied";
+  ASSERT_GT(total_one, 0.0) << "Single wrench should produce non-zero xfrc_applied";
   // Two equal wrenches must contribute exactly twice as much as one.
   EXPECT_NEAR(total_both, 2.0 * total_one, 1e-9);
 
