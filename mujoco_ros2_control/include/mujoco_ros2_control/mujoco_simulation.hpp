@@ -88,7 +88,7 @@ public:
    * @brief Construct the Simulate application and start the UI thread (or HeadlessAdapter).
    *
    * This initializes the Simulate app and starts the UI thread in the background (if not
-   * running headless).
+   * running headless). It also sets up required publishers and services using the provided node.
    */
   bool initialize(rclcpp::Node::SharedPtr node, const std::string& model_path, const std::string& mujoco_model_topic,
                   double sim_speed_factor, bool headless);
@@ -122,11 +122,6 @@ public:
    * @brief Register a callback function to be called on `reset_world_state`.
    */
   void set_reset_callback(ResetCallback callback);
-
-  /**
-   * @brief Create the reset/pause/step services on the node passed to initialize().
-   */
-  void create_services();
 
   /**
    * @brief Start the physics thread. Must be called after load_model().
@@ -169,27 +164,6 @@ public:
   {
     return *sim_mutex_;
   }
-
-  /**
-   * @brief Accessor for actual Simulate application.
-   */
-  mujoco::Simulate* simulate() const
-  {
-    return sim_.get();
-  }
-
-  /**
-   * @brief Whether or not the simulation is being run in headless mode.
-   */
-  bool headless() const
-  {
-    return headless_;
-  }
-
-  // Snapshot accessors used by plugins/tests.
-  void get_model(mjModel*& dest);
-  void get_data(mjData*& dest);
-  void set_data(mjData* mj_data);
 
   /**
    * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state.

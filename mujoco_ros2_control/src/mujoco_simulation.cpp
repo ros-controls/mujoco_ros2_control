@@ -604,6 +604,44 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
   clock_realtime_publisher_ =
       std::make_shared<realtime_tools::RealtimePublisher<rosgraph_msgs::msg::Clock>>(clock_publisher_);
 
+  // Initialize services
+  // For humble compatibility.
+#if RCLCPP_VERSION_MAJOR >= 17
+  rclcpp::QoS qos_services =
+      rclcpp::QoS(rclcpp::QoSInitialization(RMW_QOS_POLICY_HISTORY_KEEP_ALL, 1)).reliable().durability_volatile();
+#else
+  const rmw_qos_profile_t qos_services = { RMW_QOS_POLICY_HISTORY_KEEP_ALL,
+                                           1,  // message queue depth
+                                           RMW_QOS_POLICY_RELIABILITY_RELIABLE,
+                                           RMW_QOS_POLICY_DURABILITY_VOLATILE,
+                                           RMW_QOS_DEADLINE_DEFAULT,
+                                           RMW_QOS_LIFESPAN_DEFAULT,
+                                           RMW_QOS_POLICY_LIVELINESS_SYSTEM_DEFAULT,
+                                           RMW_QOS_LIVELINESS_LEASE_DURATION_DEFAULT,
+                                           false };
+#endif
+  reset_world_cb_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  set_pause_cb_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  step_simulation_cb_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+
+  reset_world_service_ = node_->create_service<mujoco_ros2_control_msgs::srv::ResetWorld>(
+      "~/reset_world",
+      std::bind(&MujocoSimulation::reset_world_callback, this, std::placeholders::_1, std::placeholders::_2),
+      qos_services, reset_world_cb_group_);
+  RCLCPP_INFO(get_logger(), "Created reset_world service at: %s/reset_world", node_->get_fully_qualified_name());
+
+  set_pause_service_ = node_->create_service<mujoco_ros2_control_msgs::srv::SetPause>(
+      "~/set_pause",
+      std::bind(&MujocoSimulation::set_pause_callback, this, std::placeholders::_1, std::placeholders::_2),
+      qos_services, set_pause_cb_group_);
+  RCLCPP_INFO(get_logger(), "Created set_pause service at: %s/set_pause", node_->get_fully_qualified_name());
+
+  step_simulation_service_ = node_->create_service<mujoco_ros2_control_msgs::srv::StepSimulation>(
+      "~/step_simulation",
+      std::bind(&MujocoSimulation::step_simulation_callback, this, std::placeholders::_1, std::placeholders::_2),
+      qos_services, step_simulation_cb_group_);
+  RCLCPP_INFO(get_logger(), "Created step_simulation service at: %s/step_simulation", node_->get_fully_qualified_name());
+
   return true;
 }
 
@@ -660,50 +698,6 @@ void MujocoSimulation::capture_initial_state()
 void MujocoSimulation::set_reset_callback(ResetCallback callback)
 {
   reset_callback_ = std::move(callback);
-}
-
-void MujocoSimulation::create_services()
-{
-  // Changed services history QoS to keep all so we don't lose any client service calls
-  // \note The versions conditioning is added here to support the source-compatibility with Humble
-#if RCLCPP_VERSION_MAJOR >= 17
-  rclcpp::QoS qos_services =
-      rclcpp::QoS(rclcpp::QoSInitialization(RMW_QOS_POLICY_HISTORY_KEEP_ALL, 1)).reliable().durability_volatile();
-#else
-  const rmw_qos_profile_t qos_services = { RMW_QOS_POLICY_HISTORY_KEEP_ALL,
-                                           1,  // message queue depth
-                                           RMW_QOS_POLICY_RELIABILITY_RELIABLE,
-                                           RMW_QOS_POLICY_DURABILITY_VOLATILE,
-                                           RMW_QOS_DEADLINE_DEFAULT,
-                                           RMW_QOS_LIFESPAN_DEFAULT,
-                                           RMW_QOS_POLICY_LIVELINESS_SYSTEM_DEFAULT,
-                                           RMW_QOS_LIVELINESS_LEASE_DURATION_DEFAULT,
-                                           false };
-#endif
-  reset_world_cb_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-  set_pause_cb_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-  step_simulation_cb_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-
-  // Create reset_world service
-  reset_world_service_ = node_->create_service<mujoco_ros2_control_msgs::srv::ResetWorld>(
-      "~/reset_world",
-      std::bind(&MujocoSimulation::reset_world_callback, this, std::placeholders::_1, std::placeholders::_2),
-      qos_services, reset_world_cb_group_);
-  RCLCPP_INFO(get_logger(), "Created reset_world service at: %s/reset_world", node_->get_fully_qualified_name());
-
-  // Create set_pause service
-  set_pause_service_ = node_->create_service<mujoco_ros2_control_msgs::srv::SetPause>(
-      "~/set_pause",
-      std::bind(&MujocoSimulation::set_pause_callback, this, std::placeholders::_1, std::placeholders::_2),
-      qos_services, set_pause_cb_group_);
-  RCLCPP_INFO(get_logger(), "Created set_pause service at: %s/set_pause", node_->get_fully_qualified_name());
-
-  // Create step_simulation service
-  step_simulation_service_ = node_->create_service<mujoco_ros2_control_msgs::srv::StepSimulation>(
-      "~/step_simulation",
-      std::bind(&MujocoSimulation::step_simulation_callback, this, std::placeholders::_1, std::placeholders::_2),
-      qos_services, step_simulation_cb_group_);
-  RCLCPP_INFO(get_logger(), "Created step_simulation service at: %s/step_simulation", node_->get_fully_qualified_name());
 }
 
 void MujocoSimulation::start_physics_thread()
@@ -1229,28 +1223,6 @@ void MujocoSimulation::update_sim_display()
   sim_->user_texts_new_.clear();
   sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, "Status\nSteps",
                                      status + "\n" + std::to_string(step_count_.load()));
-}
-
-void MujocoSimulation::get_model(mjModel*& dest)
-{
-  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  dest = mj_copyModel(dest, mj_model_);
-}
-
-void MujocoSimulation::get_data(mjData*& dest)
-{
-  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  if (dest == nullptr)
-  {
-    dest = mj_makeData(mj_model_);
-  }
-  mj_copyData(dest, mj_model_, mj_data_);
-}
-
-void MujocoSimulation::set_data(mjData* mj_data)
-{
-  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  mj_copyData(mj_data_, mj_model_, mj_data);
 }
 
 }  // namespace mujoco_ros2_control

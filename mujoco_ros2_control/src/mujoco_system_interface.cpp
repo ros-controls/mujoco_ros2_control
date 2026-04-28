@@ -476,9 +476,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // the sim mutex, after qpos/qvel/ctrl have been restored.
   simulation_->set_reset_callback([this](bool fill_initial_state) { this->reset_simulation_state(fill_initial_state); });
 
-  // Initializes relevant services in the sim wrapper (e.g. pause, reset, and step)
-  simulation_->create_services();
-
   // Ready cameras
   RCLCPP_INFO(get_logger(), "Initializing cameras...");
   cameras_ = std::make_unique<MujocoCameras>(get_node(), &simulation_->mutex(), simulation_->data(),
