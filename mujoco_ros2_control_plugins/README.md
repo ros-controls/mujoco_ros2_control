@@ -42,12 +42,11 @@ Each `ExternalWrench` in the array has:
 | Field | Type | Description |
 |---|---|---|
 | `wrench.header.frame_id` | `string` | MuJoCo body name (must match the MJCF `<body name="...">`) |
-| `wrench.wrench.force` | `geometry_msgs/Vector3` | Linear force [N] — see `apply_in_body_frame` for reference frame |
-| `wrench.wrench.torque` | `geometry_msgs/Vector3` | Angular moment [N·m] — see `apply_in_body_frame` for reference frame |
+| `wrench.wrench.force` | `geometry_msgs/Vector3` | Linear force [N] expressed in the **body (link) frame**. Rotates with the body every simulation step. |
+| `wrench.wrench.torque` | `geometry_msgs/Vector3` | Angular moment [N·m] expressed in the **body (link) frame**. Rotates with the body every simulation step. |
 | `application_point` | `geometry_msgs/Point` | Force application point in the **body (link) frame** (relative to body frame origin, metres). Zero → apply at the body frame origin. |
 | `duration` | `builtin_interfaces/Duration` | How long the wrench remains active. Zero → single simulation step. |
 | `ramp_down_duration` | `builtin_interfaces/Duration` | Duration over which the wrench linearly ramps from full magnitude to zero at the end of `duration`. Zero → no ramp-down. |
-| `apply_in_body_frame` | `bool` | **`false` (default) — World frame**: force/torque direction is fixed in the world frame and does not change as the body rotates. Use this for gravity-like or globally-directed pushes. **`true` — Body frame**: force/torque is expressed in the body's local frame and rotates with the body every simulation step. Use this for body-fixed thrusters or actuators. |
 
 **Service response fields**
 
