@@ -92,7 +92,6 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 
   if (active_wrenches_.empty())
   {
-    publishMarkers();
     return;
   }
 
@@ -172,7 +171,7 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
   service_requested_.store(!active_wrenches_.empty(), std::memory_order_release);
 
   // Step 4 - publish RViz markers for all currently active (non-expired) wrenches.
-  publishMarkers();
+  publish_markers();
 }
 
 void ExternalWrenchPlugin::cleanup()
@@ -276,7 +275,7 @@ void ExternalWrenchPlugin::publish_markers(MarkerArray& markers) const
   }
 }
 
-void ExternalWrenchPlugin::publishMarkers()
+void ExternalWrenchPlugin::publish_markers()
 {
   MarkerArray msg;
   publish_markers(msg);

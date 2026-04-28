@@ -136,7 +136,7 @@ private:
                          ApplyExternalWrench::Response::SharedPtr response);
 
   /// Publish the result of publish_markers() via the realtime publisher. Called from update().
-  void publishMarkers();
+  void publish_markers();
 
   // ROS interfaces
   rclcpp::Node::SharedPtr node_;
