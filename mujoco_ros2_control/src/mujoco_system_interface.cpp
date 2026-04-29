@@ -472,8 +472,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // Store initial state for reset_world service
   simulation_->capture_initial_state();
 
-  // Register the HW-side reset bookkeeping callback. Fired by MujocoSimulation while holding
-  // the sim mutex, after qpos/qvel/ctrl have been restored.
+  // This CB will be triggered by the MujocoSimulation after resettting the sim and qpos/qvel/ctrl have been restored.
   simulation_->set_reset_callback([this](bool fill_initial_state) { this->reset_simulation_state(fill_initial_state); });
 
   // Ready cameras
@@ -935,11 +934,18 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
 #endif
   }
 
-  // Update plugins
+  // Update plugins.
+  // Zero xfrc_applied first so plugins write fresh forces each control cycle (no undo needed).
+  // After all updates, snapshot the result into xfrc_plugin_desired_ — the physics loop reads
+  // from there so mj_copyData's viewer-force contamination never reaches the plugin buffer.
+  // TODO: Break this apart when mujoco data is separated
+  mju_zero(simulation_->control_data()->xfrc_applied, 6 * simulation_->model()->nbody);
   for (auto& plugin : plugin_instances_)
   {
     plugin->update(simulation_->model(), simulation_->control_data());
   }
+  mju_copy(simulation_->xfrc_plugin_desired().data(), simulation_->control_data()->xfrc_applied,
+           6 * simulation_->model()->nbody);
 
   return hardware_interface::return_type::OK;
 }

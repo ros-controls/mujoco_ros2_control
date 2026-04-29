@@ -67,9 +67,10 @@ public:
   /**
    * @brief Callback invoked when the simulation's state must be reset.
    *
-   * Triggered by the ~/reset_world service or by a UI-driven reset detected in the physics
-   * loop. The callback runs while the sim mutex is held; it is responsible for any
-   * HW-interface-side bookkeeping (PID resets, command/state interface synchronization, etc.).
+   * Triggered by the ~/reset_world service or by a any other reset detected in the physics
+   * loop. The callback will be run with the sim mutex but after all data has been restored.
+   *
+   * // TODO: Retire this when mujoco data is split.
    *
    * @param fill_initial_state When true, the caller has not already populated
    *        mj_data_->qpos/qvel/ctrl from a keyframe and the callback should restore the captured
@@ -85,7 +86,7 @@ public:
   ~MujocoSimulation();
 
   /**
-   * @brief Construct the Simulate application and start the UI thread (or HeadlessAdapter).
+   * @brief Construct the Simulate application and start the UI thread (if not headless).
    *
    * This initializes the Simulate app and starts the UI thread in the background (if not
    * running headless). It also sets up required publishers and services using the provided node.
@@ -166,6 +167,16 @@ public:
   }
 
   /**
+   * @brief Accessor for the stacking applied forces, these values will be added to `xfrc_applied`.
+   *
+   * TODO: Remove this and provide consisted access for write-able mujoco data.
+   */
+  std::vector<mjtNum>& xfrc_plugin_desired()
+  {
+    return xfrc_plugin_desired_;
+  }
+
+  /**
    * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state.
    * @note Caller must hold the sim mutex.
    */
@@ -206,7 +217,29 @@ private:
   // MuJoCo data pointers
   mjModel* mj_model_{ nullptr };
   mjData* mj_data_{ nullptr };
+
+  // Data container for control data
   mjData* mj_data_control_{ nullptr };
+
+  // TODO: Conslidate the control and these buffer to provide consistent, clear access for
+  //       for mujoco data.
+  //
+  // Dedicated buffer for plugin xfrc contributions.
+  //
+  // mj_copyData contaminates mj_data_control_->xfrc_applied with viewer forces, so we cannot
+  // rely on mj_data_control_->xfrc_applied to hold plugin forces across physics iterations.
+  // Instead, the control thread (read()) zeroes mj_data_control_->xfrc_applied before every
+  // plugin update, lets plugins write fresh forces, then copies the result here.  The physics
+  // thread uses this buffer (not mj_data_control_->xfrc_applied) when composing each mj_step.
+  // Because this buffer is never touched by mj_copyData, it holds the last plugin contribution
+  // cleanly until the next control cycle — no restore and no undo mechanism required.
+  std::vector<mjtNum> xfrc_viewer_capture_;  ///< viewer-only forces (drag), used per inner step
+  std::vector<mjtNum> xfrc_plugin_desired_;  ///< plugin forces, set once per control cycle
+  /// Last value written to mj_data_->xfrc_applied by the physics loop (viewer + plugin).
+  /// Used at the start of each outer iteration to detect whether the render thread ran
+  /// (and zeroed/re-applied drag) since the last physics step.  If mj_data_->xfrc_applied
+  /// matches this buffer, the render thread did not run and xfrc_viewer_capture_ is still valid.
+  std::vector<mjtNum> xfrc_last_restore_;
 
   // For rendering
   mjvCamera cam_;

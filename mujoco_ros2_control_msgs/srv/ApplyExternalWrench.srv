@@ -1,0 +1,20 @@
+# Apply one or more external wrenches to named bodies in the MuJoCo simulation.
+#
+# Each ExternalWrench in the array identifies its target body via
+# wrench.header.frame_id (must match the MJCF body name).  All wrenches
+# in a single call are validated atomically: if any body name is unknown
+# the entire request is rejected and nothing is applied.
+#
+# The service call blocks until the longest wrench duration in the array
+# has elapsed, then returns the response.
+
+# Array of wrenches to apply simultaneously.
+mujoco_ros2_control_msgs/ExternalWrenchArray wrenches
+
+---
+
+# True if all wrenches were accepted and scheduled.
+bool    success
+
+# Human-readable status message (e.g. error description when success is false).
+string  message
