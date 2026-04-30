@@ -17,7 +17,6 @@
 #include <algorithm>
 #include <string>
 
-#include <rclcpp/version.h>
 #include <geometry_msgs/msg/point.hpp>
 #include <pluginlib/class_list_macros.hpp>
 #include <visualization_msgs/msg/marker.hpp>
@@ -279,7 +278,7 @@ void ExternalWrenchPlugin::publish_markers()
 {
   MarkerArray msg;
   publish_markers(msg);
-#if RCLCPP_VERSION_MAJOR > 16
+#if REALTIME_TOOLS_VERSION_MAJOR > 2
   marker_pub_->try_publish(msg);
 #else
   marker_pub_->tryPublish(msg);

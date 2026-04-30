@@ -48,6 +48,9 @@ target_link_libraries(mujoco_ros2_control_plugins PUBLIC
   ${visualization_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
 )
+target_compile_definitions(mujoco_ros2_control_plugins PRIVATE
+  REALTIME_TOOLS_VERSION_MAJOR=${realtime_tools_VERSION_MAJOR}
+)
 
 # Install the plugin library
 install(TARGETS mujoco_ros2_control_plugins
