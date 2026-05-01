@@ -534,6 +534,8 @@ def get_processed_mujoco_inputs(processed_inputs_element):
             min_angle = float(lidar_element.getAttribute("min_angle"))
             max_angle = float(lidar_element.getAttribute("max_angle"))
             angle_increment = float(lidar_element.getAttribute("angle_increment"))
+            if angle_increment <= 0:
+                raise ValueError("'angle_increment' must be greater than zero for a 'lidar' tag!")
 
             num_sensors = int((max_angle - min_angle) / angle_increment) + 1
 
