@@ -87,7 +87,7 @@ ros2 run mujoco_vendor simulate /tmp/output/mujoco_description_formatted.xml
 Of note, the test robot has a good chunk of supported functionality, and we recommend using it as a guide.
 
 > [!NOTE]
-> The `make_mjcf_from_robot_description.py` script requires `trimesh`, `mujoco`, and `obj2mjcf`.
+> The `make_mjcf_from_robot_description.py` script requires `trimesh`, `mujoco`, `coacd`, and `obj2mjcf`.
 > These must either be installed system-wide or available within a virtual environment that is sourced before running the command.
 > [!NOTE]
 > This page focuses on generating MJCFs for robots.
