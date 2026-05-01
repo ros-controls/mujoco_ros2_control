@@ -337,7 +337,6 @@ private:
   mjvCamera cam_;
   mjvOption opt_;
   mjvPerturb pert_;
-
   // Logger
   rclcpp::Logger logger_ = rclcpp::get_logger("MujocoSystemInterface");
 
@@ -444,6 +443,23 @@ private:
   std::vector<mjtNum> initial_qvel_;
   std::vector<mjtNum> initial_ctrl_;
   std::string initial_keyframe_ = "";
+
+  // Dedicated buffer for plugin xfrc contributions.
+  //
+  // mj_copyData contaminates mj_data_control_->xfrc_applied with viewer forces, so we cannot
+  // rely on mj_data_control_->xfrc_applied to hold plugin forces across physics iterations.
+  // Instead, the control thread (read()) zeroes mj_data_control_->xfrc_applied before every
+  // plugin update, lets plugins write fresh forces, then copies the result here.  The physics
+  // thread uses this buffer (not mj_data_control_->xfrc_applied) when composing each mj_step.
+  // Because this buffer is never touched by mj_copyData, it holds the last plugin contribution
+  // cleanly until the next control cycle — no restore and no undo mechanism required.
+  std::vector<mjtNum> xfrc_viewer_capture_;  ///< viewer-only forces (drag), used per inner step
+  std::vector<mjtNum> xfrc_plugin_desired_;  ///< plugin forces, set once per control cycle
+  /// Last value written to mj_data_->xfrc_applied by the physics loop (viewer + plugin).
+  /// Used at the start of each outer iteration to detect whether the render thread ran
+  /// (and zeroed/re-applied drag) since the last physics step.  If mj_data_->xfrc_applied
+  /// matches this buffer, the render thread did not run and xfrc_viewer_capture_ is still valid.
+  std::vector<mjtNum> xfrc_last_restore_;
 };
 
 }  // namespace mujoco_ros2_control

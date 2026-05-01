@@ -2,6 +2,23 @@
 Changelog for package mujoco_ros2_control
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.0.3 (2026-05-01)
+------------------
+* Add more useful plugins for the mujoco_ros2_control (`#165 <https://github.com/ros-controls/mujoco_ros2_control/issues/165>`_)
+* Explicit scipy version for numpy >2.0 compatibility (`#177 <https://github.com/ros-controls/mujoco_ros2_control/issues/177>`_)
+* Use pkg install dir for requirements in conversion script (`#170 <https://github.com/ros-controls/mujoco_ros2_control/issues/170>`_)
+* Documentation on Generating MJCFs (`#167 <https://github.com/ros-controls/mujoco_ros2_control/issues/167>`_)
+* Use requirements.txt to install python dependencies (`#151 <https://github.com/ros-controls/mujoco_ros2_control/issues/151>`_)
+* Allow freejoint without name (`#163 <https://github.com/ros-controls/mujoco_ros2_control/issues/163>`_)
+* Replace stream logging with compiled log statements (`#160 <https://github.com/ros-controls/mujoco_ros2_control/issues/160>`_)
+* Increase timeout on sim being ready to 10s (`#161 <https://github.com/ros-controls/mujoco_ros2_control/issues/161>`_)
+* improve debug logs (`#159 <https://github.com/ros-controls/mujoco_ros2_control/issues/159>`_)
+* Search delimiter from back to support joint names with '/' (`#158 <https://github.com/ros-controls/mujoco_ros2_control/issues/158>`_)
+* Use right arrow key to advance the simulation instead of S key (`#150 <https://github.com/ros-controls/mujoco_ros2_control/issues/150>`_)
+* [Feature] Add ability to run the simulation progress by steps upon pause  (`#139 <https://github.com/ros-controls/mujoco_ros2_control/issues/139>`_)
+* disable site visuals by default in the visualizer and cameras (`#149 <https://github.com/ros-controls/mujoco_ros2_control/issues/149>`_)
+* Contributors: Christian Rauch, Emily Sheetz, Erik Holum, Nathan Dunkelberger, Sai Kishor Kothakota, Óscar Martínez Martínez, Mathias Lüdtke
+
 0.0.2 (2026-03-17)
 ------------------
 * Update internal links for myst-parser readthedocs (`#148 <https://github.com/ros-controls/mujoco_ros2_control/issues/148>`_)

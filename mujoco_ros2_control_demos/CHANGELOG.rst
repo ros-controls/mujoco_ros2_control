@@ -2,6 +2,11 @@
 Changelog for package mujoco_ros2_control_demos
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.0.3 (2026-05-01)
+------------------
+* Switch to forward_command_controller dependency (`#173 <https://github.com/ros-controls/mujoco_ros2_control/issues/173>`_)
+* Contributors: Christoph Fröhlich
+
 0.0.2 (2026-03-17)
 ------------------
 * Fix reset simulation service for robots using PID control (`#140 <https://github.com/ros-controls/mujoco_ros2_control/issues/140>`_)
