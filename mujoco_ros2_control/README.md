@@ -375,7 +375,7 @@ The lidar sensor is then configurable through ROS 2 control xacro with:
 
 ```xml
     <!-- Lidar sensors are matched to a set of rangefinder sensors in the MJCF, which should be -->
-    <!-- generated with the "<lidar>" inputs in the conversion script. The consiste of N rangefinders -->
+    <!-- generated with the "<lidar>" inputs in the conversion script. The consists of N rangefinders -->
     <!-- and will generally be of the form "<sensor_name>-01". These parameters should line up with -->
     <!-- those documented in the laserscan message. -->
     <sensor name="lidar">
