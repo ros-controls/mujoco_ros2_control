@@ -94,8 +94,8 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
       "__N" suffix so each resolves to its own asset directory. For example, if
       running multiple UR types there will be a shoulder/ and shoulder__1/ directory.
     - This happens BEFORE the pregen lookup. So if the asset_dir already
-      contains shoulder/ and shoulder__1/ from a prior run, the second source
-      will grab shoulder__1.
+      contains shoulder/ and shoulder__1/ from a prior run, the first source
+      will grab shoulder and the second source will grab shoulder__1.
     - stem_to_original_uri tracks which source uri claimed each stem slot, in
       an effort to avoid unnecessary copying.
     - A subset-equality check on (is_pre_generated, filename, scale, color) dedupes
