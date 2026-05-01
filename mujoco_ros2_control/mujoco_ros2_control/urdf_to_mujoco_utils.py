@@ -991,11 +991,13 @@ def add_lidar_from_sites(dom, lidar_dict):
     """
 
     x_form = [0.5, 0.5, 0.5, 0.5]  # pi/2 around x, pi/2 about y
+    matched_sites = set()
 
     # Construct all lidar sensor bodies for relevant sites in xml and add them as children to the same parent
     for node in dom.getElementsByTagName("site"):
         site_name = node.getAttribute("name")
         if site_name in lidar_dict:
+            matched_sites.add(site_name)
             replicate = lidar_dict[site_name]
 
             # Handle conversion of the frames by applying the site transform, rangefinder transform, then
@@ -1024,6 +1026,10 @@ def add_lidar_from_sites(dom, lidar_dict):
                 print(f"  {attr.name}: {attr.value}")
 
             node.parentNode.appendChild(new_body)
+
+    unmatched = set(lidar_dict.keys()) - matched_sites
+    if unmatched:
+        raise ValueError(f"Lidar site(s) not found in the MJCF: {', '.join(sorted(unmatched))}")
 
     return dom
 
