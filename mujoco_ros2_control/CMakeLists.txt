@@ -6,6 +6,7 @@ find_package(ros2_control_cmake REQUIRED)
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(controller_manager REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(fmt REQUIRED)
@@ -167,6 +168,7 @@ target_link_options(mujoco_ros2_control PUBLIC
 )
 target_link_libraries(mujoco_ros2_control
 PUBLIC
+  ament_index_cpp::ament_index_cpp
   hardware_interface::hardware_interface
   rclcpp::rclcpp
   rclcpp_lifecycle::rclcpp_lifecycle
