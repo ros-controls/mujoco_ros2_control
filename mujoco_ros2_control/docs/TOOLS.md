@@ -43,23 +43,23 @@ Convert a full URDF to MJCF for use in MuJoCo
 
 options:
   -h, --help            show this help message and exit
-  -u URDF, --urdf URDF  Optionally pass an existing URDF file
+  -u URDF, --urdf URDF  Optionally pass an existing URDF file (default: None)
   -r ROBOT_DESCRIPTION, --robot_description ROBOT_DESCRIPTION
-                        Optionally pass the robot description string
+                        Optionally pass the robot description string (default: None)
   -m MUJOCO_INPUTS, --mujoco_inputs MUJOCO_INPUTS
-                        Optionally specify a defaults xml for default settings, actuators, options, and additional sensors
+                        Optionally specify a defaults xml for default settings, actuators, options, and additional sensors (default: None)
   -o OUTPUT, --output OUTPUT
-                        Generated output path
+                        Generated output path (default: mjcf_data)
   -p PUBLISH_TOPIC, --publish_topic PUBLISH_TOPIC
-                        Optionally specify the topic to publish the MuJoCo model
+                        Optionally specify the topic to publish the MuJoCo model (default: None)
   -c, --convert_stl_to_obj
-                        If we should convert .stls to .objs
-  -s, --save_only       Save files permanently on disk; without this flag, files go to a temporary directory
-  -f, --add_free_joint  Adds a free joint before the root link of the robot in the urdf before conversion
-  --fuse, --no-fuse     Allows MuJoCo to merge static bodies. Use --no-fuse to prevent merging.
+                        If we should convert .stls to .objs (default: False)
+  -s, --save_only       Save files permanently on disk; without this flag, files go to a temporary directory (default: False)
+  -f, --add_free_joint  Adds a free joint before the root link of the robot in the urdf before conversion (default: False)
+  --fuse, --no-fuse     Allows MuJoCo to merge static bodies. Use --no-fuse to prevent merging. (default: True)
   -a ASSET_DIR, --asset_dir ASSET_DIR
-                        Optionally pass an existing folder with pre-generated OBJ meshes.
-  --scene SCENE         Optionally pass an existing xml for the scene
+                        Optionally pass an existing folder with pre-generated OBJ meshes. (default: None)
+  --scene SCENE         Optionally pass an existing xml for the scene (default: None)
 ```
 
 A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml).

@@ -353,7 +353,10 @@ def fix_mujoco_description(
 
 def main(args=None):
 
-    parser = argparse.ArgumentParser(description="Convert a full URDF to MJCF for use in MuJoCo")
+    parser = argparse.ArgumentParser(
+        description="Convert a full URDF to MJCF for use in MuJoCo",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument("-u", "--urdf", required=False, default=None, help="Optionally pass an existing URDF file")
     parser.add_argument(
         "-r", "--robot_description", required=False, help="Optionally pass the robot description string"
