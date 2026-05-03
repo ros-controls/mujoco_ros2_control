@@ -104,12 +104,13 @@ Of note, the test robot has a good chunk of supported functionality, and we reco
 * obj2mjcf - A tool for converting Wavefront OBJ files to multiple MuJoCo meshes grouped by material.
 * xml.dom (not sure if this is already available)
 
-### A rough outline of the automated process to convert a URDF:
+### A rough outline of the automated process to convert a URDF
 
 * reads a robot description URDF
 * add in mujoco tag that provides necessary info for conversion
 * replace package names from `package://` to absolute filepaths
-  * NOTE: duplicate mesh files will have an `_N` appended to them to avoid conflicts in the output `assets` folder. For instance, if running multiple types of UR robots in one sim, there will be multiple `shoulder.dae` files
+  * NOTE: duplicate mesh files will have an `_N` appended to them to avoid conflicts in the output `assets` folder.
+  For instance, if running multiple types of UR robots in one sim, there will be multiple `shoulder.dae` files
 * read absolute filepaths of all meshes and convert either dae or stl to obj using trimesh
   * put all of these meshes into an `assets/` folder under `mjcf_data/` relative to current working dir
   * modify filepaths again in urdf to point to `assets/` folder
