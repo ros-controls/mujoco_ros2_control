@@ -2,6 +2,14 @@
 Changelog for package mujoco_ros2_control_tests
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.0.3 (2026-05-01)
+------------------
+* Switch to forward_command_controller dependency (`#173 <https://github.com/ros-controls/mujoco_ros2_control/issues/173>`_)
+* Add epsilon to avoid floating point comparison (`#166 <https://github.com/ros-controls/mujoco_ros2_control/issues/166>`_)
+* Ensure the clock messages are flushed before time checking (`#153 <https://github.com/ros-controls/mujoco_ros2_control/issues/153>`_)
+* [Feature] Add ability to run the simulation progress by steps upon pause  (`#139 <https://github.com/ros-controls/mujoco_ros2_control/issues/139>`_)
+* Contributors: Christoph Fröhlich, Erik Holum, Sai Kishor Kothakota
+
 0.0.2 (2026-03-17)
 ------------------
 * Fix reset simulation service for robots using PID control (`#140 <https://github.com/ros-controls/mujoco_ros2_control/issues/140>`_)
