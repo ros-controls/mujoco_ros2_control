@@ -13,7 +13,7 @@ Object URDFs
 It is helpful to create a URDF to combine an object's sub-parts and keep these object URDFs in an environment/mockups package.
 
 Having the object URDFs will make it easier to convert these objects to MJCFs later, as described in the
-:doc:`MJCF conversion documentation <TOOLS>`.
+:doc:`MJCF conversion documentation <tools>`.
 
 STL File Type
 -------------
@@ -27,7 +27,7 @@ Interactions with Convex Hulls in MuJoCo
 -----------------------------------------
 
 Determining how to model complex geometries depends on how the robot (or anything in the simulation) will interact with the objects.
-When the STL files exported from CAD are run through the :doc:`conversion process <TOOLS>`, MuJoCo draws convex hulls for collision checking around the model.
+When the STL files exported from CAD are run through the :doc:`conversion process <tools>`, MuJoCo draws convex hulls for collision checking around the model.
 If an object is modeled as a singular asset, the convex hull will prevent the robot from interacting with any meaningful features of the object.
 Instead, objects should be modeled as separate sub-parts that are brought together in the `Object URDFs`_ section.
 
@@ -76,7 +76,7 @@ They can be integrated as:
 - Included into a top-level URDF for on-the-fly MJCF conversion.
 
 Regardless of the approach for integrating these objects, the process is ultimately very similar to that for
-:doc:`generating a robot MJCF <TOOLS>`.
+:doc:`generating a robot MJCF <tools>`.
 
 1. If not already done in a description package:
 
@@ -91,7 +91,7 @@ Regardless of the approach for integrating these objects, the process is ultimat
    This decomposition ensures the convex hulls for collision checking on these interactable sub-parts are accurate.
 
    a. It can often be useful to see what level of precision has been used to decompose interactable sub-parts in past applications,
-      specifically the :ref:`threshold attribute <tools:threshold-attribute>`.
+      specifically the :ref:`threshold attribute <threshold-attribute>`.
 
 3. Run the conversion script.
 
