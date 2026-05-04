@@ -83,18 +83,21 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
         filename_no_ext = os.path.splitext(filename)[0]
         filename_ext = os.path.splitext(filename)[1]
         full_filepath = mesh_item["filename"]
+        new_filepath = mesh_item["new_filepath"]
         if full_filepath in converted_filenames:
             pass
 
-        print(f"processing {full_filepath}")
+        print(f"processing {full_filepath} (mesh_name={mesh_name})")
 
         # if we want to decompose the mesh, put it in decomposed filepath, otherwise put it in full
-        if filename_no_ext in decompose_dict:
-            assets_relative_filepath = f"{mrc.DECOMPOSED_PATH_NAME}/{filename_no_ext}/"
+        # Note: we use the mesh_name as the the unique rather than filename_no_ext to avoid collisions
+        # for commonly named elements like on UR robots.
+        if mesh_name in decompose_dict or filename_no_ext in decompose_dict:
+            assets_relative_filepath = f"{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}/"
             os.makedirs(f"{directory}assets/{assets_relative_filepath}", exist_ok=True)
         else:
             assets_relative_filepath = f"{mrc.COMPOSED_PATH_NAME}/"
-        assets_relative_filepath += filename_no_ext
+        assets_relative_filepath += mesh_name
 
         output_path = f"{directory}assets/{assets_relative_filepath}.obj"
 
@@ -119,11 +122,10 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
 
                 # Export to OBJ
                 mesh.export(output_path, include_color=True, mtl_name=mtl_name)
-                xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
-
+                xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.obj")
             else:
                 shutil.copy2(full_filepath, f"{directory}assets/{assets_relative_filepath}.stl")
-                xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.stl")
+                xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.stl")
                 pass
         elif filename_ext.lower() == ".obj":
             # If import .obj files from URDF
@@ -171,21 +173,18 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                     for geom in scene.geometry.values():
                         visual = geom.visual
                         rgba = extract_rgba(visual)
-
                         new_mat = trimesh.visual.material.SimpleMaterial(
                             diffuse=rgba[:3],
                             alpha=rgba[3],
                             glossiness=1000,
                             specular=[0.2, 0.2, 0.2],
                         )
-
                         visual.material = new_mat
 
                 # give the material a unique name so that it can be properly referenced
                 mtl_modifier = f"{mesh_name}"
                 mtl_name = "mtl_" + mtl_modifier
                 mtl_filepath = os.path.dirname(output_path) + f"/{mtl_name}"
-
                 scene.export(output_path, include_color=True, mtl_name=mtl_name)
                 # rename textures
                 mrc.rename_material_textures(dir_path=os.path.dirname(output_path), modifier=mtl_modifier)
@@ -215,7 +214,7 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                 if os.path.exists(copied_image_file):
                     os.remove(copied_image_file)
 
-            xml_data = xml_data.replace(full_filepath, f"{assets_relative_filepath}.obj")
+            xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.obj")
         else:
             print(f"Can't convert {full_filepath} \n\tOnly stl and dae file extensions are supported at the moment")
             print(f"extension: {filename_ext}")
@@ -354,7 +353,10 @@ def fix_mujoco_description(
 
 def main(args=None):
 
-    parser = argparse.ArgumentParser(description="Convert a full URDF to MJCF for use in MuJoCo")
+    parser = argparse.ArgumentParser(
+        description="Convert a full URDF to MJCF for use in MuJoCo",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument("-u", "--urdf", required=False, default=None, help="Optionally pass an existing URDF file")
     parser.add_argument(
         "-r", "--robot_description", required=False, help="Optionally pass the robot description string"

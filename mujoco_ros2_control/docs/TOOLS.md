@@ -1,6 +1,5 @@
 # URDF to MJCF Conversion
 
-
 > [!WARNING]
 > This tool is hacky and _highly_ experimental!
 > Expect things to be broken.
@@ -27,38 +26,40 @@ ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py
 ros2 run mujoco_ros2_control robot_description_to_mjcf.sh
 ```
 
-When `robot_description_to_mjcf.sh` is first executed, it creates a Python virtual environment at `$ROS_HOME/ros2_control` and installs all necessary dependencies. Once set up, the script sources the environment and runs `make_mjcf_from_robot_description.py`. On subsequent runs, it reuses the existing virtual environment.
+When `robot_description_to_mjcf.sh` is first executed, it creates a Python virtual environment at `$ROS_HOME/ros2_control` and installs all necessary dependencies.
+Once set up, the script sources the environment and runs `make_mjcf_from_robot_description.py`.
+On subsequent runs, it reuses the existing virtual environment.
 
 By default, the tool will pull a URDF from the `/robot_description` topic.
 However, this is configurable at execution time.
 A complete list of options is available from the argument parser:
 
 ```bash
-$ ros2 run  mujoco_ros2_control make_mjcf_from_robot_description.py -h
-usage: make_mjcf_from_robot_description.py [-h] [-u URDF] [-r ROBOT_DESCRIPTION] [-m MUJOCO_INPUTS] [-o OUTPUT] [-p PUBLISH_TOPIC] [-c] [-s]
-                                           [-f] [--fuse | --no-fuse] [-a ASSET_DIR] [--scene SCENE]
+$ ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py -h
+usage: make_mjcf_from_robot_description.py [-h] [-u URDF] [-r ROBOT_DESCRIPTION] [-m MUJOCO_INPUTS] [-o OUTPUT] [-p PUBLISH_TOPIC] [-c] [-s] [-f]
+                                           [--fuse | --no-fuse] [-a ASSET_DIR] [--scene SCENE]
 
 Convert a full URDF to MJCF for use in MuJoCo
 
 options:
   -h, --help            show this help message and exit
-  -u URDF, --urdf URDF  Optionally pass an existing URDF file
+  -u URDF, --urdf URDF  Optionally pass an existing URDF file (default: None)
   -r ROBOT_DESCRIPTION, --robot_description ROBOT_DESCRIPTION
-                        Optionally pass the robot description string
+                        Optionally pass the robot description string (default: None)
   -m MUJOCO_INPUTS, --mujoco_inputs MUJOCO_INPUTS
-                        Optionally specify a defaults xml for default settings, actuators, options, and additional sensors
+                        Optionally specify a defaults xml for default settings, actuators, options, and additional sensors (default: None)
   -o OUTPUT, --output OUTPUT
-                        Generated output path
+                        Generated output path (default: mjcf_data)
   -p PUBLISH_TOPIC, --publish_topic PUBLISH_TOPIC
-                        Optionally specify the topic to publish the MuJoCo model
+                        Optionally specify the topic to publish the MuJoCo model (default: None)
   -c, --convert_stl_to_obj
-                        If we should convert .stls to .objs
-  -s, --save_only       Save files permanently on disk; without this flag, files go to a temporary directory
-  -f, --add_free_joint  Adds a free joint before the root link of the robot in the urdf before conversion
-  --fuse, --no-fuse     Allows MuJoCo to merge static bodies. Use --no-fuse to prevent merging (Default: --fuse).
+                        If we should convert .stls to .objs (default: False)
+  -s, --save_only       Save files permanently on disk; without this flag, files go to a temporary directory (default: False)
+  -f, --add_free_joint  Adds a free joint before the root link of the robot in the urdf before conversion (default: False)
+  --fuse, --no-fuse     Allows MuJoCo to merge static bodies. Use --no-fuse to prevent merging. (default: True)
   -a ASSET_DIR, --asset_dir ASSET_DIR
-                        Optionally pass an existing folder with pre-generated OBJ meshes.
-  --scene SCENE         Optionally pass an existing xml for the scene
+                        Optionally pass an existing folder with pre-generated OBJ meshes. (default: None)
+  --scene SCENE         Optionally pass an existing xml for the scene (default: None)
 ```
 
 A sample URDF and inputs file are provided in [test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf) and [test_inputs.xml](../../mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml).
@@ -80,32 +81,36 @@ The `/tmp/output/` directory will contain all necessary assets and MJCF files th
 They can also be adjusted as needed after the fact.
 
 ```bash
-/opt/ros/${ROS_DISTRO}/opt/mujoco_vendor/bin/simulate /tmp/output/mujoco_description_formatted.xml
+ros2 run mujoco_vendor simulate /tmp/output/mujoco_description_formatted.xml
 ```
 
 Of note, the test robot has a good chunk of supported functionality, and we recommend using it as a guide.
 
 > [!NOTE]
-> The `make_mjcf_from_robot_description.py` script requires `trimesh`, `mujoco`, and `obj2mjcf`. These must either be installed system-wide or available within a virtual environment that is sourced before running the command.
+> The `make_mjcf_from_robot_description.py` script requires `trimesh`, `mujoco`, `coacd`, and `obj2mjcf`.
+> These must either be installed system-wide or available within a virtual environment that is sourced before running the command.
 
 > [!NOTE]
-> This page focuses on generating MJCFs for robots.  Please see additional documentation on [modeling and generating MJCFs for objects](./MODELING_TIPS.md).
+> This page focuses on generating MJCFs for robots.
+> Please see additional documentation on [modeling and generating MJCFs for objects](./MODELING_TIPS.md).
 
 ## Notes
 
 > [!NOTE]
->  This has some heavy non-ROS dependencies that could probably be cleaned up:
+> This has some heavy non-ROS dependencies that could probably be cleaned up:
 
 * MuJoCo Python API
 * trimesh - Python library for loading and using triangular meshes.
 * obj2mjcf - A tool for converting Wavefront OBJ files to multiple MuJoCo meshes grouped by material.
 * xml.dom (not sure if this is already available)
 
-### A rough outline of the automated process to convert a URDF:
+### A rough outline of the automated process to convert a URDF
 
 * reads a robot description URDF
 * add in mujoco tag that provides necessary info for conversion
 * replace package names from `package://` to absolute filepaths
+  * NOTE: duplicate mesh files will have an `_N` appended to them to avoid conflicts in the output `assets` folder.
+  For instance, if running multiple types of UR robots in one sim, there will be multiple `shoulder.dae` files
 * read absolute filepaths of all meshes and convert either dae or stl to obj using trimesh
   * put all of these meshes into an `assets/` folder under `mjcf_data/` relative to current working dir
   * modify filepaths again in urdf to point to `assets/` folder
@@ -123,80 +128,89 @@ so the URDF -> MJCF conversion script can pick it up and inject the correspondin
 the generated MJCF. See [mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf) for a complete example.
 
 ### Top-level container
-- Use a `<mujoco_inputs>` element inside your xacro/URDF. The converter looks for this element
+
+* Use a `<mujoco_inputs>` element inside your xacro/URDF. The converter looks for this element
   and copies or processes its children into the MJCF.
 
 #### Main sub-elements
-- `raw_inputs`: arbitrary MJCF XML fragments that will get copied into the generated
+
+* `raw_inputs`: arbitrary MJCF XML fragments that will get copied into the generated
   MJCF. Use this for elements that don't require conversion (for example `option`, `default`,
   `actuator`, `tendon`, `equality`, simple `sensor` definitions, etc.). See `test_robot.urdf`.
-  - Can also exclude contacts between bodies using the [`contact/exclude` tag](https://mujoco.readthedocs.io/en/stable/XMLreference.html#contact-exclude).
+  * Can also exclude contacts between bodies using the [`contact/exclude` tag](https://mujoco.readthedocs.io/en/stable/XMLreference.html#contact-exclude).
 
-- `processed_inputs`: convenience tags that the converter understands and processes into valid
+* `processed_inputs`: convenience tags that the converter understands and processes into valid
   MJCF entries. Use these when the converter must transform (or) generate MJCF elements (for
   example, cameras, lidar rangefinders, mesh decomposition hints, or targeted modifications).
   Common processed tags (supported by the demo converter):
-  - `decompose_mesh` (attributes: `mesh_name`, `threshold`) — request mesh decomposition when
+  * `decompose_mesh` (attributes: `mesh_name`, `threshold`) — request mesh decomposition when
     running `obj2mjcf`/decompose step; useful when large meshes must be split for more robust
     collision hull generation.
     This is particularly useful for gripper fingers and anything a robot will interact with like object handles.
-  - `camera` (attributes: `site`, `name`, `fovy`, `mode`, `resolution`) — instructs the
+  * `camera` (attributes: `site`, `name`, `fovy`, `mode`, `resolution`) — instructs the
     converter to add a camera in the MJCF attached to the given URDF site (frame). The
     converter will fill position/quaternion from the URDF link pose. `resolution` is two
     integers separated by a space (e.g. `640 480`). The `name` must match the `sensor` name
     declared in the `ros2_control` block if you plan to publish images to ROS topics.
-  - `lidar` (attributes: `ref_site`, `sensor_name`, `min_angle`, `max_angle`, `angle_increment`)
+  * `lidar` (attributes: `ref_site`, `sensor_name`, `min_angle`, `max_angle`, `angle_increment`)
     — generates a set of MJCF `rangefinder` sensors placed around `ref_site`. The converter
     rotates rangefinders about the replicate frame's Y axis between `min_angle` and
     `max_angle` at the step size `angle_increment`. The generated rangefinders will be named
     by the `sensor_name` base (e.g. `rf-01`, `rf-02`, ...); ROS-facing `sensor` entries in the
     `ros2_control` section should use the same base name.
-  - `modify_element` (attributes: `type`, `name`, ...any MJCF attributes...) — finds the
+  * `modify_element` (attributes: `type`, `name`, ...any MJCF attributes...) — finds the
     generated MJCF element by `type` (for example `joint` or `body`) and `name` and set or
     overwrite the provided attributes. This is useful to tweak physics properties like
     `frictionloss`, `stiffness`, `damping`, `gravcomp`, etc.
 
-- `scene`: scene-level MJCF fragments such as `asset`, `worldbody`, `visual` and small scene
+* `scene`: scene-level MJCF fragments such as `asset`, `worldbody`, `visual` and small scene
   parameters. If present the converter will merge/insert it into the MJCF scene (camera
   lighting, ground textures, skybox definitions, etc.). Example: the `scene` block in
   `test_robot.urdf` adds a `groundplane` texture and a light in the MJCF. On the other hand, `scene.xml` can be parsed to the script using `--scene` arg to the script, inorder to generate the model including the scene configuration.
-  - Gravity can also be changed in the MuJoCo `scene`.
-    - For example, for Earth gravity:
+  * Gravity can also be changed in the MuJoCo `scene`.
+    * For example, for Earth gravity:
+
       ```xml
       <option gravity="0 0 -9.81">
         <flag contact="enable" />
       </option>
       ```
-    - If we wanted to experiment in Lunar gravity (one-sixth Earth gravity):
+
+    * If we wanted to experiment in Lunar gravity (one-sixth Earth gravity):
+
       ```xml
       <option gravity="0 0 -1.63">
         <flag contact="enable" />
       </option>
       ```
-    - Changing the simulated gravity does not affect gravity compensation in the `processed_inputs` described above.
+
+    * Changing the simulated gravity does not affect gravity compensation in the `processed_inputs` described above.
 
 ### Sensor and ROS mapping notes
-- Define ROS-facing sensors inside the `ros2_control` tag (or anywhere in the URDF that your
+
+* Define ROS-facing sensors inside the `ros2_control` tag (or anywhere in the URDF that your
   robot description consumers expect). For cameras the `sensor` name in the URDF must match the
   `camera` `name` you placed in `processed_inputs` so the plugin can map the MJCF camera to a
   ROS topic (see `test_robot.urdf`).
-- Lidar: the converter produces multiple MJCF `rangefinder` sensors. The URDF `sensor` for
+
+* Lidar: the converter produces multiple MJCF `rangefinder` sensors. The URDF `sensor` for
   the lidar should provide `angle_increment`, `min_angle`, `max_angle`, `range_min`, `range_max` and `laserscan_topic` parameters. The hardware interface will combine the set of generated
   rangefinders into a single ROS `LaserScan` message.
 
 ### Practical tips and conventions
-- Use URDF/xacro frames (links) as reference `site` locations for cameras and sensors; the
+
+* Use URDF/xacro frames (links) as reference `site` locations for cameras and sensors; the
   converter will read the link pose and attach MJCF objects accordingly.
-- Keep `raw_inputs` minimal and prefer `processed_inputs` for things that need conversion or
+* Keep `raw_inputs` minimal and prefer `processed_inputs` for things that need conversion or
   generation (meshes, cameras, rangefinders) — processed inputs document intent and are
   easier to maintain than dropping raw MJCF fragments into the URDF.
-- When matching sensors: make sure MJCF sensor names and URDF `sensor` names align — this is
+* When matching sensors: make sure MJCF sensor names and URDF `sensor` names align — this is
   how runtime mapping and topics are resolved.
 
 **Where to look**
-- Example usage in repo: [mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf).
-- The conversion inputs file used by the demo: [mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml](../../mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml).
 
+* Example usage in repo: [mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf](../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf).
+* The conversion inputs file used by the demo: [mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml](../../mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml).
 
 ### Minimal example (camera + lidar)
 
@@ -250,35 +264,35 @@ map MJCF sensors to ROS topics.
 The following lists the supported `processed_inputs` tags and their attributes. These are the
 attributes the demo converter recognizes; converters may extend this list.
 
-- `decompose_mesh`
-  - Required: `mesh_name` (string)
-  - Optional: `threshold` (float) — convex decomposition threshold; smaller values produce
+* `decompose_mesh`
+  * Required: `mesh_name` (string)
+  * Optional: `threshold` (float) — convex decomposition threshold; smaller values produce
     finer decomposition. Example: `<decompose_mesh mesh_name="shoulder_link" threshold="0.05"/>`.
 
-- `camera`
-  - Required: `site` (string) — URDF link/frame name to attach the camera to.
-  - Required: `name` (string) — camera name in MJCF; must match URDF `sensor` name used for
+* `camera`
+  * Required: `site` (string) — URDF link/frame name to attach the camera to.
+  * Required: `name` (string) — camera name in MJCF; must match URDF `sensor` name used for
     ROS mapping.
-  - Optional: `fovy` (int/float) — vertical field of view in degrees (example: `58`).
-  - Optional: `mode` (string) — MJCF camera mode (commonly `fixed`).
-  - Optional: `resolution` (string) — two integers `"<width> <height>"` (example: `640 480`).
-  - Optional: any other args supported by the mjcf [camera tag](https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-camera)
-  - Notes: Converter fills transform (position + quaternion) from the URDF link pose.
+  * Optional: `fovy` (int/float) — vertical field of view in degrees (example: `58`).
+  * Optional: `mode` (string) — MJCF camera mode (commonly `fixed`).
+  * Optional: `resolution` (string) — two integers `"<width> <height>"` (example: `640 480`).
+  * Optional: any other args supported by the mjcf [camera tag](https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-camera)
+  * Notes: Converter fills transform (position + quaternion) from the URDF link pose.
 
-- `lidar`
-  - Required: `ref_site` (string) — URDF frame used as reference for placing rangefinders.
-  - Required: `sensor_name` (string) — base name for generated MJCF rangefinders (e.g.
+* `lidar`
+  * Required: `ref_site` (string) — URDF frame used as reference for placing rangefinders.
+  * Required: `sensor_name` (string) — base name for generated MJCF rangefinders (e.g.
     `rf` will produce `rf-01`, `rf-02`, ...). URDF `sensor` entries and ROS mapping should
     reference the same base name.
-  - Required: `min_angle` (float) — start angle in radians (default depends on converter).
-  - Required: `max_angle` (float) — end angle in radians.
-  - Required: `angle_increment` (float) — angular step between generated rangefinders.
-  - Notes: The converter creates multiple MJCF `rangefinder` sensors across the angle range;
+  * Required: `min_angle` (float) — start angle in radians (default depends on converter).
+  * Required: `max_angle` (float) — end angle in radians.
+  * Required: `angle_increment` (float) — angular step between generated rangefinders.
+  * Notes: The converter creates multiple MJCF `rangefinder` sensors across the angle range;
     the hardware interface merges them into a single ROS LaserScan.
 
-- `modify_element`
-  - Required: `type` (string) — MJCF element type to target (e.g. `joint`, `body`).
-  - Required: `name` (string) — name attribute of the MJCF element to modify.
-  - Additional attributes: any MJCF attributes you want to set or overwrite (for example
+* `modify_element`
+  * Required: `type` (string) — MJCF element type to target (e.g. `joint`, `body`).
+  * Required: `name` (string) — name attribute of the MJCF element to modify.
+  * Additional attributes: any MJCF attributes you want to set or overwrite (for example
     `frictionloss`, `damping`, `gravcomp`, `solimp`, `solref`, ...).
-  - Example: `<modify_element type="joint" name="joint1" frictionloss="1.0" damping="2.0"/>`.
+  * Example: `<modify_element type="joint" name="joint1" frictionloss="1.0" damping="2.0"/>`.
