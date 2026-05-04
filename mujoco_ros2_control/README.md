@@ -375,19 +375,18 @@ The lidar sensor is then configurable through ROS 2 control xacro with:
 
 ```xml
     <!-- Lidar sensors are matched to a set of rangefinder sensors in the MJCF, which should be -->
-    <!-- generated with "replicate" and will generally be of the form "<sensor_name>-01". -->
-    <!-- We assume the lidar sensor starts at angle 0, increments by the specified `angle_increment`, and -->
-    <!-- that there are exactly `num_rangefinders` all named from <sensor_name>-000 to the max -->
-    <!-- <sensor_name>-<num_rangefinders> -->
+    <!-- generated with the "<lidar>" inputs in the conversion script. The consists of N rangefinders -->
+    <!-- and will generally be of the form "<sensor_name>-01". These parameters should line up with -->
+    <!-- those documented in the laserscan message. -->
     <sensor name="lidar">
       <param name="frame_name">lidar_sensor_frame</param>
       <param name="angle_increment">0.025</param>
-      <param name="num_rangefinders">12</param>
+      <param name="min_angle">-0.3</param>
+      <param name="max_angle">0.3</param>
       <param name="range_min">0.05</param>
       <param name="range_max">10</param>
       <param name="laserscan_topic">/scan</param>
     </sensor>
-  </ros2_control>
 ```
 
 ## Simulation - Topics and Services

@@ -85,8 +85,30 @@ def remove_tag(xml_string, tag_to_remove):
 
 
 def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
+    """
+    Builds a dictionary of all unique visual meshes in the URDF and rewrites the
+    raw_xml so every mesh filename points at a disambiguated path. There are some
+    gotchas:
+
+    - Different URDF meshes can share a filename stem, so colliding stems get an
+      "__N" suffix so each resolves to its own asset directory. For example, if
+      running multiple UR types there will be a shoulder/ and shoulder__1/ directory.
+    - This happens BEFORE the pregen lookup. So if the asset_dir already
+      contains shoulder/ and shoulder__1/ from a prior run, the first source
+      will grab shoulder and the second source will grab shoulder__1.
+    - stem_to_original_uri tracks which source uri claimed each stem slot, in
+      an effort to avoid unnecessary copying.
+    - A subset-equality check on (is_pre_generated, filename, scale, color) dedupes
+      entries that genuinely match based on those criteria.
+
+    Returns (mesh_info_dict, rewritten raw_xml). Each entry will have
+    carries {is_pre_generated, filename (source path), scale, color, and
+    new_filepath}.
+    """
+
     robot = URDF.from_xml_string(raw_xml)
     mesh_info_dict = {}
+    stem_to_original_uri = {}
 
     robot_materials = dict()
     for material in robot.materials:
@@ -112,14 +134,20 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
                 continue
 
             uri = geom.filename  # full URI
-            stem = pathlib.Path(uri).stem  # filename without extension
+            original_stem = pathlib.Path(uri).stem  # NEW: remember original for disambiguation
+            stem = original_stem
+            counter = 0
+            while stem in stem_to_original_uri and stem_to_original_uri[stem] != uri:
+                counter += 1
+                stem = f"{original_stem}__{counter}"
+            stem_to_original_uri[stem] = uri
 
             # Select the mesh file: use a pre-generated OBJ if available and valid; otherwise use the original
             is_pre_generated = False
             new_uri = uri  # default fallback
 
             if asset_dir:
-                if stem in decompose_dict:
+                if original_stem in decompose_dict:
                     # Decomposed mesh: check if a pre-generated OBJ exists and threshold matches
                     mesh_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/{stem}/{stem}/{stem}.obj"
                     settings_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/metadata.json"
@@ -134,7 +162,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
                             used_threshold = None
                         # Use existing decomposed object only if it has the same threshold, otherwise regenerate it.
                         if used_threshold is not None and math.isclose(
-                            used_threshold, float(decompose_dict[stem]), rel_tol=1e-9
+                            used_threshold, float(decompose_dict[original_stem]), rel_tol=1e-9
                         ):
                             new_uri = mesh_file
                             is_pre_generated = True
@@ -142,7 +170,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
                         else:
                             print(
                                 f"Existing decomposed obj for {stem} has different threshold {used_threshold} "
-                                f"than required {decompose_dict[stem]}. Regenerating..."
+                                f"than required {decompose_dict[original_stem]}. Regenerating..."
                             )
                 else:
                     # Composed mesh: check if a pre-generated OBJ exists
@@ -156,16 +184,42 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
             scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
             rgba = resolve_color(vis)
 
-            # If the same stem appears more than once, keep the first, or change as you prefer
-            mesh_info_dict.setdefault(
-                stem,
-                {
+            mesh_dict_value = {
+                "is_pre_generated": is_pre_generated,
+                "filename": new_uri,
+                "scale": scale,
+                "color": rgba,
+            }
+
+            # check to see if the values we are trying to add already exist
+            existing_identifier = None
+            for key, value in mesh_info_dict.items():
+                if mesh_dict_value.items() <= value.items():
+                    existing_identifier = key
+                    break
+
+            # if the values we want to add are not in the dictionary yet, add them
+            if existing_identifier is None:
+                # get the name of the new file so that we can reference it later, but grab correct
+                # pre generated asset if it exists
+                path_obj = pathlib.Path(new_uri)
+                if is_pre_generated:
+                    new_filepath = str(path_obj.parent.parent / stem / (stem + path_obj.suffix))
+                else:
+                    new_filepath = str(path_obj.parent / (stem + path_obj.suffix))
+
+                # add the unique name to the dictionary
+                mesh_info_dict[stem] = {
                     "is_pre_generated": is_pre_generated,
                     "filename": new_uri,
                     "scale": scale,
                     "color": rgba,
-                },
-            )
+                    "new_filepath": new_filepath,
+                }
+
+                # if we changed the identifier, make sure we update it in the underlying file
+                if stem != pathlib.Path(new_uri).stem:
+                    raw_xml = raw_xml.replace(new_uri, new_filepath)
 
     return mesh_info_dict, raw_xml
 
