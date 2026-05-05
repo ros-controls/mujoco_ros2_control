@@ -8,7 +8,7 @@ URDF to MJCF Conversion
 
 As MuJoCo does not ingest URDFs, we have written a helper tool for converting URDF to MJCF to assist with converting a robot description to an MJCF.
 This can either be done offline or at runtime; refer to
-`demo 2 <../../mujoco_ros2_control_demos/launch/02_mjcf_generation.launch.py>`_
+`demo 2 <https://github.com/ros-controls/mujoco_ros2_control/blob/main/mujoco_ros2_control_demos/launch/02_mjcf_generation.launch.py>`_
 for an example.
 
 As noted in the warning above, but reiterating here, these tools are highly experimental!
@@ -68,9 +68,9 @@ A complete list of options is available from the argument parser:
      --scene SCENE         Optionally pass an existing xml for the scene (default: None)
 
 A sample URDF and inputs file are provided in
-`test_robot.urdf <../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf>`_
+`test_robot.urdf <https://github.com/ros-controls/mujoco_ros2_control/blob/main/mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf>`_
 and
-`test_inputs.xml <../../mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml>`_.
+`test_inputs.xml <https://github.com/ros-controls/mujoco_ros2_control/blob/main/mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml>`_.
 
 .. TODO: Update test paths
 
@@ -146,7 +146,7 @@ Embedding MuJoCo Inputs inside URDF
 You can embed MuJoCo-specific information directly inside a URDF (typically inside a xacro)
 so the URDF → MJCF conversion script can pick it up and inject the corresponding tags into
 the generated MJCF. See
-`test_robot.urdf <../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf>`_
+`test_robot.urdf <https://github.com/ros-controls/mujoco_ros2_control/blob/main/mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf>`_
 for a complete example.
 
 Top-level container
@@ -247,8 +247,8 @@ Practical tips and conventions
 
 Where to look:
 
-- Example usage in repo: `test_robot.urdf <../../mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf>`_.
-- The conversion inputs file used by the demo: `test_inputs.xml <../../mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml>`_.
+- Example usage in repo: `test_robot.urdf <https://github.com/ros-controls/mujoco_ros2_control/blob/main/mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf>`_.
+- The conversion inputs file used by the demo: `test_inputs.xml <https://github.com/ros-controls/mujoco_ros2_control/blob/main/mujoco_ros2_control_demos/demo_resources/mjcf_generation/test_inputs.xml>`_.
 
 Minimal example (camera + lidar)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
