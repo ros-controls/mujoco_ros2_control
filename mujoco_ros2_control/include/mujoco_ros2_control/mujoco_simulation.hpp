@@ -137,7 +137,7 @@ public:
   /**
    * @brief Accessor for the mujoco model.
    */
-  mjModel* model() const
+  mjModel* model()
   {
     return mj_model_;
   }
@@ -145,7 +145,7 @@ public:
   /**
    * @brief Accessor for the mujoco data.
    */
-  mjData* data() const
+  mjData* data()
   {
     return mj_data_;
   }
@@ -153,7 +153,7 @@ public:
   /**
    * @brief Accessor for the mujoco control data.
    */
-  mjData* control_data() const
+  mjData* control_data()
   {
     return mj_data_control_;
   }
@@ -163,6 +163,7 @@ public:
    */
   std::recursive_mutex& mutex() const
   {
+    RCLCPP_WARN_EXPRESSION(logger_, sim_mutex_ == nullptr,  "Sim recursive mutex is still nullptr");
     return *sim_mutex_;
   }
 
