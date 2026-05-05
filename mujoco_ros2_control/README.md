@@ -55,7 +55,7 @@ We generally recommend looking there for examples and recommended workflows.
 
 ## Development
 
-More information is provided in the [developers guide](../docs/DEVELOPMENT.rst).
+More information is provided in the [developers guide](../doc/development.rst).
 
 ## Further Documentation
 
@@ -64,4 +64,4 @@ More information is provided in the [developers guide](../docs/DEVELOPMENT.rst).
 | [Hardware Interface](docs/hardware_interface.rst) | Plugin params, joints, sensors, cameras, lidar, topics, services, debugging |
 | [URDF to MJCF Conversion](docs/tools.rst) | Conversion tool usage and MJCF schema reference |
 | [Modeling Tips](docs/modeling_tips.rst) | Tips for modeling complex geometries in MuJoCo |
-| [Developers Guide](../docs/DEVELOPMENT.rst) | Development workflows (Docker, pixi) |
+| [Developers Guide](../doc/development.rst) | Development workflows (Docker, pixi) |

@@ -152,4 +152,4 @@ Further Documentation
    Hardware Interface <../mujoco_ros2_control/docs/hardware_interface>
    URDF to MJCF Conversion <../mujoco_ros2_control/docs/tools>
    Modeling Tips <../mujoco_ros2_control/docs/modeling_tips>
-   Developers Guide <../docs/DEVELOPMENT>
+   Developers Guide <development>
