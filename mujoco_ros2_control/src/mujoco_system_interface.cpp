@@ -373,10 +373,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   {
     return hardware_interface::CallbackReturn::ERROR;
   }
-  if (!simulation_->load_model())
-  {
-    return hardware_interface::CallbackReturn::ERROR;
-  }
 
   // Time publisher will be pushed from the simulation wrapper.
   RCLCPP_INFO(get_logger(), "Constructing publishers.");

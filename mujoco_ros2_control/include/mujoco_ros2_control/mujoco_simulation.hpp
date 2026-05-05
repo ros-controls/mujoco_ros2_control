@@ -95,15 +95,6 @@ public:
                   double sim_speed_factor, bool headless);
 
   /**
-   * @brief Load the MuJoCo model and compile it.
-   *
-   * Loads the MJCF as a string either from disk, if a path is specified in `model_path`. If
-   * no model is found on disk, then we listen for a string topic. This additionally allocates
-   * both the data and the control data once the model is loaded.
-   */
-  bool load_model();
-
-  /**
    * @brief Apply a keyframe to the simulation by name.
    *
    * This locks the simulation mutex and attempts to apply a keyframe by name by calling
@@ -183,13 +174,21 @@ public:
    */
   void reset_world_state(bool fill_initial_state);
 
+private:
+
+  /**
+   * @brief Loops the physics simulation until asked to terminate.
+   */
+  void physics_loop();
+
   /**
    * @brief Publish the current sim time to /clock.
    */
   void publish_clock();
 
-private:
-  void physics_loop();
+  /**
+   * @brief Progesses the simulate windows display if not running headless.
+   */
   void update_sim_display();
 
   // Service callbacks
