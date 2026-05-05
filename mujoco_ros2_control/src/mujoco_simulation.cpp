@@ -209,12 +209,6 @@ private:
   std::atomic<bool>& step_requested_;
 };
 
-// Clamps v to the lo or high value
-static double clamp(double v, double lo, double hi)
-{
-  return (v < lo) ? lo : (hi < v) ? hi : v;
-}
-
 // return the path to the directory containing the current executable
 // used to determine the location of auto-loaded plugin libraries
 static std::string getExecutableDir()
