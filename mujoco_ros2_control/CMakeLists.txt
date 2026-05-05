@@ -145,6 +145,7 @@ endif()
 
 # MuJoCo ROS 2 control system interface (this package)
 add_library(mujoco_ros2_control SHARED
+    src/mujoco_simulation.cpp
     src/mujoco_system_interface.cpp
     src/mujoco_cameras.cpp
     src/mujoco_lidar.cpp
