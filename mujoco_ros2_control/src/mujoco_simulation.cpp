@@ -637,7 +637,7 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
       qos_services, step_simulation_cb_group_);
   RCLCPP_INFO(get_logger(), "Created step_simulation service at: %s/step_simulation", node_->get_fully_qualified_name());
 
-  // Finish initliazation by loading the model and initializing the model and control data containers.
+  // Finish initialization by loading the model and initializing the model and control data containers.
   RCLCPP_INFO(get_logger(), "Loading model...");
   mj_model_ = LoadModel(model_path_.c_str(), mujoco_model_topic_, *sim_, node_);
   if (!mj_model_)

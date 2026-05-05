@@ -154,7 +154,7 @@ public:
    */
   std::recursive_mutex& mutex() const
   {
-    RCLCPP_WARN_EXPRESSION(logger_, sim_mutex_ == nullptr,  "Sim recursive mutex is still nullptr");
+    RCLCPP_WARN_EXPRESSION(logger_, sim_mutex_ == nullptr, "Sim recursive mutex is still nullptr");
     return *sim_mutex_;
   }
 
@@ -175,7 +175,6 @@ public:
   void reset_world_state(bool fill_initial_state);
 
 private:
-
   /**
    * @brief Loops the physics simulation until asked to terminate.
    */
@@ -187,7 +186,7 @@ private:
   void publish_clock();
 
   /**
-   * @brief Progesses the simulate windows display if not running headless.
+   * @brief Progresses the simulate windows display if not running headless.
    */
   void update_sim_display();
 
