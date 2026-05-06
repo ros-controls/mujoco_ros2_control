@@ -154,6 +154,50 @@ TEST_F(HeadlessInitTest, HeadlessInitialization)
   EXPECT_GE(state_interfaces.size(), 0);
 }
 
+// Verify that the sim_speed_factor parameter is accepted and the simulation runs.
+// The native-viewer overlay displays desired and actual speed only in non-headless mode;
+// this test exercises the initialization path that feeds the desired-speed display value.
+TEST_F(HeadlessInitTest, SpeedFactorParamInitialization)
+{
+  hardware_info_.hardware_parameters["sim_speed_factor"] = "0.5";
+
+#if ROS_DISTRO_HUMBLE
+  auto result = interface_->on_init(hardware_info_);
+#else
+  hardware_interface::HardwareComponentInterfaceParams params;
+  params.hardware_info = hardware_info_;
+  auto result = interface_->on_init(params);
+#endif
+  ASSERT_EQ(result, hardware_interface::CallbackReturn::SUCCESS);
+
+  // Wait for the model to load so the physics thread starts.
+  auto start = std::chrono::steady_clock::now();
+  mjModel* test_model = nullptr;
+  mjData* test_data = nullptr;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(2))
+  {
+    interface_->get_model(test_model);
+    interface_->get_data(test_data);
+    if (test_model != nullptr && test_data != nullptr)
+    {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  ASSERT_NE(test_model, nullptr) << "Model failed to initialize within timeout";
+  ASSERT_NE(test_data, nullptr) << "Data failed to initialize within timeout";
+
+  // Let the physics thread run a few steps to confirm sim_speed_factor does not
+  // cause a crash and the sim advances time.
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+  // Re-snapshot data after physics has had time to run (get_data copies the current state).
+  interface_->get_data(test_data);
+
+  // sim_time should have advanced from zero
+  EXPECT_GT(test_data->time, 0.0) << "Simulation time did not advance with sim_speed_factor=0.5";
+}
+
 int main(int argc, char** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
