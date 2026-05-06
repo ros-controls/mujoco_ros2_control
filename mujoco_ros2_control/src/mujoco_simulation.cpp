@@ -1274,10 +1274,24 @@ void MujocoSimulation::update_sim_display()
     return;  // render thread hasn't consumed the last update yet, skip
   }
 
+  // Desired speed: from parameter override when set, otherwise from the UI slider.
+  const double desired_pct = sim_speed_factor_ < 0 ? static_cast<double>(sim_->percentRealTime[sim_->real_time_index]) :
+                                                     sim_speed_factor_ * 100.0;
+
+  // Actual speed: measured_slowdown = CPU_time / sim_time, so speed = 100 / slowdown.
+  // Falls back to 0 while paused (slowdown stays at its last measured value but we
+  // suppress the display when there is no forward progress).
+  const double actual_pct = sim_->run ? (100.0 / sim_->measured_slowdown) : 0.0;
+
+  char desired_buf[16], actual_buf[16];
+  std::snprintf(desired_buf, sizeof(desired_buf), "%.1f%%", desired_pct);
+  std::snprintf(actual_buf, sizeof(actual_buf), "%.1f%%", actual_pct);
+
   const std::string status = sim_->run ? "Running" : "Paused";
   sim_->user_texts_new_.clear();
-  sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, "Status\nSteps",
-                                     status + "\n" + std::to_string(step_count_.load()));
+  sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, "Status\nSteps\nDesired Speed\nActual Speed",
+                                     status + "\n" + std::to_string(step_count_.load()) + "\n" + desired_buf + "\n" +
+                                         actual_buf);
 }
 
 }  // namespace mujoco_ros2_control
