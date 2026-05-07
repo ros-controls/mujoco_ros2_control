@@ -588,6 +588,8 @@ def get_processed_mujoco_inputs(processed_inputs_element):
             min_angle = float(lidar_element.getAttribute("min_angle"))
             max_angle = float(lidar_element.getAttribute("max_angle"))
             angle_increment = float(lidar_element.getAttribute("angle_increment"))
+            if angle_increment <= 0:
+                raise ValueError("'angle_increment' must be greater than zero for a 'lidar' tag!")
 
             num_sensors = int((max_angle - min_angle) / angle_increment) + 1
 
@@ -1045,11 +1047,13 @@ def add_lidar_from_sites(dom, lidar_dict):
     """
 
     x_form = [0.5, 0.5, 0.5, 0.5]  # pi/2 around x, pi/2 about y
+    matched_sites = set()
 
     # Construct all lidar sensor bodies for relevant sites in xml and add them as children to the same parent
     for node in dom.getElementsByTagName("site"):
         site_name = node.getAttribute("name")
         if site_name in lidar_dict:
+            matched_sites.add(site_name)
             replicate = lidar_dict[site_name]
 
             # Handle conversion of the frames by applying the site transform, rangefinder transform, then
@@ -1078,6 +1082,10 @@ def add_lidar_from_sites(dom, lidar_dict):
                 print(f"  {attr.name}: {attr.value}")
 
             node.parentNode.appendChild(new_body)
+
+    unmatched = set(lidar_dict.keys()) - matched_sites
+    if unmatched:
+        raise ValueError(f"Lidar site(s) not found in the MJCF: {', '.join(sorted(unmatched))}")
 
     return dom
 

@@ -421,8 +421,8 @@ static mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::stri
 
     if (now - start > timeout)
     {
-      RCLCPP_WARN(node->get_logger(), "Timeout waiting for /mujoco_robot_description topic. Aborting...");
-      exit(1);
+      RCLCPP_WARN(node->get_logger(), "Timeout waiting for '%s' topic.", topic_name.c_str());
+      return nullptr;
     }
 
     rclcpp::sleep_for(std::chrono::milliseconds(200));
@@ -443,6 +443,7 @@ static mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::stri
       RCLCPP_INFO(node->get_logger(), "Error %s", myerr);
       RCLCPP_FATAL(node->get_logger(), "Failed to compile MuJoCo model: %s", error);
       mj_deleteSpec(spec);
+      return nullptr;
     }
     mj_deleteSpec(spec);
     RCLCPP_INFO(node->get_logger(), "Model body count: %ld", static_cast<long>(mnew->nbody));
