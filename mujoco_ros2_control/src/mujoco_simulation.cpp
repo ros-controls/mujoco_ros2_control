@@ -272,6 +272,41 @@ static std::string getExecutableDir()
   return "";
 }
 
+static void listLinkedPlugins() {
+  // check and print plugins that are linked directly into the executable
+  int nplugin = mjp_pluginCount();
+  if (nplugin) {
+    std::printf("Built-in plugins:\n");
+    for (int i = 0; i < nplugin; ++i) {
+      std::printf("    %s\n", mjp_getPluginAtSlot(i)->name);
+    }
+  } else
+    std::printf("!!!!!!!!!!!!!!!!!!!!!!! No plugins found\n");
+}
+
+static void loadPlugins(std::string plugin_dir) {
+  mj_loadAllPluginLibraries(
+      plugin_dir.c_str(), +[](const char *filename, int first, int count) {
+        std::printf("Plugins registered by library '%s':\n", filename);
+        for (int i = first; i < first + count; ++i) {
+          std::printf("    %s\n", mjp_getPluginAtSlot(i)->name);
+        }
+      });
+}
+
+static void loadCustomPlugins() {
+  printf("**************************** %s : %d\n", __FUNCTION__, __LINE__);
+  fflush(stdout);
+  char *plptr = std::getenv("MUJOCO_PLUGIN_PATH");
+  std::string plugin_dir = "";
+  if (plptr) {
+    plugin_dir = std::string(plptr) + "/mujoco_plugin";
+  } else
+    plugin_dir = "/usr/include/bin/mujoco_plugin";
+
+  loadPlugins(plugin_dir);
+}
+
 // scan for libraries in the plugin directory to load additional plugins
 static void scanPluginLibraries()
 {
@@ -298,14 +333,8 @@ static void scanPluginLibraries()
   }
 
   const std::string plugin_dir = getExecutableDir() + sep + MUJOCO_PLUGIN_DIR;
-  mj_loadAllPluginLibraries(
-      plugin_dir.c_str(), +[](const char* filename, int first, int count) {
-        std::printf("Plugins registered by library '%s':\n", filename);
-        for (int i = first; i < first + count; ++i)
-        {
-          std::printf("    %s\n", mjp_getPluginAtSlot(i)->name);
-        }
-      });
+
+  loadPlugins(plugin_dir);
 }
 
 //------------------------------------------- simulation
@@ -510,6 +539,8 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
   // scan for libraries in the plugin directory to load additional plugins
   RCLCPP_INFO(get_logger(), "Scanning plugin libraries...");
   scanPluginLibraries();
+  loadCustomPlugins();
+  listLinkedPlugins();
 
   // Retain scope
   mjv_defaultCamera(&cam_);
