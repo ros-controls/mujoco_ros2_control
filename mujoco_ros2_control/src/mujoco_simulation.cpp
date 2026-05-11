@@ -926,19 +926,15 @@ void MujocoSimulation::step_simulation_callback(
   }
 }
 
-void MujocoSimulation::copy_mj_model(mjModel* destination)
+mjModel* MujocoSimulation::copy_mj_model(mjModel* destination)
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  mj_copyModel(destination, mj_model_);
+  return mj_copyModel(destination, mj_model_);
 }
 
 void MujocoSimulation::copy_mj_data(mjData* destination)
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  if (destination == nullptr)
-  {
-    destination = mj_makeData(mj_model_);
-  }
   mj_copyData(destination, mj_model_, mj_data_);
 }
 

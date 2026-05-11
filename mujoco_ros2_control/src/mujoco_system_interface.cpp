@@ -2043,11 +2043,15 @@ void MujocoSystemInterface::reset_simulation_state(bool /*fill_initial_state*/)
 
 void MujocoSystemInterface::get_model(mjModel*& dest)
 {
-  simulation_->copy_mj_model(dest);
+  dest = simulation_->copy_mj_model(dest);
 }
 
 void MujocoSystemInterface::get_data(mjData*& dest)
 {
+  if (dest == nullptr)
+  {
+    dest = mj_makeData(simulation_->model());
+  }
   simulation_->copy_mj_data(dest);
 }
 

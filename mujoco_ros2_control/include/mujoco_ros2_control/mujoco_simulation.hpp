@@ -192,13 +192,13 @@ public:
    *
    * This locks the sim mutex and will pause the physics loop, so should be used sparingly.
    */
-  void copy_mj_model(mjModel* destination);
+  mjModel* copy_mj_model(mjModel* destination);
 
   /**
    * @brief Copies `mj_data_` into the provided container in a thread safe way.
    *
    * This locks the sim mutex and will pause the physics loop, so should be used sparingly.
-   * @note If `destination` is empty a new mjData will be allocated.
+   * @note: Destination must be non-null
    */
   void copy_mj_data(mjData* destination);
 
