@@ -12,7 +12,7 @@ pixi install --frozen
 pixi run build
 
 # Build the docs and rebuild on changes
-pixi run live build
+pixi run live-build
 
 # Clean out the build artifacts and symlinks
 pixi run clean
