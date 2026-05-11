@@ -191,51 +191,37 @@ struct URDFJointData
 };
 
 /**
- * @brief Isolated data container for passing control information from a plugin to the simulation.
+ * @brief Isolated data container for passing additional information from a plugin to the simulation.
  *
- * This structure is made available to plugins during `update`, and can be used to pass input from
- * plugins through to the underlying simulation in a well defined manner. During the control loop,
- * each entry will be added to its corresponding value in `mj_data_control_` to be stacked into the
- * physics simulation.
+ * This structure is made available to plugins during `update`, and can be used to pass data from
+ * plugins through to the underlying simulation in an extensible, well defined manner.
  *
- * These buffers exist separately from `mj_data_` and `mj_data_control_` as the render thread's `Sync()`
- * can zero out applied Cartesian forces, which otherwise complicates determining desired forces from
- * external plugins.
+ * For now, we include `xfrc_applied` as a mechanism to inject external forces directly into the physics
+ * simulation, while providing rendering capabilities that work in tandem with the Simulate app's
+ * force rendering arrows. Of note, these buffers exist separately from `mj_data_` and `mj_data_control_`
+ * as the Simulate's render thread's `Sync()` function can zero out applied Cartesian forces, which
+ * otherwise complicates determining desired forces from external plugins.
  *
- * @note While `ctrl` and `qfrc_applied` are directly writeable from plugins, we provide them here for
- *       consistency and clarity for consumers of the plugin interface. The intention is to make it
- *       obvious which inputs are available and how they are used.
- *
- * @param ctrl Control data (nu x 1)
- * @param qfrc_applied Applied generalized force (nv x 1)
  * @param xfrc_applied Applied Cartesian force/torque (nbody x 6)
  */
 struct PluginData
 {
-  std::vector<mjtNum> ctrl;
-  std::vector<mjtNum> qfrc_applied;
   std::vector<mjtNum> xfrc_applied;
 
-  // And then we just have some kind of initialize and reset function....
+  /**
+   * @brief Reserves sufficient data for vectors based on the provided model.
+   */
   void allocate(const mjModel* m)
   {
-    ctrl.assign(m->nu, 0.0);
-    qfrc_applied.assign(m->nv, 0.0);
     xfrc_applied.assign(6 * m->nbody, 0.0);
   }
 
+  /**
+   * @brief Sets all entries to 0 in the provided buffer.
+   */
   void clear()
   {
-    std::fill(ctrl.begin(), ctrl.end(), 0.0);
-    std::fill(qfrc_applied.begin(), qfrc_applied.end(), 0.0);
     std::fill(xfrc_applied.begin(), xfrc_applied.end(), 0.0);
-  }
-
-  void add_to_data(const mjModel* model, mjData* destination)
-  {
-    mju_addTo(destination->ctrl, ctrl.data(), model->nu);
-    mju_addTo(destination->qfrc_applied, qfrc_applied.data(), model->nv);
-    mju_addTo(destination->xfrc_applied, xfrc_applied.data(), 6 * model->nbody);
   }
 };
 

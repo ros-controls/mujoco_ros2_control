@@ -1047,8 +1047,8 @@ void MujocoSimulation::physics_loop()
             syncSim = mj_data_->time;
             sim_->speed_changed = false;
 
-            // Add plugin contributions to mj_data_
-            plugin_data_.add_to_data(mj_model_, mj_data_);
+            // Add plugin Cartesian force contributions to mj_data_
+            mju_addTo(mj_data_->xfrc_applied, plugin_data_.xfrc_applied.data(), 6 * mj_model_->nbody);
 
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
@@ -1098,8 +1098,8 @@ void MujocoSimulation::physics_loop()
 #else
               sim_->InjectNoise(-1);
 #endif
-              // Add plugin contributions to mj_data_
-              plugin_data_.add_to_data(mj_model_, mj_data_);
+              // Add plugin Cartesian force contributions to mj_data_
+              mju_addTo(mj_data_->xfrc_applied, plugin_data_.xfrc_applied.data(), 6 * mj_model_->nbody);
 
               // call mj_step
               mj_step(mj_model_, mj_data_);
@@ -1156,8 +1156,8 @@ void MujocoSimulation::physics_loop()
           // (try_publish) has time to flush between steps, matching play mode behavior.
           if (pending_steps_.load() > 0)
           {
-            // Add plugin contributions to mj_data_
-            plugin_data_.add_to_data(mj_model_, mj_data_);
+            // Add plugin Cartesian force contributions to mj_data_
+            mju_addTo(mj_data_->xfrc_applied, plugin_data_.xfrc_applied.data(), 6 * mj_model_->nbody);
 
             mj_step(mj_model_, mj_data_);
             publish_clock();
