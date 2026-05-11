@@ -273,6 +273,9 @@ TEST_F(ExternalWrenchPluginTest, UpdateUndoesPreviousContributionOnNextCall)
   // First update: wrench applied, then immediately expired (zero duration).
   plugin.update(model_, data_, plugin_data_);
 
+  // Plugin data is cleared between writes
+  plugin_data_->clear();
+
   // Second update: plugin subtracts its saved contribution; no active wrenches remain.
   plugin.update(model_, data_, plugin_data_);
 
@@ -310,6 +313,9 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
     total_both += std::abs(plugin_data_->xfrc_applied[i]);
   }
 
+  // Plugin data is cleared between writes
+  plugin_data_->clear();
+
   // Second update clears state.
   plugin.update(model_, data_, plugin_data_);
 
@@ -320,6 +326,9 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
     ASSERT_TRUE(r->success);
   }
 
+  // Plugin data is cleared between writes
+  plugin_data_->clear();
+
   plugin.update(model_, data_, plugin_data_);
 
   double total_one = 0.0;
@@ -327,6 +336,9 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
   {
     total_one += std::abs(plugin_data_->xfrc_applied[i]);
   }
+
+  // Plugin data is cleared between writes
+  plugin_data_->clear();
 
   ASSERT_GT(total_one, 0.0) << "Single wrench should produce non-zero xfrc_applied";
   // Two equal wrenches must contribute exactly twice as much as one.
