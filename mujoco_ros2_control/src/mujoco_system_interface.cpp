@@ -988,7 +988,8 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     }
     else if (actuator.is_position_pid_control_enabled)
     {
-      const double error = actuator.position_interface.command_ - simulation_->data()->qpos[actuator.mj_pos_adr];
+      const double error =
+          actuator.position_interface.command_ - simulation_->control_data()->qpos[actuator.mj_pos_adr];
       simulation_->control_data()->ctrl[actuator.mj_actuator_id] = pid_compute_command(actuator.pos_pid, error, period);
     }
     else if (actuator.is_velocity_control_enabled)
@@ -997,7 +998,8 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     }
     else if (actuator.is_velocity_pid_control_enabled)
     {
-      const double error = actuator.velocity_interface.command_ - simulation_->data()->qvel[actuator.mj_vel_adr];
+      const double error =
+          actuator.velocity_interface.command_ - simulation_->control_data()->qvel[actuator.mj_vel_adr];
       simulation_->control_data()->ctrl[actuator.mj_actuator_id] = pid_compute_command(actuator.vel_pid, error, period);
     }
     else if (actuator.is_effort_control_enabled)
