@@ -1,0 +1,33 @@
+name: build_documentation
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    branches:
+      - '*'
+  workflow_dispatch:
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: prefix-dev/setup-pixi@v0.9.4
+        with:
+          manifest-path: doc/pixi.toml
+      - name: Build docs
+        working-directory: doc
+        run: pixi run build -W
+      - uses: actions/upload-artifact@v7
+        with:
+          name: docs-html
+          path: doc/_build/html
