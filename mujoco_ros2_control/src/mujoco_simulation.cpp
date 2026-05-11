@@ -1089,6 +1089,10 @@ void MujocoSimulation::physics_loop()
                     static_cast<float>(std::chrono::duration<double>(elapsedCPU).count() / elapsedSim);
                 measured = true;
               }
+// inject noise
+// Use mjVERSION_HEADER and if it is greater than 337 then do one thing or another
+// Needed due to
+// https://github.com/google-deepmind/mujoco/commit/401bf431b8b0fe6e0a619412a607b5135dc4ded4#diff-3dc22ceeebd71304c41d349c6d273bda172ea88ff49c772dbdcf51b9b19bbd33R2943
 #if mjVERSION_HEADER < 337
               sim_->InjectNoise();
 #else
