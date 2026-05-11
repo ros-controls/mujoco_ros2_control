@@ -213,11 +213,13 @@ private:
   std::string model_path_;
   std::string mujoco_model_topic_;
 
-  // MuJoCo data pointers
+  // MuJoCo data pointers, these are the primary containers used by the physics simulation.
+  // It is generally not recommended to interact with them directly.
   mjModel* mj_model_{ nullptr };
   mjData* mj_data_{ nullptr };
 
-  // Data container for control data
+  // Data container for control data. The physics data is copied into this container every
+  // controller loop. This is where the controller should add commands.
   mjData* mj_data_control_{ nullptr };
 
   // TODO: Conslidate the control and these buffer to provide consistent, clear access for
