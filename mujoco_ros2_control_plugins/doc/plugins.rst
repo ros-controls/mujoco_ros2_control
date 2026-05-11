@@ -5,10 +5,16 @@ The ``mujoco_ros2_control_plugins`` package provides a plugin interface for exte
 functionality of ``mujoco_ros2_control``.
 This separation allows for modular, optional features without adding complexity to the core package.
 
+During each control loop's write call, consumers are provided access to the underlying physics model,
+the control loop's mjData container, and a set of inputs through `PluginData`. This enables callers
+to read/modify data immediately before it is pushed to the simulation. Refer to the header and docs
+for more information on how data is pushed from the hardware interface into the simulation.
+
 .. note::
 
    This interface provides flexibility for accessing information from the MuJoCo model and data.
    Users are responsible for handling that data correctly and avoiding changes to critical information.
+   Caution is advised!
 
 
 Available Plugins
@@ -264,7 +270,7 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
    {
    public:
      bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
-     void update(const mjModel* model, mjData* data) override;
+     void update(const mjModel* model, mjData* data, std::shared_ptr<PluginData> plugin_data) override;
      void cleanup() override;
 
    private:
@@ -293,7 +299,7 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
      return true;
    }
 
-   void MyCustomPlugin::update(const mjModel* model, mjData* data)
+   void MyCustomPlugin::update(const mjModel* model, mjData* data, std::shared_ptr<PluginData> plugin_data)
    {
      // Called every control loop iteration
    }
@@ -354,10 +360,10 @@ Plugin Lifecycle
 
 1. **Initialization** (``init``): Called once when the plugin is loaded. Use this to read
    parameters and set up publishers, subscribers, and services.
-2. **Update** (``update``): Called every simulation step at the **end of the** ``read`` **loop**,
-   before the controller update and ``write`` loops. Changes to ``mjData`` here are visible to
-   controllers and affect the next simulation step. This runs in a real-time thread — avoid
-   blocking operations.
+2. **Update** (``update``): Called every simulation step at the **end of the** ``write`` **loop**,
+   before the control inputs are updated in the Simulation. Changes to relevant control inputs in
+   `mjData` here will be pushed directly to the physics simulation. This runs in a real-time thread
+   — avoid blocking operations.
 3. **Cleanup** (``cleanup``): Called when shutting down. Release any resources acquired in
    ``init``.
 

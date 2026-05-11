@@ -55,22 +55,8 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
   return true;
 }
 
-void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
+void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data, std::shared_ptr<PluginData> plugin_data)
 {
-  // Step 0 - undo the xfrc_applied contributions written in the previous cycle
-  // so stale forces are never left in the array when all wrenches have expired.
-  // When the system interface also zeroes xfrc_applied before calling update(),
-  // this loop is a harmless no-op on already-zero values.
-  for (const int body_id : prev_written_body_ids_)
-  {
-    mjtNum* base = data->xfrc_applied + body_id * 6;
-    for (int j = 0; j < 6; ++j)
-    {
-      base[j] = 0.0;
-    }
-  }
-  prev_written_body_ids_.clear();
-
   if (!service_requested_.load(std::memory_order_acquire) && active_wrenches_.empty())
   {
     // No active wrenches and no pending service requests.
@@ -147,8 +133,8 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
     const int base = w.body_id * 6;
     for (int j = 0; j < 3; ++j)
     {
-      data->xfrc_applied[base + j] += force_world[j];
-      data->xfrc_applied[base + 3 + j] += torque_at_xipos[j];
+      plugin_data->xfrc_applied[base + j] += force_world[j];
+      plugin_data->xfrc_applied[base + 3 + j] += torque_at_xipos[j];
     }
 
     // Track which body slots we touched so Step 0 can undo them next cycle.

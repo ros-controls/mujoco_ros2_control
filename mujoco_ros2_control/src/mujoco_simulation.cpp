@@ -652,7 +652,8 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
 
     // Initialized containers for data sharing
     mj_data_control_ = mj_makeData(mj_model_);
-    plugin_data_.allocate(mj_model_);
+    plugin_data_ = std::make_shared<mujoco_ros2_control_plugins::PluginData>();
+    plugin_data_->allocate(mj_model_);
   }
   if (!mj_data_ || !mj_data_control_)
   {
@@ -1048,7 +1049,7 @@ void MujocoSimulation::physics_loop()
             sim_->speed_changed = false;
 
             // Add plugin Cartesian force contributions to mj_data_
-            mju_addTo(mj_data_->xfrc_applied, plugin_data_.xfrc_applied.data(), 6 * mj_model_->nbody);
+            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
 
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
@@ -1099,7 +1100,7 @@ void MujocoSimulation::physics_loop()
               sim_->InjectNoise(-1);
 #endif
               // Add plugin Cartesian force contributions to mj_data_
-              mju_addTo(mj_data_->xfrc_applied, plugin_data_.xfrc_applied.data(), 6 * mj_model_->nbody);
+              mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
 
               // call mj_step
               mj_step(mj_model_, mj_data_);
@@ -1135,7 +1136,7 @@ void MujocoSimulation::physics_loop()
           {
             // Restore plugin xfrc into mj_data_ so mjv_updateScene shows force arrows
             // in the native viewer (it reads xfrc_applied before zeroing it).
-            mju_addTo(mj_data_->xfrc_applied, plugin_data_.xfrc_applied.data(), 6 * mj_model_->nbody);
+            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
 
             sim_->AddToHistory();
             update_sim_display();
@@ -1157,7 +1158,7 @@ void MujocoSimulation::physics_loop()
           if (pending_steps_.load() > 0)
           {
             // Add plugin Cartesian force contributions to mj_data_
-            mju_addTo(mj_data_->xfrc_applied, plugin_data_.xfrc_applied.data(), 6 * mj_model_->nbody);
+            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
 
             mj_step(mj_model_, mj_data_);
             publish_clock();
@@ -1173,7 +1174,7 @@ void MujocoSimulation::physics_loop()
             else
             {
               // Restore plugin xfrc for viewer arrows
-              mju_addTo(mj_data_->xfrc_applied, plugin_data_.xfrc_applied.data(), 6 * mj_model_->nbody);
+              mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
 
               sim_->AddToHistory();
               pending_steps_.fetch_sub(1);
@@ -1191,7 +1192,7 @@ void MujocoSimulation::physics_loop()
           else
           {
             // Restore plugin xfrc for viewer arrows
-            mju_addTo(mj_data_->xfrc_applied, plugin_data_.xfrc_applied.data(), 6 * mj_model_->nbody);
+            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
 
             // run mj_forward, to update rendering and joint sliders
             mj_forward(mj_model_, mj_data_);

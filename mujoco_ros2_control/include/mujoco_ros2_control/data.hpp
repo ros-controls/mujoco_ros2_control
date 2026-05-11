@@ -190,41 +190,6 @@ struct URDFJointData
   }
 };
 
-/**
- * @brief Isolated data container for passing additional information from a plugin to the simulation.
- *
- * This structure is made available to plugins during `update`, and can be used to pass data from
- * plugins through to the underlying simulation in an extensible, well defined manner.
- *
- * For now, we include `xfrc_applied` as a mechanism to inject external forces directly into the physics
- * simulation, while providing rendering capabilities that work in tandem with the Simulate app's
- * force rendering arrows. Of note, these buffers exist separately from `mj_data_` and `mj_data_control_`
- * as the Simulate's render thread's `Sync()` function can zero out applied Cartesian forces, which
- * otherwise complicates determining desired forces from external plugins.
- *
- * @param xfrc_applied Applied Cartesian force/torque (nbody x 6)
- */
-struct PluginData
-{
-  std::vector<mjtNum> xfrc_applied;
-
-  /**
-   * @brief Reserves sufficient data for vectors based on the provided model.
-   */
-  void allocate(const mjModel* m)
-  {
-    xfrc_applied.assign(6 * m->nbody, 0.0);
-  }
-
-  /**
-   * @brief Sets all entries to 0 in the provided buffer.
-   */
-  void clear()
-  {
-    std::fill(xfrc_applied.begin(), xfrc_applied.end(), 0.0);
-  }
-};
-
 template <typename T>
 struct SensorData
 {

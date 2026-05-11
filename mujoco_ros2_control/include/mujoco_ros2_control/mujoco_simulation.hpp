@@ -37,10 +37,10 @@
 
 #include <mujoco/mujoco.h>
 
-#include <mujoco_ros2_control/data.hpp>
 #include <mujoco_ros2_control_msgs/srv/reset_world.hpp>
 #include <mujoco_ros2_control_msgs/srv/set_pause.hpp>
 #include <mujoco_ros2_control_msgs/srv/step_simulation.hpp>
+#include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp>
 
 namespace mujoco_ros2_control
 {
@@ -176,7 +176,7 @@ public:
   /**
    * @brief Accessor for the plugin_data.
    */
-  PluginData& plugin_data()
+  std::shared_ptr<mujoco_ros2_control_plugins::PluginData> plugin_data()
   {
     return plugin_data_;
   }
@@ -277,7 +277,7 @@ private:
   mjData* mj_data_control_{ nullptr };
 
   // Data structure to provide access to control and force inputs from plugins.
-  PluginData plugin_data_;
+  std::shared_ptr<mujoco_ros2_control_plugins::PluginData> plugin_data_;
 
   // For rendering
   mjvCamera cam_;

@@ -26,6 +26,7 @@
 #include <mujoco_ros2_control_msgs/msg/external_wrench.hpp>
 #include <mujoco_ros2_control_msgs/msg/external_wrench_array.hpp>
 #include <mujoco_ros2_control_msgs/srv/apply_external_wrench.hpp>
+#include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -95,6 +96,11 @@ protected:
     }
     mj_deleteSpec(spec);
 
+    // Allocate data for tracking xfrc_applied
+    plugin_data_ = std::make_shared<mujoco_ros2_control_plugins::PluginData>();
+    plugin_data_->allocate(model_);
+    plugin_data_->clear();
+
     data_ = mj_makeData(model_);
     ASSERT_NE(data_, nullptr);
     mj_forward(model_, data_);
@@ -141,6 +147,7 @@ protected:
 
   mjModel* model_{ nullptr };
   mjData* data_{ nullptr };
+  std::shared_ptr<mujoco_ros2_control_plugins::PluginData> plugin_data_;
   rclcpp::Node::SharedPtr node_;
   rclcpp::Node::SharedPtr plugin_node_;
 
@@ -233,7 +240,7 @@ TEST_F(ExternalWrenchPluginTest, UpdateAppliesForceToXfrcApplied)
   // All xfrc_applied entries must start at zero.
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    EXPECT_DOUBLE_EQ(data_->xfrc_applied[i], 0.0);
+    EXPECT_DOUBLE_EQ(plugin_data_->xfrc_applied[i], 0.0);
   }
 
   // Apply 10 N in body-frame X (≡ world-frame X at identity orientation).
@@ -241,13 +248,13 @@ TEST_F(ExternalWrenchPluginTest, UpdateAppliesForceToXfrcApplied)
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
 
   // At least one xfrc_applied entry must carry a non-zero value.
   double total = 0.0;
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    total += std::abs(data_->xfrc_applied[i]);
+    total += std::abs(plugin_data_->xfrc_applied[i]);
   }
   EXPECT_GT(total, 0.0) << "xfrc_applied should be non-zero after applying a force";
 
@@ -264,14 +271,14 @@ TEST_F(ExternalWrenchPluginTest, UpdateUndoesPreviousContributionOnNextCall)
   ASSERT_TRUE(resp->success);
 
   // First update: wrench applied, then immediately expired (zero duration).
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
 
   // Second update: plugin subtracts its saved contribution; no active wrenches remain.
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
 
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    EXPECT_DOUBLE_EQ(data_->xfrc_applied[i], 0.0) << "xfrc_applied[" << i << "] not zeroed after wrench expiry";
+    EXPECT_DOUBLE_EQ(plugin_data_->xfrc_applied[i], 0.0) << "xfrc_applied[" << i << "] not zeroed after wrench expiry";
   }
 
   plugin.cleanup();
@@ -295,16 +302,16 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
   }
 
   // First update: both wrenches active, both expire (zero duration).
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
 
   double total_both = 0.0;
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    total_both += std::abs(data_->xfrc_applied[i]);
+    total_both += std::abs(plugin_data_->xfrc_applied[i]);
   }
 
   // Second update clears state.
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
 
   // Queue a single wrench of the same magnitude.
   {
@@ -313,12 +320,12 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
     ASSERT_TRUE(r->success);
   }
 
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
 
   double total_one = 0.0;
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    total_one += std::abs(data_->xfrc_applied[i]);
+    total_one += std::abs(plugin_data_->xfrc_applied[i]);
   }
 
   ASSERT_GT(total_one, 0.0) << "Single wrench should produce non-zero xfrc_applied";
@@ -339,12 +346,12 @@ TEST_F(ExternalWrenchPluginTest, TorqueOnlyWrenchAppliesRotationalForce)
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
 
   double total = 0.0;
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    total += std::abs(data_->xfrc_applied[i]);
+    total += std::abs(plugin_data_->xfrc_applied[i]);
   }
   EXPECT_GT(total, 0.0) << "xfrc_applied should be non-zero after applying a torque";
 
@@ -382,12 +389,12 @@ TEST_F(ExternalWrenchPluginTest, SingleCallWithMultipleWrenchesAppliesAll)
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
 
   double total = 0.0;
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    total += std::abs(data_->xfrc_applied[i]);
+    total += std::abs(plugin_data_->xfrc_applied[i]);
   }
   EXPECT_GT(total, 0.0) << "Both wrenches in the batch should produce non-zero xfrc_applied";
 
@@ -427,10 +434,11 @@ TEST_F(ExternalWrenchPluginTest, SingleCallRejectsIfAnyBodyNameInvalid)
   EXPECT_FALSE(resp->message.empty());
 
   // No wrench should have been applied — xfrc_applied must remain zero.
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    EXPECT_DOUBLE_EQ(data_->xfrc_applied[i], 0.0) << "xfrc_applied[" << i << "] must be zero after rejected batch";
+    EXPECT_DOUBLE_EQ(plugin_data_->xfrc_applied[i], 0.0)
+        << "xfrc_applied[" << i << "] must be zero after rejected batch";
   }
 
   plugin.cleanup();
@@ -449,7 +457,7 @@ TEST_F(ExternalWrenchPluginTest, PublishMarkersForActiveForceWrench)
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   // Run update() while the wrench is still active.
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
 
   // Collect markers via the new aggregation API.
   MarkerArray markers;
@@ -484,7 +492,7 @@ TEST_F(ExternalWrenchPluginTest, PublishMarkersContributesNothingWhenNoWrenchesA
   ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
 
   // No service calls — no active wrenches.
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
 
   // publish_markers() must not append anything when there are no active wrenches.
   // Marker lifetime-based expiry (managed by the system interface) handles cleanup
@@ -504,7 +512,7 @@ TEST_F(ExternalWrenchPluginTest, PublishMarkersAppendsToExistingArray)
 
   std::thread svc_thread([this]() { callServiceWithDuration("test_body", 0.2, /*fx=*/5.0, /*fy=*/0.0, /*fz=*/0.0); });
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  plugin.update(model_, data_);
+  plugin.update(model_, data_, plugin_data_);
 
   // Pre-populate the array with a sentinel marker (simulates another plugin's contribution).
   MarkerArray markers;
