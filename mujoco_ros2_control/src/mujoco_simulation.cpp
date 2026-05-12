@@ -272,36 +272,45 @@ static std::string getExecutableDir()
   return "";
 }
 
-static void listLinkedPlugins() {
+static void listLinkedPlugins()
+{
   // check and print plugins that are linked directly into the executable
   int nplugin = mjp_pluginCount();
-  if (nplugin) {
+  if (nplugin)
+  {
     std::printf("Built-in plugins:\n");
-    for (int i = 0; i < nplugin; ++i) {
+    for (int i = 0; i < nplugin; ++i)
+    {
       std::printf("    %s\n", mjp_getPluginAtSlot(i)->name);
     }
-  } else
+  }
+  else
     std::printf("!!!!!!!!!!!!!!!!!!!!!!! No plugins found\n");
 }
 
-static void loadPlugins(std::string plugin_dir) {
+static void loadPlugins(std::string plugin_dir)
+{
   mj_loadAllPluginLibraries(
-      plugin_dir.c_str(), +[](const char *filename, int first, int count) {
+      plugin_dir.c_str(), +[](const char* filename, int first, int count) {
         std::printf("Plugins registered by library '%s':\n", filename);
-        for (int i = first; i < first + count; ++i) {
+        for (int i = first; i < first + count; ++i)
+        {
           std::printf("    %s\n", mjp_getPluginAtSlot(i)->name);
         }
       });
 }
 
-static void loadCustomPlugins() {
+static void loadCustomPlugins()
+{
   printf("**************************** %s : %d\n", __FUNCTION__, __LINE__);
   fflush(stdout);
-  char *plptr = std::getenv("mujoco_DIR");
+  char* plptr = std::getenv("mujoco_DIR");
   std::string plugin_dir = "";
-  if (plptr) {
+  if (plptr)
+  {
     plugin_dir = std::string(plptr) + "/bin/mujoco_plugin";
-  } else
+  }
+  else
     plugin_dir = "/usr/include/bin/mujoco_plugin";
 
   loadPlugins(plugin_dir);

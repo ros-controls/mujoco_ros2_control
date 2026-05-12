@@ -26,7 +26,8 @@ namespace mujoco_ros2_control
 /**
  * Construct a LidarConfig object given a string sensor name and hardware_info object to parse.
  */
-std::optional<LidarConfig> get_lidar_config(const hardware_interface::HardwareInfo& hardware_info, const std::string& name)
+std::optional<LidarConfig> get_lidar_config(const hardware_interface::HardwareInfo& hardware_info,
+                                            const std::string& name)
 {
   const auto sensor_info_maybe = get_sensor_from_info(hardware_info, name);
   if (!sensor_info_maybe.has_value())
@@ -63,12 +64,12 @@ std::optional<LidarConfig> get_lidar_config(const hardware_interface::HardwareIn
   lidar_sensor.min_angle = std::stod(*min_angle);
   lidar_sensor.max_angle = std::stod(*max_angle);
   lidar_sensor.angle_increment = std::stod(*angle_increment);
-  
 
   lidar_sensor.laserscan_topic = laserscan_topic.has_value() ? laserscan_topic.value() : "/scan";
   lidar_sensor.range_min = range_min.has_value() ? std::stod(range_min.value()) : 0.0;
   lidar_sensor.range_max = range_max.has_value() ? std::stod(range_max.value()) : 1000.0;
-  lidar_sensor.num_rangefinders = static_cast<int>((lidar_sensor.max_angle - lidar_sensor.min_angle)/lidar_sensor.angle_increment) + 1;
+  lidar_sensor.num_rangefinders =
+      static_cast<int>((lidar_sensor.max_angle - lidar_sensor.min_angle) / lidar_sensor.angle_increment) + 1;
 
   // Configure the static parameters of the laserscan message
   lidar_sensor.laser_scan_msg.header.frame_id = lidar_sensor.frame_name;
@@ -106,23 +107,22 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
 
     // Grab the name of the sensor, which is required.
     const auto sensor_name_maybe = mj_id2name(mj_model_, mjtObj::mjOBJ_SENSOR, i);
-    
+
     if (sensor_name_maybe == nullptr)
     {
       RCLCPP_WARN(node_->get_logger(), "Cannot find a name for lidar sensor at index: '%d' skipping!", i);
       continue;
     }
-    
+
     RCLCPP_INFO(node_->get_logger(), "Adding lidar sensor: '%s', idx: %d", sensor_name_maybe, lidar_config_.sensor_id);
 
     auto new_data_maybe = get_lidar_config(hardware_info, sensor_name_maybe);
     if (!new_data_maybe.has_value())
     {
       RCLCPP_ERROR(node_->get_logger(), "Failed to parse required configuration from ros2_control xacro: '%s'",
-                    sensor_name_maybe);
+                   sensor_name_maybe);
       return false;
     }
-
 
     lidar_config_ = new_data_maybe.value();
 
@@ -135,14 +135,14 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
     lidar_config_.laser_scan_msg.scan_time = 1.0f / static_cast<float>(lidar_publish_rate_);
 
     // Note that we have added the sensor
-    RCLCPP_INFO(node_->get_logger(), "Adding lidar sensor: '%s', idx: %d", lidar_config_.name.c_str(), lidar_config_.sensor_id);
+    RCLCPP_INFO(node_->get_logger(), "Adding lidar sensor: '%s', idx: %d", lidar_config_.name.c_str(),
+                lidar_config_.sensor_id);
     RCLCPP_INFO(node_->get_logger(), "         frame_name: '%s'", lidar_config_.frame_name.c_str());
     RCLCPP_INFO(node_->get_logger(), "          min_angle: %f", lidar_config_.min_angle);
     RCLCPP_INFO(node_->get_logger(), "          max_angle: %f", lidar_config_.max_angle);
     RCLCPP_INFO(node_->get_logger(), "    angle_increment: %f", lidar_config_.angle_increment);
     RCLCPP_INFO(node_->get_logger(), "          range_min: %f", lidar_config_.range_min);
     RCLCPP_INFO(node_->get_logger(), "          range_max: %f", lidar_config_.range_max);
-
   }
 
   return true;
@@ -181,23 +181,22 @@ void MujocoLidar::update_loop()
 
 void MujocoLidar::update()
 {
-  
   // Step 1: Lock the sim and copy only the sensordata
   {
     std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
     std::memcpy(mj_lidar_data_.data(), mj_data_->sensordata, mj_lidar_data_.size() * sizeof(mjtNum));
   }
 
-  for(int i = 0; i < lidar_config_.num_rangefinders; ++i)
+  for (int i = 0; i < lidar_config_.num_rangefinders; ++i)
   {
     lidar_config_.laser_scan_msg.ranges[i] = static_cast<float>(mj_data_->sensordata[lidar_config_.sensor_id + i]);
   }
 
   // Apply range limits to the copied data
   std::transform(lidar_config_.laser_scan_msg.ranges.begin(), lidar_config_.laser_scan_msg.ranges.end(),
-                  lidar_config_.laser_scan_msg.ranges.begin(),
-                  [&](auto range) { return (range < lidar_config_.range_min || range > lidar_config_.range_max) ? -1.0 : range; });
-
+                 lidar_config_.laser_scan_msg.ranges.begin(), [&](auto range) {
+                   return (range < lidar_config_.range_min || range > lidar_config_.range_max) ? -1.0 : range;
+                 });
 
   lidar_config_.laser_scan_msg.header.stamp = node_->now();
   scan_pub_->publish(lidar_config_.laser_scan_msg);
