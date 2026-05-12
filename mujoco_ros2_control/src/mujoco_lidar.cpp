@@ -23,37 +23,10 @@
 namespace mujoco_ros2_control
 {
 
-
-
-/**
- * Given a sensor in the form <sensor_name>-id, returns the name and id if possible.
- * Otherwise, return "" and -1 to indicate failure.
- */
-std::pair<std::string, int> parse_lidar_name(const std::string& sensor_name)
-{
-  const auto split_idx = sensor_name.find_last_of("-");
-  if (split_idx == std::string::npos)
-  {
-    return { sensor_name, -1 };
-  }
-
-  // Grab the lidar sensor name
-  const auto lidar_name = sensor_name.substr(0, split_idx);
-
-  // Grab the index of the sensor name, if possible
-  const auto lidar_idx = sensor_name.substr(split_idx + 1);
-  if (lidar_idx.empty() || !std::all_of(lidar_idx.begin(), lidar_idx.end(), ::isdigit))
-  {
-    return { lidar_name, -1 };
-  }
-
-  return { lidar_name, std::stoi(lidar_idx) };
-}
-
 /**
  * Construct a LidarConfig object given a string sensor name and hardware_info object to parse.
  */
-std::optional<LidarConfig> get_lidar_data(const hardware_interface::HardwareInfo& hardware_info, const std::string& name)
+std::optional<LidarConfig> get_lidar_config(const hardware_interface::HardwareInfo& hardware_info, const std::string& name)
 {
   const auto sensor_info_maybe = get_sensor_from_info(hardware_info, name);
   if (!sensor_info_maybe.has_value())
@@ -142,7 +115,7 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
     
     RCLCPP_INFO(node_->get_logger(), "Adding lidar sensor: '%s', idx: %d", sensor_name_maybe, lidar_config_.sensor_id);
 
-    auto new_data_maybe = get_lidar_data(hardware_info, sensor_name_maybe);
+    auto new_data_maybe = get_lidar_config(hardware_info, sensor_name_maybe);
     if (!new_data_maybe.has_value())
     {
       RCLCPP_ERROR(node_->get_logger(), "Failed to parse required configuration from ros2_control xacro: '%s'",
@@ -220,36 +193,14 @@ void MujocoLidar::update()
     lidar_config_.laser_scan_msg.ranges[i] = static_cast<float>(mj_data_->sensordata[lidar_config_.sensor_id + i]);
   }
 
-  // Step 2: Copy sensor information for lidar to the relevant containers, filtering as needed
-  // TODO: This could be more efficient if we made assumptions about sensor data for a specific lidar
-  //       sensor being contiguous in sensordata. However, we haven't noted any issues with this
-  //       as is, and it is objectively more flexible. Leaving it for now.
-  /*
-  for (auto& lidar : lidar_sensors_)
-  {
-    RCLCPP_DEBUG(node_->get_logger(), "Lidar Sensor: '%s'", lidar.name.c_str());
-    for (size_t idx = 0; idx < lidar.sensor_indexes.size(); ++idx)
-    {
-      const auto& i = lidar.sensor_indexes[idx];
-      auto range = mj_lidar_data_[i];
-      lidar.laser_scan_msg.ranges[idx] = static_cast<float>(range);
-      RCLCPP_DEBUG(node_->get_logger(), "  sensor_indexes[%zu] = %d - %f", idx, lidar.sensor_indexes[idx],
-                   mj_lidar_data_[i]);
-    }
-*/
-    // Apply range limits to the copied data
-    std::transform(lidar_config_.laser_scan_msg.ranges.begin(), lidar_config_.laser_scan_msg.ranges.end(),
-                   lidar_config_.laser_scan_msg.ranges.begin(),
-                   [&](auto range) { return (range < lidar_config_.range_min || range > lidar_config_.range_max) ? -1.0 : range; });
- // }
+  // Apply range limits to the copied data
+  std::transform(lidar_config_.laser_scan_msg.ranges.begin(), lidar_config_.laser_scan_msg.ranges.end(),
+                  lidar_config_.laser_scan_msg.ranges.begin(),
+                  [&](auto range) { return (range < lidar_config_.range_min || range > lidar_config_.range_max) ? -1.0 : range; });
 
-  // Step 3: Publish messages
- // for (auto& lidar : lidar_sensors_)
-  {
-    lidar_config_.laser_scan_msg.header.stamp = node_->now();
-    scan_pub_->publish(lidar_config_.laser_scan_msg);
-  }
-    
+
+  lidar_config_.laser_scan_msg.header.stamp = node_->now();
+  scan_pub_->publish(lidar_config_.laser_scan_msg);
 }
 
 }  // namespace mujoco_ros2_control
