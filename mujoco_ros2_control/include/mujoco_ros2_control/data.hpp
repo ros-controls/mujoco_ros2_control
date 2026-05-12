@@ -27,8 +27,6 @@
 #include <string>
 #include <vector>
 
-#include <mujoco/mujoco.h>
-
 namespace mujoco_ros2_control
 {
 
