@@ -1,5 +1,16 @@
 <mujoco model="two_dof_robot">
   <compiler angle="radian" meshdir="assets/" texturedir="assets/"/>
+
+    <extension>
+        <plugin plugin="mujoco.plugin.lidar">
+            <instance name="hokuyo">
+                <config key="size" value="24 1"/>
+                <config key="fov" value="0.6 0.0"/>
+                <config key="max_range" value="13.0"/>
+            </instance>
+        </plugin>
+    </extension>
+
   <worldbody>
     <body name="upperarm">
       <inertial pos="0.5 0 0" quat="0.5 0.5 0.5 0.5" mass="27" diaginertia="0.225 0.225 0.0225"/>
@@ -42,11 +53,8 @@
     </body>
     <site name="world" pos="0 0 0" quat="1.0 0 0 0"/>
     <site name="base" pos="0 0 0" quat="1.0 0 0 0"/>
-    <site name="lidar_sensor_frame" pos="1.0 2.0 0" quat="0.7071054825112363 0 0 -0.7071080798594737"/>
-    <body name="lidar_sensor_frame_lidar_body" pos="1.0 2.0 0" quat="0.6991665401770936 0.6991665401770936 -0.10567000093116563 -0.10567000093116563">
-      <replicate site="lidar_sensor_frame" count="24" sep="-" offset="0 0 0" euler="0 0.025 0">
-        <site name="rf" pos="0.0 0.0 0.0" quat="0.0 0.0 0.0 1.0"/>
-      </replicate>
+    <body name="lidar_sensor_frame" pos="1 2 0" euler="0 0 -1.5708">
+        <site name="lidar_sensor_frame" pos="0 0 0"/>
     </body>
   </worldbody>
   <option integrator="implicitfast"/>
@@ -73,7 +81,7 @@
     <joint joint1="gripper_left_finger_joint" joint2="gripper_right_finger_joint" polycoef="0 -1 0 0 0" solimp="0.95 0.99 0.001" solref="0.005 1"/>
   </equality>
   <sensor>
-    <rangefinder name="lidar" site="rf"/>
+    <plugin name="lidar" instance="hokuyo" objtype="site" objname="lidar_sensor_frame"/>
   </sensor>
   <keyframe>
     <key name="start_90" time="422.274" qpos="1.57 -1.57 -0.02 0.02" qvel="0 0 0 0" ctrl="1.57 -1.57 -0.02"/>

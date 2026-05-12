@@ -202,13 +202,13 @@
     <origin xyz="0 0 0" rpy="3.14159 0 0"/>
   </joint>
 
-  <!-- In the URDF, the lidar sensor's Z-axis should point "up" so that the sensor data sweeps -->
+   <!-- In the URDF, the lidar sensor's Z-axis should point "up" so that the sensor data sweeps -->
   <!-- counter clockwise. We expect the X-axis to be in line with the first rangefinder's Z-axis. -->
   <link name="lidar_sensor_frame" />
   <joint name="lidar_sensor_link" type="fixed">
-    <parent link="world"/>
-    <child link="lidar_sensor_frame"/>
-    <origin rpy="0 0 -1.5708" xyz="1.0 2.0 0"/>
+    <parent link="world" />
+    <child link="lidar_sensor_frame" />
+    <origin rpy="0 0 -1.5708" xyz="1.0 2.0 0" />
   </joint>
 
   <!-- To test the model generation from tags within the URDF, we test that when both -->
@@ -246,10 +246,6 @@
           <equality>
             <joint joint1="gripper_left_finger_joint" joint2="gripper_right_finger_joint" polycoef="0 -1 0 0 0" solimp="0.95 0.99 0.001" solref="0.005 1"/>
           </equality>
-
-          <sensor>
-            <rangefinder name="lidar" site="rf" />
-          </sensor>
         </raw_inputs>
 
         <!-- Specific inputs that require processing from the conversion script-->
@@ -261,12 +257,6 @@
           <!-- The position and quaterinion will be filled in by the converter -->
           <camera site="camera_color_optical_frame" name="camera" fovy="58" mode="fixed" resolution="640 480"/>
 
-          <!-- Adds a lidar tag below a site tag to support a lidar sensor. -->
-          <!-- In the URDF, we assume that that the sensor frame has the Z-axis pointed directly up in the sensor -->
-          <!-- frame. This tag will create rangefinders in the MJCF between min_angle and max_angle at each -->
-          <!-- angle_increment rotated about the replicate frame's Y axis. The hardware intercface then combines -->
-          <!-- them into a single LaserScan message. -->
-          <lidar ref_site="lidar_sensor_frame" sensor_name="rf" min_angle="-0.3" max_angle="0.3" angle_increment="0.025" />
 
           <!-- The element with the type and name as listed below will be modified with the remaining attributes -->
           <!-- If the attribute already existed, it will be overwritten -->
