@@ -35,7 +35,7 @@
 namespace mujoco_ros2_control
 {
 
-struct LidarData
+struct LidarConfig
 {
   std::string name;
   std::string frame_name;
@@ -46,14 +46,12 @@ struct LidarData
   double range_min;
   double range_max;
 
-  // Maps the index of the rangefinder to the index of the MuJoCo rangefinder's data.
-  // E.g. lidar-034 -> sensor_indexes[34] will contain index of that rangefinder in mj_data_->sensordata
-  std::vector<int> sensor_indexes;
+  // id in the mujoco sensor data
+  int sensor_id;
 
   // For message publishing
   std::string laserscan_topic;
   sensor_msgs::msg::LaserScan laser_scan_msg;
-  rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_pub;
 };
 
 /**
@@ -116,13 +114,14 @@ private:
   // LaserScan publishing rate in Hz
   double lidar_publish_rate_;
 
+  rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_pub_;
   // Rendering options for the cameras, currently hard coded to defaults
   mjvOption mjv_opt_;
   mjvScene mjv_scn_;
   mjrContext mjr_con_;
 
   // Containers for ladar data and ROS constructs
-  std::vector<LidarData> lidar_sensors_;
+  LidarConfig lidar_config_;
 
   // Lidar processing thread
   std::thread rendering_thread_;

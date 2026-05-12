@@ -297,10 +297,10 @@ static void loadPlugins(std::string plugin_dir) {
 static void loadCustomPlugins() {
   printf("**************************** %s : %d\n", __FUNCTION__, __LINE__);
   fflush(stdout);
-  char *plptr = std::getenv("MUJOCO_PLUGIN_PATH");
+  char *plptr = std::getenv("mujoco_DIR");
   std::string plugin_dir = "";
   if (plptr) {
-    plugin_dir = std::string(plptr) + "/mujoco_plugin";
+    plugin_dir = std::string(plptr) + "/bin/mujoco_plugin";
   } else
     plugin_dir = "/usr/include/bin/mujoco_plugin";
 
