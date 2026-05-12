@@ -650,7 +650,7 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
     std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
     mj_data_ = mj_makeData(mj_model_);
 
-    // Initialized containers for data sharing
+    // Initialize containers for data sharing
     mj_data_control_ = mj_makeData(mj_model_);
     plugin_data_ = std::make_shared<mujoco_ros2_control_plugins::PluginData>();
     plugin_data_->allocate(mj_model_);
@@ -1130,10 +1130,6 @@ void MujocoSimulation::physics_loop()
           // save current state to history buffer
           if (stepped)
           {
-            // Restore plugin xfrc into mj_data_ so mjv_updateScene shows force arrows
-            // in the native viewer (it reads xfrc_applied before zeroing it).
-            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
-
             sim_->AddToHistory();
             update_sim_display();
           }
@@ -1169,9 +1165,6 @@ void MujocoSimulation::physics_loop()
             }
             else
             {
-              // Restore plugin xfrc for viewer arrows
-              mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
-
               sim_->AddToHistory();
               pending_steps_.fetch_sub(1);
               step_count_.fetch_add(1);
@@ -1187,15 +1180,16 @@ void MujocoSimulation::physics_loop()
           }
           else
           {
-            // Restore plugin xfrc for viewer arrows
-            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
-
             // run mj_forward, to update rendering and joint sliders
             mj_forward(mj_model_, mj_data_);
             sim_->speed_changed = true;
             update_sim_display();
           }
         }
+
+        // Restore plugin xfrc into mj_data_ so mjv_updateScene shows force arrows
+        // in the native viewer (it reads xfrc_applied before zeroing it).
+        mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
 
         // Update previous simulation time for next iteration
         if (mj_data_)
