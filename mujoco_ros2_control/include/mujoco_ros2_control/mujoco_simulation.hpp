@@ -277,6 +277,11 @@ private:
   // Data structure to provide access to control and force inputs from plugins.
   std::shared_ptr<mujoco_ros2_control_plugins::PluginData> plugin_data_;
 
+  // Buffers to track actively applied Cartesian forces from both the plugins and the Simulate /
+  // viewer-only drag forces.
+  std::vector<mjtNum> xfrc_viewer_capture_;
+  std::vector<mjtNum> xfrc_last_written_;  // tracks the last value written to xfrc_applied
+
   // For rendering
   mjvCamera cam_;
   mjvOption opt_;

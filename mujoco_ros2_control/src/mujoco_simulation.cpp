@@ -654,6 +654,8 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
     mj_data_control_ = mj_makeData(mj_model_);
     plugin_data_ = std::make_shared<mujoco_ros2_control_plugins::PluginData>();
     plugin_data_->allocate(mj_model_);
+    xfrc_viewer_capture_.assign(6 * mj_model_->nbody, 0.0);
+    xfrc_last_written_.assign(6 * mj_model_->nbody, 0.0);
   }
   if (!mj_data_ || !mj_data_control_)
   {
@@ -784,6 +786,8 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state)
 
   // Clear plugin contributions
   plugin_data_->clear();
+  std::fill(xfrc_viewer_capture_.begin(), xfrc_viewer_capture_.end(), 0.0);
+  std::fill(xfrc_last_written_.begin(), xfrc_last_written_.end(), 0.0);
 
   // Restore simulation time to preserve ROS clock continuity
   mj_data_->time = saved_time;
@@ -1005,6 +1009,25 @@ void MujocoSimulation::physics_loop()
       // run only if model is present
       if (mj_model_)
       {
+        // Determine the viewer (drag) forces for this outer iteration.
+        //
+        // mjv_updateScene in simulate.cc reads mj_data_->xfrc_applied BEFORE zeroing it, so
+        // plugin forces written here are visible as arrows in the native viewer. To avoid
+        // accumulation across outer iterations we must preserve the viewer-drag portion.
+        // We do this in xfrc_viewer_capture_.
+        //
+        // After each outer iteration we restore mj_data_->xfrc_applied = viewer + plugin and
+        // record it in xfrc_last_written_. We can then combine the desired forces from the plugins
+        // as well as the viewers prior to stepping, without either of them stacking in
+        // undesirable ways.
+        const uint32_t nbody6 = 6 * mj_model_->nbody;
+        if (std::memcmp(mj_data_->xfrc_applied, xfrc_last_written_.data(), nbody6 * sizeof(mjtNum)) != 0)
+        {
+          // Render thread ran: xfrc_applied was zeroed then drag was applied.
+          mju_copy(xfrc_viewer_capture_.data(), mj_data_->xfrc_applied, nbody6);
+        }
+        // else: render thread did not run; keep the existing xfrc_viewer_capture_.
+
         // running (ie, not paused)
         if (sim_->run)
         {
@@ -1047,8 +1070,9 @@ void MujocoSimulation::physics_loop()
             syncSim = mj_data_->time;
             sim_->speed_changed = false;
 
-            // Add plugin Cartesian force contributions to mj_data_
-            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
+            // Restore viewer forces, then add plugin contribution on top.
+            mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
+            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), nbody6);
 
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
@@ -1098,8 +1122,12 @@ void MujocoSimulation::physics_loop()
 #else
               sim_->InjectNoise(-1);
 #endif
-              // Add plugin Cartesian force contributions to mj_data_
-              mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
+
+              // Restore viewer forces, then add plugin contribution (xfrc_plugin_desired_ is only
+              // written by the control thread between outer loop iterations — constant here).
+              // TODO: Cleanup when mujoco data is split
+              mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
+              mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), nbody6);
 
               // call mj_step
               mj_step(mj_model_, mj_data_);
@@ -1133,8 +1161,13 @@ void MujocoSimulation::physics_loop()
           // save current state to history buffer
           if (stepped)
           {
-            // Add plugin Cartesian force contributions to mj_data_
-            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
+            // Restore viewer + plugin into mj_data_->xfrc_applied so mjv_updateScene (which
+            // reads it before zeroing) shows plugin force arrows in the native viewer.
+            // Record the value in xfrc_last_restore_ so the next outer iteration can detect
+            // whether the render thread ran and updated xfrc_applied in the interim.
+            mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
+            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), nbody6);
+            mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, nbody6);
 
             sim_->AddToHistory();
             update_sim_display();
@@ -1155,8 +1188,9 @@ void MujocoSimulation::physics_loop()
           // (try_publish) has time to flush between steps, matching play mode behavior.
           if (pending_steps_.load() > 0)
           {
-            // Add plugin Cartesian force contributions to mj_data_
-            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
+            // Add the viewer and plugin applied forces
+            mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
+            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), nbody6);
 
             mj_step(mj_model_, mj_data_);
             publish_clock();
@@ -1171,8 +1205,10 @@ void MujocoSimulation::physics_loop()
             }
             else
             {
-              // Add plugin Cartesian force contributions to mj_data_
-              mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
+              // Restore forces for viewer arrows
+              mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
+              mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), nbody6);
+              mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, nbody6);
 
               sim_->AddToHistory();
               pending_steps_.fetch_sub(1);
@@ -1181,7 +1217,6 @@ void MujocoSimulation::physics_loop()
               update_sim_display();
             }
 
-            // Force timing re-sync when/if simulation is resumed
             if (pending_steps_.load() == 0)
             {
               sim_->speed_changed = true;
@@ -1189,10 +1224,11 @@ void MujocoSimulation::physics_loop()
           }
           else
           {
-            // Add plugin Cartesian force contributions to mj_data_
-            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), 6 * mj_model_->nbody);
+            // Compose for mj_forward to ensure derived quantities match applied forces
+            mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
+            mju_addTo(mj_data_->xfrc_applied, plugin_data_->xfrc_applied.data(), nbody6);
+            mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, nbody6);
 
-            // run mj_forward, to update rendering and joint sliders
             mj_forward(mj_model_, mj_data_);
             sim_->speed_changed = true;
             update_sim_display();
