@@ -1,0 +1,26 @@
+[workspace]
+authors = ["Erik Holum <erik.holum@nasa.gov>"]
+name = "mujoco_ros2_control_docs"
+channels = ["https://prefix.dev/conda-forge"]
+platforms = ["linux-aarch64", "linux-64"]
+version = "0.1.0"
+
+[dependencies]
+python = ">=3.11,<3.13"
+sphinx = ">=7,<9"
+sphinx_rtd_theme = ">=3,<4"
+sphinx-copybutton = ">=0.5,<1"
+
+[pypi-dependencies]
+sphinx-autobuild = ">=2024,<2026"
+
+[tasks]
+# A little annoying but lets the docs build respect the upstream settings
+setup = """
+ln -sfn ../mujoco_ros2_control mujoco_ros2_control && \
+ln -sfn ../mujoco_ros2_control_demos mujoco_ros2_control_demos && \
+ln -sfn ../mujoco_ros2_control_plugins mujoco_ros2_control_plugins
+"""
+build = { cmd = "sphinx-build -b html . _build/html", depends-on = ["setup"] }
+clean = "rm -rf _build mujoco_ros2_control*"
+live-build = { cmd = "sphinx-autobuild . _build/html", depends-on = ["setup"] }
