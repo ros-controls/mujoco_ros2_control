@@ -63,14 +63,16 @@ namespace mujoco_ros2_control
  * Instead, consumers of this class are provided with functions to read all sim data and provide
  * control inputs.
  *
- * `copy_mj_data` will lock the sim and do a full copy of the existing `mj_data_` into the
+ * `copy_mj_data()` will lock the sim and do a full copy of the existing `mj_data_` into the
  * provided container, which can be used as the caller requires.
  *
- * `update_control_data` will copy control inputs from `mj_data_control_` in `mj_data_`, add is
+ * `update_control_data()` will copy control inputs from `mj_data_control_` in `mj_data_`, add is
  * the recommended way to send control commands to the underlying sim.
  *
- * Lastly, `plugin_data_` is provided to update control inputs or applied forces from plugin
- * interfaces in a standalone, well structured manner.
+ * `plugin_data()` is provided to update applied Cartesian forces on bodies in a separate manner
+ * from the Simulate application. Values are applied directly to the body in combination with the
+ * applied click and drag forces from the Simulate window. This keeps plugin applied forces separate,
+ * but they are still included in every iteration of the physics loop.
  *
  * Thread safety is still somewhat messy, as callers are provided with a simulation mutex that
  * locks the model and data while the actual mujoco engine moves the sim forward. Callers
@@ -279,8 +281,8 @@ private:
 
   // Buffers to track actively applied Cartesian forces from both the plugins and the Simulate /
   // viewer-only drag forces.
-  std::vector<mjtNum> xfrc_viewer_capture_;
-  std::vector<mjtNum> xfrc_last_written_;  // tracks the last value written to xfrc_applied
+  std::vector<mjtNum> xfrc_viewer_capture_;  // Tracks forces from the viewer
+  std::vector<mjtNum> xfrc_last_written_;    // tracks the last value written to xfrc_applied
 
   // For rendering
   mjvCamera cam_;
