@@ -95,7 +95,7 @@ public:
   ~ExternalWrenchPlugin() override = default;
 
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
-  void update(const mjModel* model, mjData* data, std::shared_ptr<PluginData> plugin_data) override;
+  void update(const mjModel* model, mjData* data) override;
   void cleanup() override;
 
   /**

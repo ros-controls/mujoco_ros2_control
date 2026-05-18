@@ -66,13 +66,11 @@ namespace mujoco_ros2_control
  * `copy_mj_data()` will lock the sim and do a full copy of the existing `mj_data_` into the
  * provided container, which can be used as the caller requires.
  *
- * `update_control_data()` will copy control inputs from `mj_data_control_` in `mj_data_`, add is
- * the recommended way to send control commands to the underlying sim.
- *
- * `plugin_data()` is provided to update applied Cartesian forces on bodies in a separate manner
- * from the Simulate application. Values are applied directly to the body in combination with the
- * applied click and drag forces from the Simulate window. This keeps plugin applied forces separate,
- * but they are still included in every iteration of the physics loop.
+ * `update_control_data()` will copy control inputs from `mj_data_control_` into the physics
+ * loop. Specifically, it copies `ctrl`, `qfrc_applied`, and `xfrc_applied`. `ctrl` and
+ * `qfrc_applied` are copied directly into their corresponding buffers in `mj_data_`. However
+ * Cartesian forces from `xfrc_applied` competes with inputs from the Simulate's drag function,
+ * and so is resolved separately.
  *
  * Thread safety is still somewhat messy, as callers are provided with a simulation mutex that
  * locks the model and data while the actual mujoco engine moves the sim forward. Callers
@@ -174,14 +172,6 @@ public:
   }
 
   /**
-   * @brief Accessor for the plugin_data.
-   */
-  std::shared_ptr<mujoco_ros2_control_plugins::PluginData> plugin_data()
-  {
-    return plugin_data_;
-  }
-
-  /**
    * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state.
    * @note Caller must hold the sim mutex.
    */
@@ -214,6 +204,8 @@ public:
    *
    * Specifically, copies `mj_data_control_->ctrl` and `mj_data_control_->qfrc_applied` into
    * `mj_data_` to update the hw control inputs for the next iteration of the physics loop.
+   * `mj_data_control_->xfrc_applied` is copied into `xfrc_plugin_desired_` to avoid conflicts
+   * from the simulate app.
    */
   void update_control_data();
 
@@ -276,11 +268,9 @@ private:
   // This container provides both state information and control inputs for the system interface.
   mjData* mj_data_control_{ nullptr };
 
-  // Data structure to provide access to control and force inputs from plugins.
-  std::shared_ptr<mujoco_ros2_control_plugins::PluginData> plugin_data_;
-
   // Buffers to track actively applied Cartesian forces from both the plugins and the Simulate /
   // viewer-only drag forces.
+  std::vector<mjtNum> xfrc_plugin_desired_;  // Tracks forces from plugins
   std::vector<mjtNum> xfrc_viewer_capture_;  // Tracks forces from the viewer
   std::vector<mjtNum> xfrc_last_written_;    // tracks the last value written to xfrc_applied
 

@@ -1001,11 +1001,9 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   // Update plugins.
   // Clear plugin data, then let each plugin update as needed, in order. This enables plugins to read and
   // rewrite control inputs immediately before they are sent to the simulation.
-  simulation_->plugin_data()->clear();
   for (auto& plugin : plugin_instances_)
   {
-    // TODO: Update the plugin interface accordingly
-    plugin->update(simulation_->model(), simulation_->control_data(), simulation_->plugin_data());
+    plugin->update(simulation_->model(), simulation_->control_data());
   }
 
   // Trigger to simulation to update its control inputs (this locks)
