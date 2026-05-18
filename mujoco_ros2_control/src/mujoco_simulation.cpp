@@ -1020,7 +1020,7 @@ void MujocoSimulation::physics_loop()
         // record it in xfrc_last_written_. We can then combine the desired forces from the plugins
         // as well as the viewers prior to stepping, without either of them stacking in
         // undesirable ways.
-        const uint32_t nbody6 = 6 * mj_model_->nbody;
+        const auto nbody6 = 6 * mj_model_->nbody;
         if (std::memcmp(mj_data_->xfrc_applied, xfrc_last_written_.data(), nbody6 * sizeof(mjtNum)) != 0)
         {
           // Render thread ran: xfrc_applied was zeroed then drag was applied.
