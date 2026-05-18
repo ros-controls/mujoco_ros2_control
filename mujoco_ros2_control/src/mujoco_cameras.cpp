@@ -131,12 +131,12 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
 void MujocoCameras::init()
 {
   // Start the rendering thread process
-  if (!glfwInit())
-  {
-    RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Disabling camera publishing.");
-    publish_images_ = false;
-    return;
-  }
+  // if (!glfwInit())
+  // {
+  //   RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Disabling camera publishing.");
+  //   publish_images_ = false;
+  //   return;
+  // }
   publish_images_ = true;
   rendering_thread_ = std::thread(&MujocoCameras::update_loop, this);
 }
@@ -152,10 +152,12 @@ void MujocoCameras::close()
 
 void MujocoCameras::update_loop()
 {
-  // We create an offscreen context specific to this process for managing camera rendering.
-  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-  GLFWwindow* window = glfwCreateWindow(1, 1, "", NULL, NULL);
-  glfwMakeContextCurrent(window);
+  // {
+  //   // We create an offscreen context specific to this process for managing camera rendering.
+  //   glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  //   GLFWwindow* window = glfwCreateWindow(1, 1, "", NULL, NULL);
+  //   glfwMakeContextCurrent(window);
+  // }
 
   // Initialization of the context and data structures has to happen in the rendering thread
   RCLCPP_INFO(node_->get_logger(), "Initializing rendering for cameras");
@@ -200,7 +202,7 @@ void MujocoCameras::update_loop()
   mjv_freeScene(&mjv_scn_);
   mjr_freeContext(&mjr_con_);
   mj_deleteData(mj_camera_data_);
-  glfwDestroyWindow(window);
+  // glfwDestroyWindow(window);
 }
 
 void MujocoCameras::update()
