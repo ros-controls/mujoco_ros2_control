@@ -555,6 +555,18 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
         assert "lidar_site" in lidar_dict
 
+    def test_get_processed_mujoco_inputs_lidar_zero_angle_increment(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <lidar ref_site="lidar_site" sensor_name="rf" min_angle="0" max_angle="1.57" angle_increment="0"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        with self.assertRaises(ValueError) as context:
+            get_processed_mujoco_inputs(processed_element)
+        assert "angle_increment" in str(context.exception)
+
     def test_get_processed_mujoco_inputs_modify_element(self):
         xml_string = """<?xml version="1.0"?>
 <processed_inputs>
@@ -980,9 +992,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         lidar_elem.setAttribute("min_angle", "0")
         lidar_dict["other_site"] = lidar_elem
 
-        result_dom = add_lidar_from_sites(dom, lidar_dict)
-        result_xml = result_dom.toxml()
-        assert "lidar_body" not in result_xml
+        with self.assertRaises(ValueError) as context:
+            add_lidar_from_sites(dom, lidar_dict)
+        assert "other_site" in str(context.exception)
 
     def test_add_lidar_from_sites_removes_min_angle(self):
         xml_string = """<?xml version="1.0"?>

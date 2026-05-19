@@ -6,4 +6,16 @@
       A simple plugin that publishes a heartbeat message every second to demonstrate the plugin system.
     </description>
   </class>
+  <class name="mujoco_ros2_control_plugins/ExternalWrenchPlugin"
+         type="mujoco_ros2_control_plugins::ExternalWrenchPlugin"
+         base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
+    <description>
+      Plugin that applies an external wrench (force + torque) to a named MuJoCo body for a
+      configurable duration via the ROS 2 service ~/apply_wrench
+      (mujoco_ros2_control_msgs/srv/ApplyExternalWrench).
+      The force and torque are expressed in the world frame; the application point is expressed
+      in the body's local frame (relative to the body frame origin).
+      Multiple concurrent wrenches on different or the same bodies are supported.
+    </description>
+  </class>
 </library>

@@ -29,7 +29,10 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        ros_distro: [humble, jazzy, kilted, rolling]
+        # TODO: Re-enable rolling when keys are available:
+        # https://github.com/ros-controls/mujoco_ros2_control/issues/178
+        # ros_distro: [humble, jazzy, kilted, rolling]
+        ros_distro: [humble, jazzy, kilted]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

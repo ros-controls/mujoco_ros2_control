@@ -157,6 +157,7 @@ endif()
 
 # MuJoCo ROS 2 control system interface (this package)
 add_library(mujoco_ros2_control SHARED
+    src/mujoco_simulation.cpp
     src/mujoco_system_interface.cpp
     src/mujoco_cameras.cpp
     src/mujoco_lidar.cpp
@@ -258,6 +259,11 @@ install(
   DIRECTORY resources scripts
   DESTINATION share/${PROJECT_NAME}
   USE_SOURCE_PERMISSIONS
+)
+
+install(
+  FILES scripts/requirements.txt
+  DESTINATION share/${PROJECT_NAME}
 )
 
 pluginlib_export_plugin_description_file(hardware_interface mujoco_system_interface_plugin.xml)
