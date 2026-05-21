@@ -843,8 +843,7 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
 
 hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& time, const rclcpp::Duration& /*period*/)
 {
-  // Snapshot the latest physics state into our local copy to avoid locking.
-  // This locks the sim mutex internally, then all reads below use control_data()
+  // Snapshot the latest physics state into our local copy to avoid locking for the whole method.
   simulation_->copy_physics_data(mj_data_control_);
 
   // Joint states
@@ -1981,7 +1980,7 @@ void MujocoSystemInterface::set_initial_pose()
   }
 
   // Copy into the control data for reads
-  mj_copyData(mj_data_control_, simulation_->model(), simulation_->data());
+  simulation_->copy_physics_data(mj_data_control_);
 }
 
 void MujocoSystemInterface::reset_simulation_state(bool /*fill_initial_state*/)
