@@ -473,10 +473,6 @@ MujocoSimulation::~MujocoSimulation()
   {
     mj_deleteData(mj_data_);
   }
-  if (mj_data_control_)
-  {
-    mj_deleteData(mj_data_control_);
-  }
   if (mj_model_)
   {
     mj_deleteModel(mj_model_);
@@ -651,13 +647,11 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
     mj_data_ = mj_makeData(mj_model_);
 
     // Initialize containers for data sharing
-    mj_data_control_ = mj_makeData(mj_model_);
-
     xfrc_plugin_desired_.assign(6 * mj_model_->nbody, 0.0);
     xfrc_viewer_capture_.assign(6 * mj_model_->nbody, 0.0);
     xfrc_last_written_.assign(6 * mj_model_->nbody, 0.0);
   }
-  if (!mj_data_ || !mj_data_control_)
+  if (!mj_data_)
   {
     RCLCPP_FATAL(get_logger(), "Could not allocate mjData for '%s'", model_path_.c_str());
     return false;
@@ -795,9 +789,6 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state)
   // Run forward dynamics to update derived quantities
   mj_forward(mj_model_, mj_data_);
 
-  // Copy to control data for reads - this ensures the physics loop uses the reset state
-  mj_copyData(mj_data_control_, mj_model_, mj_data_);
-
   // Delegate HW-side bookkeeping (PID resets, command/state interface sync, etc.)
   if (reset_callback_)
   {
@@ -933,30 +924,35 @@ void MujocoSimulation::step_simulation_callback(
   }
 }
 
-void MujocoSimulation::copy_mj_model(mjModel*& destination)
+void MujocoSimulation::copy_physics_model(mjModel*& destination)
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
   destination = mj_copyModel(destination, mj_model_);
 }
 
-void MujocoSimulation::copy_mj_data(mjData* destination)
-{
-  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  mj_copyData(destination, mj_model_, mj_data_);
-}
-
-void MujocoSimulation::set_mj_data(mjData* source)
+void MujocoSimulation::overwrite_physics_data(mjData* source)
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
   mj_copyData(mj_data_, mj_model_, source);
 }
 
-void MujocoSimulation::update_control_data()
+void MujocoSimulation::copy_physics_data(mjData*& destination)
+{
+  if (destination == nullptr)
+  {
+    destination = mj_makeData(mj_model_);
+  }
+
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  mj_copyData(destination, mj_model_, mj_data_);
+}
+
+void MujocoSimulation::apply_control_data(mjData* control_data)
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  mju_copy(mj_data_->ctrl, mj_data_control_->ctrl, mj_model_->nu);
-  mju_copy(mj_data_->qfrc_applied, mj_data_control_->qfrc_applied, mj_model_->nv);
-  mju_copy(xfrc_plugin_desired_.data(), mj_data_control_->xfrc_applied, 6 * mj_model_->nbody);
+  mju_copy(mj_data_->ctrl, control_data->ctrl, mj_model_->nu);
+  mju_copy(mj_data_->qfrc_applied, control_data->qfrc_applied, mj_model_->nv);
+  mju_copy(xfrc_plugin_desired_.data(), control_data->xfrc_applied, 6 * mj_model_->nbody);
 }
 
 // simulate in background thread (while rendering in main thread)

@@ -61,16 +61,21 @@ namespace mujoco_ros2_control
  * requested by the user. It is important to not interrupt the loop with locking calls that
  * interact with either the physics sim data, `mj_data_`,  or the model, `mj_model_`.
  * Instead, consumers of this class are provided with functions to read all sim data and provide
- * control inputs.
+ * control inputs from their own mjData containers.
  *
- * `copy_mj_data()` will lock the sim and do a full copy of the existing `mj_data_` into the
- * provided container, which can be used as the caller requires.
+ * The three functions relevant to interacting with the physics sim's mjData are:
  *
- * `update_control_data()` will copy control inputs from `mj_data_control_` into the physics
+ * `copy_physics_data(...)` will lock the sim and do a full copy of the existing `mj_data_`
+ * into the provided container, which can be used as the caller requires.
+ *
+ * `apply_control_data(...)` will copy control inputs from the provided mjData into the physics
  * loop. Specifically, it copies `ctrl`, `qfrc_applied`, and `xfrc_applied`. `ctrl` and
  * `qfrc_applied` are copied directly into their corresponding buffers in `mj_data_`. However
  * Cartesian forces from `xfrc_applied` competes with inputs from the Simulate's drag function,
  * and so is resolved separately.
+ *
+ * `overwrite_physics_data(...)` will completely replace the data for the sim. Should be used
+ * with extreme caution.
  *
  * Thread safety is still somewhat messy, as callers are provided with a simulation mutex that
  * locks the model and data while the actual mujoco engine moves the sim forward. Callers
@@ -161,17 +166,6 @@ public:
   }
 
   /**
-   * @brief Accessor for the mujoco control data.
-   *
-   * Standard container for both providing control inputs through `ctrl` and `qfrc_applied`, along
-   * with access to the underlying mujoco simulation's data.
-   */
-  mjData* control_data()
-  {
-    return mj_data_control_;
-  }
-
-  /**
    * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state.
    * @note Caller must hold the sim mutex.
    */
@@ -182,32 +176,32 @@ public:
    *
    * This locks the sim mutex and will pause the physics loop, so should be used sparingly.
    */
-  void copy_mj_model(mjModel*& destination);
-
-  /**
-   * @brief Copies `mj_data_` into the provided container in a thread safe way.
-   *
-   * This locks the sim mutex and will pause the physics loop, so should be used sparingly.
-   * @note: Destination must be non-null
-   */
-  void copy_mj_data(mjData* destination);
+  void copy_physics_model(mjModel*& destination);
 
   /**
    * @brief Copies the provided mjData into mj_data_ in a thread safe way.
    *
    * @note This will completely overwrite the existing data, use with caution!
    */
-  void set_mj_data(mjData* source);
+  void overwrite_physics_data(mjData* source);
 
   /**
-   * @brief Copies control fields from `mj_data_control_` into the sim data in a thread safe way.
+   * @brief Copies `mj_data_` into the provided container in a thread safe way.
    *
-   * Specifically, copies `mj_data_control_->ctrl` and `mj_data_control_->qfrc_applied` into
+   * This locks the sim mutex and will pause the physics loop, so should be used sparingly.
+   * @note: If the destination is null it will be created.
+   */
+  void copy_physics_data(mjData*& destination);
+
+  /**
+   * @brief Copies control fields from `control_data` into the sim data in a thread safe way.
+   *
+   * Specifically, copies `control_data->ctrl` and `control_data->qfrc_applied` into
    * `mj_data_` to update the hw control inputs for the next iteration of the physics loop.
-   * `mj_data_control_->xfrc_applied` is copied into `xfrc_plugin_desired_` to avoid conflicts
+   * `control_data->xfrc_applied` is copied into `xfrc_plugin_desired_` to avoid conflicts
    * from the simulate app.
    */
-  void update_control_data();
+  void apply_control_data(mjData* control_data);
 
   /**
    * @brief Accessor for the mutex which locks access to the data and model.
@@ -264,9 +258,6 @@ private:
   // Primary data container for the physics loop. We do not recommend interacting with this
   // directly unless you are sure of what you are doing.
   mjData* mj_data_{ nullptr };
-
-  // This container provides both state information and control inputs for the system interface.
-  mjData* mj_data_control_{ nullptr };
 
   // Buffers to track actively applied Cartesian forces from both the plugins and the Simulate /
   // viewer-only drag forces.
