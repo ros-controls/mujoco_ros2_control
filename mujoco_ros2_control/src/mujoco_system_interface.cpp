@@ -999,7 +999,9 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 
   // Update plugins.
   // Clear plugin data, then let each plugin update as needed, in order. This enables plugins to read and
-  // rewrite control inputs immediately before they are sent to the simulation.
+  // rewrite control inputs immediately before they are sent to the simulation. Namely, we have to zero
+  // out xfrc_applied so plugins can update as needed.
+  mju_zero(mj_data_control_->xfrc_applied, 6 * simulation_->model()->nbody);
   for (auto& plugin : plugin_instances_)
   {
     plugin->update(simulation_->model(), mj_data_control_);

@@ -955,6 +955,14 @@ void MujocoSimulation::apply_control_data(mjData* control_data)
   mju_copy(xfrc_plugin_desired_.data(), control_data->xfrc_applied, 6 * mj_model_->nbody);
 }
 
+void MujocoSimulation::handle_xfrc_applied()
+{
+  const auto nbody6 = 6 * mj_model_->nbody;
+  mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
+  mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
+  mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, 6 * mj_model_->nbody);
+}
+
 // simulate in background thread (while rendering in main thread)
 void MujocoSimulation::physics_loop()
 {
@@ -1067,10 +1075,7 @@ void MujocoSimulation::physics_loop()
             syncSim = mj_data_->time;
             sim_->speed_changed = false;
 
-            // Restore viewer forces, then add plugin contribution on top.
-            mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
-            mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
-
+            handle_xfrc_applied();
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
 
@@ -1119,13 +1124,7 @@ void MujocoSimulation::physics_loop()
 #else
               sim_->InjectNoise(-1);
 #endif
-
-              // Restore viewer forces, then add plugin contribution (xfrc_plugin_desired_ is only
-              // written by the control thread between outer loop iterations — constant here).
-              // TODO: Cleanup when mujoco data is split
-              mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
-              mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
-
+              handle_xfrc_applied();
               // call mj_step
               mj_step(mj_model_, mj_data_);
 
@@ -1158,14 +1157,7 @@ void MujocoSimulation::physics_loop()
           // save current state to history buffer
           if (stepped)
           {
-            // Restore viewer + plugin into mj_data_->xfrc_applied so mjv_updateScene (which
-            // reads it before zeroing) shows plugin force arrows in the native viewer.
-            // Record the value in xfrc_last_restore_ so the next outer iteration can detect
-            // whether the render thread ran and updated xfrc_applied in the interim.
-            mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
-            mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
-            mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, nbody6);
-
+            handle_xfrc_applied();
             sim_->AddToHistory();
             update_sim_display();
           }
@@ -1181,14 +1173,14 @@ void MujocoSimulation::physics_loop()
             pending_steps_.fetch_add(1);
           }
 
+          // Record so the next iteration can detect render thread changes, only necessary once
+          // when paused
+          handle_xfrc_applied();
+
           // Execute one pending step per physics loop iteration so the clock publisher
           // (try_publish) has time to flush between steps, matching play mode behavior.
           if (pending_steps_.load() > 0)
           {
-            // Add the viewer and plugin applied forces
-            mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
-            mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
-
             mj_step(mj_model_, mj_data_);
             publish_clock();
 
@@ -1202,11 +1194,6 @@ void MujocoSimulation::physics_loop()
             }
             else
             {
-              // Restore forces for viewer arrows
-              mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
-              mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
-              mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, nbody6);
-
               sim_->AddToHistory();
               pending_steps_.fetch_sub(1);
               step_count_.fetch_add(1);
@@ -1221,11 +1208,6 @@ void MujocoSimulation::physics_loop()
           }
           else
           {
-            // Compose for mj_forward to ensure derived quantities match applied forces
-            mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
-            mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
-            mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, nbody6);
-
             mj_forward(mj_model_, mj_data_);
             sim_->speed_changed = true;
             update_sim_display();

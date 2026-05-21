@@ -214,6 +214,13 @@ public:
 
 private:
   /**
+   * @brief Helper function to compose hw interface and simulation provided Cartesian forces.
+   *
+   * This should be called before stepping the simulation.
+   */
+  void handle_xfrc_applied();
+
+  /**
    * @brief Loops the physics simulation until asked to terminate.
    */
   void physics_loop();
