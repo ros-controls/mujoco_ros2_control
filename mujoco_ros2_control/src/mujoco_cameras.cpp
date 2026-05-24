@@ -128,10 +128,10 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
   }
 }
 
-void MujocoCameras::init()
+void MujocoCameras::init(GlfwInitFn glfw_init_fn)
 {
   // Start the rendering thread process
-  if (!glfwInit())
+  if (!glfw_init_fn())
   {
     RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Disabling camera publishing.");
     publish_images_ = false;
