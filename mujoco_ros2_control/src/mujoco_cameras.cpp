@@ -130,6 +130,11 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
 
 void MujocoCameras::init(GlfwInitFn glfw_init_fn)
 {
+  if (cameras_.empty())
+  {
+    return;
+  }
+
   // Start the rendering thread process
   if (!glfw_init_fn())
   {
