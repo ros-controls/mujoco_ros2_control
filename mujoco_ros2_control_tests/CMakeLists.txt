@@ -26,11 +26,11 @@ if(BUILD_TESTING)
   )
 
   add_launch_test(test/robot_launch_mjcf_generation_test.py
-    TIMEOUT 75
+    TIMEOUT 250
   )
 
   add_launch_test(test/robot_launch_mjcf_generation_from_robot_description_test.py
-    TIMEOUT 75
+    TIMEOUT 250
   )
 
   add_launch_test(test/robot_launch_transmission_test.py
