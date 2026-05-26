@@ -169,7 +169,8 @@ void MujocoCameras::close()
 bool MujocoCameras::init_egl_context()
 {
   // Get EGL display
-  egl_display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+  // egl_display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+  egl_display_ = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, NULL);
 
   // Initialize EGL
   EGLint major, minor;

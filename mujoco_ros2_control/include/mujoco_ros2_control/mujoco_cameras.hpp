@@ -25,6 +25,7 @@
 #include <vector>
 
 #include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include <GLFW/glfw3.h>
 #ifdef OSMESA_AVAILABLE
 #include <GL/osmesa.h>
