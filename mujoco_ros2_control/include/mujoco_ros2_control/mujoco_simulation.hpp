@@ -28,17 +28,19 @@
 #include <thread>
 #include <vector>
 
-#include <mujoco/mujoco.h>
-
-#include <mujoco_ros2_control_msgs/srv/reset_world.hpp>
-#include <mujoco_ros2_control_msgs/srv/set_pause.hpp>
-#include <mujoco_ros2_control_msgs/srv/step_simulation.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <realtime_tools/realtime_publisher.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 
 #include "glfw_adapter.h"  // for mj::GlfwAdapter
 #include "simulate.h"      // must be on your include path, handled by CMake
+
+#include <mujoco/mujoco.h>
+
+#include <mujoco_ros2_control_msgs/srv/reset_world.hpp>
+#include <mujoco_ros2_control_msgs/srv/set_pause.hpp>
+#include <mujoco_ros2_control_msgs/srv/step_simulation.hpp>
+#include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp>
 
 namespace mujoco_ros2_control
 {
@@ -55,6 +57,26 @@ namespace mujoco_ros2_control
  * underlying simulation - including publishing simulated time to /clock, as well as services
  * for pausing, stepping, and resetting the simulation.
  *
+ * Importantly, the physics loop is intended to run at whatever speed (relative realtime) is
+ * requested by the user. It is important to not interrupt the loop with locking calls that
+ * interact with either the physics sim data, `mj_data_`,  or the model, `mj_model_`.
+ * Instead, consumers of this class are provided with functions to read all sim data and provide
+ * control inputs from their own mjData containers.
+ *
+ * The three functions relevant to interacting with the physics sim's mjData are:
+ *
+ * `copy_physics_data(...)` will lock the sim and do a full copy of the existing `mj_data_`
+ * into the provided container, which can be used as the caller requires.
+ *
+ * `apply_control_data(...)` will copy control inputs from the provided mjData into the physics
+ * loop. Specifically, it copies `ctrl`, `qfrc_applied`, and `xfrc_applied`. `ctrl` and
+ * `qfrc_applied` are copied directly into their corresponding buffers in `mj_data_`. However
+ * Cartesian forces from `xfrc_applied` competes with inputs from the Simulate's drag function,
+ * and so is resolved separately.
+ *
+ * `overwrite_physics_data(...)` will completely replace the data for the sim. Should be used
+ * with extreme caution.
+ *
  * Thread safety is still somewhat messy, as callers are provided with a simulation mutex that
  * locks the model and data while the actual mujoco engine moves the sim forward. Callers
  * need to be wary of locking that mutex external to this class, as it can have significant
@@ -69,8 +91,6 @@ public:
    *
    * Triggered by the ~/reset_world service or by a any other reset detected in the physics
    * loop. The callback will be run with the sim mutex but after all data has been restored.
-   *
-   * // TODO: Retire this when mujoco data is split.
    *
    * @param fill_initial_state When true, the caller has not already populated
    *        mj_data_->qpos/qvel/ctrl from a keyframe and the callback should restore the captured
@@ -134,7 +154,11 @@ public:
   }
 
   /**
-   * @brief Accessor for the mujoco data.
+   * @brief Accessor for the raw mujoco simulation data.
+   *
+   * Users should generally not interact with the physics sim data excepting during setup and
+   * other special circumstances. For "normal" processing it is recommended to use
+   * `control_data` or other containers populated by `copy_mj_data`.
    */
   mjData* data()
   {
@@ -142,12 +166,42 @@ public:
   }
 
   /**
-   * @brief Accessor for the mujoco control data.
+   * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state.
+   * @note Caller must hold the sim mutex.
    */
-  mjData* control_data()
-  {
-    return mj_data_control_;
-  }
+  void reset_world_state(bool fill_initial_state);
+
+  /**
+   * @brief Copies `mj_model_` into the provided container in a thread safe way.
+   *
+   * This locks the sim mutex and will pause the physics loop, so should be used sparingly.
+   */
+  void copy_physics_model(mjModel*& destination);
+
+  /**
+   * @brief Copies the provided mjData into mj_data_ in a thread safe way.
+   *
+   * @note This will completely overwrite the existing data, use with caution!
+   */
+  void overwrite_physics_data(mjData* source);
+
+  /**
+   * @brief Copies `mj_data_` into the provided container in a thread safe way.
+   *
+   * This locks the sim mutex and will pause the physics loop, so should be used sparingly.
+   * @note: If the destination is null it will be created.
+   */
+  void copy_physics_data(mjData*& destination);
+
+  /**
+   * @brief Copies control fields from `control_data` into the sim data in a thread safe way.
+   *
+   * Specifically, copies `control_data->ctrl` and `control_data->qfrc_applied` into
+   * `mj_data_` to update the hw control inputs for the next iteration of the physics loop.
+   * `control_data->xfrc_applied` is copied into `xfrc_plugin_desired_` to avoid conflicts
+   * from the simulate app.
+   */
+  void apply_control_data(mjData* control_data);
 
   /**
    * @brief Accessor for the mutex which locks access to the data and model.
@@ -158,23 +212,14 @@ public:
     return *sim_mutex_;
   }
 
-  /**
-   * @brief Accessor for the stacking applied forces, these values will be added to `xfrc_applied`.
-   *
-   * TODO: Remove this and provide consisted access for write-able mujoco data.
-   */
-  std::vector<mjtNum>& xfrc_plugin_desired()
-  {
-    return xfrc_plugin_desired_;
-  }
-
-  /**
-   * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state.
-   * @note Caller must hold the sim mutex.
-   */
-  void reset_world_state(bool fill_initial_state);
-
 private:
+  /**
+   * @brief Helper function to compose hw interface and simulation provided Cartesian forces.
+   *
+   * This should be called before stepping the simulation.
+   */
+  void handle_xfrc_applied();
+
   /**
    * @brief Loops the physics simulation until asked to terminate.
    */
@@ -213,32 +258,19 @@ private:
   std::string model_path_;
   std::string mujoco_model_topic_;
 
-  // MuJoCo data pointers
+  // MuJoCo data pointers, these are the primary containers used by the physics simulation.
+  // It is generally not recommended to interact with them directly.
   mjModel* mj_model_{ nullptr };
+
+  // Primary data container for the physics loop. We do not recommend interacting with this
+  // directly unless you are sure of what you are doing.
   mjData* mj_data_{ nullptr };
 
-  // Data container for control data
-  mjData* mj_data_control_{ nullptr };
-
-  // TODO: Conslidate the control and these buffer to provide consistent, clear access for
-  //       for mujoco data.
-  //
-  // Dedicated buffer for plugin xfrc contributions.
-  //
-  // mj_copyData contaminates mj_data_control_->xfrc_applied with viewer forces, so we cannot
-  // rely on mj_data_control_->xfrc_applied to hold plugin forces across physics iterations.
-  // Instead, the control thread (read()) zeroes mj_data_control_->xfrc_applied before every
-  // plugin update, lets plugins write fresh forces, then copies the result here.  The physics
-  // thread uses this buffer (not mj_data_control_->xfrc_applied) when composing each mj_step.
-  // Because this buffer is never touched by mj_copyData, it holds the last plugin contribution
-  // cleanly until the next control cycle — no restore and no undo mechanism required.
-  std::vector<mjtNum> xfrc_viewer_capture_;  ///< viewer-only forces (drag), used per inner step
-  std::vector<mjtNum> xfrc_plugin_desired_;  ///< plugin forces, set once per control cycle
-  /// Last value written to mj_data_->xfrc_applied by the physics loop (viewer + plugin).
-  /// Used at the start of each outer iteration to detect whether the render thread ran
-  /// (and zeroed/re-applied drag) since the last physics step.  If mj_data_->xfrc_applied
-  /// matches this buffer, the render thread did not run and xfrc_viewer_capture_ is still valid.
-  std::vector<mjtNum> xfrc_last_restore_;
+  // Buffers to track actively applied Cartesian forces from both the plugins and the Simulate /
+  // viewer-only drag forces.
+  std::vector<mjtNum> xfrc_plugin_desired_;  // Tracks forces from plugins
+  std::vector<mjtNum> xfrc_viewer_capture_;  // Tracks forces from the viewer
+  std::vector<mjtNum> xfrc_last_written_;    // tracks the last value written to xfrc_applied
 
   // For rendering
   mjvCamera cam_;
