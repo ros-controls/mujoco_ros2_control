@@ -950,17 +950,17 @@ void MujocoSimulation::copy_physics_data(mjData*& destination)
 void MujocoSimulation::apply_control_data(mjData* control_data)
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  mju_copy(mj_data_->ctrl, control_data->ctrl, mj_model_->nu);
-  mju_copy(mj_data_->qfrc_applied, control_data->qfrc_applied, mj_model_->nv);
+  mju_copy(mj_data_->ctrl, control_data->ctrl, static_cast<int>(mj_model_->nu));
+  mju_copy(mj_data_->qfrc_applied, control_data->qfrc_applied, static_cast<int>(mj_model_->nv));
   mju_copy(xfrc_plugin_desired_.data(), control_data->xfrc_applied, 6 * static_cast<int>(mj_model_->nbody));
 }
 
 void MujocoSimulation::handle_xfrc_applied()
 {
-  const auto nbody6 = 6 * mj_model_->nbody;
+  const int nbody6 = 6 * static_cast<int>(mj_model_->nbody);
   mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
   mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
-  mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, 6 * mj_model_->nbody);
+  mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, nbody6);
 }
 
 // simulate in background thread (while rendering in main thread)
