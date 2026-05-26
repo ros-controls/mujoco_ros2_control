@@ -170,11 +170,6 @@ bool MujocoCameras::init_egl_context()
 {
   // Get EGL display
   egl_display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-  if (egl_display_ == EGL_NO_DISPLAY)
-  {
-    RCLCPP_ERROR(node_->get_logger(), "EGL: Failed to get display");
-    return false;
-  }
 
   // Initialize EGL
   EGLint major, minor;
