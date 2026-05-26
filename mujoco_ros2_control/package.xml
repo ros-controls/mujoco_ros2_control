@@ -24,6 +24,7 @@
   <depend>controller_manager</depend>
   <depend>hardware_interface</depend>
   <depend>fmt</depend>
+  <depend>ros2pkg</depend>
   <depend>nav_msgs</depend>
   <depend>libglfw3-dev</depend>
   <depend>mujoco_vendor</depend>
