@@ -18,10 +18,6 @@ RUN apt-get update && apt-get install -y \
 RUN curl -fsSL https://pixi.sh/install.sh | bash
 ENV PATH="/root/.pixi/bin:${PATH}"
 
-# Enable software rendering with LLVMpipe for headless environments (CI, Docker without GPU)
-ENV LIBGL_ALWAYS_SOFTWARE=1
-ENV GALLIUM_DRIVER=llvmpipe
-
 WORKDIR /workspace
 
 CMD ["/bin/bash"]

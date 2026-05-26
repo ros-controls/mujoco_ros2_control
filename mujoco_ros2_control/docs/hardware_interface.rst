@@ -290,7 +290,8 @@ Frame and topic names can be overridden via ``ros2_control`` xacro:
 Headless Rendering
 ~~~~~~~~~~~~~~~~~~
 
-Camera rendering is supported in headless environments (without a display). The system automatically detects whether a display is available:
+Camera rendering is supported in headless environments (without a display).
+The system automatically detects whether a display is available:
 
 * With display: Uses GLFW for OpenGL context creation (default behavior)
 * Without display: Falls back to EGL for GPU-accelerated headless rendering
