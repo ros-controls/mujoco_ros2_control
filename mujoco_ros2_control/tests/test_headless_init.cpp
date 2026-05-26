@@ -181,7 +181,7 @@ TEST_F(HeadlessInitTest, HeadlessActivateWithoutCameras)
 
   // Wait for model and data to be available.
   auto start = std::chrono::steady_clock::now();
-  auto timeout = std::chrono::seconds(5);
+  auto timeout = std::chrono::seconds(1);
   mjModel* test_model = nullptr;
   mjData* test_data = nullptr;
   while (std::chrono::steady_clock::now() - start < timeout)
