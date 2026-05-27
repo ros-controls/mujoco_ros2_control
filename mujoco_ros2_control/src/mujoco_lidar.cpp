@@ -211,6 +211,11 @@ bool MujocoLidar::register_lidar(const hardware_interface::HardwareInfo& hardwar
 
 void MujocoLidar::init()
 {
+  if (lidar_sensors_.empty())
+  {
+    return;
+  }
+
   // Start the rendering thread process
   publish_lidar_ = true;
   rendering_thread_ = std::thread(&MujocoLidar::update_loop, this);
