@@ -257,6 +257,24 @@ Lidar::Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNu
       vectors_.push_back(std::sin(elevationAngles[e]));
     }
   }
+
+  // Lookup sensor details based on the model
+  int id;
+  for (id = 0; id < m->nsensor; ++id)
+  {
+    if (m->sensor_type[id] == mjSENS_PLUGIN && m->sensor_plugin[id] == instance)
+    {
+      sensor_id_ = id;
+      break;
+    }
+  }
+  site_id_ = m->sensor_objid[sensor_id_];
+  sensor_address_ = m->sensor_adr[sensor_id_];
+  dimension_ = m->sensor_dim[sensor_id_];
+
+  // Allocate storage for data
+  rotated_vectors_.resize(dimension_ * 3);
+  geomid_.resize(resolution_[0] * resolution_[1]);
 }
 
 void Lidar::Reset(const mjModel* m, int instance)
@@ -281,62 +299,38 @@ void Lidar::Compute(const mjModel* m, mjData* d, int instance)
   mjtByte flg_static = -1;
   int body_exclude = -1;
 
-  // Get site id.
-  int32_t id;
-  for (id = 0; id < m->nsensor; ++id)
-  {
-    if (m->sensor_type[id] == mjSENS_PLUGIN && m->sensor_plugin[id] == instance)
-    {
-      break;
-    }
-  }
-  int site_id = m->sensor_objid[id];
-
   // Get site frame.
-  mjtNum* site_pos = d->site_xpos + 3 * site_id;
-  mjtNum* site_mat = d->site_xmat + 9 * site_id;
-
-  int adr = m->sensor_adr[id];
-  int dim = m->sensor_dim[id];
-
-  mj_markStack(d);
+  mjtNum* site_pos = d->site_xpos + 3 * site_id_;
+  mjtNum* site_mat = d->site_xmat + 9 * site_id_;
 
   // Clear sensordata and distance matrix.
-  mjtNum* sensordata = d->sensordata + adr;
-  mju_zero(sensordata, dim);
+  mjtNum* sensordata = d->sensordata + sensor_address_;
+  mju_zero(sensordata, dimension_);
 
-  rotated_vectors_.clear();
-  rotated_vectors_.reserve(dim * 3);
-  for (int idx = 0; idx < dim; ++idx)
+  for (int idx = 0; idx < dimension_; ++idx)
   {
     mjtNum vec[] = { vectors_[idx * 3], vectors_[idx * 3 + 1], vectors_[idx * 3 + 2] };
-    mjtNum res[] = { 0.0, 0.0, 0.0 };
-    mju_mulMatVec3(res, site_mat, vec);
-    rotated_vectors_.push_back(res[0]);
-    rotated_vectors_.push_back(res[1]);
-    rotated_vectors_.push_back(res[2]);
+    mju_mulMatVec3(&rotated_vectors_[idx * 3], site_mat, vec);
   }
 
 #if (mjVERSION_HEADER == 3005000)
   int* geomid = nullptr;
   mj_multiRay(m, d, site_pos, rotated_vectors_.data(), geom_group, flg_static, body_exclude, geomid, sensordata, NULL,
-              resolution_[0] * resolution_[1], max_range_);
+              dimension_, max_range_);
 #elif (mjVERSION_HEADER == 340)
-  std::vector<int> geomid(resolution_[0] * resolution_[1]);
-  mj_multiRay(m, d, site_pos, rotated_vectors_.data(), geom_group, flg_static, body_exclude, geomid.data(), sensordata,
-              resolution_[0] * resolution_[1], max_range_);
+  mj_multiRay(m, d, site_pos, rotated_vectors_.data(), geom_group, flg_static, body_exclude, geomid_.data(), sensordata,
+              dimension_, max_range_);
 #else
   mju_error("Unsupported mujoco version (%d)\n", mjVERSION_HEADER);
 #endif
 
-  for (int32_t idx = 0; idx < resolution_[0] * resolution_[1]; ++idx)
+  for (int32_t idx = 0; idx < dimension_; ++idx)
   {
     if (sensordata[idx] >= max_range_ || sensordata[idx] < min_range_)
     {
       sensordata[idx] = -1.0;
     }
   }
-  mj_freeStack(d);
 }
 
 void Lidar::Visualize(const mjModel* m, mjData* d, const mjvOption* opt, mjvScene* scn, int instance)
@@ -346,53 +340,31 @@ void Lidar::Visualize(const mjModel* m, mjData* d, const mjvOption* opt, mjvScen
     return;
   }
 
-  // Get sensor id.
-  int id;
-  for (id = 0; id < m->nsensor; ++id)
+  // Get site frame.
+  mjtNum* site_pos = d->site_xpos + 3 * site_id_;
+
+  const mjtNum* dataptr = d->sensordata + sensor_address_;
+
+  // get point and draw line if dist is valid
+  mjtNum point[3] = { 0 };
+  for (int idx = 0; idx < dimension_; ++idx)
   {
-    if (m->sensor_type[id] == mjSENS_PLUGIN && m->sensor_plugin[id] == instance)
+    mjtNum dist = dataptr[idx];
+    if (dist >= 0 && scn->ngeom < scn->maxgeom)
     {
-      break;
-    }
-  }
+      point[0] = site_pos[0] + rotated_vectors_[idx * 3] * dist;
+      point[1] = site_pos[1] + rotated_vectors_[idx * 3 + 1] * dist;
+      point[2] = site_pos[2] + rotated_vectors_[idx * 3 + 2] * dist;
 
-  // Get sensor data.
-  if (id < m->nsensor)
-  {
-    int site_id = m->sensor_objid[id];
+      mjvGeom* thisgeom = scn->geoms + scn->ngeom;
+      mjv_initGeom(thisgeom, mjGEOM_LINE, nullptr, nullptr, nullptr, m->vis.rgba.rangefinder);
 
-    // Get site frame.
-    mjtNum* site_pos = d->site_xpos + 3 * site_id;
-
-    int adr = m->sensor_adr[id];
-    int dim = m->sensor_dim[id];
-
-    const mjtNum* dataptr = d->sensordata + adr;
-
-    // get point and draw line if dist is valid
-    mjtNum point[3] = { 0 };
-    if (rotated_vectors_.size() == dim * 3)
-    {
-      for (int idx = 0; idx < dim; ++idx)
-      {
-        mjtNum dist = dataptr[idx];
-        if (dist >= 0 && scn->ngeom < scn->maxgeom)
-        {
-          point[0] = site_pos[0] + rotated_vectors_[idx * 3] * dist;
-          point[1] = site_pos[1] + rotated_vectors_[idx * 3 + 1] * dist;
-          point[2] = site_pos[2] + rotated_vectors_[idx * 3 + 2] * dist;
-
-          mjvGeom* thisgeom = scn->geoms + scn->ngeom;
-          mjv_initGeom(thisgeom, mjGEOM_LINE, nullptr, nullptr, nullptr, m->vis.rgba.rangefinder);
-
-          mjv_connector(thisgeom, mjGEOM_LINE, 1, site_pos, point);
-          thisgeom->objtype = mjOBJ_UNKNOWN;
-          thisgeom->objid = id;
-          thisgeom->category = mjCAT_DECOR;
-          thisgeom->segid = scn->ngeom;
-          scn->ngeom++;
-        }
-      }
+      mjv_connector(thisgeom, mjGEOM_LINE, 1, site_pos, point);
+      thisgeom->objtype = mjOBJ_UNKNOWN;
+      thisgeom->objid = sensor_id_;
+      thisgeom->category = mjCAT_DECOR;
+      thisgeom->segid = scn->ngeom;
+      scn->ngeom++;
     }
   }
 }

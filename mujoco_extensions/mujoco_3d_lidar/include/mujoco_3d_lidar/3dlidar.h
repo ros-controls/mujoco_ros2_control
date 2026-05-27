@@ -58,7 +58,12 @@ private:
         mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate);
   std::vector<mjtNum> vectors_;
   std::vector<mjtNum> rotated_vectors_;
+  std::vector<int> geomid_;
 
+  int sensor_id_;             // sensor id of the sensor in the model
+  int site_id_;               // site id of the sensor in the model
+  int sensor_address_;        // Address in the model based on sensor id
+  int dimension_;             // Dimension of the sensor
   int resolution_[2];         // horizontal and vertical resolution
   mjtNum fov_[2];             // horizontal and vertical field of view, in degrees
   mjtNum max_range_;          // max range of lidar
