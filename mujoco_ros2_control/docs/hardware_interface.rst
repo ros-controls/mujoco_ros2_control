@@ -287,6 +287,22 @@ Frame and topic names can be overridden via ``ros2_control`` xacro:
 
    MuJoCo's camera coordinate conventions differ from ROS. Refer to the MuJoCo documentation for details.
 
+Headless Rendering
+~~~~~~~~~~~~~~~~~~
+
+Camera rendering is supported in headless environments (without a display).
+The system automatically detects whether a display is available:
+
+* With display: Uses GLFW for OpenGL context creation (default behavior)
+* Without display: Falls back to EGL for GPU-accelerated headless rendering
+
+This allows camera topics to be published even when running in headless mode (e.g., on a server, in Docker containers, or in CI environments).
+
+.. note::
+   EGL requires proper GPU drivers and EGL libraries to be installed (e.g., libegl1-mesa on Ubuntu).
+   If both GLFW and EGL fail to initialize, camera publishing will be disabled with a warning.
+
+
 Lidar
 -----
 

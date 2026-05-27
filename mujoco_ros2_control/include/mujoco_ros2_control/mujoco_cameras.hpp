@@ -25,6 +25,8 @@
 #include <thread>
 #include <vector>
 
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include <GLFW/glfw3.h>
 #include <mujoco/mujoco.h>
 
@@ -142,6 +144,23 @@ private:
   // Camera processing thread
   std::thread rendering_thread_;
   std::atomic_bool publish_images_;
+
+  // EGL context for headless rendering (used when GLFW is unavailable)
+  EGLDisplay egl_display_{ EGL_NO_DISPLAY };
+  EGLContext egl_context_{ EGL_NO_CONTEXT };
+  EGLSurface egl_surface_{ EGL_NO_SURFACE };
+  bool use_egl_{ false };
+
+  /**
+   * @brief Initializes EGL context for headless rendering.
+   * @return true if EGL initialization succeeded, false otherwise.
+   */
+  bool init_egl_context();
+
+  /**
+   * @brief Cleans up EGL resources.
+   */
+  void cleanup_egl_context();
 };
 
 }  // namespace mujoco_ros2_control
