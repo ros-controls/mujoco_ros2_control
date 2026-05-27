@@ -1000,7 +1000,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   // Clear plugin data, then let each plugin update as needed, in order. This enables plugins to read and
   // rewrite control inputs immediately before they are sent to the simulation. Namely, we have to zero
   // out xfrc_applied so plugins can update as needed.
-  mju_zero(mj_data_control_->xfrc_applied, 6 * simulation_->model()->nbody);
+  mju_zero(mj_data_control_->xfrc_applied, 6 * static_cast<int>(simulation_->model()->nbody));
   for (auto& plugin : plugin_instances_)
   {
     plugin->update(simulation_->model(), mj_data_control_);
@@ -1931,11 +1931,11 @@ bool MujocoSystemInterface::set_override_start_positions(const std::string& over
   {
     RCLCPP_ERROR(get_logger(),
                  "Mismatch in data types in override starting positions. Numbers are:\n\t"
-                 "qpos size in file: %zu, qpos size in model: %d\n\t"
-                 "qvel size in file: %zu, qvel size in model: %d\n\t"
-                 "ctrl size in file: %zu, ctrl size in model: %d",
-                 qpos.size(), simulation_->model()->nq, qvel.size(), simulation_->model()->nv, ctrl.size(),
-                 simulation_->model()->nu);
+                 "qpos size in file: %zu, qpos size in model: %ld\n\t"
+                 "qvel size in file: %zu, qvel size in model: %ld\n\t"
+                 "ctrl size in file: %zu, ctrl size in model: %ld",
+                 qpos.size(), static_cast<long>(simulation_->model()->nq), qvel.size(),
+                 static_cast<long>(simulation_->model()->nv), ctrl.size(), static_cast<long>(simulation_->model()->nu));
     return false;
   }
 

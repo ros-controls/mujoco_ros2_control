@@ -138,11 +138,16 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
   }
 }
 
-void MujocoCameras::init()
+void MujocoCameras::init(GlfwInitFn glfw_init_fn)
 {
+  if (cameras_.empty())
+  {
+    return;
+  }
+
   // Start the rendering thread process
   // Try GLFW first, fall back to EGL for headless environments
-  if (glfwInit())
+  if (glfw_init_fn())
   {
     use_egl_ = false;
     publish_images_ = true;

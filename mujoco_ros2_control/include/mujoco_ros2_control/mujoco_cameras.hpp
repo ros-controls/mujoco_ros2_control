@@ -20,6 +20,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -75,6 +76,9 @@ struct CameraData
 class MujocoCameras
 {
 public:
+  /** Signature of the GLFW initializer; injectable for testing. */
+  using GlfwInitFn = std::function<int()>;
+
   /**
    * @brief Constructs a new MujocoCameras wrapper object.
    *
@@ -90,10 +94,14 @@ public:
   /**
    * @brief Starts the image processing thread in the background.
    *
-   * The background thread will initialize its own offscreen glfw context for rendering images that is
-   * separate from the Simulate applications, as the context must be in the running thread.
+   * Does nothing when no cameras have been registered. The background thread will initialize
+   * its own offscreen GLFW context for rendering images that is separate from the Simulate
+   * application, as the context must be created in the running thread.
+   *
+   * @param glfw_init_fn Callable used to initialize GLFW; defaults to ::glfwInit. Override in
+   *                     tests to simulate a display-capable environment without a real GPU.
    */
-  void init();
+  void init(GlfwInitFn glfw_init_fn = glfwInit);
 
   /**
    * @brief Stops the camera processing thread and closes the relevant objects, call before shutdown.
