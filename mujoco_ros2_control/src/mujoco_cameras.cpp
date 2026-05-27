@@ -142,14 +142,13 @@ void MujocoCameras::init(GlfwInitFn glfw_init_fn)
   if (glfw_init_fn())
   {
     use_egl_ = false;
-    publish_images_ = true;
   }
   else
   {
     RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Attempting EGL for headless rendering.");
     use_egl_ = true;
-    publish_images_ = true;
   }
+  publish_images_ = true;
   rendering_thread_ = std::thread(&MujocoCameras::update_loop, this);
 }
 
