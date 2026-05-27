@@ -89,18 +89,30 @@ protected:
 
   void TearDown() override
   {
-    sim_.reset();
+    // Ensuire the sim is torn down first
+    if (sim_)
+    {
+      sim_->shutdown();
+      sim_.reset();
+    }
 
-    executor_->cancel();
+    // Clean up the executor and ROS
+    if (executor_)
+    {
+      executor_->cancel();
+      executor_.reset();
+    }
     if (spin_thread_.joinable())
     {
       spin_thread_.join();
     }
-    executor_.reset();
-    node_.reset();
-
+    if (node_)
+    {
+      node_.reset();
+    }
     rclcpp::shutdown();
 
+    // Clean up test files if present
     if (std::filesystem::exists(kTestModelPath))
     {
       std::filesystem::remove(kTestModelPath);
