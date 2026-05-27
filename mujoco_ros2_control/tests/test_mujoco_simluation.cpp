@@ -89,7 +89,9 @@ protected:
   void SetUp() override
   {
     write_test_model();
-    node_ = std::make_shared<rclcpp::Node>("test_mujoco_simulation_node");
+    const auto* test_info = ::testing::UnitTest::GetInstance()->current_test_info();
+    const std::string node_name = std::string("test_sim_") + test_info->name();
+    node_ = std::make_shared<rclcpp::Node>(node_name);
     executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>();
     executor_->add_node(node_);
     spin_thread_ = std::thread([this]() { executor_->spin(); });
@@ -99,14 +101,7 @@ protected:
 
   void TearDown() override
   {
-    // Ensuire the sim is torn down first
-    if (sim_)
-    {
-      sim_->shutdown();
-      sim_.reset();
-    }
-
-    // Clean up the executor and ROS
+    // Clean up the executor to kill callbacks
     if (executor_)
     {
       executor_->cancel();
@@ -114,6 +109,12 @@ protected:
     if (spin_thread_.joinable())
     {
       spin_thread_.join();
+    }
+    // Then tear down the sim
+    if (sim_)
+    {
+      sim_->shutdown();
+      sim_.reset();
     }
     node_.reset();
     executor_.reset();
