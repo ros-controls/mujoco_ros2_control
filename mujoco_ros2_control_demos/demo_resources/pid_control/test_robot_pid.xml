@@ -72,7 +72,38 @@
   <equality>
     <joint joint1="gripper_left_finger_joint" joint2="gripper_right_finger_joint" polycoef="0 -1 0 0 0" solimp="0.95 0.99 0.001" solref="0.005 1"/>
   </equality>
+  <!-- TODO: Remove when we replace lidar -->
   <sensor>
     <rangefinder name="lidar" site="rf"/>
+  </sensor>
+  <extension>
+    <plugin plugin="mujoco.plugin.lidar">
+      <instance name="2d_lidar">
+        <config key="resolution" value="24 1"/>
+        <config key="azimuth_range" value="-0.3 0.3"/>
+        <config key="elevation_range" value="0.0"/>
+        <config key="max_range" value="10.0"/>
+        <config key="min_range" value="0.0"/>
+        <config key="update_rate" value="0.1"/>
+      </instance>
+    </plugin>
+  </extension>
+  <sensor>
+    <plugin name="2d_lidar" instance="2d_lidar" objtype="site" objname="lidar_sensor_frame"/>
+  </sensor>
+  <extension>
+    <plugin plugin="mujoco.plugin.lidar">
+      <instance name="3d_lidar">
+        <config key="resolution" value="24 24"/>
+        <config key="azimuth_range" value="-0.3 0.3"/>
+        <config key="elevation_range" value="-0.3 0.3"/>
+        <config key="max_range" value="10.0"/>
+        <config key="min_range" value="0.0"/>
+        <config key="update_rate" value="1.0"/>
+      </instance>
+    </plugin>
+  </extension>
+  <sensor>
+    <plugin name="3d_lidar" instance="3d_lidar" objtype="site" objname="3d_lidar_sensor_frame"/>
   </sensor>
 </mujoco>

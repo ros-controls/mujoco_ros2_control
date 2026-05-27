@@ -43,6 +43,7 @@
     <site name="world" pos="0 0 0" quat="1.0 0 0 0"/>
     <site name="base" pos="0 0 0" quat="1.0 0 0 0"/>
     <site name="lidar_sensor_frame" pos="1.0 2.0 0" quat="0.7071054825112363 0 0 -0.7071080798594737"/>
+    <site name="3d_lidar_sensor_frame" pos="1.0 -2.0 0" quat="0.7071054825112363 0 0 0.7071080798594737"/>
     <body name="lidar_sensor_frame_lidar_body" pos="1.0 2.0 0" quat="0.6991665401770936 0.6991665401770936 -0.10567000093116563 -0.10567000093116563">
       <replicate site="lidar_sensor_frame" count="24" sep="-" offset="0 0 0" euler="0 0.025 0">
         <site name="rf" pos="0.0 0.0 0.0" quat="0.0 0.0 0.0 1.0"/>
@@ -75,7 +76,34 @@
   <sensor>
     <rangefinder name="lidar" site="rf"/>
   </sensor>
-  <keyframe>
-    <key name="start_90" time="422.274" qpos="1.57 -1.57 -0.02 0.02" qvel="0 0 0 0" ctrl="1.57 -1.57 -0.02"/>
-  </keyframe>
+  <extension>
+    <plugin plugin="mujoco.plugin.lidar">
+      <instance name="2d_lidar">
+        <config key="resolution" value="24 1"/>
+        <config key="azimuth_range" value="-0.3 0.3"/>
+        <config key="elevation_range" value="0.0"/>
+        <config key="max_range" value="10.0"/>
+        <config key="min_range" value="0.0"/>
+        <config key="update_rate" value="10.0"/>
+      </instance>
+    </plugin>
+  </extension>
+  <sensor>
+    <plugin name="2d_lidar" instance="2d_lidar" objtype="site" objname="lidar_sensor_frame"/>
+  </sensor>
+  <extension>
+    <plugin plugin="mujoco.plugin.lidar">
+      <instance name="3d_lidar">
+        <config key="resolution" value="24 24"/>
+        <config key="azimuth_range" value="-0.3 0.3"/>
+        <config key="elevation_range" value="-0.3 0.3"/>
+        <config key="max_range" value="10.0"/>
+        <config key="min_range" value="0.0"/>
+        <config key="update_rate" value="1.0"/>
+      </instance>
+    </plugin>
+  </extension>
+  <sensor>
+    <plugin name="3d_lidar" instance="3d_lidar" objtype="site" objname="3d_lidar_sensor_frame"/>
+  </sensor>
 </mujoco>
