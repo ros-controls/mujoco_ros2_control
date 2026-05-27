@@ -179,8 +179,10 @@ bool MujocoCameras::init_egl_context()
     RCLCPP_ERROR(node_->get_logger(), "EGL: Failed to initialize (error: 0x%x)", eglGetError());
     return false;
   }
+  const char* client_apis = eglQueryString(egl_display_, EGL_CLIENT_APIS);
+  const char* vendor = eglQueryString(egl_display_, EGL_VENDOR);
   RCLCPP_INFO(node_->get_logger(), "EGL: Initialized version %d.%d", major, minor);
-
+  RCLCPP_INFO(node_->get_logger(), "EGL: Vendor: %s, APIs: %s", vendor, client_apis);
   // Choose EGL config for offscreen rendering
   const EGLint config_attribs[] = { EGL_SURFACE_TYPE,
                                     EGL_PBUFFER_BIT,
