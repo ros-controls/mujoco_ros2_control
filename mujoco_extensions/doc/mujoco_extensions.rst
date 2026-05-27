@@ -86,7 +86,8 @@ The vectors are determined by the size and field of view parameters.
 - ``max_range``: Maximum detection distance in meters.
 - ``min_range``: Minimum detection distance in meters (optional, defaults to 0).
 - ``update_rate``: Sensor update frequency in Hz (optional, defaults to every timestep).
-    * **Note**. This may be removed in future versions after the `interval attribute <https://mujoco.readthedocs.io/en/stable/modeling.html#sensors>`_ is available for sensors.
+
+    * Note this may be removed in future versions after the `interval attribute <https://mujoco.readthedocs.io/en/stable/modeling.html#sensors>`_ is available for sensors.
 
 Example MJCF:
 
