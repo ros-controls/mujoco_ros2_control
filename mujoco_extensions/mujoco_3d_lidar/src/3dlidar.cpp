@@ -313,7 +313,7 @@ void Lidar::Compute(const mjModel* m, mjData* d, int instance)
     mju_mulMatVec3(&rotated_vectors_[idx * 3], site_mat, vec);
   }
 
-#if (mjVERSION_HEADER == 3005000)
+#if (mjVERSION_HEADER >= 3005000)
   int* geomid = nullptr;
   mj_multiRay(m, d, site_pos, rotated_vectors_.data(), geom_group, flg_static, body_exclude, geomid, sensordata, NULL,
               dimension_, max_range_);
