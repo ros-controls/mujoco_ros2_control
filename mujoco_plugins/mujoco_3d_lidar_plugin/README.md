@@ -16,6 +16,7 @@ The sensor is parametrizable with the following:
 5. Maximum Range. _positive float greater than 0.0 (m)_
 6. Minimum Range. _positive float greater than 0.0 (m)_ (Optional, defaults to 0.0)
 7. Update Rate. _positive float greater than 0.0 (Hz)_ (Optional, defaults to 0.0)
+    * **Note**. This may be removed in future versions after the [interval attribute](https://mujoco.readthedocs.io/en/stable/modeling.html#sensors) is available for sensors.
 
 Field of view should always be in radians regardless of the compiler options.
 
