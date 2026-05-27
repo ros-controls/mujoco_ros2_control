@@ -146,10 +146,10 @@ private:
   std::atomic_bool publish_images_;
 
   // EGL context for headless rendering (used when GLFW is unavailable)
-  EGLDisplay egl_display_;
-  EGLContext egl_context_;
-  EGLSurface egl_surface_;
-  bool use_egl_;
+  EGLDisplay egl_display_{ EGL_NO_DISPLAY };
+  EGLContext egl_context_{ EGL_NO_CONTEXT };
+  EGLSurface egl_surface_{ EGL_NO_SURFACE };
+  bool use_egl_{ false };
 
   /**
    * @brief Initializes EGL context for headless rendering.
