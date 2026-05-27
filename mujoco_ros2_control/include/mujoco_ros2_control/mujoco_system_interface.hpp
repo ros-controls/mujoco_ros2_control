@@ -308,6 +308,10 @@ private:
   std::unordered_map<std::string, hardware_interface::ComponentInfo> joint_hw_info_;
   std::unordered_map<std::string, hardware_interface::ComponentInfo> sensors_hw_info_;
 
+  // Container for interacting with the underlying physics sim's data. This will be used to copy physics data
+  // during `read` and to apply control inputs during `write`.
+  mjData* mj_data_control_{ nullptr };
+
   // Data containers for the MuJoCo Actuators
   std::vector<MuJoCoActuatorData> mujoco_actuator_data_;
 

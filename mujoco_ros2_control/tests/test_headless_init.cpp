@@ -19,10 +19,13 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <thread>
 
 #include <hardware_interface/version.h>
+#include <mujoco/mujoco.h>
 #include <hardware_interface/hardware_info.hpp>
+#include <mujoco_ros2_control/mujoco_cameras.hpp>
 #include <mujoco_ros2_control/mujoco_system_interface.hpp>
 #include <rclcpp/rclcpp.hpp>
 
@@ -152,6 +155,111 @@ TEST_F(HeadlessInitTest, HeadlessInitialization)
   // Test that we can export state interfaces without crashing
   auto state_interfaces = interface_->export_state_interfaces();
   EXPECT_GE(state_interfaces.size(), 0);
+}
+
+// Verify that on_activate() returns SUCCESS and does not start an OpenGL rendering thread when
+// the model has no <camera> elements. Without the fix, glfwInit()/gladLoadGL would be called
+// unconditionally and could crash on headless hosts that have GLFW but no usable GL driver.
+TEST_F(HeadlessInitTest, HeadlessActivateWithoutCameras)
+{
+  hardware_interface::HardwareInfo info;
+  info.name = "test_mujoco_no_cameras";
+  info.type = "system";
+  info.hardware_parameters["mujoco_model"] = test_model_path_;
+  info.hardware_parameters["meshdir"] = "";
+  info.hardware_parameters["headless"] = "true";
+  // Intentionally omit "disable_rendering" — the fix must not rely on that workaround.
+
+#if ROS_DISTRO_HUMBLE
+  auto init_result = interface_->on_init(info);
+#else
+  hardware_interface::HardwareComponentInterfaceParams params;
+  params.hardware_info = info;
+  auto init_result = interface_->on_init(params);
+#endif
+  ASSERT_EQ(init_result, hardware_interface::CallbackReturn::SUCCESS);
+
+  // Wait for model and data to be available.
+  auto start = std::chrono::steady_clock::now();
+  auto timeout = std::chrono::seconds(1);
+  mjModel* test_model = nullptr;
+  mjData* test_data = nullptr;
+  while (std::chrono::steady_clock::now() - start < timeout)
+  {
+    interface_->get_model(test_model);
+    interface_->get_data(test_data);
+    if (test_model != nullptr && test_data != nullptr)
+    {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  ASSERT_NE(test_model, nullptr) << "Model failed to initialize within timeout";
+  ASSERT_NE(test_data, nullptr) << "Data failed to initialize within timeout";
+
+  // ncam == 0 for the test model; on_activate must not launch a GLFW/OpenGL thread.
+  rclcpp_lifecycle::State active_state(0, "active");
+  auto activate_result = interface_->on_activate(active_state);
+  EXPECT_EQ(activate_result, hardware_interface::CallbackReturn::SUCCESS);
+}
+
+// Unit test for MujocoCameras::init() — verifies glfwInit is never called when no cameras are
+// registered. Uses an injectable mock so the test is deterministic on any host (no display needed).
+// Without the cameras_.empty() guard this test fails; with the guard it passes.
+TEST(MujocoCamerasInitTest, InitDoesNotCallGlfwWhenNoCameras)
+{
+  if (!rclcpp::ok())
+  {
+    rclcpp::init(0, nullptr);
+  }
+
+  // Write a minimal MuJoCo model with no cameras to a temp file.
+  const std::string model_path = "/tmp/test_cameras_unit_model.xml";
+  {
+    std::ofstream f(model_path);
+    f << R"(<?xml version="1.0"?>
+<mujoco model="no_cameras">
+  <worldbody>
+    <body name="box" pos="0 0 0.1">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+      <geom type="box" size="0.05 0.05 0.05"/>
+    </body>
+  </worldbody>
+</mujoco>
+)";
+  }
+
+  char error[1000] = "";
+  mjModel* model = mj_loadXML(model_path.c_str(), nullptr, error, sizeof(error));
+  ASSERT_NE(model, nullptr) << "mj_loadXML failed: " << error;
+  ASSERT_EQ(model->ncam, 0) << "Test model must have no cameras";
+
+  mjData* data = mj_makeData(model);
+  ASSERT_NE(data, nullptr);
+
+  auto node = rclcpp::Node::make_shared("test_cameras_unit_node");
+  std::recursive_mutex mutex;
+
+  mujoco_ros2_control::MujocoCameras cameras(node, &mutex, data, model, 5.0);
+
+  hardware_interface::HardwareInfo info;  // no camera sensors
+  cameras.register_cameras(info);
+
+  bool glfw_init_called = false;
+  auto mock_glfw_init = [&]() -> int {
+    glfw_init_called = true;
+    return 1;  // simulate a display-capable host
+  };
+
+  cameras.init(mock_glfw_init);
+
+  EXPECT_FALSE(glfw_init_called) << "glfwInit must not be called when no cameras are registered";
+
+  cameras.close();
+  mj_deleteData(data);
+  mj_deleteModel(model);
+  std::filesystem::remove(model_path);
 }
 
 int main(int argc, char** argv)
