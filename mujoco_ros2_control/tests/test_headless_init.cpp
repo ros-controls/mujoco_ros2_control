@@ -31,13 +31,24 @@
 class HeadlessInitTest : public ::testing::Test
 {
 protected:
-  void SetUp() override
+  static void SetUpTestSuite()
   {
     if (!rclcpp::ok())
     {
       rclcpp::init(0, nullptr);
     }
+  }
 
+  static void TearDownTestSuite()
+  {
+    if (rclcpp::ok())
+    {
+      rclcpp::shutdown();
+    }
+  }
+
+  void SetUp() override
+  {
     // Create a simple MuJoCo model
     create_test_model();
 
@@ -55,9 +66,6 @@ protected:
       interface_->on_deactivate(inactive_state);
       interface_.reset();
     }
-
-    // Clean up ROS
-    rclcpp::shutdown();
 
     // Clean up test file
     if (std::filesystem::exists(test_model_path_))

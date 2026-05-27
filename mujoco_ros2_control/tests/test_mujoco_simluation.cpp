@@ -70,15 +70,25 @@ void write_test_model()
 class MujocoSimulationTest : public ::testing::Test
 {
 protected:
-  void SetUp() override
+  static void SetUpTestSuite()
   {
     if (!rclcpp::ok())
     {
       rclcpp::init(0, nullptr);
     }
+  }
 
+  static void TearDownTestSuite()
+  {
+    if (rclcpp::ok())
+    {
+      rclcpp::shutdown();
+    }
+  }
+
+  void SetUp() override
+  {
     write_test_model();
-
     node_ = std::make_shared<rclcpp::Node>("test_mujoco_simulation_node");
     executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>();
     executor_->add_node(node_);
@@ -107,7 +117,6 @@ protected:
     }
     node_.reset();
     executor_.reset();
-    rclcpp::shutdown();
 
     // Clean up test files if present
     if (std::filesystem::exists(kTestModelPath))
