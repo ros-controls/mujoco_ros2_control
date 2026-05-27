@@ -7,20 +7,20 @@ find_package(mujoco_vendor REQUIRED)
 
 include_directories(include)
 
-add_library(mujoco_plugin_lidar SHARED)
-target_sources(mujoco_plugin_lidar PRIVATE
+add_library(mujoco_3d_lidar SHARED)
+target_sources(mujoco_3d_lidar PRIVATE
   src/register.cpp
   src/3dlidar.cpp
 )
-target_link_libraries(mujoco_plugin_lidar PRIVATE mujoco::mujoco)
-target_compile_options(mujoco_plugin_lidar PRIVATE ${mujoco_SILENCE_COMPILER_WARNINGS})
+target_link_libraries(mujoco_3d_lidar PRIVATE mujoco::mujoco)
+target_compile_options(mujoco_3d_lidar PRIVATE ${mujoco_SILENCE_COMPILER_WARNINGS})
 
 # Install in the local package, and export
-install(TARGETS mujoco_plugin_lidar
+install(TARGETS mujoco_3d_lidar
   EXPORT export_${PROJECT_NAME}
   LIBRARY DESTINATION lib/${PROJECT_NAME}
 )
-install(TARGETS mujoco_plugin_lidar
+install(TARGETS mujoco_3d_lidar
   LIBRARY DESTINATION lib/${PROJECT_NAME}/mujoco_plugin
 )
 
@@ -32,7 +32,7 @@ if(mujoco_SIMULATE)
   cmake_path(SET mujoco_BIN_PATH NORMALIZE ${mujoco_SIMULATE}/..)
   install(CODE "
     execute_process(
-      COMMAND cp -f \"\${CMAKE_INSTALL_PREFIX}/lib/${PROJECT_NAME}/mujoco_plugin/libmujoco_plugin_lidar.so\"
+      COMMAND cp -f \"\${CMAKE_INSTALL_PREFIX}/lib/${PROJECT_NAME}/mujoco_plugin/libmujoco_3d_lidar.so\"
                     \"${mujoco_BIN_PATH}/mujoco_plugin/\"
       RESULT_VARIABLE _err)
     if(_err)
@@ -41,7 +41,7 @@ if(mujoco_SIMULATE)
   ")
 else()
   message(WARNING "NO SIMULATE FOUND!"
-    "To use the lidar plugin with simulate, manually copy libmujoco_plugin_lidar.so "
+    "To use the lidar plugin with simulate, manually copy libmujoco_3d_lidar.so "
     "into ${mujoco_BIN_PATH}/mujoco_plugin/")
 endif()
 

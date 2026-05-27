@@ -18,7 +18,7 @@
  */
 
 #include <mujoco/mjplugin.h>
-#include "mujoco_lidar_plugin/3dlidar.h"
+#include "mujoco_3d_lidar/3dlidar.h"
 
 namespace mujoco::plugin::lidar
 {

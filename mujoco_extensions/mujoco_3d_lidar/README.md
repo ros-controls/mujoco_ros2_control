@@ -1,6 +1,6 @@
-# 3-D Lidar Plugin for Mujoco
+# 3-D Lidar Extension for Mujoco
 
-## [Lidar](include/mujoco_lidar_plugin/3dlidar.h)
+## [Lidar](include/mujoco_3d_lidar/3dlidar.h)
 
 This sensor uses ray casting to simulate lidar.
 
@@ -25,7 +25,7 @@ The vertical fov is divided by the vertical resolution (vn) to gt vn elevation a
 Each azmuth/elevation pair defines a vector.
 The distance result is the set of distances to collision from the site origin along that vector.
 
-These parameters are passed as plugin config attributes:
+These parameters are passed as extension config attributes:
 
 ```xml
 <mujoco>
@@ -92,7 +92,7 @@ cmake ..
 make
 ```
 
-This will create a mujoco_plugin directory alongside the mujoco binaries and install the lidar plugin there.
+This will create a mujoco_plugin directory alongside the mujoco binaries and install the lidar extension there.
 It can now be found.
 
 ```bash
