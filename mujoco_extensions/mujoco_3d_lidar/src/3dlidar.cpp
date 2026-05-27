@@ -266,6 +266,7 @@ void Lidar::Reset(const mjModel* m, int instance)
 void Lidar::Compute(const mjModel* m, mjData* d, int instance)
 {
   // Throttle to the update rate, if it exists and is positive
+  // TODO: When we bump to later versions of mujoco we could replace this with `interval`
   if (update_period_ > 0.0 && (d->time - last_compute_time_) < update_period_)
   {
     return;
