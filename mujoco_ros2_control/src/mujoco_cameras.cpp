@@ -36,10 +36,6 @@ MujocoCameras::MujocoCameras(rclcpp::Node::SharedPtr node, std::recursive_mutex*
   , mj_data_(mujoco_data)
   , mj_model_(mujoco_model)
   , camera_publish_rate_(camera_publish_rate)
-  , egl_display_(EGL_NO_DISPLAY)
-  , egl_context_(EGL_NO_CONTEXT)
-  , egl_surface_(EGL_NO_SURFACE)
-  , use_egl_(false)
 {
 }
 
