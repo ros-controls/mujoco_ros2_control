@@ -100,16 +100,13 @@ protected:
     if (executor_)
     {
       executor_->cancel();
-      executor_.reset();
     }
     if (spin_thread_.joinable())
     {
       spin_thread_.join();
     }
-    if (node_)
-    {
-      node_.reset();
-    }
+    node_.reset();
+    executor_.reset();
     rclcpp::shutdown();
 
     // Clean up test files if present
