@@ -49,7 +49,7 @@ Using with ``simulate``
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 The standalone ``simulate`` application only loads plugins from the ``mujoco_plugin/`` directory next to its own binary.
-Since this directory may not be writable (e.g., apt installs), the plugin ``CMakeLists.txt`` attempts a best-effort copy at install time:
+Users can attempt to install the plugin to that directory by adding a best-effort copy to ``CMakeLists.txt``:
 
 .. code-block:: cmake
 

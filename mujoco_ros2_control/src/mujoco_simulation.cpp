@@ -270,7 +270,6 @@ static void loadPluginsFromDirectory(const std::string& plugin_dir)
     int before = mjp_pluginCount();
     mj_loadPluginLibrary(path.c_str());
     int after = mjp_pluginCount();
-
     if (after > before)
     {
       std::printf("Plugins registered by library '%s':\n", path.filename().c_str());
@@ -278,6 +277,10 @@ static void loadPluginsFromDirectory(const std::string& plugin_dir)
       {
         std::printf("    %s\n", mjp_getPluginAtSlot(i)->name);
       }
+    }
+    else
+    {
+      std::printf("No plugins loaded from: '%s':\n", path.filename().c_str());
     }
   }
 }

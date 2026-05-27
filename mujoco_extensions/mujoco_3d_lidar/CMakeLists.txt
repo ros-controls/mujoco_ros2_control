@@ -42,7 +42,7 @@ if(mujoco_SIMULATE)
 else()
   message(WARNING "NO SIMULATE FOUND!"
     "To use the lidar plugin with simulate, manually copy libmujoco_3d_lidar.so "
-    "into ${mujoco_BIN_PATH}/mujoco_plugin/")
+    "into .../mujoco/bin/mujoco_plugin/")
 endif()
 
 # Optionally export
