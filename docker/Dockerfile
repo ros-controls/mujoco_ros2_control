@@ -35,7 +35,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       tmux \
       wget \
       xterm \
-      vim
+      vim \
+      libegl1 \
+      libgbm1
 
 # Setup a ROS workspace
 ENV ROS_WS="/opt/mujoco/ws"
