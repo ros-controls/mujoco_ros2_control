@@ -37,9 +37,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       xterm \
       vim \
       libegl1 \
-      libgbm1 \
-      libosmesa6 \
-      libosmesa6-dev
+      libgbm1
 
 # Setup a ROS workspace
 ENV ROS_WS="/opt/mujoco/ws"

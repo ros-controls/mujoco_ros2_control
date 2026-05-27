@@ -12,16 +12,6 @@ find_package(fmt REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(OpenGL REQUIRED COMPONENTS EGL)
 
-# Find OSMesa for headless software rendering fallback
-find_library(OSMESA_LIBRARY OSMesa)
-find_path(OSMESA_INCLUDE_DIR GL/osmesa.h)
-if(OSMESA_LIBRARY AND OSMESA_INCLUDE_DIR)
-  message(STATUS "Found OSMesa: ${OSMESA_LIBRARY}")
-  set(OSMESA_FOUND TRUE)
-else()
-  message(STATUS "OSMesa not found - headless software rendering fallback will be disabled")
-  set(OSMESA_FOUND FALSE)
-endif()
 find_package(control_toolbox REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -200,11 +190,6 @@ PRIVATE
   OpenGL::OpenGL
   ${CMAKE_DL_LIBS}
 )
-if(OSMESA_FOUND)
-  target_link_libraries(mujoco_ros2_control PRIVATE ${OSMESA_LIBRARY})
-  target_include_directories(mujoco_ros2_control PRIVATE ${OSMESA_INCLUDE_DIR})
-  target_compile_definitions(mujoco_ros2_control PRIVATE OSMESA_AVAILABLE)
-endif()
 
 # Note: the transmissions_interface must NOT be statically linked against the library, only headers
 # should be used. Otherwise it will be loaded by the linker at process startup and its

@@ -28,9 +28,6 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLFW/glfw3.h>
-#ifdef OSMESA_AVAILABLE
-#include <GL/osmesa.h>
-#endif
 #include <mujoco/mujoco.h>
 
 #include <hardware_interface/hardware_info.hpp>
@@ -153,24 +150,6 @@ private:
   EGLContext egl_context_;
   EGLSurface egl_surface_;
   bool use_egl_;
-
-#ifdef OSMESA_AVAILABLE
-  // OSMesa context for software-only headless rendering (fallback when EGL fails)
-  OSMesaContext osmesa_context_;
-  std::vector<unsigned char> osmesa_buffer_;
-  bool use_osmesa_;
-
-  /**
-   * @brief Initializes OSMesa context for software-only headless rendering.
-   * @return true if OSMesa initialization succeeded, false otherwise.
-   */
-  bool init_osmesa_context();
-
-  /**
-   * @brief Cleans up OSMesa resources.
-   */
-  void cleanup_osmesa_context();
-#endif
 
   /**
    * @brief Initializes EGL context for headless rendering.
