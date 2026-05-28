@@ -30,10 +30,10 @@ import pytest
 import rclpy
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from rosgraph_msgs.msg import Clock
-from mujoco_ros2_control_msgs.srv import SetPause, StepSimulation
+from mujoco_ros2_control_msgs.srv import ResetWorld, SetPause, StepSimulation
 from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState, Image, CameraInfo
-from controller_manager_msgs.srv import ListHardwareInterfaces
+from controller_manager_msgs.srv import ListHardwareInterfaces, SwitchController
 
 
 # This function specifies the processes to be run for our test
@@ -304,6 +304,61 @@ class TestFixture(unittest.TestCase):
         assert wait_for_topics.topics_not_received() == set(), "Some topics were not received!"
         assert wait_for_topics.topics_received() == {t[0] for t in topic_list}, "Not all topics were received!"
         wait_for_topics.shutdown()
+
+    def test_reset_world_service(self):
+        """Test that reset_world resets joints and controllers remain functional."""
+        cnames = ["gripper_controller", "position_controller", "joint_state_broadcaster"]
+        self.check_controllers_running_with_retry(cnames)
+
+        pub = self.node.create_publisher(Float64MultiArray, "/position_controller/commands", 10)
+        self.assertTrue(
+            self.spin_until(lambda: pub.get_subscription_count() > 0, timeout=10.0),
+            "Controller did not subscribe to commands",
+        )
+
+        # Move joints to a non-zero position
+        msg = Float64MultiArray()
+        msg.data = [-0.5, 0.5]
+        end_time = time.time() + 2
+        while time.time() < end_time:
+            pub.publish(msg)
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+        self.wait_for_joint_positions({"joint1": -0.5, "joint2": 0.5}, delta=0.075, timeout=15.0)
+
+        # Deactivate controller before reset
+        switch_client = self.node.create_client(SwitchController, "/controller_manager/switch_controller")
+        self.assertTrue(switch_client.wait_for_service(timeout_sec=10.0))
+        switch_request = SwitchController.Request()
+        switch_request.deactivate_controllers = ["position_controller"]
+        switch_request.strictness = SwitchController.Request.BEST_EFFORT
+        future = switch_client.call_async(switch_request)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        self.assertTrue(future.result().ok)
+
+        # Reset world
+        reset_client = self.node.create_client(ResetWorld, "/mujoco_ros2_control_node/reset_world")
+        self.assertTrue(reset_client.wait_for_service(timeout_sec=10.0))
+        future = reset_client.call_async(ResetWorld.Request())
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        self.assertTrue(future.result().success)
+
+        # Verify joints return to zero
+        time.sleep(1.0)
+        self.wait_for_joint_positions({"joint1": 0.0, "joint2": 0.0}, delta=0.05, timeout=15.0, verify_efforts=False)
+
+        # Reactivate controller and verify it still works
+        switch_request = SwitchController.Request()
+        switch_request.activate_controllers = ["position_controller"]
+        switch_request.strictness = SwitchController.Request.BEST_EFFORT
+        future = switch_client.call_async(switch_request)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        self.assertTrue(future.result().ok)
+
+        end_time = time.time() + 2
+        while time.time() < end_time:
+            pub.publish(msg)
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+        self.wait_for_joint_positions({"joint1": -0.5, "joint2": 0.5}, delta=0.075, timeout=15.0)
 
     def test_step_simulation_zero_steps_rejected(self):
         """step_simulation with steps=0 must be rejected even when the simulation is paused."""
