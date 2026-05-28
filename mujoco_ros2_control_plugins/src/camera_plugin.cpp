@@ -17,34 +17,47 @@
 namespace mujoco_ros2_control_plugins
 {
 
-bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* /*data*/)
+bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data)
 {
   node_ = node;
   logger_ = node_->get_logger().get_child(node->get_sub_namespace());
-  model_ = model;
+  mj_model_ = model;
+  mj_data_ = data;
 
-  if (!node_->has_parameter("camera_publish_rate"))
+  // Read the mj_model_, identify the number of cameras, and populate containers for them.
+  register_cameras();
+  // if (!node_->has_parameter("camera_publish_rate"))
+  // {
+  //   node_->declare_parameter("camera_publish_rate", camera_publish_rate_);
+  // }
+  // camera_publish_rate_ = node_->get_parameter("camera_publish_rate").as_double();
+
+  // RCLCPP_INFO(node_->get_logger(), "CameraPlugin initialised.");
+  if (cameras_.empty())
   {
-    node_->declare_parameter("camera_publish_rate", camera_publish_rate_);
+    return false;
   }
-  camera_publish_rate_ = node_->get_parameter("camera_publish_rate").as_double();
 
-  image_pub_raw_ = node_->create_publisher<Image>("~/image_raw", rclcpp::SensorDataQoS());
-  depth_image_pub_raw_ = node_->create_publisher<Image>("~/aligned_depth_to_color/image_raw", rclcpp::SensorDataQoS());
-  camera_info_pub_raw_ = node_->create_publisher<CameraInfo>("~/camera_info", rclcpp::SensorDataQoS());
-
-  image_pub_ = std::make_unique<realtime_tools::RealtimePublisher<Image>>(image_pub_raw_);
-  depth_image_pub_ = std::make_unique<realtime_tools::RealtimePublisher<Image>>(depth_image_pub_raw_);
-  camera_info_ = std::make_unique<realtime_tools::RealtimePublisher<CameraInfo>>(camera_info_pub_raw_);
-
-  RCLCPP_INFO(node_->get_logger(), "CameraPlugin initialised.");
-
+  // this is more temporary until I figure out a better place for this
+  GlfwInitFn glfw_init_fn = glfwInit;
+  // Start the rendering thread process
+  // Try GLFW first, fall back to EGL for headless environments
+  if (glfw_init_fn())
+  {
+    use_egl_ = false;
+  }
+  else
+  {
+    RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Attempting EGL for headless rendering.");
+    use_egl_ = true;
+  }
+  publish_images_ = true;
+  // rendering_thread_ = std::thread(&CameraPlugin::update_loop, this);
   return true;
 }
 
 void CameraPlugin::update(const mjModel* /*model_arg*/, mjData* /*data*/)
-{
-}
+{ std::cout << "We will publish image: " << publish_images_ << " , we will use_egl: " << use_egl_ << std::endl; }
 
 void CameraPlugin::cleanup()
 {
@@ -139,28 +152,6 @@ void CameraPlugin::register_cameras()
     // Add to list of cameras
     cameras_.push_back(camera);
   }
-}
-
-void CameraPlugin::init(GlfwInitFn glfw_init_fn)
-{
-  if (cameras_.empty())
-  {
-    return;
-  }
-
-  // Start the rendering thread process
-  // Try GLFW first, fall back to EGL for headless environments
-  if (glfw_init_fn())
-  {
-    use_egl_ = false;
-  }
-  else
-  {
-    RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Attempting EGL for headless rendering.");
-    use_egl_ = true;
-  }
-  publish_images_ = true;
-  rendering_thread_ = std::thread(&CameraPlugin::update_loop, this);
 }
 
 void CameraPlugin::close()

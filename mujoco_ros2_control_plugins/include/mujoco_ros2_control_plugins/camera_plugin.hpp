@@ -104,18 +104,6 @@ private:
   // Model pointer (const, valid for simulation lifetime)
 
   /**
-   * @brief Starts the image processing thread in the background.
-   *
-   * Does nothing when no cameras have been registered. The background thread will initialize
-   * its own offscreen GLFW context for rendering images that is separate from the Simulate
-   * application, as the context must be created in the running thread.
-   *
-   * @param glfw_init_fn Callable used to initialize GLFW; defaults to ::glfwInit. Override in
-   *                     tests to simulate a display-capable environment without a real GPU.
-   */
-  void init(GlfwInitFn glfw_init_fn = glfwInit);
-
-  /**
    * @brief Stops the camera processing thread and closes the relevant objects, call before shutdown.
    */
   void close();
@@ -141,7 +129,7 @@ private:
   std::recursive_mutex* sim_mutex_{ nullptr };
 
   mjData* mj_data_;
-  mjModel* mj_model_;
+  const mjModel* mj_model_;
   mjData* mj_camera_data_;
 
   // Image publishing rate
