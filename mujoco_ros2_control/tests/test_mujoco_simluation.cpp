@@ -127,7 +127,7 @@ protected:
     }
   }
 
-  /// Initialize the simulation in headless mode with default settings.
+  // initialize the simulation in headless mode with default settings.
   bool initialize_sim()
   {
     return sim_->initialize(node_, kTestModelPath, "/mujoco_robot_description", -1.0, true);
@@ -146,6 +146,27 @@ protected:
     }
     return condition();
   }
+
+  // Helper function to confirm physics loop has stopped by verifying the time has "settled".
+  // Verifies that the sim is continuing to step, but the time remains constant for 10 iterations.
+  bool wait_for_pause()
+  {
+    uint64_t prev = sim_->step_count();
+    int settled_count = 0;
+    return wait_until([&]() {
+      uint64_t now = sim_->step_count();
+      if (now == prev)
+      {
+        settled_count++;
+      }
+      else
+      {
+        settled_count = 0;
+      }
+      prev = now;
+      return settled_count >= 10;
+    });
+  };
 
   rclcpp::Node::SharedPtr node_;
   std::unique_ptr<rclcpp::executors::MultiThreadedExecutor> executor_;
@@ -237,14 +258,7 @@ TEST_F(MujocoSimulationTest, PauseStepUnpause)
   ASSERT_TRUE(pause_future.get()->success);
 
   // Once paused, time should not advance
-  double prev = sim_->data()->time;
-  ASSERT_TRUE(wait_until([&]() {
-    double now = sim_->data()->time;
-    bool settled = (now == prev);
-    prev = now;
-    return settled;
-  })) << "Simulation did not pause";
-
+  ASSERT_TRUE(wait_for_pause()) << "Simulation did not pause";
   const double time_after_pause = sim_->data()->time;
   ASSERT_TRUE(wait_until([&]() { return sim_->data()->time != time_after_pause; }, std::chrono::milliseconds(200)) ==
               false)
@@ -313,13 +327,7 @@ TEST_F(MujocoSimulationTest, ResetWorldTest)
   ASSERT_TRUE(pause_future.get()->success);
 
   // Wait for pause to take effect
-  double prev = sim_->data()->time;
-  ASSERT_TRUE(wait_until([&]() {
-    double now = sim_->data()->time;
-    bool settled = (now == prev);
-    prev = now;
-    return settled;
-  })) << "Simulation did not pause";
+  ASSERT_TRUE(wait_for_pause()) << "Simulation did not pause";
 
   // Call reset_world with no keyframe (resets to captured initial state)
   auto reset_req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
