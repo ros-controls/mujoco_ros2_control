@@ -4,3 +4,5 @@
       heart_beat_plugin:
         type: "mujoco_ros2_control_plugins/HeartbeatPublisherPlugin"
         update_rate: 1.0
+      camera:
+        type: "mujoco_ros2_control_plugins/CameraPlugin"
