@@ -243,14 +243,14 @@ MujocoSystemInterface::MujocoSystemInterface() = default;
 MujocoSystemInterface::~MujocoSystemInterface()
 {
   // Stop sensor threads that hold model and data pointers BEFORE the simulation is torn down.
-  if (cameras_)
-  {
-    cameras_->close();
-  }
-  if (lidar_sensors_)
-  {
-    lidar_sensors_->close();
-  }
+  // if (cameras_)
+  // {
+  //   cameras_->close();
+  // }
+  // if (lidar_sensors_)
+  // {
+  //   lidar_sensors_->close();
+  // }
 
   // Stop plugins
   for (auto& plugin : plugin_instances_)
@@ -325,9 +325,11 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // Pull the camera publish rate out of the info, if present, otherwise default to 5 hz.
   const auto camera_publish_rate =
       std::stod(get_hardware_parameter(get_hardware_info(), "camera_publish_rate").value_or("5.0"));
+  std::cout << camera_publish_rate << std::endl;
   // Pull the lidar publish rate out of the info, if present, otherwise default to 5 hz.
   const auto lidar_publish_rate =
       std::stod(get_hardware_parameter(get_hardware_info(), "lidar_publish_rate").value_or("5.0"));
+  std::cout << lidar_publish_rate << std::endl;
 
   // Check for headless mode
   const bool headless =
@@ -477,19 +479,19 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
 
   // Ready cameras
   RCLCPP_INFO(get_logger(), "Initializing cameras...");
-  cameras_ = std::make_unique<MujocoCameras>(get_node(), &simulation_->mutex(), simulation_->data(),
-                                             simulation_->model(), camera_publish_rate);
-  cameras_->register_cameras(get_hardware_info());
+  // cameras_ = std::make_unique<MujocoCameras>(get_node(), &simulation_->mutex(), simulation_->data(),
+  //                                            simulation_->model(), camera_publish_rate);
+  // cameras_->register_cameras(get_hardware_info());
 
   // Configure Lidar sensors
   RCLCPP_INFO(get_logger(), "Initializing lidar...");
-  lidar_sensors_ = std::make_unique<MujocoLidar>(get_node(), &simulation_->mutex(), simulation_->data(),
-                                                 simulation_->model(), lidar_publish_rate);
-  if (!lidar_sensors_->register_lidar(get_hardware_info()))
-  {
-    RCLCPP_INFO(get_logger(), "Failed to initialize lidar, exiting...");
-    return hardware_interface::CallbackReturn::FAILURE;
-  }
+  // lidar_sensors_ = std::make_unique<MujocoLidar>(get_node(), &simulation_->mutex(), simulation_->data(),
+  //                                                simulation_->model(), lidar_publish_rate);
+  // if (!lidar_sensors_->register_lidar(get_hardware_info()))
+  // {
+  //   RCLCPP_INFO(get_logger(), "Failed to initialize lidar, exiting...");
+  //   return hardware_interface::CallbackReturn::FAILURE;
+  // }
 
 #if !ROS_DISTRO_HUMBLE
   // Verify the update rate
@@ -710,8 +712,8 @@ hardware_interface::CallbackReturn MujocoSystemInterface::on_activate(const rclc
   RCLCPP_INFO(get_logger(), "Activating MuJoCo hardware interface and starting Simulate threads...");
 
   // Start camera and sensor rendering loops
-  cameras_->init();
-  lidar_sensors_->init();
+  // cameras_->init();
+  // lidar_sensors_->init();
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -2043,29 +2045,19 @@ void MujocoSystemInterface::reset_simulation_state(bool /*fill_initial_state*/)
 }
 
 void MujocoSystemInterface::get_model(mjModel*& dest)
-{
-  simulation_->copy_physics_model(dest);
-}
+{ simulation_->copy_physics_model(dest); }
 
 void MujocoSystemInterface::get_data(mjData*& dest)
-{
-  simulation_->copy_physics_data(dest);
-}
+{ simulation_->copy_physics_data(dest); }
 
 void MujocoSystemInterface::set_data(mjData* mj_data)
-{
-  simulation_->overwrite_physics_data(mj_data);
-}
+{ simulation_->overwrite_physics_data(mj_data); }
 
 rclcpp::Logger MujocoSystemInterface::get_logger() const
-{
-  return logger_;
-}
+{ return logger_; }
 
 rclcpp::Node::SharedPtr MujocoSystemInterface::get_node() const
-{
-  return mujoco_node_;
-}
+{ return mujoco_node_; }
 
 void MujocoSystemInterface::load_mujoco_plugins()
 {
