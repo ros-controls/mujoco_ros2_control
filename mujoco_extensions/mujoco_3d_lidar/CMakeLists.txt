@@ -40,7 +40,7 @@ if(mujoco_SIMULATE)
     endif()
   ")
 else()
-  message(WARNING "NO SIMULATE FOUND!"
+  message(WARNING "NO SIMULATE FOUND! "
     "To use the lidar plugin with simulate, manually copy libmujoco_3d_lidar.so "
     "into .../mujoco/bin/mujoco_plugin/")
 endif()
