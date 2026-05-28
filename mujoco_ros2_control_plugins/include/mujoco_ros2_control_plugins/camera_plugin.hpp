@@ -99,22 +99,9 @@ public:
   void cleanup() override;
 
 private:
-  using Image = sensor_msgs::msg::Image;
-  using CameraInfo = sensor_msgs::msg::CameraInfo;
-
   // ROS interfaces
   rclcpp::Logger logger_{ rclcpp::get_logger("ExternalWrenchPlugin") };
-
-  rclcpp::Publisher<Image>::SharedPtr image_pub_raw_;
-  rclcpp::Publisher<Image>::SharedPtr depth_image_pub_raw_;
-  rclcpp::Publisher<CameraInfo>::SharedPtr camera_info_pub_raw_;
-
-  std::unique_ptr<realtime_tools::RealtimePublisher<Image>> image_pub_;
-  std::unique_ptr<realtime_tools::RealtimePublisher<Image>> depth_image_pub_;
-  std::unique_ptr<realtime_tools::RealtimePublisher<CameraInfo>> camera_info_;
-
   // Model pointer (const, valid for simulation lifetime)
-  const mjModel* model_{ nullptr };
 
   /**
    * @brief Starts the image processing thread in the background.
