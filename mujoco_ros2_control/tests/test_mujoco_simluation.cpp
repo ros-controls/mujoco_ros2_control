@@ -274,8 +274,6 @@ TEST_F(MujocoSimulationTest, PauseStepUnpause)
   ASSERT_TRUE(pause_future.get()->success);
   ASSERT_TRUE(wait_until([&]() { return sim_->data()->time > time_after_step; }))
       << "Time should advance after unpausing";
-
-  sim_->shutdown();
 }
 
 TEST_F(MujocoSimulationTest, ResetWorldTest)
@@ -354,8 +352,6 @@ TEST_F(MujocoSimulationTest, ResetWorldTest)
   const double time_after_reset = sim_->data()->time;
   ASSERT_TRUE(wait_until([&]() { return sim_->data()->time > time_after_reset; }))
       << "Time should advance after unpausing post-reset";
-
-  sim_->shutdown();
 }
 
 int main(int argc, char** argv)
