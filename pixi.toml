@@ -26,8 +26,8 @@ colcon mixin update default
 # Build tasks
 build = "colcon build"
 clean = "rm -rf build install log .pixi"
-test = "colcon test"
-test-result = "colcon test-result --verbose"
+test = { cmd = "bash -c 'source install/setup.bash && colcon test'" }
+test-result = { cmd = "bash -c 'source install/setup.bash && olcon test-result --verbose'" }
 
 [dev]
 # Path dependencies to local ROS packages
