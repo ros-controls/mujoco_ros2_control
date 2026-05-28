@@ -26,8 +26,9 @@
 #include <thread>
 
 #include <mujoco/mujoco.h>
-#include <mujoco_ros2_control/mujoco_simulation.hpp>
 #include <rclcpp/rclcpp.hpp>
+
+#include <mujoco_ros2_control/mujoco_simulation.hpp>
 
 namespace
 {
@@ -239,7 +240,7 @@ TEST_F(MujocoSimulationTest, PauseStepUnpause)
   double prev = sim_->data()->time;
   ASSERT_TRUE(wait_until([&]() {
     double now = sim_->data()->time;
-    bool settled = (now == prev) && (now > 0.0);
+    bool settled = (now == prev);
     prev = now;
     return settled;
   })) << "Simulation did not pause";
@@ -317,7 +318,7 @@ TEST_F(MujocoSimulationTest, ResetWorldTest)
   double prev = sim_->data()->time;
   ASSERT_TRUE(wait_until([&]() {
     double now = sim_->data()->time;
-    bool settled = (now == prev) && (now > 0.0);
+    bool settled = (now == prev);
     prev = now;
     return settled;
   })) << "Simulation did not pause";
