@@ -128,11 +128,20 @@ Rough outline of the automated conversion process
      Duplicate mesh files will have an ``_N`` appended to them to avoid conflicts in the output ``assets`` folder.
      For instance, if running multiple types of UR robots in one sim, there will be multiple ``shoulder.dae`` files.
 
-- Reads absolute filepaths of all meshes and converts either ``.dae`` or ``.stl`` to ``.obj`` using trimesh.
+- Reads absolute filepaths of all meshes (from both ``<visual>`` and ``<collision>`` tags) and
+  converts either ``.dae`` or ``.stl`` to ``.obj`` using trimesh.
 
   - Puts all meshes into an ``assets/`` folder under ``mjcf_data/`` relative to current working dir.
   - Modifies filepaths again in URDF to point to the ``assets/`` folder.
   - Decomposes large meshes into multiple components to ensure convex hulls.
+
+- Handles visual and collision geometry independently:
+
+  - The ``<visual>`` geometry is used purely for rendering (the ``visual`` class).
+  - The ``<collision>`` geometry drives physics (the ``collision`` class). When a link defines no
+    ``<collision>``, a collision is synthesized from its ``<visual>`` so the visual mesh is reused
+    as the collision shape (the previous behaviour). This synthesis happens at the URDF level, so it
+    stays correct per link even when MuJoCo fuses fixed-jointed bodies together.
 
 - Publishes the new formatted robot description XML file that can be used for conversion.
 - Converts the new robot description URDF file.

@@ -484,9 +484,11 @@ def main(args=None):
     # Add required MuJoCo tags to the starting URDF
     xml_data = mrc.add_mujoco_info(urdf, output_filepath, parsed_args.publish_topic, parsed_args.fuse)
 
-    # get rid of collision data, assuming the visual data is much better resolution.
-    # not sure if this is the best move...
-    xml_data = mrc.remove_tag(xml_data, "collision")
+    # Keep authored collision geometry so it drives the MuJoCo collision geoms, and
+    # only synthesize a collision from the visual for links that don't define one.
+    # This way visual meshes render the robot while the (often simpler) collision
+    # geometry is used for physics, with the visual mesh as the fallback.
+    xml_data = mrc.add_missing_collisions(xml_data)
 
     xml_data = mrc.replace_package_names(xml_data)
     mesh_info_dict, xml_data = mrc.extract_mesh_info(xml_data, parsed_args.asset_dir, decompose_dict)
