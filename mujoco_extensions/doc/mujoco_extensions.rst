@@ -87,27 +87,49 @@ The vectors are determined by the size and field of view parameters.
 - ``min_range``: Minimum detection distance in meters (optional, defaults to 0).
 - ``update_rate``: Sensor update frequency in Hz (optional, defaults to every timestep).
 
-    * Note this may be removed in future versions after the `interval attribute <https://mujoco.readthedocs.io/en/stable/modeling.html#sensors>`_ is available for sensors.
+    * Setting an update can drastically save time when calling ``mj_step``.
+    * This may be removed in future versions after the `interval attribute <https://mujoco.readthedocs.io/en/stable/modeling.html#sensors>`_ is available for sensors.
 
-Example MJCF:
+Note that rays that hit nothing or fall outside the min/max range return ``-1``.
+
+Example MJCF for a 2D lidar sensor:
 
 .. code-block:: xml
 
-    <extension>
-      <plugin plugin="mujoco.plugin.lidar">
-        <instance name="front_lidar">
-          <config key="resolution" value="360 1"/>
-          <config key="azimuth_range" value="-2.3 2.3"/>
-          <config key="elevation_range" value="0.0"/>
-          <config key="max_range" value="10.0"/>
-          <config key="min_range" value="0.05"/>
-          <config key="update_rate" value="10.0"/>
-        </instance>
-      </plugin>
-    </extension>
+   <extension>
+     <plugin plugin="mujoco.plugin.lidar">
+       <instance name="2d_lidar">
+         <config key="resolution" value="24 1"/>
+         <config key="azimuth_range" value="-0.3 0.3"/>
+         <config key="elevation_range" value="0.0"/>
+         <config key="max_range" value="10.0"/>
+         <config key="min_range" value="0.0"/>
+         <config key="update_rate" value="10.0"/>
+       </instance>
+     </plugin>
+   </extension>
 
-    <sensor>
-      <plugin instance="front_lidar" name="front_lidar" objtype="site" objname="lidar_site"/>
-    </sensor>
+   <sensor>
+     <plugin name="2d_lidar" instance="2d_lidar" objtype="site" objname="lidar_sensor_frame"/>
+   </sensor>
 
-Rays that hit nothing or fall outside the min/max range return ``-1``.
+For a 3D lidar, increase the vertical resolution and specify an elevation range.
+
+.. code-block:: xml
+
+   <extension>
+     <plugin plugin="mujoco.plugin.lidar">
+       <instance name="3d_lidar">
+         <config key="resolution" value="24 50"/>
+         <config key="azimuth_range" value="-0.3 0.3"/>
+         <config key="elevation_range" value="-1.0 1.0"/>
+         <config key="max_range" value="10.0"/>
+         <config key="min_range" value="0.0"/>
+         <config key="update_rate" value="1.0"/>
+       </instance>
+     </plugin>
+   </extension>
+
+   <sensor>
+     <plugin name="3d_lidar" instance="3d_lidar" objtype="site" objname="3d_lidar_sensor_frame"/>
+   </sensor>
