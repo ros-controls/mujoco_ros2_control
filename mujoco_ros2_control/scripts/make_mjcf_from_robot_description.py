@@ -403,6 +403,15 @@ def main(args=None):
         help="Optionally pass an existing folder with pre-generated OBJ meshes.",
     )
     parser.add_argument("--scene", required=False, default=None, help="Optionally pass an existing xml for the scene")
+    parser.add_argument(
+        "--cache-dir",
+        dest="cache_dir",
+        required=False,
+        default=None,
+        help="Optionally pass a directory containing a previously generated MJCF. If it already "
+        "holds the necessary information, the conversion is skipped and the cached MJCF is read "
+        "and published/copied directly instead of being regenerated.",
+    )
 
     # remove ros args to make argparser happy
     args_without_filename = sys.argv[1:]
@@ -410,6 +419,27 @@ def main(args=None):
         args_without_filename.remove("--ros-args")
 
     parsed_args = parser.parse_args(args_without_filename)
+
+    # If a cache directory with a complete, previously generated MJCF was provided, skip the
+    # (expensive) conversion pipeline entirely and just publish/copy the cached result.
+    if mrc.is_mjcf_cache_complete(parsed_args.cache_dir):
+        cache_dir = os.path.join(parsed_args.cache_dir, "")
+        print(f"Using cached MJCF from: {cache_dir}")
+
+        if parsed_args.save_only:
+            output_filepath = os.path.join(parsed_args.output, "")
+            if os.path.abspath(output_filepath) != os.path.abspath(cache_dir):
+                shutil.copytree(cache_dir, output_filepath, dirs_exist_ok=True)
+
+        if parsed_args.publish_topic:
+            mrc.publish_model_on_topic(parsed_args.publish_topic, cache_dir, args)
+        elif not parsed_args.save_only:
+            raise ValueError(
+                "You must specify at least one of the following options: --publish_topic or --save_only."
+            )
+        return
+    elif parsed_args.cache_dir:
+        print(f"Cache directory '{parsed_args.cache_dir}' is incomplete; regenerating the MJCF.")
 
     # Load URDF from file, string, or topic
     urdf_path = None
