@@ -538,18 +538,27 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
 
 def update_non_obj_assets(dom, output_filepath):
     """
-    We want to take the group 1 objects that get created, and turn them into the equivalent
-    but both in group 2 and in group 3. That means taking something like this
+    Classifies the geoms that MuJoCo imported from the URDF into the "visual" and
+    "collision" default classes. Because the source URDF now always carries both a
+    <visual> and a <collision> per renderable link (the latter synthesized from the
+    visual when missing, see add_missing_collisions), MuJoCo emits a separate geom for
+    each, and we simply tag them rather than duplicating a single geom.
+
+    MuJoCo imports a URDF <visual> as a geom that still carries its raw import
+    attributes, e.g.
         <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.2 0.2 0.2 1" mesh="finger_v6"/>
-    and turning it into this
-        <geom mesh="finger_v6" class="visual" pos="0 0 0" quat="0.707107 0.707107 0 0"/>
-        <geom mesh="finger_v6" class="collision" pos="0 0 0" quat="0.707107 0.707107 0 0"/>
+    and a <collision> as a plain collidable geom with no contype. So:
 
-    To do this, we need to add in class visual, and class collision to them, keep the rgba on the visual one, and
-    get rid of the other components (type, contype, conaffinity, group, density)
+    - A geom WITH a contype attribute is a visual: it becomes
+        <geom mesh="finger_v6" class="visual" rgba="0.2 0.2 0.2 1" .../>
+      keeping its rgba but dropping the raw import attributes (contype, conaffinity,
+      group, density).
+    - A geom WITHOUT a contype attribute is a collision: it becomes
+        <geom mesh="finger_v6" class="collision" .../>
+      and its rgba (if any) is dropped since collisions are not rendered.
 
-    We can tell that we need to modify it because it will have a contype attribute attached to it (not the best way
-    but I guess it works for now)
+    Geoms that already carry a class attribute (e.g. those expanded by
+    update_obj_assets) are left untouched.
     """
 
     # Find the <worldbody> element
@@ -559,39 +568,27 @@ def update_non_obj_assets(dom, output_filepath):
     # get all of the geom elements in the worldbody element
     worldbody_geoms = worldbody_element.getElementsByTagName("geom")
 
-    # elements to remove
+    # raw import attributes that should not survive on a classified visual geom
     remove_attributes = ["contype", "conaffinity", "group", "density"]
 
     for geom in worldbody_geoms:
-        if not geom.hasAttribute("contype"):
-            pass
-        else:
-            collision_geom = geom.cloneNode(False)
+        # already classified upstream (e.g. obj-decomposed meshes); leave as is
+        if geom.hasAttribute("class"):
+            continue
 
-            # if there is no type associated, make the type sphere explicitly
-            if not collision_geom.hasAttribute("type"):
-                collision_geom.setAttribute("type", "sphere")
-
-            # set to collision class
-            collision_geom.setAttribute("class", "collision")
+        if geom.hasAttribute("contype"):
+            # visual geom: keep rgba, strip the raw import attributes
+            geom.setAttribute("class", "visual")
             for attribute in remove_attributes:
-                if collision_geom.hasAttribute(attribute):
-                    collision_geom.removeAttribute(attribute)
-
-            # most of the components are the same between collision and visual, so just copy it
-            visual_geom = collision_geom.cloneNode(False)
-            visual_geom.setAttribute("class", "visual")
-
-            # remove rgba from collision geom bc it isn't necessary
+                if geom.hasAttribute(attribute):
+                    geom.removeAttribute(attribute)
+        else:
+            # collision geom: ensure a type, drop rgba (not rendered)
+            if not geom.hasAttribute("type"):
+                geom.setAttribute("type", "sphere")
+            geom.setAttribute("class", "collision")
             if geom.hasAttribute("rgba"):
-                collision_geom.removeAttribute("rgba")
-
-            # get the parent of the geom node, and remove the old element
-            parent = geom.parentNode
-            parent.removeChild(geom)
-            # add the new collision and visual specific elements
-            parent.appendChild(collision_geom)
-            parent.appendChild(visual_geom)
+                geom.removeAttribute("rgba")
 
     return dom
 
