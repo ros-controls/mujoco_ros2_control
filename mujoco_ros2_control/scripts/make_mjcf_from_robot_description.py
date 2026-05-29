@@ -434,9 +434,7 @@ def main(args=None):
         if parsed_args.publish_topic:
             mrc.publish_model_on_topic(parsed_args.publish_topic, cache_dir, args)
         elif not parsed_args.save_only:
-            raise ValueError(
-                "You must specify at least one of the following options: --publish_topic or --save_only."
-            )
+            raise ValueError("You must specify at least one of the following options: --publish_topic or --save_only.")
         return
     elif parsed_args.cache_dir:
         print(f"Cache directory '{parsed_args.cache_dir}' is incomplete; regenerating the MJCF.")
