@@ -18,6 +18,7 @@
 
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>mujoco_3d_lidar</exec_depend>
   <exec_depend>mujoco_ros2_control</exec_depend>
   <exec_depend>mujoco_ros2_control_msgs</exec_depend>
   <exec_depend>forward_command_controller</exec_depend>
