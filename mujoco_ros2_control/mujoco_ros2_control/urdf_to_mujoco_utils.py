@@ -125,9 +125,12 @@ def add_missing_collisions(xml_string):
 
 def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
     """
-    Builds a dictionary of all unique visual meshes in the URDF and rewrites the
-    raw_xml so every mesh filename points at a disambiguated path. There are some
-    gotchas:
+    Builds a dictionary of all unique meshes in the URDF (from both <visual> and
+    <collision> tags) and rewrites the raw_xml so every mesh filename points at a
+    disambiguated path. Visuals are processed first so their <material> color wins;
+    a collision that reuses a visual's mesh file shares that asset, while a distinct
+    collision mesh gets its own entry (defaulting to white, as collisions carry no
+    material). There are some gotchas:
 
     - Different URDF meshes can share a filename stem, so colliding stems get an
       "__N" suffix so each resolves to its own asset directory. For example, if
@@ -166,99 +169,123 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
                     return tuple(ref.color.rgba)
         return (1.0, 1.0, 1.0, 1.0)
 
-    for link in robot.links:
-        for vis in link.visuals:
-            geom = vis.geometry
-            if not (geom and hasattr(geom, "filename")):
-                continue
+    # Track which source mesh files have already been turned into an asset entry so a
+    # collision that reuses a visual's mesh (the fallback case) shares the same asset
+    # instead of producing a duplicate. Visuals are processed first so their material
+    # color wins; collisions then only add entries for genuinely distinct meshes.
+    processed_uris = set()
 
-            uri = geom.filename  # full URI
-            original_stem = pathlib.Path(uri).stem  # NEW: remember original for disambiguation
-            stem = original_stem
-            counter = 0
-            while stem in stem_to_original_uri and stem_to_original_uri[stem] != uri:
-                counter += 1
-                stem = f"{original_stem}__{counter}"
-            stem_to_original_uri[stem] = uri
+    def process_geometry(element, is_collision):
+        nonlocal raw_xml
+        geom = element.geometry
+        if not (geom and hasattr(geom, "filename")):
+            return
 
-            # Select the mesh file: use a pre-generated OBJ if available and valid; otherwise use the original
-            is_pre_generated = False
-            new_uri = uri  # default fallback
+        uri = geom.filename  # full URI
 
-            if asset_dir:
-                if original_stem in decompose_dict:
-                    # Decomposed mesh: check if a pre-generated OBJ exists and threshold matches
-                    mesh_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/{stem}/{stem}/{stem}.obj"
-                    settings_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/metadata.json"
+        # A collision reusing a visual's mesh file shares that already-built asset.
+        if is_collision and uri in processed_uris:
+            return
 
-                    if os.path.exists(mesh_file) and os.path.exists(settings_file):
-                        try:
-                            with open(settings_file) as f:
-                                data = json.load(f)
-                                used_threshold = float(data.get(f"{stem}"))
-                        except (FileNotFoundError, PermissionError, json.JSONDecodeError) as e:
-                            print(f"Warning: could not read thresholds for {stem}: {e}")
-                            used_threshold = None
-                        # Use existing decomposed object only if it has the same threshold, otherwise regenerate it.
-                        if used_threshold is not None and math.isclose(
-                            used_threshold, float(decompose_dict[original_stem]), rel_tol=1e-9
-                        ):
-                            new_uri = mesh_file
-                            is_pre_generated = True
-                            raw_xml = raw_xml.replace(geom.filename, new_uri)
-                        else:
-                            print(
-                                f"Existing decomposed obj for {stem} has different threshold {used_threshold} "
-                                f"than required {decompose_dict[original_stem]}. Regenerating..."
-                            )
-                else:
-                    # Composed mesh: check if a pre-generated OBJ exists
-                    mesh_file = f"{asset_dir}/{COMPOSED_PATH_NAME}/{stem}/{stem}.obj"
+        original_stem = pathlib.Path(uri).stem  # NEW: remember original for disambiguation
+        stem = original_stem
+        counter = 0
+        while stem in stem_to_original_uri and stem_to_original_uri[stem] != uri:
+            counter += 1
+            stem = f"{original_stem}__{counter}"
+        stem_to_original_uri[stem] = uri
 
-                    if os.path.exists(mesh_file):
+        # Select the mesh file: use a pre-generated OBJ if available and valid; otherwise use the original
+        is_pre_generated = False
+        new_uri = uri  # default fallback
+
+        if asset_dir:
+            if original_stem in decompose_dict:
+                # Decomposed mesh: check if a pre-generated OBJ exists and threshold matches
+                mesh_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/{stem}/{stem}/{stem}.obj"
+                settings_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/metadata.json"
+
+                if os.path.exists(mesh_file) and os.path.exists(settings_file):
+                    try:
+                        with open(settings_file) as f:
+                            data = json.load(f)
+                            used_threshold = float(data.get(f"{stem}"))
+                    except (FileNotFoundError, PermissionError, json.JSONDecodeError) as e:
+                        print(f"Warning: could not read thresholds for {stem}: {e}")
+                        used_threshold = None
+                    # Use existing decomposed object only if it has the same threshold, otherwise regenerate it.
+                    if used_threshold is not None and math.isclose(
+                        used_threshold, float(decompose_dict[original_stem]), rel_tol=1e-9
+                    ):
                         new_uri = mesh_file
                         is_pre_generated = True
                         raw_xml = raw_xml.replace(geom.filename, new_uri)
+                    else:
+                        print(
+                            f"Existing decomposed obj for {stem} has different threshold {used_threshold} "
+                            f"than required {decompose_dict[original_stem]}. Regenerating..."
+                        )
+            else:
+                # Composed mesh: check if a pre-generated OBJ exists
+                mesh_file = f"{asset_dir}/{COMPOSED_PATH_NAME}/{stem}/{stem}.obj"
 
-            scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
-            rgba = resolve_color(vis)
+                if os.path.exists(mesh_file):
+                    new_uri = mesh_file
+                    is_pre_generated = True
+                    raw_xml = raw_xml.replace(geom.filename, new_uri)
 
-            mesh_dict_value = {
+        scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
+        # Collision elements carry no <material>, so they default to white.
+        rgba = (1.0, 1.0, 1.0, 1.0) if is_collision else resolve_color(element)
+
+        mesh_dict_value = {
+            "is_pre_generated": is_pre_generated,
+            "filename": new_uri,
+            "scale": scale,
+            "color": rgba,
+        }
+
+        # this source mesh file has now been accounted for
+        processed_uris.add(uri)
+
+        # check to see if the values we are trying to add already exist
+        existing_identifier = None
+        for key, value in mesh_info_dict.items():
+            if mesh_dict_value.items() <= value.items():
+                existing_identifier = key
+                break
+
+        # if the values we want to add are not in the dictionary yet, add them
+        if existing_identifier is None:
+            # get the name of the new file so that we can reference it later, but grab correct
+            # pre generated asset if it exists
+            path_obj = pathlib.Path(new_uri)
+            if is_pre_generated:
+                new_filepath = str(path_obj.parent.parent / stem / (stem + path_obj.suffix))
+            else:
+                new_filepath = str(path_obj.parent / (stem + path_obj.suffix))
+
+            # add the unique name to the dictionary
+            mesh_info_dict[stem] = {
                 "is_pre_generated": is_pre_generated,
                 "filename": new_uri,
                 "scale": scale,
                 "color": rgba,
+                "new_filepath": new_filepath,
             }
 
-            # check to see if the values we are trying to add already exist
-            existing_identifier = None
-            for key, value in mesh_info_dict.items():
-                if mesh_dict_value.items() <= value.items():
-                    existing_identifier = key
-                    break
+            # if we changed the identifier, make sure we update it in the underlying file
+            if stem != pathlib.Path(new_uri).stem:
+                raw_xml = raw_xml.replace(new_uri, new_filepath)
 
-            # if the values we want to add are not in the dictionary yet, add them
-            if existing_identifier is None:
-                # get the name of the new file so that we can reference it later, but grab correct
-                # pre generated asset if it exists
-                path_obj = pathlib.Path(new_uri)
-                if is_pre_generated:
-                    new_filepath = str(path_obj.parent.parent / stem / (stem + path_obj.suffix))
-                else:
-                    new_filepath = str(path_obj.parent / (stem + path_obj.suffix))
-
-                # add the unique name to the dictionary
-                mesh_info_dict[stem] = {
-                    "is_pre_generated": is_pre_generated,
-                    "filename": new_uri,
-                    "scale": scale,
-                    "color": rgba,
-                    "new_filepath": new_filepath,
-                }
-
-                # if we changed the identifier, make sure we update it in the underlying file
-                if stem != pathlib.Path(new_uri).stem:
-                    raw_xml = raw_xml.replace(new_uri, new_filepath)
+    # First pass: visual meshes (their material color wins). Second pass: collision
+    # meshes, which only add genuinely distinct meshes thanks to processed_uris.
+    for link in robot.links:
+        for vis in link.visuals:
+            process_geometry(vis, is_collision=False)
+    for link in robot.links:
+        for col in link.collisions:
+            process_geometry(col, is_collision=True)
 
     return mesh_info_dict, raw_xml
 
@@ -478,10 +505,16 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
             body = sub_dom.getElementsByTagName("body")
             body_element = body[0]
             sub_geoms = body_element.getElementsByTagName("geom")
+            # raw import attributes that should not survive on a classified geom
+            remove_attributes = ["contype", "conaffinity", "group", "density"]
             for geom_element in worldbody_geoms:
                 if geom_element.getAttribute("mesh") == mesh_name:
                     pos = geom_element.getAttribute("pos")
                     quat = geom_element.getAttribute("quat")
+                    # A visual geom from a URDF <visual> keeps its contype marker; a
+                    # collision geom does not. Tag the expanded sub-geoms accordingly so
+                    # obj-converted collision meshes land in the collision class.
+                    is_visual = geom_element.hasAttribute("contype")
 
                     parent = geom_element.parentNode
                     parent.removeChild(geom_element)
@@ -489,6 +522,15 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                         sub_geom_local = sub_geom.cloneNode(False)
                         sub_geom_local.setAttribute("pos", pos)
                         sub_geom_local.setAttribute("quat", quat)
+                        for attribute in remove_attributes:
+                            if sub_geom_local.hasAttribute(attribute):
+                                sub_geom_local.removeAttribute(attribute)
+                        if is_visual:
+                            sub_geom_local.setAttribute("class", "visual")
+                        else:
+                            sub_geom_local.setAttribute("class", "collision")
+                            if sub_geom_local.hasAttribute("rgba"):
+                                sub_geom_local.removeAttribute("rgba")
                         parent.appendChild(sub_geom_local)
 
     return dom
