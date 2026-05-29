@@ -43,7 +43,7 @@ A complete list of options is available from the argument parser:
 
    $ ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py -h
    usage: make_mjcf_from_robot_description.py [-h] [-u URDF] [-r ROBOT_DESCRIPTION] [-m MUJOCO_INPUTS] [-o OUTPUT] [-p PUBLISH_TOPIC] [-c] [-s] [-f]
-                                              [--fuse | --no-fuse] [-a ASSET_DIR] [--scene SCENE]
+                                              [--fuse | --no-fuse] [-a ASSET_DIR] [--scene SCENE] [--cache-dir CACHE_DIR]
 
    Convert a full URDF to MJCF for use in MuJoCo
 
@@ -66,6 +66,26 @@ A complete list of options is available from the argument parser:
      -a ASSET_DIR, --asset_dir ASSET_DIR
                            Optionally pass an existing folder with pre-generated OBJ meshes. (default: None)
      --scene SCENE         Optionally pass an existing xml for the scene (default: None)
+     --cache-dir CACHE_DIR
+                           Optionally pass a directory containing a previously generated MJCF. If it already holds the necessary
+                           information, the conversion is skipped and the cached MJCF is read and published/copied directly
+                           instead of being regenerated. (default: None)
+
+A cache directory is considered complete when it contains a non-empty
+``mujoco_description_formatted.xml`` together with the ``assets`` directory that the
+MJCF references (i.e. the output of a previous ``--save_only`` run). When ``--cache-dir``
+points at such a directory, the expensive mesh conversion / ``obj2mjcf`` step is skipped:
+the cached MJCF is published on ``--publish_topic`` and/or copied into ``--output`` when
+``--save_only`` is set. If the directory is missing or incomplete, the tool falls back to
+regenerating the MJCF from scratch.
+
+.. code-block:: bash
+
+   # Regenerate and save once
+   ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py --save_only -u robot.urdf -o /tmp/output/
+
+   # Re-publish later straight from the cache, without regenerating
+   ros2 run mujoco_ros2_control make_mjcf_from_robot_description.py --cache-dir /tmp/output/ -p /mujoco_description
 
 A sample URDF and inputs file are provided in
 `test_robot.urdf <https://github.com/ros-controls/mujoco_ros2_control/blob/main/mujoco_ros2_control_demos/demo_resources/robot/test_robot.urdf>`_
