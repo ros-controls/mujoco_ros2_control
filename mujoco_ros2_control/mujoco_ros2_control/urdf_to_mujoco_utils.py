@@ -36,6 +36,9 @@ from xml.dom import minidom
 DECOMPOSED_PATH_NAME = "decomposed"
 COMPOSED_PATH_NAME = "full"
 
+# Name of the post-processed MJCF that is published / consumed downstream.
+MJCF_FORMATTED_FILENAME = "mujoco_description_formatted.xml"
+
 
 def add_mujoco_info(raw_xml, output_filepath, publish_topic, fuse=True):
     dom = minidom.parseString(raw_xml)
@@ -1222,6 +1225,33 @@ def get_xml_from_file(urdf_file=None):
     return urdf
 
 
+def is_mjcf_cache_complete(cache_dir):
+    """
+    Determine whether ``cache_dir`` holds a previously generated MJCF that is
+    complete enough to be published without re-running the conversion pipeline.
+
+    A cache is considered complete when it contains a non-empty
+    ``mujoco_description_formatted.xml`` (the file that is published / consumed
+    downstream) alongside the ``assets`` directory that the MJCF references.
+
+    :param cache_dir: directory to inspect for a cached conversion result. May
+        be ``None`` (treated as no cache).
+    :returns: ``True`` if the cache contains all the necessary information,
+        ``False`` otherwise.
+    """
+    if not cache_dir or not os.path.isdir(cache_dir):
+        return False
+
+    mjcf_path = os.path.join(cache_dir, MJCF_FORMATTED_FILENAME)
+    if not os.path.isfile(mjcf_path) or os.path.getsize(mjcf_path) == 0:
+        return False
+
+    if not os.path.isdir(os.path.join(cache_dir, "assets")):
+        return False
+
+    return True
+
+
 def publish_model_on_topic(publish_topic, output_filepath, args=None):
 
     import rclpy
@@ -1253,7 +1283,7 @@ def publish_model_on_topic(publish_topic, output_filepath, args=None):
             self.publisher_.publish(msg)
 
     rclpy.init(args=args)
-    mjcf_path = os.path.join(output_filepath, "mujoco_description_formatted.xml")
+    mjcf_path = os.path.join(output_filepath, MJCF_FORMATTED_FILENAME)
     mjcf_node = MjcfPublisher(mjcf_path)
 
     try:

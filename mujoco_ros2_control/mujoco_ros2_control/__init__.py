@@ -38,10 +38,12 @@ from .urdf_to_mujoco_utils import (
     get_urdf_from_rsp,
     get_xml_from_file,
     publish_model_on_topic,
+    is_mjcf_cache_complete,
     add_urdf_free_joint,
     write_mujoco_scene,
     DECOMPOSED_PATH_NAME,
     COMPOSED_PATH_NAME,
+    MJCF_FORMATTED_FILENAME,
 )
 
 __all__ = [
@@ -70,8 +72,10 @@ __all__ = [
     "get_urdf_from_rsp",
     "get_xml_from_file",
     "publish_model_on_topic",
+    "is_mjcf_cache_complete",
     "add_urdf_free_joint",
     "write_mujoco_scene",
     DECOMPOSED_PATH_NAME,
     COMPOSED_PATH_NAME,
+    MJCF_FORMATTED_FILENAME,
 ]

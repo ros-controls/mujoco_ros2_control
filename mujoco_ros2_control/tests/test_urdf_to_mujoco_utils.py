@@ -50,6 +50,8 @@ from mujoco_ros2_control import (
     parse_scene_xml,
     extract_mesh_info,
     copy_pre_generated_meshes,
+    is_mjcf_cache_complete,
+    MJCF_FORMATTED_FILENAME,
 )
 
 
@@ -2003,6 +2005,47 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
             assets_dir = os.path.join(output_dir, "assets")
             self.assertFalse(os.path.exists(assets_dir))
+
+
+class TestIsMjcfCacheComplete(unittest.TestCase):
+    def _make_cache(self, cache_dir, with_mjcf=True, with_assets=True, mjcf_content="<mujoco/>"):
+        os.makedirs(cache_dir, exist_ok=True)
+        if with_mjcf:
+            with open(os.path.join(cache_dir, MJCF_FORMATTED_FILENAME), "w") as f:
+                f.write(mjcf_content)
+        if with_assets:
+            os.makedirs(os.path.join(cache_dir, "assets"), exist_ok=True)
+
+    def test_complete_cache_is_detected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = os.path.join(tmpdir, "cache")
+            self._make_cache(cache_dir)
+            self.assertTrue(is_mjcf_cache_complete(cache_dir))
+
+    def test_missing_mjcf_is_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = os.path.join(tmpdir, "cache")
+            self._make_cache(cache_dir, with_mjcf=False)
+            self.assertFalse(is_mjcf_cache_complete(cache_dir))
+
+    def test_empty_mjcf_is_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = os.path.join(tmpdir, "cache")
+            self._make_cache(cache_dir, mjcf_content="")
+            self.assertFalse(is_mjcf_cache_complete(cache_dir))
+
+    def test_missing_assets_is_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = os.path.join(tmpdir, "cache")
+            self._make_cache(cache_dir, with_assets=False)
+            self.assertFalse(is_mjcf_cache_complete(cache_dir))
+
+    def test_nonexistent_dir_is_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.assertFalse(is_mjcf_cache_complete(os.path.join(tmpdir, "does_not_exist")))
+
+    def test_none_is_incomplete(self):
+        self.assertFalse(is_mjcf_cache_complete(None))
 
 
 if __name__ == "__main__":
