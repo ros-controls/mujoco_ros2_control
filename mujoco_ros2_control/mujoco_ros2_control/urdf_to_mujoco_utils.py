@@ -84,6 +84,45 @@ def remove_tag(xml_string, tag_to_remove):
     return xmldoc.toprettyxml()
 
 
+def add_missing_collisions(xml_string):
+    """
+    Ensures every link that can be rendered can also collide, while respecting any
+    collision geometry the URDF author already provided.
+
+    For each <link> that has at least one <visual> but no <collision>, a <collision>
+    is synthesized for every visual by copying that visual's <geometry> and <origin>.
+    Links that already declare a collision are left untouched (the authored collision
+    drives physics), and links without any visual are left untouched.
+
+    Establishing this fallback at the URDF level - before MuJoCo conversion and any
+    static-body fusion - keeps the visual->collision fallback correct per link: the
+    visual meshes are used purely for rendering while the collision geometry (authored
+    when present, copied from the visual otherwise) is used for physics.
+
+    :param xml_string: the URDF as a string
+    :returns: the URDF string with synthesized collisions added where they were missing
+    """
+    dom = minidom.parseString(xml_string)
+
+    for link in dom.getElementsByTagName("link"):
+        visuals = [c for c in link.childNodes if c.nodeType == c.ELEMENT_NODE and c.tagName == "visual"]
+        collisions = [c for c in link.childNodes if c.nodeType == c.ELEMENT_NODE and c.tagName == "collision"]
+
+        # Respect authored collisions and skip links with nothing to render.
+        if collisions or not visuals:
+            continue
+
+        for visual in visuals:
+            collision = dom.createElement("collision")
+            # Copy the geometry and origin (collisions carry no material in URDF).
+            for child in visual.childNodes:
+                if child.nodeType == child.ELEMENT_NODE and child.tagName in ("geometry", "origin"):
+                    collision.appendChild(child.cloneNode(deep=True))
+            link.appendChild(collision)
+
+    return dom.toprettyxml()
+
+
 def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
     """
     Builds a dictionary of all unique visual meshes in the URDF and rewrites the

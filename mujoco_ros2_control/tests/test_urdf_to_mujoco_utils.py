@@ -50,6 +50,7 @@ from mujoco_ros2_control import (
     parse_scene_xml,
     extract_mesh_info,
     copy_pre_generated_meshes,
+    add_missing_collisions,
 )
 
 
@@ -404,7 +405,55 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             result_dom = update_obj_assets(dom, tmpdir + "/", mesh_info_dict)
             self.assertIsNotNone(result_dom)
 
-    def test_update_non_obj_assets_basic(self):
+    def test_update_obj_assets_tags_visual_and_collision(self):
+        # A visual-source geom (has contype) and a collision-source geom (no contype)
+        # that reference obj-converted meshes should have their expanded sub-geoms
+        # tagged class="visual" and class="collision" respectively.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            composed = os.path.join(tmpdir, "assets", COMPOSED_PATH_NAME)
+            os.makedirs(os.path.join(tmpdir, "assets", DECOMPOSED_PATH_NAME))
+            for name in ("vis_mesh", "col_mesh"):
+                mesh_dir = os.path.join(composed, name)
+                os.makedirs(mesh_dir)
+                with open(os.path.join(mesh_dir, f"{name}.xml"), "w") as f:
+                    f.write(
+                        '<mujoco><asset><mesh name="{n}_0" file="{n}.obj"/></asset>'
+                        '<worldbody><body><geom mesh="{n}_0"/></body></worldbody></mujoco>'.format(n=name)
+                    )
+            xml_string = (
+                '<?xml version="1.0"?><mujoco><asset>'
+                '<mesh name="vis_mesh" file="vis.obj"/><mesh name="col_mesh" file="col.obj"/>'
+                '</asset><worldbody><body name="test">'
+                '<geom type="mesh" contype="0" conaffinity="0" group="1" density="0" '
+                'rgba="1 0 0 1" mesh="vis_mesh" pos="0 0 0" quat="1 0 0 0"/>'
+                '<geom type="mesh" mesh="col_mesh" pos="0 0 0" quat="1 0 0 0"/>'
+                "</body></worldbody></mujoco>"
+            )
+            dom = minidom.parseString(xml_string)
+            mesh_info_dict = {
+                "vis_mesh": {
+                    "is_pre_generated": False,
+                    "filename": "/p/vis.obj",
+                    "scale": "1 1 1",
+                    "color": (1, 0, 0, 1),
+                },
+                "col_mesh": {
+                    "is_pre_generated": False,
+                    "filename": "/p/col.obj",
+                    "scale": "1 1 1",
+                    "color": (1, 1, 1, 1),
+                },
+            }
+            result_dom = update_obj_assets(dom, tmpdir + "/", mesh_info_dict)
+            result_xml = result_dom.toxml()
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="vis_mesh_0"[^>]*class="visual"[^>]*>')
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_0"[^>]*class="collision"[^>]*>')
+            # raw import attrs stripped from the expanded visual geom
+            self.assertEqual(result_xml.count("contype"), 0)
+
+    def test_update_non_obj_assets_visual_geom(self):
+        # A geom with contype is a MuJoCo-imported <visual>; it is classified as
+        # visual only (no collision clone) and its raw import attributes are stripped.
         xml_string = """<?xml version="1.0"?>
 <mujoco>
   <worldbody>
@@ -416,45 +465,70 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         result_dom = update_non_obj_assets(dom, "/tmp/output/")
         result_xml = result_dom.toxml()
-        assert 'class="collision"' in result_xml
         assert 'class="visual"' in result_xml
+        assert 'class="collision"' not in result_xml
         assert "contype" not in result_xml
+        assert "conaffinity" not in result_xml
+        assert 'group="1"' not in result_xml
+        assert 'density="0"' not in result_xml
+        # visual keeps its rgba for rendering
+        assert 'rgba="0.2 0.2 0.2 1"' in result_xml
 
-    def test_update_non_obj_assets_no_contype(self):
+    def test_update_non_obj_assets_collision_geom(self):
+        # A geom without contype is a MuJoCo-imported <collision>; it is classified
+        # as collision and its rgba (if any) is dropped.
         xml_string = """<?xml version="1.0"?>
 <mujoco>
   <worldbody>
     <body name="test">
-      <geom type="box" size="1 1 1"/>
+      <geom type="box" size="1 1 1" rgba="0.2 0.2 0.2 1"/>
     </body>
   </worldbody>
 </mujoco>"""
         dom = minidom.parseString(xml_string)
         result_dom = update_non_obj_assets(dom, "/tmp/output/")
         result_xml = result_dom.toxml()
-        assert "<geom" in result_xml
+        assert 'class="collision"' in result_xml
+        assert 'class="visual"' not in result_xml
+        assert "rgba" not in result_xml
 
-    def test_update_non_obj_assets_multiple_geoms(self):
+    def test_update_non_obj_assets_visual_and_collision(self):
+        # Real case: a link with both a visual mesh and a collision mesh. The visual
+        # geom becomes class="visual" and the collision geom becomes class="collision";
+        # no duplication occurs.
         xml_string = """<?xml version="1.0"?>
 <mujoco>
   <worldbody>
     <body name="test">
-      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="mesh1"/>
-      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="mesh2"/>
+      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="visual_mesh"/>
+      <geom type="mesh" mesh="collision_mesh"/>
     </body>
   </worldbody>
 </mujoco>"""
         dom = minidom.parseString(xml_string)
         result_dom = update_non_obj_assets(dom, "/tmp/output/")
         result_xml = result_dom.toxml()
-        self.assertEqual(result_xml.count('class="collision"'), 2)
-        self.assertEqual(result_xml.count('class="visual"'), 2)
+        self.assertEqual(result_xml.count('class="visual"'), 1)
+        self.assertEqual(result_xml.count('class="collision"'), 1)
         self.assertEqual(result_xml.count("contype"), 0)
-        self.assertEqual(result_xml.count("conaffinity"), 0)
-        self.assertEqual(result_xml.count('group="1"'), 0)
-        self.assertEqual(result_xml.count('density="0"'), 0)
-        self.assertRegex(result_xml, r'<geom[^>]*mesh="mesh1"[^>]*class="visual"[^>]*>')
-        self.assertRegex(result_xml, r'<geom[^>]*mesh="mesh2"[^>]*class="collision"[^>]*>')
+        self.assertRegex(result_xml, r'<geom[^>]*mesh="visual_mesh"[^>]*class="visual"[^>]*>')
+        self.assertRegex(result_xml, r'<geom[^>]*mesh="collision_mesh"[^>]*class="collision"[^>]*>')
+
+    def test_update_non_obj_assets_skips_classified(self):
+        # Geoms already classified (e.g. by update_obj_assets) are left untouched.
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="test">
+      <geom mesh="already" class="visual"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        result_dom = update_non_obj_assets(dom, "/tmp/output/")
+        result_xml = result_dom.toxml()
+        self.assertEqual(result_xml.count('class="visual"'), 1)
+        self.assertEqual(result_xml.count('class="collision"'), 0)
 
     def test_add_mujoco_inputs_both_none(self):
         xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
@@ -1694,6 +1768,86 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         finally:
             os.unlink(invalid_path)
 
+    def test_add_missing_collisions_adds_from_visual(self):
+        # A link with a visual but no collision should get a synthesized collision
+        # that copies the visual's geometry and origin.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0.5 0 0"/>
+      <geometry>
+        <mesh filename="package://test_package/meshes/model.stl"/>
+      </geometry>
+      <material name="red"><color rgba="1 0 0 1"/></material>
+    </visual>
+  </link>
+</robot>"""
+        result = add_missing_collisions(urdf)
+        dom = minidom.parseString(result)
+        link = dom.getElementsByTagName("link")[0]
+        collisions = link.getElementsByTagName("collision")
+        self.assertEqual(len(collisions), 1)
+        col = collisions[0]
+        # geometry mesh is copied
+        col_meshes = col.getElementsByTagName("mesh")
+        self.assertEqual(len(col_meshes), 1)
+        self.assertEqual(col_meshes[0].getAttribute("filename"), "package://test_package/meshes/model.stl")
+        # origin is copied
+        col_origins = col.getElementsByTagName("origin")
+        self.assertEqual(len(col_origins), 1)
+        self.assertEqual(col_origins[0].getAttribute("xyz"), "0.5 0 0")
+        # collisions must not carry a material
+        self.assertEqual(len(col.getElementsByTagName("material")), 0)
+
+    def test_add_missing_collisions_keeps_existing(self):
+        # A link that already defines a collision must be left untouched.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry><box size="1 1 1"/></geometry>
+    </visual>
+    <collision>
+      <geometry><sphere radius="0.5"/></geometry>
+    </collision>
+  </link>
+</robot>"""
+        result = add_missing_collisions(urdf)
+        dom = minidom.parseString(result)
+        link = dom.getElementsByTagName("link")[0]
+        collisions = link.getElementsByTagName("collision")
+        self.assertEqual(len(collisions), 1)
+        # the original sphere collision is preserved (not replaced by the visual box)
+        self.assertEqual(len(collisions[0].getElementsByTagName("sphere")), 1)
+        self.assertEqual(len(collisions[0].getElementsByTagName("box")), 0)
+
+    def test_add_missing_collisions_no_visual(self):
+        # A link without any visual must not get a collision.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link"/>
+</robot>"""
+        result = add_missing_collisions(urdf)
+        dom = minidom.parseString(result)
+        link = dom.getElementsByTagName("link")[0]
+        self.assertEqual(len(link.getElementsByTagName("collision")), 0)
+
+    def test_add_missing_collisions_multiple_visuals(self):
+        # Every visual on a collision-less link produces a matching collision.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual><geometry><box size="1 1 1"/></geometry></visual>
+    <visual><geometry><sphere radius="0.5"/></geometry></visual>
+  </link>
+</robot>"""
+        result = add_missing_collisions(urdf)
+        dom = minidom.parseString(result)
+        link = dom.getElementsByTagName("link")[0]
+        collisions = link.getElementsByTagName("collision")
+        self.assertEqual(len(collisions), 2)
+
     def test_extract_mesh_info_basic(self):
         urdf = """<?xml version="1.0"?>
 <robot name="test_robot">
@@ -1769,6 +1923,58 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result, updated_xml = extract_mesh_info(urdf, None, {})
         self.assertEqual(len(result), 0)
         self.assertEqual(updated_xml, urdf)
+
+    def test_extract_mesh_info_distinct_collision_mesh(self):
+        # A link with a visual mesh and a different collision mesh yields two entries.
+        # The collision entry has no material, so its color defaults to white.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/visual_model.stl"/>
+      </geometry>
+      <material name="red"><color rgba="1.0 0.0 0.0 1.0"/></material>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://test_package/meshes/collision_model.stl"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>"""
+        result, updated_xml = extract_mesh_info(urdf, None, {})
+        self.assertEqual(len(result), 2)
+        assert "visual_model" in result
+        assert "collision_model" in result
+        self.assertEqual(result["visual_model"]["color"], (1.0, 0.0, 0.0, 1.0))
+        self.assertEqual(result["collision_model"]["color"], (1.0, 1.0, 1.0, 1.0))
+        assert "package://test_package/meshes/collision_model.stl" in updated_xml
+
+    def test_extract_mesh_info_shared_collision_mesh(self):
+        # When the collision references the same mesh file as the visual (the
+        # fallback case), they share a single entry - no duplicate asset - and the
+        # visual's material color wins.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/model.stl"/>
+      </geometry>
+      <material name="red"><color rgba="1.0 0.0 0.0 1.0"/></material>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://test_package/meshes/model.stl"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>"""
+        result, _ = extract_mesh_info(urdf, None, {})
+        self.assertEqual(len(result), 1)
+        assert "model" in result
+        self.assertEqual(result["model"]["color"], (1.0, 0.0, 0.0, 1.0))
 
     def test_extract_mesh_info_with_decompose_dict(self):
         urdf = """<?xml version="1.0"?>

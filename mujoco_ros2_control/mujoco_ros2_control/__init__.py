@@ -15,6 +15,7 @@
 from .urdf_to_mujoco_utils import (
     add_mujoco_info,
     remove_tag,
+    add_missing_collisions,
     extract_mesh_info,
     replace_package_names,
     get_images_from_dae,
@@ -47,6 +48,7 @@ from .urdf_to_mujoco_utils import (
 __all__ = [
     "add_mujoco_info",
     "remove_tag",
+    "add_missing_collisions",
     "extract_mesh_info",
     "replace_package_names",
     "get_images_from_dae",
