@@ -43,6 +43,20 @@ VISUAL_PATH_NAME = "visual"
 # Matches obj2mjcf's coacd default.
 DEFAULT_DECOMPOSE_THRESHOLD = "0.05"
 
+# Explicit attributes written onto classified geoms so visual/collision separation does not
+# depend on the user supplying a <default class="..."> block via mujoco_inputs.
+# Visuals are render-only (contype=0 -> never collide) and live in group 2; collisions do the
+# colliding (contype/conaffinity=1), live in group 3, and are tinted COLLISION_MATERIAL_NAME
+# so they can be inspected in the viewer.
+COLLISION_MATERIAL_NAME = "bright_orange"
+VISUAL_GEOM_ATTRS = {"contype": "0", "conaffinity": "0", "group": "2", "density": "0"}
+COLLISION_GEOM_ATTRS = {
+    "group": "3",
+    "contype": "1",
+    "conaffinity": "1",
+    "material": COLLISION_MATERIAL_NAME,
+}
+
 
 def add_mujoco_info(raw_xml, output_filepath, publish_topic, fuse=True):
     dom = minidom.parseString(raw_xml)

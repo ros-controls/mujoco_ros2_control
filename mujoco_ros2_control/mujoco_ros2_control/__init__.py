@@ -45,6 +45,7 @@ from .urdf_to_mujoco_utils import (
     COMPOSED_PATH_NAME,
     VISUAL_PATH_NAME,
     DEFAULT_DECOMPOSE_THRESHOLD,
+    COLLISION_MATERIAL_NAME,
 )
 
 __all__ = [
@@ -80,4 +81,5 @@ __all__ = [
     COMPOSED_PATH_NAME,
     VISUAL_PATH_NAME,
     DEFAULT_DECOMPOSE_THRESHOLD,
+    COLLISION_MATERIAL_NAME,
 ]
