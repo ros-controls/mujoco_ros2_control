@@ -508,6 +508,43 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             # the collision geom was expanded into decomposed pieces
             self.assertRegex(result_xml, r'<geom[^>]*mesh="shared_collision_0"[^>]*class="collision"[^>]*>')
 
+    def test_update_obj_assets_expands_scaled_sibling(self):
+        # A mirrored link makes MuJoCo emit a scaled sibling mesh (same file, scale="1 -1 1",
+        # auto-named e.g. "leg1") for the mirrored side. Its collision must also be decomposed,
+        # using scaled copies of the convex pieces - not left as a single whole mesh.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_decomposed_mjcf(tmpdir, "leg")
+            xml_string = (
+                '<?xml version="1.0"?><mujoco><asset>'
+                '<mesh name="leg" file="decomposed/leg/leg.obj"/>'
+                '<mesh name="leg1" file="decomposed/leg/leg.obj" scale="1 -1 1"/>'
+                '</asset><worldbody>'
+                '<body name="left">'
+                '<geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="leg"/>'
+                '<geom type="mesh" mesh="leg"/>'
+                "</body>"
+                '<body name="right">'
+                '<geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="leg"/>'
+                '<geom type="mesh" mesh="leg1"/>'
+                "</body>"
+                "</worldbody></mujoco>"
+            )
+            dom = minidom.parseString(xml_string)
+            mesh_info_dict = {
+                "leg": {"scale": "1 1 1", "used_as_visual": True, "used_as_collision": True},
+            }
+            result_xml = update_obj_assets(dom, tmpdir + "/", mesh_info_dict).toxml()
+            # the mirrored sibling's whole-mesh collision geom is gone ...
+            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="leg1"[^>]*class="collision"[^>]*>')
+            # ... replaced by scaled decomposed pieces referencing per-sibling piece meshes
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="leg_collision_0__leg1"[^>]*class="collision"[^>]*>')
+            # a scaled piece mesh asset exists, carrying the sibling's mirror scale
+            self.assertRegex(result_xml, r'<mesh name="leg_collision_0__leg1"[^>]*scale="1 -1 1"[^>]*>')
+            # the whole sibling mesh asset is dropped (no visual references it)
+            self.assertNotRegex(result_xml, r'<mesh name="leg1"[ />]')
+            # the unscaled (left) side still expands as before
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="leg_collision_0"[^>]*class="collision"[^>]*>')
+
     def test_update_non_obj_assets_visual_geom(self):
         # A geom with contype is a MuJoCo-imported <visual>; it is classified as visual and
         # given explicit render attributes (contype=0 so it never collides) plus group 2.
