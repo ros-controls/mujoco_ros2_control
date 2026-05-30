@@ -480,6 +480,12 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
     contype/conaffinity 1) but, unlike plain collision geoms, is NOT tinted with
     COLLISION_MATERIAL_NAME - the pieces keep obj2mjcf's own materials/colors so the
     individual convex hulls remain visually distinguishable.
+
+    A mirrored link (e.g. left/right feet) makes MuJoCo emit a scaled sibling of the
+    decomposed mesh (same source file, a scale like "1 -1 1", auto-named e.g. "leg_7_link1").
+    That sibling is handled too: scaled copies of the convex pieces are created (carrying the
+    sibling's scale) and its collision geom is expanded into them, so both sides of a mirrored
+    link get the decomposition rather than only one.
     """
     # Find the <asset> element
     asset = dom.getElementsByTagName("asset")
@@ -526,10 +532,16 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
         # This should definitely be there, otherwise something is horribly wrong
         scale = mesh_info_dict[mesh_name]["scale"]
         used_as_visual = mesh_info_dict[mesh_name].get("used_as_visual", False)
+        # the whole-mesh file shared by the visual and any scaled mirror siblings
+        base_file = mesh.getAttribute("file")
 
         mesh_path = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/{mesh_name}.xml"
         if not os.path.exists(mesh_path):
             continue
+
+        # rewritten file path of each decomposed convex piece, keyed by its effective name -
+        # used to build scaled copies for mirror siblings (see below)
+        decomposed_piece_files = {}
 
         sub_dom = minidom.parse(mesh_path)
         sub_asset_element = sub_dom.getElementsByTagName("asset")[0]
@@ -547,11 +559,13 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
             if eff in existing_mesh_names:
                 continue
             sub_mesh_file = sub_mesh.getAttribute("file")
-            sub_mesh.setAttribute("file", f"{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/{sub_mesh_file}")
+            rewritten_file = f"{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/{sub_mesh_file}"
+            sub_mesh.setAttribute("file", rewritten_file)
             if scale:
                 sub_mesh.setAttribute("scale", scale)
             asset_element.appendChild(sub_mesh)
             existing_mesh_names.add(eff)
+            decomposed_piece_files[eff] = rewritten_file
 
         # bring in any materials/textures (collision usually has none, kept for safety),
         # also de-duplicating by name
@@ -574,14 +588,10 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
         body_element = sub_dom.getElementsByTagName("body")[0]
         sub_geoms = body_element.getElementsByTagName("geom")
 
-        # Replace each collision geom (no contype) referencing this mesh with the decomposed
-        # convex pieces. Visual geoms (contype) are left referencing the whole mesh.
-        for geom_element in list(worldbody_geoms):
-            if geom_element.getAttribute("mesh") != mesh_name:
-                continue
-            if geom_element.hasAttribute("contype"):
-                continue
-
+        def expand_collision_geom(geom_element, mesh_suffix=""):
+            # Replace a whole-mesh collision geom with the decomposed convex pieces. ``mesh_suffix``
+            # is appended to each piece's mesh name so a scaled mirror sibling can reference its own
+            # scaled piece meshes (see the sibling handling below).
             pos = geom_element.getAttribute("pos")
             quat = geom_element.getAttribute("quat")
             parent = geom_element.parentNode
@@ -592,6 +602,8 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                 if sub_geom.getAttribute("class") == "visual" or sub_geom.getAttribute("mesh") == mesh_name:
                     continue
                 sub_geom_local = sub_geom.cloneNode(False)
+                if mesh_suffix:
+                    sub_geom_local.setAttribute("mesh", sub_geom.getAttribute("mesh") + mesh_suffix)
                 if pos:
                     sub_geom_local.setAttribute("pos", pos)
                 if quat:
@@ -606,6 +618,54 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                         continue
                     sub_geom_local.setAttribute(attribute, value)
                 parent.appendChild(sub_geom_local)
+
+        # Expand the (unscaled) collision geoms referencing this mesh directly. Visual geoms
+        # (contype) are left referencing the whole mesh.
+        for geom_element in list(worldbody_geoms):
+            if geom_element.getAttribute("mesh") != mesh_name:
+                continue
+            if geom_element.hasAttribute("contype"):
+                continue
+            expand_collision_geom(geom_element)
+
+        # A mirrored link (e.g. left/right feet) makes MuJoCo emit a scaled sibling mesh -
+        # same source file, scale like "1 -1 1", auto-named e.g. "leg_7_link1". That sibling is
+        # not in decomposed_dirs, so without this its collision would stay a single whole mesh
+        # while the other side is decomposed. Decompose it too, using scaled copies of the
+        # convex pieces that carry the sibling's scale.
+        siblings = [s for s in list(meshes) if s is not mesh and s.getAttribute("file") == base_file]
+        for sibling in siblings:
+            sibling_name = sibling.getAttribute("name")
+            if not sibling_name:
+                continue
+            sibling_scale = sibling.getAttribute("scale")
+            suffix = f"__{sibling_name}"
+            # one scaled mesh asset per decomposed piece, referencing the same piece .obj
+            for eff, piece_file in decomposed_piece_files.items():
+                scaled_name = eff + suffix
+                if scaled_name in existing_mesh_names:
+                    continue
+                scaled_mesh = dom.createElement("mesh")
+                scaled_mesh.setAttribute("name", scaled_name)
+                scaled_mesh.setAttribute("file", piece_file)
+                if sibling_scale:
+                    scaled_mesh.setAttribute("scale", sibling_scale)
+                asset_element.appendChild(scaled_mesh)
+                existing_mesh_names.add(scaled_name)
+            # expand the sibling's collision geoms into the scaled pieces
+            for geom_element in list(worldbody_geoms):
+                if geom_element.getAttribute("mesh") != sibling_name:
+                    continue
+                if geom_element.hasAttribute("contype"):
+                    continue
+                expand_collision_geom(geom_element, suffix)
+            # drop the whole sibling <mesh> asset unless a visual geom still references it
+            sibling_used_as_visual = any(
+                g.getAttribute("mesh") == sibling_name and g.hasAttribute("contype") for g in worldbody_geoms
+            )
+            if not sibling_used_as_visual:
+                asset_element.removeChild(sibling)
+                existing_mesh_names.discard(sibling_name)
 
     return dom
 
