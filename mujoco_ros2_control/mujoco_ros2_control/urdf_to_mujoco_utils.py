@@ -43,18 +43,39 @@ VISUAL_PATH_NAME = "visual"
 # Matches obj2mjcf's coacd default.
 DEFAULT_DECOMPOSE_THRESHOLD = "0.05"
 
-# Explicit attributes written onto classified geoms so visual/collision separation does not
-# depend on the user supplying a <default class="..."> block via mujoco_inputs.
-# Visuals are render-only (contype=0 -> never collide) and live in group 2; collisions do the
-# colliding (contype/conaffinity=1), live in group 3, and are tinted COLLISION_MATERIAL_NAME
-# so they can be inspected in the viewer.
+# Geom classification uses MuJoCo default classes so individual geoms only carry class=
+# instead of repeating attrs on every element.  The three classes below are auto-generated
+# by ensure_default_geom_classes() unless the user already defined them via mujoco_inputs.
+#
+# visual         – render-only (contype=0 → never collide), lives in group 2.
+# collision      – collidable plain/primitive geoms, tinted COLLISION_MATERIAL_NAME for
+#                  easy inspection in the viewer.
+# decomposed_collision – convex pieces from obj2mjcf; same physics as collision but keep
+#                  obj2mjcf's own per-piece materials/colors so individual hulls are
+#                  distinguishable — no bright_orange tint.
 COLLISION_MATERIAL_NAME = "bright_orange"
-VISUAL_GEOM_ATTRS = {"contype": "0", "conaffinity": "0", "group": "2", "density": "0"}
-COLLISION_GEOM_ATTRS = {
+
+VISUAL_CLASS_NAME = "visual"
+COLLISION_CLASS_NAME = "collision"
+DECOMPOSED_COLLISION_CLASS_NAME = "decomposed_collision"
+
+VISUAL_CLASS_GEOM_ATTRS = {"contype": "0", "conaffinity": "0", "group": "2", "density": "0"}
+COLLISION_CLASS_GEOM_ATTRS = {
     "group": "3",
+    "type": "mesh",
     "contype": "1",
     "conaffinity": "1",
     "material": COLLISION_MATERIAL_NAME,
+}
+# type="mesh" is required: decomposed pieces reference a mesh by name only (obj2mjcf emits
+# them with no explicit type), so without it MuJoCo falls back to its default type="sphere"
+# and fits a sphere around each convex piece. contype/conaffinity are set explicitly to 1 so
+# the pieces collide with everything regardless of any user-changed global geom defaults.
+DECOMPOSED_COLLISION_CLASS_GEOM_ATTRS = {
+    "group": "3",
+    "type": "mesh",
+    "contype": "1",
+    "conaffinity": "1",
 }
 
 
@@ -608,15 +629,9 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                     sub_geom_local.setAttribute("pos", pos)
                 if quat:
                     sub_geom_local.setAttribute("quat", quat)
-                sub_geom_local.setAttribute("class", "collision")
-                # Give decomposed pieces the same collision-separation attributes as plain
-                # collisions (group 3, contype/conaffinity 1), but NOT the bright_orange
-                # material: decomposed meshes keep obj2mjcf's own materials/rgba so the
-                # individual convex pieces stay distinguishable.
-                for attribute, value in COLLISION_GEOM_ATTRS.items():
-                    if attribute == "material":
-                        continue
-                    sub_geom_local.setAttribute(attribute, value)
+                # decomposed_collision class: same physics as collision but no material attr
+                # so obj2mjcf's per-piece colors remain distinguishable in the viewer.
+                sub_geom_local.setAttribute("class", DECOMPOSED_COLLISION_CLASS_NAME)
                 parent.appendChild(sub_geom_local)
 
         # Expand the (unscaled) collision geoms referencing this mesh directly. Visual geoms
@@ -687,12 +702,12 @@ def update_non_obj_assets(dom, output_filepath, mesh_info_dict=None):
     and a <collision> as a plain collidable geom with no contype. So:
 
     - A geom WITH a contype attribute is a visual: it becomes
-        <geom mesh="finger_v6" class="visual" rgba="0.2 0.2 0.2 1" .../>
-      keeping its rgba but dropping the raw import attributes (contype, conaffinity,
-      group, density).
+        <geom mesh="finger_v6" class="visual" rgba="0.2 0.2 0.2 1"/>
+      keeping its rgba but the raw import attrs (contype, conaffinity, group, density) are
+      removed so they don't override the <default class="visual"> block.
     - A geom WITHOUT a contype attribute is a collision: it becomes
-        <geom mesh="finger_v6" class="collision" .../>
-      and its rgba (if any) is dropped since collisions are not rendered.
+        <geom mesh="finger_v6" class="collision"/>
+      with rgba (if any) dropped. Physics attrs come from <default class="collision">.
 
     Geoms that already carry a class attribute (e.g. those expanded by
     update_obj_assets) are left untouched.
@@ -705,17 +720,19 @@ def update_non_obj_assets(dom, output_filepath, mesh_info_dict=None):
     # get all of the geom elements in the worldbody element
     worldbody_geoms = worldbody_element.getElementsByTagName("geom")
 
-    used_collision_material = False
+    has_collision_geom = False
     for geom in worldbody_geoms:
         # already classified upstream (e.g. obj-decomposed meshes); leave as is
         if geom.hasAttribute("class"):
             continue
 
         if geom.hasAttribute("contype"):
-            # visual geom: keep rgba, set explicit render attributes (contype=0 -> no collide)
-            geom.setAttribute("class", "visual")
-            for attribute, value in VISUAL_GEOM_ATTRS.items():
-                geom.setAttribute(attribute, value)
+            # visual geom: strip raw import attrs so the visual class default takes over,
+            # keep rgba so plain visual meshes render with their URDF color.
+            geom.setAttribute("class", VISUAL_CLASS_NAME)
+            for attr in VISUAL_CLASS_GEOM_ATTRS:
+                if geom.hasAttribute(attr):
+                    geom.removeAttribute(attr)
             # apply the URDF color so plain visual meshes (no obj2mjcf material) render
             if mesh_info_dict:
                 mesh_name = geom.getAttribute("mesh")
@@ -723,20 +740,19 @@ def update_non_obj_assets(dom, output_filepath, mesh_info_dict=None):
                     rgba = mesh_info_dict[mesh_name]["color"]
                     geom.setAttribute("rgba", " ".join(str(v) for v in rgba))
         else:
-            # collision geom: ensure a type, drop rgba (not rendered), set explicit collision
-            # attributes and tint it so the collision shape is visible in the viewer
+            # collision geom: ensure a type, drop rgba (not rendered). Physics attrs
+            # (group/contype/conaffinity/material) come from the collision class default.
             if not geom.hasAttribute("type"):
                 geom.setAttribute("type", "sphere")
-            geom.setAttribute("class", "collision")
+            geom.setAttribute("class", COLLISION_CLASS_NAME)
             if geom.hasAttribute("rgba"):
                 geom.removeAttribute("rgba")
-            for attribute, value in COLLISION_GEOM_ATTRS.items():
-                geom.setAttribute(attribute, value)
-            used_collision_material = True
+            has_collision_geom = True
 
-    # Collision geoms reference COLLISION_MATERIAL_NAME, so it must exist or MuJoCo fails to
-    # load. Add it only when absent to avoid a repeated-name clash with a user-defined one.
-    if used_collision_material:
+    # The collision class default references COLLISION_MATERIAL_NAME, so the material must
+    # exist in <asset>. Add it now (idempotent) so it is available when the class default
+    # is later injected by ensure_default_geom_classes().
+    if has_collision_geom:
         _ensure_collision_material(dom)
 
     return dom
@@ -832,6 +848,62 @@ def ensure_default_geom_classes(dom):
             _ensure_collision_material(dom)
 
     return dom
+
+
+def _merge_default_element(dom, incoming_default):
+    """Merges the children of ``incoming_default`` into the DOM's top-level ``<default>``.
+
+    MJCF allows only one top-level ``<default>`` element; appending a second one is invalid.
+    This helper finds (or creates) the single root ``<default>`` and moves each child of
+    ``incoming_default`` into it.  For ``<default class="X">`` children, an existing
+    definition with the same class name is replaced by the incoming one so user-supplied
+    definitions always take precedence over auto-generated ones.
+
+    :param dom: parsed MJCF DOM (xml.dom.minidom.Document)
+    :param incoming_default: ``<default>`` element whose children should be merged
+    """
+    root = dom.documentElement
+
+    # Find or create the single root <default>.
+    root_default = None
+    for child in root.childNodes:
+        if child.nodeType == child.ELEMENT_NODE and child.tagName == "default":
+            root_default = child
+            break
+
+    if root_default is None:
+        root_default = dom.createElement("default")
+        worldbody_elements = root.getElementsByTagName("worldbody")
+        if worldbody_elements:
+            root.insertBefore(root_default, worldbody_elements[0])
+        else:
+            root.appendChild(root_default)
+
+    # Index existing <default class="X"> children by class name.
+    existing_class_nodes = {}
+    for child in root_default.childNodes:
+        if child.nodeType == child.ELEMENT_NODE and child.tagName == "default":
+            class_name = child.getAttribute("class")
+            if class_name:
+                existing_class_nodes[class_name] = child
+
+    for child in incoming_default.childNodes:
+        if child.nodeType != child.ELEMENT_NODE:
+            continue
+        imported = dom.importNode(child, True)
+        if child.tagName == "default" and child.hasAttribute("class"):
+            class_name = child.getAttribute("class")
+            if class_name in existing_class_nodes:
+                # Replace existing with incoming (user definition takes precedence).
+                root_default.replaceChild(imported, existing_class_nodes[class_name])
+                existing_class_nodes[class_name] = imported
+            else:
+                root_default.appendChild(imported)
+                existing_class_nodes[class_name] = imported
+        else:
+            root_default.appendChild(imported)
+
+
 def add_mujoco_inputs(dom, raw_inputs, scene_inputs):
     """
     Copies all elements under the "raw_inputs" and "scene_inputs" XML tags directly in the provided dom.
@@ -843,14 +915,20 @@ def add_mujoco_inputs(dom, raw_inputs, scene_inputs):
     if scene_inputs:
         for child in scene_inputs.childNodes:
             if child.nodeType == child.ELEMENT_NODE:
-                imported_node = dom.importNode(child, True)
-                root.appendChild(imported_node)
+                if child.tagName == "default":
+                    _merge_default_element(dom, child)
+                else:
+                    imported_node = dom.importNode(child, True)
+                    root.appendChild(imported_node)
 
     if raw_inputs:
         for child in raw_inputs.childNodes:
             if child.nodeType == child.ELEMENT_NODE:
-                imported_node = dom.importNode(child, True)
-                root.appendChild(imported_node)
+                if child.tagName == "default":
+                    _merge_default_element(dom, child)
+                else:
+                    imported_node = dom.importNode(child, True)
+                    root.appendChild(imported_node)
 
     return dom
 
