@@ -24,6 +24,7 @@ from .urdf_to_mujoco_utils import (
     update_obj_assets,
     update_non_obj_assets,
     add_mujoco_inputs,
+    ensure_default_geom_classes,
     get_processed_mujoco_inputs,
     parse_inputs_xml,
     parse_scene_xml,
@@ -46,6 +47,12 @@ from .urdf_to_mujoco_utils import (
     VISUAL_PATH_NAME,
     DEFAULT_DECOMPOSE_THRESHOLD,
     COLLISION_MATERIAL_NAME,
+    VISUAL_CLASS_NAME,
+    COLLISION_CLASS_NAME,
+    DECOMPOSED_COLLISION_CLASS_NAME,
+    VISUAL_CLASS_GEOM_ATTRS,
+    COLLISION_CLASS_GEOM_ATTRS,
+    DECOMPOSED_COLLISION_CLASS_GEOM_ATTRS,
 )
 
 __all__ = [
@@ -60,6 +67,7 @@ __all__ = [
     "update_obj_assets",
     "update_non_obj_assets",
     "add_mujoco_inputs",
+    "ensure_default_geom_classes",
     "get_processed_mujoco_inputs",
     "parse_inputs_xml",
     "parse_scene_xml",
@@ -82,4 +90,10 @@ __all__ = [
     VISUAL_PATH_NAME,
     DEFAULT_DECOMPOSE_THRESHOLD,
     COLLISION_MATERIAL_NAME,
+    VISUAL_CLASS_NAME,
+    COLLISION_CLASS_NAME,
+    DECOMPOSED_COLLISION_CLASS_NAME,
+    "VISUAL_CLASS_GEOM_ATTRS",
+    "COLLISION_CLASS_GEOM_ATTRS",
+    "DECOMPOSED_COLLISION_CLASS_GEOM_ATTRS",
 ]

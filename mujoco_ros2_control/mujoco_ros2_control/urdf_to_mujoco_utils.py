@@ -768,6 +768,70 @@ def _ensure_collision_material(dom):
     return dom
 
 
+def ensure_default_geom_classes(dom):
+    """Ensures visual, collision, and decomposed_collision default geom class blocks exist.
+
+    For each of the three classes not already present in the DOM (e.g. user-supplied via
+    ``mujoco_inputs``), an auto-generated ``<default class="..."><geom .../></default>`` block
+    is appended to the top-level ``<default>`` element.  Call this **after**
+    ``add_mujoco_inputs()`` so user-defined classes are already merged before the gap-fill runs.
+
+    When the ``collision`` class is auto-generated (it references ``material="bright_orange"``),
+    the material is also ensured in ``<asset>`` via ``_ensure_collision_material``.
+
+    :param dom: parsed MJCF DOM (xml.dom.minidom.Document)
+    :return: the modified DOM
+    """
+    root = dom.documentElement
+
+    # Collect all top-level <default> elements. Normally there is at most one (MJCF allows
+    # only one), but merge any extras defensively before adding new class blocks.
+    root_level_defaults = [
+        child for child in root.childNodes if child.nodeType == child.ELEMENT_NODE and child.tagName == "default"
+    ]
+
+    if not root_level_defaults:
+        root_default = dom.createElement("default")
+        worldbody_elements = root.getElementsByTagName("worldbody")
+        if worldbody_elements:
+            root.insertBefore(root_default, worldbody_elements[0])
+        else:
+            root.appendChild(root_default)
+    else:
+        root_default = root_level_defaults[0]
+        # Merge any extra <default> siblings into the first one.
+        for extra in root_level_defaults[1:]:
+            _merge_default_element(dom, extra)
+            root.removeChild(extra)
+
+    # Collect class names already defined as direct children of the (now single) root default.
+    existing_classes = set()
+    for child in root_default.childNodes:
+        if child.nodeType == child.ELEMENT_NODE and child.tagName == "default":
+            if child.hasAttribute("class"):
+                existing_classes.add(child.getAttribute("class"))
+
+    classes_to_add = {
+        VISUAL_CLASS_NAME: VISUAL_CLASS_GEOM_ATTRS,
+        COLLISION_CLASS_NAME: COLLISION_CLASS_GEOM_ATTRS,
+        DECOMPOSED_COLLISION_CLASS_NAME: DECOMPOSED_COLLISION_CLASS_GEOM_ATTRS,
+    }
+
+    for class_name, attrs in classes_to_add.items():
+        if class_name in existing_classes:
+            continue
+        class_default = dom.createElement("default")
+        class_default.setAttribute("class", class_name)
+        geom_el = dom.createElement("geom")
+        for attr, val in attrs.items():
+            geom_el.setAttribute(attr, val)
+        class_default.appendChild(geom_el)
+        root_default.appendChild(class_default)
+        if class_name == COLLISION_CLASS_NAME:
+            # The collision class references bright_orange; ensure the material exists.
+            _ensure_collision_material(dom)
+
+    return dom
 def add_mujoco_inputs(dom, raw_inputs, scene_inputs):
     """
     Copies all elements under the "raw_inputs" and "scene_inputs" XML tags directly in the provided dom.

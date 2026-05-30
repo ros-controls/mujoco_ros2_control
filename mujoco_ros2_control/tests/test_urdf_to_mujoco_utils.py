@@ -34,10 +34,17 @@ from mujoco_ros2_control import (
     update_obj_assets,
     update_non_obj_assets,
     add_mujoco_inputs,
+    ensure_default_geom_classes,
     get_processed_mujoco_inputs,
     DECOMPOSED_PATH_NAME,
     COMPOSED_PATH_NAME,
     VISUAL_PATH_NAME,
+    VISUAL_CLASS_NAME,
+    COLLISION_CLASS_NAME,
+    DECOMPOSED_COLLISION_CLASS_NAME,
+    VISUAL_CLASS_GEOM_ATTRS,
+    COLLISION_CLASS_GEOM_ATTRS,
+    DECOMPOSED_COLLISION_CLASS_GEOM_ATTRS,
     write_mujoco_scene,
     add_urdf_free_joint,
     get_xml_from_file,
@@ -444,18 +451,21 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
                 "col_mesh": {"scale": "1 1 1", "used_as_visual": False, "used_as_collision": True},
             }
             result_xml = update_obj_assets(dom, tmpdir + "/", mesh_info_dict).toxml()
-            self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*class="collision"[^>]*>')
+            # decomposed pieces use the decomposed_collision class (not collision) so they
+            # inherit group/contype/conaffinity from the default but keep obj2mjcf's own materials
+            self.assertRegex(
+                result_xml,
+                r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*class="decomposed_collision"[^>]*>',
+            )
             # both convex piece mesh assets are present (not skipped as duplicate empty names)
             assert "col_mesh_collision_0.obj" in result_xml
             assert "col_mesh_collision_1.obj" in result_xml
             # obj2mjcf's visual sub-geom (whole mesh) is not cloned as a collision geom
-            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="col_mesh"[^>]*class="collision"[^>]*>')
-            # decomposed collision pieces get the explicit collision separation attributes
-            # (group 3, contype/conaffinity 1) ...
-            self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*group="3"[^>]*>')
-            self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*contype="1"[^>]*>')
-            # ... but are NOT tinted bright_orange - they keep obj2mjcf's own decomposition
-            # materials, and no bright_orange material is injected for them.
+            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="col_mesh"[^>]*class="decomposed_collision"[^>]*>')
+            # no per-geom collision attrs - they come from the decomposed_collision class default
+            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*group="3"[^>]*>')
+            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*contype="1"[^>]*>')
+            # no bright_orange material injected - decomposed pieces keep obj2mjcf's own colors
             self.assertNotIn('material="bright_orange"', result_xml)
 
     def test_update_obj_assets_visual_only_untouched(self):
@@ -506,7 +516,10 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             # the visual geom still references the whole mesh (keeps its contype for now)
             self.assertRegex(result_xml, r'<geom[^>]*contype[^>]*mesh="shared"[^>]*>')
             # the collision geom was expanded into decomposed pieces
-            self.assertRegex(result_xml, r'<geom[^>]*mesh="shared_collision_0"[^>]*class="collision"[^>]*>')
+            self.assertRegex(
+                result_xml,
+                r'<geom[^>]*mesh="shared_collision_0"[^>]*class="decomposed_collision"[^>]*>',
+            )
 
     def test_update_obj_assets_expands_scaled_sibling(self):
         # A mirrored link makes MuJoCo emit a scaled sibling mesh (same file, scale="1 -1 1",
@@ -535,19 +548,26 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             }
             result_xml = update_obj_assets(dom, tmpdir + "/", mesh_info_dict).toxml()
             # the mirrored sibling's whole-mesh collision geom is gone ...
-            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="leg1"[^>]*class="collision"[^>]*>')
+            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="leg1"[^>]*class="decomposed_collision"[^>]*>')
             # ... replaced by scaled decomposed pieces referencing per-sibling piece meshes
-            self.assertRegex(result_xml, r'<geom[^>]*mesh="leg_collision_0__leg1"[^>]*class="collision"[^>]*>')
+            self.assertRegex(
+                result_xml,
+                r'<geom[^>]*mesh="leg_collision_0__leg1"[^>]*class="decomposed_collision"[^>]*>',
+            )
             # a scaled piece mesh asset exists, carrying the sibling's mirror scale
             self.assertRegex(result_xml, r'<mesh name="leg_collision_0__leg1"[^>]*scale="1 -1 1"[^>]*>')
             # the whole sibling mesh asset is dropped (no visual references it)
             self.assertNotRegex(result_xml, r'<mesh name="leg1"[ />]')
             # the unscaled (left) side still expands as before
-            self.assertRegex(result_xml, r'<geom[^>]*mesh="leg_collision_0"[^>]*class="collision"[^>]*>')
+            self.assertRegex(
+                result_xml,
+                r'<geom[^>]*mesh="leg_collision_0"[^>]*class="decomposed_collision"[^>]*>',
+            )
 
     def test_update_non_obj_assets_visual_geom(self):
         # A geom with contype is a MuJoCo-imported <visual>; it is classified as visual and
-        # given explicit render attributes (contype=0 so it never collides) plus group 2.
+        # its raw import attributes (contype/conaffinity/group/density) are stripped so they
+        # don't override the <default class="visual"> block added by ensure_default_geom_classes.
         xml_string = """<?xml version="1.0"?>
 <mujoco>
   <worldbody>
@@ -561,18 +581,18 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_xml = result_dom.toxml()
         assert 'class="visual"' in result_xml
         assert 'class="collision"' not in result_xml
-        # explicit visual attributes: visuals never collide and live in group 2
-        assert 'contype="0"' in result_xml
-        assert 'conaffinity="0"' in result_xml
-        assert 'group="2"' in result_xml
-        assert 'density="0"' in result_xml
+        # raw import attrs are stripped - physics attrs come from the visual class default
+        assert "contype=" not in result_xml
+        assert "conaffinity=" not in result_xml
+        assert "group=" not in result_xml
+        assert "density=" not in result_xml
         # visual keeps its rgba for rendering
         assert 'rgba="0.2 0.2 0.2 1"' in result_xml
 
     def test_update_non_obj_assets_collision_geom(self):
         # A geom without contype is a MuJoCo-imported <collision>; it is classified as
-        # collision, its rgba is dropped, and it gets explicit collision attributes
-        # (group 3, contype/conaffinity 1) tinted bright_orange for inspection.
+        # collision, its rgba is dropped. Physics attrs (group/contype/conaffinity/material)
+        # come from the <default class="collision"> block, not from individual geom attributes.
         xml_string = """<?xml version="1.0"?>
 <mujoco>
   <worldbody>
@@ -587,11 +607,11 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         assert 'class="collision"' in result_xml
         assert 'class="visual"' not in result_xml
         assert 'rgba="0.2 0.2 0.2 1"' not in result_xml
-        assert 'group="3"' in result_xml
-        assert 'contype="1"' in result_xml
-        assert 'conaffinity="1"' in result_xml
-        assert 'material="bright_orange"' in result_xml
-        # the referenced material is auto-defined so the MJCF still loads
+        # no per-geom collision attrs - they come from the collision class default
+        assert "group=" not in result_xml
+        assert "contype=" not in result_xml
+        assert "conaffinity=" not in result_xml
+        # the bright_orange material is still added to <asset> so the class default can reference it
         self.assertRegex(result_xml, r'<material[^>]*name="bright_orange"')
 
     def test_update_non_obj_assets_keeps_existing_bright_orange_material(self):
@@ -632,7 +652,6 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_xml = result_dom.toxml()
         self.assertEqual(result_xml.count('class="visual"'), 1)
         self.assertEqual(result_xml.count('class="collision"'), 1)
-        # both geoms now carry an explicit contype (0 for visual, 1 for collision)
         self.assertRegex(result_xml, r'<geom[^>]*mesh="visual_mesh"[^>]*class="visual"[^>]*>')
         self.assertRegex(result_xml, r'<geom[^>]*mesh="collision_mesh"[^>]*class="collision"[^>]*>')
 
@@ -713,6 +732,91 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_xml = result_dom.toxml()
         assert "integrator" in result_xml
         assert "light" in result_xml
+
+    def test_add_mujoco_inputs_merges_default_into_existing(self):
+        # When the DOM already has a <default> and raw_inputs also contains one, the two
+        # must be merged into a single top-level <default> rather than creating a sibling.
+        # Having two top-level <default> elements is invalid in MJCF.
+        xml_string = (
+            '<?xml version="1.0"?><mujoco>' "<default>" '<joint armature="0.01"/>' "</default>" "<worldbody/></mujoco>"
+        )
+        raw_xml = (
+            '<?xml version="1.0"?><raw_inputs>'
+            "<default>"
+            '<default class="visual"><geom contype="0" group="2"/></default>'
+            "</default>"
+            "</raw_inputs>"
+        )
+        raw_dom = minidom.parseString(raw_xml)
+        raw_inputs = raw_dom.getElementsByTagName("raw_inputs")[0]
+        dom = minidom.parseString(xml_string)
+        result_dom = add_mujoco_inputs(dom, raw_inputs, None)
+        result_xml = result_dom.toxml()
+        # exactly ONE top-level <default> element
+        root_defaults = [
+            c for c in result_dom.documentElement.childNodes if c.nodeType == c.ELEMENT_NODE and c.tagName == "default"
+        ]
+        self.assertEqual(len(root_defaults), 1, "Expected a single top-level <default> element")
+        # both the original joint content and the user's class def are present
+        assert 'armature="0.01"' in result_xml
+        assert 'class="visual"' in result_xml
+
+    def test_add_mujoco_inputs_default_with_no_existing(self):
+        # When the DOM has no <default> and raw_inputs supplies one, a root <default>
+        # is created and the user's children are placed inside it.
+        xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
+        raw_xml = (
+            '<?xml version="1.0"?><raw_inputs>'
+            "<default>"
+            '<default class="visual"><geom contype="0" group="2"/></default>'
+            "</default>"
+            "</raw_inputs>"
+        )
+        raw_dom = minidom.parseString(raw_xml)
+        raw_inputs = raw_dom.getElementsByTagName("raw_inputs")[0]
+        dom = minidom.parseString(xml_string)
+        result_dom = add_mujoco_inputs(dom, raw_inputs, None)
+        result_xml = result_dom.toxml()
+        root_defaults = [
+            c for c in result_dom.documentElement.childNodes if c.nodeType == c.ELEMENT_NODE and c.tagName == "default"
+        ]
+        self.assertEqual(len(root_defaults), 1)
+        assert 'class="visual"' in result_xml
+
+    def test_add_mujoco_inputs_user_class_not_duplicated_by_ensure_default(self):
+        # Full pipeline simulation: DOM has a MuJoCo-generated <default> (with joint attrs),
+        # raw_inputs has a <default> with user class defs. After add_mujoco_inputs +
+        # ensure_default_geom_classes, there must be exactly one top-level <default> and
+        # each class name must appear exactly once.
+        xml_string = (
+            '<?xml version="1.0"?><mujoco>' '<default><joint armature="0.01"/></default>' "<worldbody/></mujoco>"
+        )
+        raw_xml = (
+            '<?xml version="1.0"?><raw_inputs>'
+            "<default>"
+            '<default class="visual"><geom contype="0" conaffinity="0" group="99" density="0"/></default>'
+            '<default class="collision"><geom group="3" type="mesh"/></default>'
+            "</default>"
+            "</raw_inputs>"
+        )
+        raw_dom = minidom.parseString(raw_xml)
+        raw_inputs = raw_dom.getElementsByTagName("raw_inputs")[0]
+        dom = minidom.parseString(xml_string)
+        dom = add_mujoco_inputs(dom, raw_inputs, None)
+        dom = ensure_default_geom_classes(dom)
+        result_xml = dom.toxml()
+        # single top-level <default>
+        root_defaults = [
+            c for c in dom.documentElement.childNodes if c.nodeType == c.ELEMENT_NODE and c.tagName == "default"
+        ]
+        self.assertEqual(len(root_defaults), 1)
+        # user's visual definition preserved (group=99), not overwritten with group=2
+        assert 'group="99"' in result_xml
+        self.assertNotIn('group="2"', result_xml)
+        # each class appears exactly once
+        self.assertEqual(result_xml.count(f'class="{VISUAL_CLASS_NAME}"'), 1)
+        self.assertEqual(result_xml.count(f'class="{COLLISION_CLASS_NAME}"'), 1)
+        self.assertEqual(result_xml.count(f'class="{DECOMPOSED_COLLISION_CLASS_NAME}"'), 1)
 
     def test_get_processed_mujoco_inputs_none_element(self):
         result = get_processed_mujoco_inputs(None)
@@ -2429,6 +2533,187 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
             assets_dir = os.path.join(output_dir, "assets")
             self.assertFalse(os.path.exists(assets_dir))
+
+    # --- ensure_default_geom_classes ---
+
+    def test_ensure_default_geom_classes_creates_all(self):
+        # When the MJCF has no <default> section, all three class blocks are created.
+        xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
+        dom = minidom.parseString(xml_string)
+        result_dom = ensure_default_geom_classes(dom)
+        result_xml = result_dom.toxml()
+        assert f'class="{VISUAL_CLASS_NAME}"' in result_xml
+        assert f'class="{COLLISION_CLASS_NAME}"' in result_xml
+        assert f'class="{DECOMPOSED_COLLISION_CLASS_NAME}"' in result_xml
+        # visual class has the correct geom attrs
+        for attr, val in VISUAL_CLASS_GEOM_ATTRS.items():
+            assert f'{attr}="{val}"' in result_xml
+        # collision class has the correct geom attrs
+        for attr, val in COLLISION_CLASS_GEOM_ATTRS.items():
+            assert f'{attr}="{val}"' in result_xml
+        # decomposed_collision class has the correct geom attrs (no material)
+        for attr, val in DECOMPOSED_COLLISION_CLASS_GEOM_ATTRS.items():
+            assert f'{attr}="{val}"' in result_xml
+        # bright_orange material is added to <asset> for the collision class to reference
+        self.assertRegex(result_xml, r'<material[^>]*name="bright_orange"')
+
+    def test_ensure_default_geom_classes_collision_is_mesh(self):
+        # The collision class sets type="mesh" as a fallback (matching the convention in the
+        # example MJCFs). Primitive collisions carry an explicit type that overrides it, so
+        # this only affects collision geoms that reference a mesh without an explicit type.
+        xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
+        dom = minidom.parseString(xml_string)
+        result_dom = ensure_default_geom_classes(dom)
+        collision_geom = None
+        for default_el in result_dom.getElementsByTagName("default"):
+            if default_el.getAttribute("class") == COLLISION_CLASS_NAME:
+                geoms = default_el.getElementsByTagName("geom")
+                self.assertEqual(len(geoms), 1)
+                collision_geom = geoms[0]
+        self.assertIsNotNone(collision_geom, "collision class default not found")
+        self.assertEqual(collision_geom.getAttribute("type"), "mesh")
+        self.assertEqual(collision_geom.getAttribute("contype"), "1")
+        self.assertEqual(collision_geom.getAttribute("conaffinity"), "1")
+
+    def test_ensure_default_geom_classes_decomposed_collision_is_mesh(self):
+        # Decomposed pieces are always meshes and reference a mesh by name only (obj2mjcf
+        # emits <geom mesh="..._collision_0" class="collision"/> with no explicit type). The
+        # decomposed_collision class MUST set type="mesh", otherwise MuJoCo falls back to its
+        # default type="sphere" and fits a sphere around each piece - so they render as spheres.
+        xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
+        dom = minidom.parseString(xml_string)
+        result_dom = ensure_default_geom_classes(dom)
+        decomposed_geom = None
+        for default_el in result_dom.getElementsByTagName("default"):
+            if default_el.getAttribute("class") == DECOMPOSED_COLLISION_CLASS_NAME:
+                geoms = default_el.getElementsByTagName("geom")
+                self.assertEqual(len(geoms), 1)
+                decomposed_geom = geoms[0]
+        self.assertIsNotNone(decomposed_geom, "decomposed_collision class default not found")
+        self.assertEqual(decomposed_geom.getAttribute("type"), "mesh")
+
+    def test_ensure_default_geom_classes_skips_user_defined_visual(self):
+        # When the user already defined class="visual", it is left untouched and only
+        # the missing collision and decomposed_collision classes are auto-generated.
+        xml_string = (
+            '<?xml version="1.0"?><mujoco>'
+            "<default>"
+            '<default class="visual"><geom group="99" contype="0" conaffinity="0" density="0"/></default>'
+            "</default>"
+            "<worldbody/></mujoco>"
+        )
+        dom = minidom.parseString(xml_string)
+        result_dom = ensure_default_geom_classes(dom)
+        result_xml = result_dom.toxml()
+        # user's definition preserved (group=99, not group=2)
+        assert 'group="99"' in result_xml
+        self.assertNotIn('group="2"', result_xml)
+        # exactly one visual default, plus auto-generated collision and decomposed_collision
+        self.assertEqual(result_xml.count(f'class="{VISUAL_CLASS_NAME}"'), 1)
+        assert f'class="{COLLISION_CLASS_NAME}"' in result_xml
+        assert f'class="{DECOMPOSED_COLLISION_CLASS_NAME}"' in result_xml
+
+    def test_ensure_default_geom_classes_skips_all_user_defined(self):
+        # When all three classes are already in the DOM, nothing is added or changed.
+        xml_string = (
+            '<?xml version="1.0"?><mujoco>'
+            "<default>"
+            '<default class="visual"><geom group="99"/></default>'
+            '<default class="collision"><geom group="88"/></default>'
+            '<default class="decomposed_collision"><geom group="77"/></default>'
+            "</default>"
+            "<worldbody/></mujoco>"
+        )
+        dom = minidom.parseString(xml_string)
+        result_dom = ensure_default_geom_classes(dom)
+        result_xml = result_dom.toxml()
+        # all three user definitions preserved unchanged
+        assert 'group="99"' in result_xml
+        assert 'group="88"' in result_xml
+        assert 'group="77"' in result_xml
+        # exactly one of each class
+        self.assertEqual(result_xml.count(f'class="{VISUAL_CLASS_NAME}"'), 1)
+        self.assertEqual(result_xml.count(f'class="{COLLISION_CLASS_NAME}"'), 1)
+        self.assertEqual(result_xml.count(f'class="{DECOMPOSED_COLLISION_CLASS_NAME}"'), 1)
+
+    def test_ensure_default_geom_classes_creates_root_default_if_absent(self):
+        # A <default> element is created at the root level when none exists.
+        xml_string = '<?xml version="1.0"?><mujoco><worldbody/></mujoco>'
+        dom = minidom.parseString(xml_string)
+        result_dom = ensure_default_geom_classes(dom)
+        defaults = result_dom.documentElement.getElementsByTagName("default")
+        root_defaults = [d for d in defaults if d.parentNode == result_dom.documentElement]
+        self.assertEqual(len(root_defaults), 1)
+
+    def test_update_non_obj_assets_visual_geom_strips_import_attrs(self):
+        # Raw import attrs (contype/conaffinity/group/density) are removed from visual geoms
+        # so the <default class="visual"> block can supply them without being overridden.
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="test">
+      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="arm"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        result_dom = update_non_obj_assets(dom, "/tmp/output/")
+        worldbody_geoms = result_dom.getElementsByTagName("worldbody")[0].getElementsByTagName("geom")
+        classified = [g for g in worldbody_geoms if g.getAttribute("class") == VISUAL_CLASS_NAME]
+        self.assertEqual(len(classified), 1)
+        geom = classified[0]
+        self.assertFalse(geom.hasAttribute("contype"))
+        self.assertFalse(geom.hasAttribute("conaffinity"))
+        self.assertFalse(geom.hasAttribute("group"))
+        self.assertFalse(geom.hasAttribute("density"))
+
+    def test_update_non_obj_assets_collision_geom_no_explicit_attrs(self):
+        # Collision geoms get class="collision" but no per-geom physics attrs; those come from
+        # the <default class="collision"> block created by ensure_default_geom_classes.
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="test">
+      <geom type="sphere" size="0.1"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        result_dom = update_non_obj_assets(dom, "/tmp/output/")
+        worldbody_geoms = result_dom.getElementsByTagName("worldbody")[0].getElementsByTagName("geom")
+        classified = [g for g in worldbody_geoms if g.getAttribute("class") == COLLISION_CLASS_NAME]
+        self.assertEqual(len(classified), 1)
+        geom = classified[0]
+        self.assertFalse(geom.hasAttribute("contype"))
+        self.assertFalse(geom.hasAttribute("conaffinity"))
+        self.assertFalse(geom.hasAttribute("group"))
+        self.assertFalse(geom.hasAttribute("material"))
+
+    def test_update_obj_assets_decomposed_uses_decomposed_collision_class(self):
+        # Expanded decomposed pieces use class="decomposed_collision", not class="collision",
+        # and carry no per-geom physics attrs (they come from the class default).
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_decomposed_mjcf(tmpdir, "finger")
+            xml_string = (
+                '<?xml version="1.0"?><mujoco><asset>'
+                '<mesh name="finger" file="finger.obj"/>'
+                '</asset><worldbody><body name="test">'
+                '<geom type="mesh" mesh="finger" pos="0 0 0" quat="1 0 0 0"/>'
+                "</body></worldbody></mujoco>"
+            )
+            dom = minidom.parseString(xml_string)
+            mesh_info_dict = {
+                "finger": {"scale": "1 1 1", "used_as_visual": False, "used_as_collision": True},
+            }
+            result_dom = update_obj_assets(dom, tmpdir + "/", mesh_info_dict)
+            worldbody_geoms = result_dom.getElementsByTagName("worldbody")[0].getElementsByTagName("geom")
+            decomposed = [g for g in worldbody_geoms if g.getAttribute("class") == DECOMPOSED_COLLISION_CLASS_NAME]
+            self.assertGreater(len(decomposed), 0)
+            for geom in decomposed:
+                self.assertFalse(geom.hasAttribute("contype"))
+                self.assertFalse(geom.hasAttribute("conaffinity"))
+                self.assertFalse(geom.hasAttribute("group"))
+                self.assertFalse(geom.hasAttribute("material"))
 
 
 if __name__ == "__main__":
