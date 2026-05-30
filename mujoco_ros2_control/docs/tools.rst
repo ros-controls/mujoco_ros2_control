@@ -129,19 +129,25 @@ Rough outline of the automated conversion process
      For instance, if running multiple types of UR robots in one sim, there will be multiple ``shoulder.dae`` files.
 
 - Reads absolute filepaths of all meshes (from both ``<visual>`` and ``<collision>`` tags) and
-  converts either ``.dae`` or ``.stl`` to ``.obj`` using trimesh.
-
-  - Puts all meshes into an ``assets/`` folder under ``mjcf_data/`` relative to current working dir.
-  - Modifies filepaths again in URDF to point to the ``assets/`` folder.
-  - Decomposes large meshes into multiple components to ensure convex hulls.
+  materializes them into an ``assets/`` folder under ``mjcf_data/`` relative to the current
+  working dir, rewriting the URDF mesh paths to point there.
 
 - Handles visual and collision geometry independently:
 
-  - The ``<visual>`` geometry is used purely for rendering (the ``visual`` class).
-  - The ``<collision>`` geometry drives physics (the ``collision`` class). When a link defines no
-    ``<collision>``, a collision is synthesized from its ``<visual>`` so the visual mesh is reused
-    as the collision shape (the previous behaviour). This synthesis happens at the URDF level, so it
-    stays correct per link even when MuJoCo fuses fixed-jointed bodies together.
+  - **Visual** geometry is used purely for rendering (the ``visual`` class). Visual meshes are
+    plain references - ``.stl``/``.obj`` are kept as-is and only ``.dae`` is converted to ``.obj``
+    (MuJoCo cannot load DAE). They live under ``assets/visual/`` and are **never decomposed**; their
+    color is applied as the geom's ``rgba``.
+  - **Collision** geometry drives physics (the ``collision`` class). Collision *primitives*
+    (box/sphere/cylinder/capsule) are used directly. Collision *meshes* are also used directly
+    (as a single whole-mesh collision geom) **unless** their link is named in a ``decompose_mesh``
+    input, in which case they are convex-decomposed with obj2mjcf (coacd) under
+    ``assets/decomposed/`` at the requested threshold. So decomposition is opt-in per link.
+  - When a link defines no ``<collision>``, one is synthesized from its ``<visual>`` so the visual
+    mesh is reused as the collision shape. This synthesis happens at the URDF level, so it stays
+    correct per link even when MuJoCo fuses fixed-jointed bodies together. A mesh shared by a visual
+    and a collision is converted once and reused for both (and, if that link requests decomposition,
+    the whole mesh renders while its decomposed pieces collide).
 
 - Publishes the new formatted robot description XML file that can be used for conversion.
 - Converts the new robot description URDF file.
