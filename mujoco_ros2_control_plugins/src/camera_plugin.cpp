@@ -29,13 +29,13 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
   mj_model_ = model;
   mj_data_ = data;
 
+  RCLCPP_INFO(node_->get_logger(), "CameraPlugin initializing cameras...");
+
   // Read the mj_model_, identify the number of cameras, and populate containers for them.
   register_cameras();
-
-  // RCLCPP_INFO(node_->get_logger(), "CameraPlugin initialised.");
   if (cameras_.empty())
   {
-    return false;
+    return true;
   }
 
   // this is more temporary until I figure out a better place for this
@@ -58,12 +58,25 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
 
 void CameraPlugin::update(const mjModel* model_arg, mjData* data)
 {
-  mjv_copyData(mj_camera_data_, model_arg, data);
-  new_data_ = true;
+  // Check if it is time to publish
+  auto now = node_->get_clock()->now();
+  if ((now - last_publish_time_).seconds() < (1.0 / camera_publish_rate_))
+  {
+    return;
+  }
+  last_publish_time_ = now;
+
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    mjv_copyData(mj_camera_data_, model_arg, data);
+    new_data_ = true;
+  }
+  data_cv_.notify_one();
 }
 
 void CameraPlugin::cleanup()
 {
+  close();
 }
 
 void CameraPlugin::register_cameras()
@@ -169,7 +182,11 @@ void CameraPlugin::register_cameras()
 
 void CameraPlugin::close()
 {
-  publish_images_ = false;
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    publish_images_ = false;
+  }
+  data_cv_.notify_one();
   if (rendering_thread_.joinable())
   {
     rendering_thread_.join();
@@ -348,11 +365,19 @@ void CameraPlugin::update_loop()
   RCLCPP_INFO(node_->get_logger(), "Resized offscreen buffer to %d x %d", max_width, max_height);
 
   // TODO: Support per-camera publish rates?
-  rclcpp::Rate rate(camera_publish_rate_);
   while (rclcpp::ok() && publish_images_)
   {
+    std::unique_lock<std::mutex> lock(data_mutex_);
+    data_cv_.wait(lock, [this] { return new_data_ || !publish_images_; });
+    if (!publish_images_)
+    {
+      break;
+    }
+
+    new_data_ = false;
+    lock.unlock();
+
     update_cameras();
-    rate.sleep();
   }
 
   mjv_freeScene(&mjv_scn_);
@@ -371,12 +396,7 @@ void CameraPlugin::update_loop()
 
 void CameraPlugin::update_cameras()
 {
-  // Step 1: Check if there is new data
-  if (!new_data_)
-  {
-    return;
-  }
-
+  // Step 1: Done in the `update` cb to copy rendering data
   // Rendering is done offscreen
   mjr_setBuffer(mjFB_OFFSCREEN, &mjr_con_);
 
@@ -435,9 +455,6 @@ void CameraPlugin::update_cameras()
     camera.depth_image_pub->publish(camera.depth_image);
     camera.camera_info_pub->publish(camera.camera_info);
   }
-
-  // Reset
-  new_data_ = false;
 }
 
 }  // namespace mujoco_ros2_control_plugins
