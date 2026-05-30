@@ -160,6 +160,10 @@ Rough outline of the automated conversion process
       untouched). **Decomposed** collision pieces are the exception: they get the same group 3 /
       contype / conaffinity attributes but keep obj2mjcf's own per-decomposition materials/colors
       instead of being recolored, so the individual convex hulls stay distinguishable.
+  - Mirrored links (e.g. left/right feet) make MuJoCo emit a scaled sibling of a decomposed
+    mesh (same source, ``scale="1 -1 1"``). The sibling is decomposed as well - scaled copies
+    of the convex pieces are generated - so both sides of a mirrored link get the
+    decomposition rather than only one.
 
 - Publishes the new formatted robot description XML file that can be used for conversion.
 - Converts the new robot description URDF file.
