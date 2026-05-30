@@ -1,16 +1,21 @@
-// Copyright 2026 PAL Robotics S.L.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/**
+ * Copyright (c) 2026, United States Government, as represented by the
+ * Administrator of the National Aeronautics and Space Administration.
+ *
+ * All rights reserved.
+ *
+ * This software is licensed under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ */
 
 #include "mujoco_ros2_control_plugins/camera_plugin.hpp"
 
@@ -26,7 +31,6 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
 
   // Read the mj_model_, identify the number of cameras, and populate containers for them.
   register_cameras();
-  camera_publish_rate_ = 24;
 
   // RCLCPP_INFO(node_->get_logger(), "CameraPlugin initialised.");
   if (cameras_.empty())
@@ -55,7 +59,7 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
 void CameraPlugin::update(const mjModel* model_arg, mjData* data)
 {
   mjv_copyData(mj_camera_data_, model_arg, data);
-  new_data = true;
+  new_data_ = true;
 }
 
 void CameraPlugin::cleanup()
@@ -368,68 +372,72 @@ void CameraPlugin::update_loop()
 void CameraPlugin::update_cameras()
 {
   // Step 1: Check if there is new data
-  if (new_data)
+  if (!new_data_)
   {
-    // Rendering is done offscreen
-    mjr_setBuffer(mjFB_OFFSCREEN, &mjr_con_);
-
-    // Step 2: Render the scene and copy images to relevant camera data containers.
-    for (auto& camera : cameras_)
-    {
-      // Render scene
-      mjv_updateScene(mj_model_, mj_camera_data_, &mjv_opt_, NULL, &camera.mjv_cam, mjCAT_ALL, &mjv_scn_);
-      mjr_render(camera.viewport, &mjv_scn_, &mjr_con_);
-
-      // Copy image into relevant buffers
-      mjr_readPixels(camera.image_buffer.data(), camera.depth_buffer.data(), camera.viewport, &mjr_con_);
-    }
-
-    // Step 3: Adjust the images and copy depth data.
-    const float near = static_cast<float>(mj_model_->vis.map.znear * mj_model_->stat.extent);
-    const float far = static_cast<float>(mj_model_->vis.map.zfar * mj_model_->stat.extent);
-    const float depth_scale = 1.0f - near / far;
-    for (auto& camera : cameras_)
-    {
-      // Fix non-linear projections in the depth image and flip the data.
-      // https://github.com/google-deepmind/mujoco/blob/3.4.0/python/mujoco/renderer.py#L190
-      for (uint32_t h = 0; h < camera.height; h++)
-      {
-        for (uint32_t w = 0; w < camera.width; w++)
-        {
-          auto idx = h * camera.width + w;
-          auto idx_flipped = (camera.height - 1 - h) * camera.width + w;
-          camera.depth_buffer[idx] = near / (1.0f - camera.depth_buffer[idx] * (depth_scale));
-          camera.depth_buffer_flipped[idx_flipped] = camera.depth_buffer[idx];
-        }
-      }
-      // Copy flipped data into the depth image message, floats -> unsigned chars
-      std::memcpy(&camera.depth_image.data[0], camera.depth_buffer_flipped.data(), camera.depth_image.data.size());
-
-      // OpenGL's coordinate system's origin is in the bottom left, so we invert the images row-by-row
-      auto row_size = camera.width * 3;
-      for (uint32_t h = 0; h < camera.height; h++)
-      {
-        auto src_idx = h * row_size;
-        auto dest_idx = (camera.height - 1 - h) * row_size;
-        std::memcpy(&camera.image.data[dest_idx], &camera.image_buffer[src_idx], row_size);
-      }
-    }
-
-    // Step 4: Publish the images.
-    for (auto& camera : cameras_)
-    {
-      // Publish images and camera info
-      const auto time = node_->now();
-      camera.image.header.stamp = time;
-      camera.depth_image.header.stamp = time;
-      camera.camera_info.header.stamp = time;
-
-      camera.image_pub->publish(camera.image);
-      camera.depth_image_pub->publish(camera.depth_image);
-      camera.camera_info_pub->publish(camera.camera_info);
-    }
-    new_data = false;
+    return;
   }
+
+  // Rendering is done offscreen
+  mjr_setBuffer(mjFB_OFFSCREEN, &mjr_con_);
+
+  // Step 2: Render the scene and copy images to relevant camera data containers.
+  for (auto& camera : cameras_)
+  {
+    // Render scene
+    mjv_updateScene(mj_model_, mj_camera_data_, &mjv_opt_, NULL, &camera.mjv_cam, mjCAT_ALL, &mjv_scn_);
+    mjr_render(camera.viewport, &mjv_scn_, &mjr_con_);
+
+    // Copy image into relevant buffers
+    mjr_readPixels(camera.image_buffer.data(), camera.depth_buffer.data(), camera.viewport, &mjr_con_);
+  }
+
+  // Step 3: Adjust the images and copy depth data.
+  const float near = static_cast<float>(mj_model_->vis.map.znear * mj_model_->stat.extent);
+  const float far = static_cast<float>(mj_model_->vis.map.zfar * mj_model_->stat.extent);
+  const float depth_scale = 1.0f - near / far;
+  for (auto& camera : cameras_)
+  {
+    // Fix non-linear projections in the depth image and flip the data.
+    // https://github.com/google-deepmind/mujoco/blob/3.4.0/python/mujoco/renderer.py#L190
+    for (uint32_t h = 0; h < camera.height; h++)
+    {
+      for (uint32_t w = 0; w < camera.width; w++)
+      {
+        auto idx = h * camera.width + w;
+        auto idx_flipped = (camera.height - 1 - h) * camera.width + w;
+        camera.depth_buffer[idx] = near / (1.0f - camera.depth_buffer[idx] * (depth_scale));
+        camera.depth_buffer_flipped[idx_flipped] = camera.depth_buffer[idx];
+      }
+    }
+    // Copy flipped data into the depth image message, floats -> unsigned chars
+    std::memcpy(&camera.depth_image.data[0], camera.depth_buffer_flipped.data(), camera.depth_image.data.size());
+
+    // OpenGL's coordinate system's origin is in the bottom left, so we invert the images row-by-row
+    auto row_size = camera.width * 3;
+    for (uint32_t h = 0; h < camera.height; h++)
+    {
+      auto src_idx = h * row_size;
+      auto dest_idx = (camera.height - 1 - h) * row_size;
+      std::memcpy(&camera.image.data[dest_idx], &camera.image_buffer[src_idx], row_size);
+    }
+  }
+
+  // Step 4: Publish the images.
+  for (auto& camera : cameras_)
+  {
+    // Publish images and camera info
+    const auto time = node_->now();
+    camera.image.header.stamp = time;
+    camera.depth_image.header.stamp = time;
+    camera.camera_info.header.stamp = time;
+
+    camera.image_pub->publish(camera.image);
+    camera.depth_image_pub->publish(camera.depth_image);
+    camera.camera_info_pub->publish(camera.camera_info);
+  }
+
+  // Reset
+  new_data_ = false;
 }
 
 }  // namespace mujoco_ros2_control_plugins
