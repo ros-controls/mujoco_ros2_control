@@ -414,16 +414,16 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         os.makedirs(mesh_dir)
         with open(os.path.join(mesh_dir, f"{name}.xml"), "w") as f:
             f.write(
-                '<mujoco><asset>'
+                "<mujoco><asset>"
                 '<mesh file="{n}.obj"/>'
                 '<mesh file="{n}_collision_0.obj"/>'
                 '<mesh file="{n}_collision_1.obj"/>'
-                '</asset>'
-                '<worldbody><body>'
+                "</asset>"
+                "<worldbody><body>"
                 '<geom mesh="{n}" class="visual"/>'
                 '<geom mesh="{n}_collision_0" class="collision"/>'
                 '<geom mesh="{n}_collision_1" class="collision"/>'
-                '</body></worldbody></mujoco>'.format(n=name)
+                "</body></worldbody></mujoco>".format(n=name)
             )
 
     def test_update_obj_assets_expands_collision_only(self):
@@ -446,8 +446,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             result_xml = update_obj_assets(dom, tmpdir + "/", mesh_info_dict).toxml()
             self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*class="collision"[^>]*>')
             # both convex piece mesh assets are present (not skipped as duplicate empty names)
-            self.assertIn("col_mesh_collision_0.obj", result_xml)
-            self.assertIn("col_mesh_collision_1.obj", result_xml)
+            assert "col_mesh_collision_0.obj" in result_xml
+            assert "col_mesh_collision_1.obj" in result_xml
             # obj2mjcf's visual sub-geom (whole mesh) is not cloned as a collision geom
             self.assertNotRegex(result_xml, r'<geom[^>]*mesh="col_mesh"[^>]*class="collision"[^>]*>')
             # decomposed collision pieces get the explicit collision separation attributes
@@ -518,7 +518,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
                 '<?xml version="1.0"?><mujoco><asset>'
                 '<mesh name="leg" file="decomposed/leg/leg.obj"/>'
                 '<mesh name="leg1" file="decomposed/leg/leg.obj" scale="1 -1 1"/>'
-                '</asset><worldbody>'
+                "</asset><worldbody>"
                 '<body name="left">'
                 '<geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="leg"/>'
                 '<geom type="mesh" mesh="leg"/>'
