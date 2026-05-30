@@ -475,6 +475,11 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
     mesh is shared by a visual the whole ``<mesh>`` asset is kept so that visual still
     resolves. Visual-only meshes live in VISUAL_PATH_NAME, are not decomposed, and are
     left as plain single references.
+
+    Each decomposed collision piece receives the collision-separation attributes (group 3,
+    contype/conaffinity 1) but, unlike plain collision geoms, is NOT tinted with
+    COLLISION_MATERIAL_NAME - the pieces keep obj2mjcf's own materials/colors so the
+    individual convex hulls remain visually distinguishable.
     """
     # Find the <asset> element
     asset = dom.getElementsByTagName("asset")
@@ -592,8 +597,14 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                 if quat:
                     sub_geom_local.setAttribute("quat", quat)
                 sub_geom_local.setAttribute("class", "collision")
-                if sub_geom_local.hasAttribute("rgba"):
-                    sub_geom_local.removeAttribute("rgba")
+                # Give decomposed pieces the same collision-separation attributes as plain
+                # collisions (group 3, contype/conaffinity 1), but NOT the bright_orange
+                # material: decomposed meshes keep obj2mjcf's own materials/rgba so the
+                # individual convex pieces stay distinguishable.
+                for attribute, value in COLLISION_GEOM_ATTRS.items():
+                    if attribute == "material":
+                        continue
+                    sub_geom_local.setAttribute(attribute, value)
                 parent.appendChild(sub_geom_local)
 
     return dom
@@ -634,20 +645,17 @@ def update_non_obj_assets(dom, output_filepath, mesh_info_dict=None):
     # get all of the geom elements in the worldbody element
     worldbody_geoms = worldbody_element.getElementsByTagName("geom")
 
-    # raw import attributes that should not survive on a classified visual geom
-    remove_attributes = ["contype", "conaffinity", "group", "density"]
-
+    used_collision_material = False
     for geom in worldbody_geoms:
         # already classified upstream (e.g. obj-decomposed meshes); leave as is
         if geom.hasAttribute("class"):
             continue
 
         if geom.hasAttribute("contype"):
-            # visual geom: keep rgba, strip the raw import attributes
+            # visual geom: keep rgba, set explicit render attributes (contype=0 -> no collide)
             geom.setAttribute("class", "visual")
-            for attribute in remove_attributes:
-                if geom.hasAttribute(attribute):
-                    geom.removeAttribute(attribute)
+            for attribute, value in VISUAL_GEOM_ATTRS.items():
+                geom.setAttribute(attribute, value)
             # apply the URDF color so plain visual meshes (no obj2mjcf material) render
             if mesh_info_dict:
                 mesh_name = geom.getAttribute("mesh")
@@ -655,13 +663,48 @@ def update_non_obj_assets(dom, output_filepath, mesh_info_dict=None):
                     rgba = mesh_info_dict[mesh_name]["color"]
                     geom.setAttribute("rgba", " ".join(str(v) for v in rgba))
         else:
-            # collision geom: ensure a type, drop rgba (not rendered)
+            # collision geom: ensure a type, drop rgba (not rendered), set explicit collision
+            # attributes and tint it so the collision shape is visible in the viewer
             if not geom.hasAttribute("type"):
                 geom.setAttribute("type", "sphere")
             geom.setAttribute("class", "collision")
             if geom.hasAttribute("rgba"):
                 geom.removeAttribute("rgba")
+            for attribute, value in COLLISION_GEOM_ATTRS.items():
+                geom.setAttribute(attribute, value)
+            used_collision_material = True
 
+    # Collision geoms reference COLLISION_MATERIAL_NAME, so it must exist or MuJoCo fails to
+    # load. Add it only when absent to avoid a repeated-name clash with a user-defined one.
+    if used_collision_material:
+        _ensure_collision_material(dom)
+
+    return dom
+
+
+def _ensure_collision_material(dom):
+    """
+    Ensures an ``<asset>`` ``<material>`` named COLLISION_MATERIAL_NAME exists in ``dom``.
+
+    Collision geoms are tinted with this material so the collision geometry can be inspected
+    in the MuJoCo viewer. If the material is already defined (e.g. supplied via mujoco_inputs)
+    it is left untouched; otherwise a default orange material is created. Creates the
+    ``<asset>`` element if the document has none.
+    """
+    assets = dom.getElementsByTagName("asset")
+    if assets:
+        asset = assets[0]
+        for material in asset.getElementsByTagName("material"):
+            if material.getAttribute("name") == COLLISION_MATERIAL_NAME:
+                return dom
+    else:
+        asset = dom.createElement("asset")
+        dom.documentElement.appendChild(asset)
+
+    material = dom.createElement("material")
+    material.setAttribute("name", COLLISION_MATERIAL_NAME)
+    material.setAttribute("rgba", "1 0.5 0 1")
+    asset.appendChild(material)
     return dom
 
 
