@@ -43,6 +43,8 @@ from .urdf_to_mujoco_utils import (
     write_mujoco_scene,
     DECOMPOSED_PATH_NAME,
     COMPOSED_PATH_NAME,
+    VISUAL_PATH_NAME,
+    DEFAULT_DECOMPOSE_THRESHOLD,
 )
 
 __all__ = [
@@ -76,4 +78,6 @@ __all__ = [
     "write_mujoco_scene",
     DECOMPOSED_PATH_NAME,
     COMPOSED_PATH_NAME,
+    VISUAL_PATH_NAME,
+    DEFAULT_DECOMPOSE_THRESHOLD,
 ]

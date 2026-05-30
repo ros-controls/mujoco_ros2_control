@@ -35,6 +35,13 @@ from xml.dom import minidom
 # Hardcoded relative paths for MuJoCo asset outputs
 DECOMPOSED_PATH_NAME = "decomposed"
 COMPOSED_PATH_NAME = "full"
+# Plain visual meshes (rendering only) live here; they are referenced as-is and never
+# decomposed. Collision meshes go through DECOMPOSED_PATH_NAME (obj2mjcf --decompose).
+VISUAL_PATH_NAME = "visual"
+
+# coacd threshold used when a collision mesh is not named in a decompose_mesh input.
+# Matches obj2mjcf's coacd default.
+DEFAULT_DECOMPOSE_THRESHOLD = "0.05"
 
 
 def add_mujoco_info(raw_xml, output_filepath, publish_topic, fuse=True):
