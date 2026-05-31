@@ -79,6 +79,14 @@ the cached MJCF is published on ``--publish_topic`` and/or copied into ``--outpu
 ``--save_only`` is set. If the directory is missing or incomplete, the tool falls back to
 regenerating the MJCF from scratch.
 
+When the cached MJCF is **published** (``--publish_topic``), any relative
+``meshdir`` / ``texturedir`` / ``assetdir`` on its ``<compiler>`` tag (for example
+``<compiler angle="radian" meshdir="assets/" texturedir="assets/"/>``) is rewritten to an
+absolute path anchored at the cache directory before publishing, so a consumer can resolve
+the assets without sharing the generator's working directory. This rewrite happens only on
+the publish path and only to the published message; the cached files on disk (and the
+``--save_only`` copy) keep their relative paths unchanged.
+
 .. code-block:: bash
 
    # Regenerate and save once
