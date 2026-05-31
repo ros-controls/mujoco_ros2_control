@@ -25,10 +25,11 @@ namespace mujoco_ros2_control_plugins
 bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data)
 {
   node_ = node;
-  logger_ = node_->get_logger().get_child(node->get_sub_namespace());
   mj_model_ = model;
   mj_data_ = data;
 
+  // Ensure the logger has a name
+  logger_ = node_->get_logger().get_child(node->get_sub_namespace());
   RCLCPP_INFO(node_->get_logger(), "CameraPlugin initializing cameras...");
 
   // Read the mj_model_, identify the number of cameras, and populate containers for them.
@@ -79,6 +80,12 @@ void CameraPlugin::cleanup()
   close();
 }
 
+void CameraPlugin::trigger_update()
+{
+  std::lock_guard<std::mutex> lock(data_mutex_);
+  update_cameras();
+}
+
 void CameraPlugin::register_cameras()
 {
   const std::string param_prefix = "mujoco_plugins.mujoco_camera_plugin.";
@@ -104,7 +111,7 @@ void CameraPlugin::register_cameras()
     const std::string frame_param = param_ns + "frame_name";
     if (!node_->has_parameter(frame_param))
     {
-      node_->declare_parameter(frame_param, camera.frame_name);
+      node_->declare_parameter(frame_param, "");
     }
     camera.frame_name = node_->get_parameter(frame_param).as_string();
 

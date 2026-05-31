@@ -90,6 +90,14 @@ public:
   void update(const mjModel* model, mjData* data) override;
   void cleanup() override;
 
+  /**
+   * @brief Manually force the cameras to publish their updates.
+   *
+   * This is included for test purposes only, as the plumbing to manually force a data
+   * sync in WIP.
+   */
+  void trigger_update();
+
 private:
   // ROS interfaces
   rclcpp::Logger logger_{ rclcpp::get_logger("CameraPlugin") };
