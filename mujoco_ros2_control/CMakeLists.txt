@@ -15,7 +15,6 @@ find_package(OpenGL REQUIRED COMPONENTS EGL)
 find_package(control_toolbox REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(nav_msgs REQUIRED)
-find_package(sensor_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
@@ -173,7 +172,6 @@ PUBLIC
   rclcpp::rclcpp
   rclcpp_lifecycle::rclcpp_lifecycle
   ${nav_msgs_TARGETS}
-  ${sensor_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
   pluginlib::pluginlib
   fmt::fmt
@@ -267,7 +265,6 @@ ament_export_dependencies(
   rclcpp
   rclcpp_lifecycle
   nav_msgs
-  sensor_msgs
   mujoco_ros2_control_msgs
   mujoco_ros2_control_plugins
   pluginlib
