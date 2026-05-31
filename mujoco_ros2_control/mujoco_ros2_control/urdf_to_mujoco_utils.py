@@ -1252,6 +1252,48 @@ def is_mjcf_cache_complete(cache_dir):
     return True
 
 
+def absolutize_compiler_asset_dirs(xml_string, base_dir):
+    """
+    Rewrite relative ``meshdir`` / ``texturedir`` / ``assetdir`` attributes on the
+    MJCF ``<compiler>`` tag to absolute paths anchored at ``base_dir``.
+
+    A cached MJCF may carry relative asset directories (e.g. ``meshdir="assets/"``).
+    When the description is published over a ROS topic, the consumer no longer shares
+    the working directory the cache was generated in, so relative asset dirs fail to
+    resolve. This anchors them at ``base_dir`` (the cache / output directory) so the
+    published description is self-contained.
+
+    Absolute paths and empty values are left untouched, which makes the call
+    idempotent. If there is no ``<compiler>`` tag, or nothing relative to rewrite, the
+    original string is returned unchanged (no reformatting). The edit is surgical (only
+    the ``<compiler>`` tag's attribute values change) so the rest of the document is
+    preserved verbatim -- in particular the absence of an ``<?xml ?>`` declaration,
+    which MuJoCo rejects at the start of the description.
+
+    :param xml_string: the MJCF document as a string.
+    :param base_dir: directory the relative asset dirs are anchored to (typically the
+        cache / output directory).
+    :returns: the MJCF string with relative compiler asset dirs made absolute.
+    """
+    compiler_match = re.search(r"<compiler\b[^>]*>", xml_string)
+    if not compiler_match:
+        return xml_string
+    compiler_tag = compiler_match.group(0)
+
+    def _absolutize(attr_match):
+        attr, value = attr_match.group(1), attr_match.group(2)
+        if value and not os.path.isabs(value):
+            return f'{attr}="{os.path.join(base_dir, value)}"'
+        return attr_match.group(0)
+
+    new_compiler_tag = re.sub(
+        r'\b(meshdir|texturedir|assetdir)\s*=\s*"([^"]*)"', _absolutize, compiler_tag
+    )
+    if new_compiler_tag == compiler_tag:
+        return xml_string
+    return xml_string.replace(compiler_tag, new_compiler_tag, 1)
+
+
 def publish_model_on_topic(publish_topic, output_filepath, args=None):
 
     import rclpy

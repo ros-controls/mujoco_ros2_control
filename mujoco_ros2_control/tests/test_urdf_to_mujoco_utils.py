@@ -51,6 +51,7 @@ from mujoco_ros2_control import (
     extract_mesh_info,
     copy_pre_generated_meshes,
     is_mjcf_cache_complete,
+    absolutize_compiler_asset_dirs,
     MJCF_FORMATTED_FILENAME,
 )
 
@@ -2046,6 +2047,73 @@ class TestIsMjcfCacheComplete(unittest.TestCase):
 
     def test_none_is_incomplete(self):
         self.assertFalse(is_mjcf_cache_complete(None))
+
+
+class TestAbsolutizeCompilerAssetDirs(unittest.TestCase):
+    BASE_DIR = "/abs/cache"
+
+    def _meshdir(self, xml):
+        """Return the meshdir attribute value parsed back out of the result."""
+        compiler = minidom.parseString(xml).getElementsByTagName("compiler")[0]
+        return compiler.getAttribute("meshdir")
+
+    def test_relative_meshdir_and_texturedir_made_absolute(self):
+        xml = '<mujoco><compiler angle="radian" meshdir="assets/" texturedir="assets/"/></mujoco>'
+        result = absolutize_compiler_asset_dirs(xml, self.BASE_DIR)
+        self.assertIn('meshdir="/abs/cache/assets/"', result)
+        self.assertIn('texturedir="/abs/cache/assets/"', result)
+        # The angle attribute (not an asset dir) must be left intact.
+        self.assertIn('angle="radian"', result)
+        compiler = minidom.parseString(result).getElementsByTagName("compiler")[0]
+        self.assertTrue(os.path.isabs(compiler.getAttribute("meshdir")))
+        self.assertTrue(os.path.isabs(compiler.getAttribute("texturedir")))
+
+    def test_relative_assetdir_made_absolute(self):
+        xml = '<mujoco><compiler assetdir="assets"/></mujoco>'
+        result = absolutize_compiler_asset_dirs(xml, self.BASE_DIR)
+        self.assertIn('assetdir="/abs/cache/assets"', result)
+
+    def test_absolute_dirs_left_untouched(self):
+        xml = '<mujoco><compiler meshdir="/somewhere/assets" texturedir="/somewhere/assets"/></mujoco>'
+        result = absolutize_compiler_asset_dirs(xml, self.BASE_DIR)
+        self.assertEqual(result, xml)
+        # Idempotency: a second pass over an already-absolute doc changes nothing.
+        self.assertEqual(absolutize_compiler_asset_dirs(result, self.BASE_DIR), xml)
+
+    def test_missing_asset_attributes_returns_unchanged(self):
+        xml = '<mujoco><compiler angle="radian"/></mujoco>'
+        self.assertEqual(absolutize_compiler_asset_dirs(xml, self.BASE_DIR), xml)
+
+    def test_no_compiler_tag_returns_unchanged(self):
+        xml = "<mujoco><worldbody/></mujoco>"
+        self.assertEqual(absolutize_compiler_asset_dirs(xml, self.BASE_DIR), xml)
+
+    def test_no_xml_declaration_added(self):
+        # The published MJCF must never gain an <?xml ?> line (MuJoCo rejects it).
+        xml = '<mujoco><compiler meshdir="assets/"/></mujoco>'
+        result = absolutize_compiler_asset_dirs(xml, self.BASE_DIR)
+        self.assertNotIn("<?xml", result)
+
+    def test_empty_attribute_value_unchanged(self):
+        xml = '<mujoco><compiler meshdir=""/></mujoco>'
+        result = absolutize_compiler_asset_dirs(xml, self.BASE_DIR)
+        self.assertEqual(self._meshdir(result), "")
+
+    def test_mixed_relative_and_absolute(self):
+        xml = '<mujoco><compiler meshdir="assets/" texturedir="/abs/textures"/></mujoco>'
+        result = absolutize_compiler_asset_dirs(xml, self.BASE_DIR)
+        self.assertIn('meshdir="/abs/cache/assets/"', result)
+        self.assertIn('texturedir="/abs/textures"', result)
+
+    def test_trailing_slash_preserved(self):
+        with_slash = absolutize_compiler_asset_dirs(
+            '<mujoco><compiler meshdir="assets/"/></mujoco>', self.BASE_DIR
+        )
+        self.assertEqual(self._meshdir(with_slash), "/abs/cache/assets/")
+        without_slash = absolutize_compiler_asset_dirs(
+            '<mujoco><compiler meshdir="assets"/></mujoco>', self.BASE_DIR
+        )
+        self.assertEqual(self._meshdir(without_slash), "/abs/cache/assets")
 
 
 if __name__ == "__main__":
