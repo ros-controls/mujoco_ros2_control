@@ -1320,6 +1320,11 @@ def publish_model_on_topic(publish_topic, output_filepath, args=None):
         def publish_mjcf(self):
             with open(self.mjcf_path) as f:
                 xml_content = f.read()
+            # Topic consumers don't share our working directory, so relative compiler
+            # asset dirs (e.g. meshdir="assets/") wouldn't resolve. Anchor them at
+            # output_filepath before publishing. This only runs on the publish path;
+            # the --save_only copy keeps the cache (and its relative dirs) verbatim.
+            xml_content = absolutize_compiler_asset_dirs(xml_content, output_filepath)
             msg = String()
             msg.data = xml_content
             self.publisher_.publish(msg)
