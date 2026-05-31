@@ -2060,10 +2060,10 @@ class TestAbsolutizeCompilerAssetDirs(unittest.TestCase):
     def test_relative_meshdir_and_texturedir_made_absolute(self):
         xml = '<mujoco><compiler angle="radian" meshdir="assets/" texturedir="assets/"/></mujoco>'
         result = absolutize_compiler_asset_dirs(xml, self.BASE_DIR)
-        self.assertIn('meshdir="/abs/cache/assets/"', result)
-        self.assertIn('texturedir="/abs/cache/assets/"', result)
+        assert 'meshdir="/abs/cache/assets/"' in result
+        assert 'texturedir="/abs/cache/assets/"' in result
         # The angle attribute (not an asset dir) must be left intact.
-        self.assertIn('angle="radian"', result)
+        assert 'angle="radian"' in result
         compiler = minidom.parseString(result).getElementsByTagName("compiler")[0]
         self.assertTrue(os.path.isabs(compiler.getAttribute("meshdir")))
         self.assertTrue(os.path.isabs(compiler.getAttribute("texturedir")))
@@ -2071,7 +2071,7 @@ class TestAbsolutizeCompilerAssetDirs(unittest.TestCase):
     def test_relative_assetdir_made_absolute(self):
         xml = '<mujoco><compiler assetdir="assets"/></mujoco>'
         result = absolutize_compiler_asset_dirs(xml, self.BASE_DIR)
-        self.assertIn('assetdir="/abs/cache/assets"', result)
+        assert 'assetdir="/abs/cache/assets"' in result
 
     def test_absolute_dirs_left_untouched(self):
         xml = '<mujoco><compiler meshdir="/somewhere/assets" texturedir="/somewhere/assets"/></mujoco>'
@@ -2102,17 +2102,13 @@ class TestAbsolutizeCompilerAssetDirs(unittest.TestCase):
     def test_mixed_relative_and_absolute(self):
         xml = '<mujoco><compiler meshdir="assets/" texturedir="/abs/textures"/></mujoco>'
         result = absolutize_compiler_asset_dirs(xml, self.BASE_DIR)
-        self.assertIn('meshdir="/abs/cache/assets/"', result)
-        self.assertIn('texturedir="/abs/textures"', result)
+        assert 'meshdir="/abs/cache/assets/"' in result
+        assert 'texturedir="/abs/textures"' in result
 
     def test_trailing_slash_preserved(self):
-        with_slash = absolutize_compiler_asset_dirs(
-            '<mujoco><compiler meshdir="assets/"/></mujoco>', self.BASE_DIR
-        )
+        with_slash = absolutize_compiler_asset_dirs('<mujoco><compiler meshdir="assets/"/></mujoco>', self.BASE_DIR)
         self.assertEqual(self._meshdir(with_slash), "/abs/cache/assets/")
-        without_slash = absolutize_compiler_asset_dirs(
-            '<mujoco><compiler meshdir="assets"/></mujoco>', self.BASE_DIR
-        )
+        without_slash = absolutize_compiler_asset_dirs('<mujoco><compiler meshdir="assets"/></mujoco>', self.BASE_DIR)
         self.assertEqual(self._meshdir(without_slash), "/abs/cache/assets")
 
 

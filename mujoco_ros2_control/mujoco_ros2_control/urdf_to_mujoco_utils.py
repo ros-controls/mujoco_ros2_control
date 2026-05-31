@@ -1286,9 +1286,7 @@ def absolutize_compiler_asset_dirs(xml_string, base_dir):
             return f'{attr}="{os.path.join(base_dir, value)}"'
         return attr_match.group(0)
 
-    new_compiler_tag = re.sub(
-        r'\b(meshdir|texturedir|assetdir)\s*=\s*"([^"]*)"', _absolutize, compiler_tag
-    )
+    new_compiler_tag = re.sub(r'\b(meshdir|texturedir|assetdir)\s*=\s*"([^"]*)"', _absolutize, compiler_tag)
     if new_compiler_tag == compiler_tag:
         return xml_string
     return xml_string.replace(compiler_tag, new_compiler_tag, 1)
