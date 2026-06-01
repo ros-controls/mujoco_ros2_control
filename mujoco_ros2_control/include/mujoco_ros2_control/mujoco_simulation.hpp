@@ -212,6 +212,16 @@ public:
     return *sim_mutex_;
   }
 
+  /**
+   * @brief Returns the number of steps takein by the physics simulation.
+   *
+   * Equivalent to the step counter that is shown in the simulate UI.
+   */
+  uint64_t step_count() const
+  {
+    return step_count_.load();
+  }
+
 private:
   /**
    * @brief Helper function to compose hw interface and simulation provided Cartesian forces.

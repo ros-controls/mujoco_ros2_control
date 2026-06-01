@@ -26,12 +26,24 @@
 class MujocoSystemInterfaceLoadingTest : public ::testing::Test
 {
 protected:
-  void SetUp() override
+  static void SetUpTestSuite()
   {
     if (!rclcpp::ok())
     {
       rclcpp::init(0, nullptr);
     }
+  }
+
+  static void TearDownTestSuite()
+  {
+    if (rclcpp::ok())
+    {
+      rclcpp::shutdown();
+    }
+  }
+
+  void SetUp() override
+  {
     plugin_loader_ = std::make_unique<pluginlib::ClassLoader<hardware_interface::SystemInterface>>(
         "hardware_interface", "hardware_interface::SystemInterface");
   }
@@ -39,7 +51,6 @@ protected:
   void TearDown() override
   {
     plugin_loader_.reset();
-    rclcpp::shutdown();
   }
 
   std::unique_ptr<pluginlib::ClassLoader<hardware_interface::SystemInterface>> plugin_loader_;
