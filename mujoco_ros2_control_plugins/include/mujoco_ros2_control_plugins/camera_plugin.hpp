@@ -123,6 +123,8 @@ private:
    */
   void update_cameras();
 
+  bool new_data{ false };
+
   rclcpp::Node::SharedPtr node_;
 
   // Ensures locked access to simulation data for rendering.
