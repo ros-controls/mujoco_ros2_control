@@ -15,27 +15,20 @@
 #ifndef MUJOCO_ROS2_CONTROL_PLUGINS__EXTERNAL_WRENCH_PLUGIN_HPP_
 #define MUJOCO_ROS2_CONTROL_PLUGINS__EXTERNAL_WRENCH_PLUGIN_HPP_
 
+#include <algorithm>
+#include <atomic>
+#include <functional>
 #include <mutex>
 #include <queue>
 #include <string>
+#include <thread>
 #include <vector>
-
-#include <rclcpp/rclcpp.hpp>
-#include <realtime_tools/realtime_publisher.hpp>
-#include <sensor_msgs/msg/camera_info.hpp>
-#include <sensor_msgs/msg/image.hpp>
 
 #include "sensor_msgs/image_encodings.hpp"
 
 #include <dlfcn.h>
 
 #include "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
-
-#include <atomic>
-#include <functional>
-#include <mutex>
-#include <thread>
-#include <vector>
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -48,12 +41,7 @@
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
-#include <algorithm>
-#include <string>
-
-#include <geometry_msgs/msg/point.hpp>
 #include <pluginlib/class_list_macros.hpp>
-#include <visualization_msgs/msg/marker.hpp>
 
 namespace mujoco_ros2_control_plugins
 {
