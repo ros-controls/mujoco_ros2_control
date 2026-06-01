@@ -26,11 +26,7 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
 
   // Read the mj_model_, identify the number of cameras, and populate containers for them.
   register_cameras();
-  // if (!node_->has_parameter("camera_publish_rate"))
-  // {
-  //   node_->declare_parameter("camera_publish_rate", camera_publish_rate_);
-  // }
-  // camera_publish_rate_ = node_->get_parameter("camera_publish_rate").as_double();
+  camera_publish_rate_ = 24;
 
   // RCLCPP_INFO(node_->get_logger(), "CameraPlugin initialised.");
   if (cameras_.empty())
@@ -68,6 +64,8 @@ void CameraPlugin::cleanup()
 
 void CameraPlugin::register_cameras()
 {
+  const std::string param_prefix = "mujoco_plugins.mujoco_camera_plugin.";
+
   cameras_.resize(0);
   for (auto i = 0; i < mj_model_->ncam; ++i)
   {
@@ -84,24 +82,32 @@ void CameraPlugin::register_cameras()
     camera.height = static_cast<uint32_t>(cam_resolution[1]);
     camera.viewport = { 0, 0, cam_resolution[0], cam_resolution[1] };
 
-    // If the hardware_info has a camera of the same name then we pull parameters from there.
-    // const auto camera_info_maybe = get_sensor_from_info(hardware_info, cam_name);
-    // if (camera_info_maybe.has_value())
-    // {
-    //   const auto camera_info = camera_info_maybe.value();
-    //   camera.frame_name = camera_info.parameters.at("frame_name");
-    //   camera.info_topic = camera_info.parameters.at("info_topic");
-    //   camera.image_topic = camera_info.parameters.at("image_topic");
-    //   camera.depth_topic = camera_info.parameters.at("depth_topic");
-    // }
-    // Otherwise set default values for the frame and topics.
-    // else
+    const std::string param_ns = param_prefix + cam_name + ".";
+
+    const std::string frame_param = param_ns + "frame_name";
+    if (!node_->has_parameter(frame_param))
     {
-      camera.frame_name = camera.name + "_frame";
-      camera.info_topic = camera.name + "/camera_info";
-      camera.image_topic = camera.name + "/color";
-      camera.depth_topic = camera.name + "/depth";
+      node_->declare_parameter(frame_param, camera.frame_name);
     }
+    camera.frame_name = node_->get_parameter(frame_param).as_string();
+
+    if (!node_->has_parameter(param_ns + "info_topic"))
+    {
+      node_->declare_parameter(param_ns + "info_topic", camera.name + "/camera_info");
+    }
+    camera.info_topic = node_->get_parameter(param_ns + "info_topic").as_string();
+
+    if (!node_->has_parameter(param_ns + "image_topic"))
+    {
+      node_->declare_parameter(param_ns + "image_topic", camera.name + "/color");
+    }
+    camera.image_topic = node_->get_parameter(param_ns + "image_topic").as_string();
+
+    if (!node_->has_parameter(param_ns + "depth_topic"))
+    {
+      node_->declare_parameter(param_ns + "depth_topic", camera.name + "/depth");
+    }
+    camera.depth_topic = node_->get_parameter(param_ns + "depth_topic").as_string();
 
     RCLCPP_INFO(node_->get_logger(), "Adding camera: '%s'", cam_name);
     RCLCPP_INFO(node_->get_logger(), "    frame_name: '%s'", camera.frame_name.c_str());
