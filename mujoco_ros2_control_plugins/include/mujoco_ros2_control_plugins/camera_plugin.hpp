@@ -1,19 +1,23 @@
-// Copyright 2026 PAL Robotics S.L.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/**
+ * Copyright (c) 2026, United States Government, as represented by the
+ * Administrator of the National Aeronautics and Space Administration.
+ *
+ * All rights reserved.
+ *
+ * This software is licensed under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ */
 
-#ifndef MUJOCO_ROS2_CONTROL_PLUGINS__EXTERNAL_WRENCH_PLUGIN_HPP_
-#define MUJOCO_ROS2_CONTROL_PLUGINS__EXTERNAL_WRENCH_PLUGIN_HPP_
+#pragma once
 
 #include <algorithm>
 #include <atomic>
@@ -86,10 +90,17 @@ public:
   void update(const mjModel* model, mjData* data) override;
   void cleanup() override;
 
+  /**
+   * @brief Manually force the cameras to publish their updates.
+   *
+   * This is included for test purposes only, as the plumbing to manually force a data
+   * sync in WIP.
+   */
+  void trigger_update();
+
 private:
   // ROS interfaces
-  rclcpp::Logger logger_{ rclcpp::get_logger("ExternalWrenchPlugin") };
-  // Model pointer (const, valid for simulation lifetime)
+  rclcpp::Logger logger_{ rclcpp::get_logger("CameraPlugin") };
 
   /**
    * @brief Stops the camera processing thread and closes the relevant objects, call before shutdown.
@@ -111,8 +122,6 @@ private:
    */
   void update_cameras();
 
-  bool new_data{ false };
-
   rclcpp::Node::SharedPtr node_;
 
   // Ensures locked access to simulation data for rendering.
@@ -123,7 +132,8 @@ private:
   mjData* mj_camera_data_;
 
   // Image publishing rate
-  double camera_publish_rate_;
+  double camera_publish_rate_{ 5.0 };
+  rclcpp::Time last_publish_time_{ 0, 0, RCL_ROS_TIME };
 
   // Rendering options for the cameras, currently hard coded to defaults
   mjvOption mjv_opt_;
@@ -133,9 +143,12 @@ private:
   // Containers for camera data and ROS constructs
   std::vector<CameraData> cameras_;
 
-  // Camera processing thread
+  // Camera processing thread and objects for syncing
   std::thread rendering_thread_;
-  std::atomic_bool publish_images_;
+  std::atomic_bool publish_images_{ false };
+  std::mutex data_mutex_;
+  std::condition_variable data_cv_;
+  bool new_data_{ false };
 
   // EGL context for headless rendering (used when GLFW is unavailable)
   EGLDisplay egl_display_{ EGL_NO_DISPLAY };
@@ -156,5 +169,3 @@ private:
 };
 
 }  // namespace mujoco_ros2_control_plugins
-
-#endif  // MUJOCO_ROS2_CONTROL_PLUGINS__EXTERNAL_WRENCH_PLUGIN_HPP_

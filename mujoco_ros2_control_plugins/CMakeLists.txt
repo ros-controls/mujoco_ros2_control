@@ -11,6 +11,7 @@ find_package(backward_ros REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(pluginlib REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(mujoco_ros2_control_msgs REQUIRED)
@@ -47,6 +48,7 @@ target_link_libraries(mujoco_ros2_control_plugins PUBLIC
   rclcpp::rclcpp
   realtime_tools::realtime_tools
   pluginlib::pluginlib
+  ${sensor_msgs_TARGETS}
   ${std_msgs_TARGETS}
   ${visualization_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
@@ -76,6 +78,14 @@ if(BUILD_TESTING)
     mujoco_ros2_control_plugins
     ${mujoco_ros2_control_msgs_TARGETS}
     ${visualization_msgs_TARGETS}
+  )
+
+  ament_add_gtest(test_camera_plugin
+    test/test_camera_plugin.cpp
+  )
+  target_link_libraries(test_camera_plugin
+    mujoco_ros2_control_plugins
+    ${sensor_msgs_TARGETS}
   )
   # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
   # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
