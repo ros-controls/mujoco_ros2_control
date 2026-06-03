@@ -159,7 +159,8 @@ TEST_F(CameraPluginTest, InitAndPublish)
 
   ASSERT_EQ(model_->ncam, 1);
   mujoco_ros2_control_plugins::CameraPlugin plugin;
-  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
+  // GLFW is not initialized, and No OpenGL framebuffer will be available so we make the init fall back on to EGL.
+  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, []() { return 0; }));
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   // Verify publishers were created

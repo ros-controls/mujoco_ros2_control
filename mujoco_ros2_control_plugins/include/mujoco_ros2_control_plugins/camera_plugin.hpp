@@ -116,6 +116,7 @@ public:
   ~CameraPlugin() override = default;
 
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
+  bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data, GlfwInitFn glfw_init_fn);
   void update(const mjModel* model, mjData* data) override;
   void cleanup() override;
 

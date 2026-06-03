@@ -24,6 +24,12 @@ namespace mujoco_ros2_control_plugins
 
 bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data)
 {
+  // by default use `glfwInit` to check if the GLFW is initialized.
+  return this->init(node, model, data, glfwInit);
+}
+
+bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data, GlfwInitFn glfw_init_fn)
+{
   node_ = node;
   mj_model_ = model;
   mj_data_ = data;
@@ -39,8 +45,6 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
     return true;
   }
 
-  // this is more temporary until I figure out a better place for this
-  GlfwInitFn glfw_init_fn = glfwInit;
   // Start the rendering thread process
   // Try GLFW first, fall back to EGL for headless environments
   if (glfw_init_fn())
