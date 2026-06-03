@@ -77,6 +77,35 @@ struct CameraData
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_pub;
 };
 
+/**
+ * @brief Plugin that publishes the mujoco camera data to ROS 2 topics.
+ *
+ * Camera topics can be named in the ROS 2 controls plugins YAML config file
+ * and loaded as node parameters.
+ * If any of the parameters are not specified default topic names will be assigned.
+ * A user can provide topic names for multiple cameras as long as cameras are not named the same.
+ * Name collision is resolved by last name in the yaml file.
+ *
+ * Plugin Parameters Structure (and default topics)
+ * ---------------------------
+ *
+ * mujoco_camera_plugin:
+ *   type: "mujoco_ros2_control_plugins/CameraPlugin"
+ *   camera_publish_rate: 6.0
+ *   <camera_name>:
+ *     frame_name: ""
+ *     info_topic: <camera_name>/camera_info
+ *     image_topic: <camera_name>/colo
+ *     depth_topic: <camera_name>/depth
+ *
+ * Implementation notes
+ * --------------------
+ * If the camera name, in the parameters, does not match any of the mujoco cameras
+ * the data will not be published to ROS topics.
+ * If no cameras parameters are given (but mujoco_camera_plugin and it's type are declared)
+ * cameras topics will be namespace and given an index to avoid name collision.
+ *
+ */
 class CameraPlugin : public MuJoCoROS2ControlPluginBase
 {
 public:
