@@ -90,6 +90,14 @@ void CameraPlugin::register_cameras()
 {
   const std::string param_prefix = "mujoco_plugins.mujoco_camera_plugin.";
 
+  if (!node_->has_parameter(param_prefix + "camera_publish_rate"))
+  {
+    node_->declare_parameter(param_prefix + "camera_publish_rate", 5.0);
+  }
+
+  camera_publish_rate_ = node_->get_parameter(param_prefix + "camera_publish_rate").as_double();
+  RCLCPP_INFO(node_->get_logger(), "Publishing camera data at rate %f per second.", camera_publish_rate_);
+
   cameras_.resize(0);
   for (auto i = 0; i < mj_model_->ncam; ++i)
   {
