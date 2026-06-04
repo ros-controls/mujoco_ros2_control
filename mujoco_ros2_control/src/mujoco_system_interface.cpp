@@ -2025,19 +2025,29 @@ void MujocoSystemInterface::reset_simulation_state(bool /*fill_initial_state*/)
 }
 
 void MujocoSystemInterface::get_model(mjModel*& dest)
-{ simulation_->copy_physics_model(dest); }
+{
+  simulation_->copy_physics_model(dest);
+}
 
 void MujocoSystemInterface::get_data(mjData*& dest)
-{ simulation_->copy_physics_data(dest); }
+{
+  simulation_->copy_physics_data(dest);
+}
 
 void MujocoSystemInterface::set_data(mjData* mj_data)
-{ simulation_->overwrite_physics_data(mj_data); }
+{
+  simulation_->overwrite_physics_data(mj_data);
+}
 
 rclcpp::Logger MujocoSystemInterface::get_logger() const
-{ return logger_; }
+{
+  return logger_;
+}
 
 rclcpp::Node::SharedPtr MujocoSystemInterface::get_node() const
-{ return mujoco_node_; }
+{
+  return mujoco_node_;
+}
 
 void MujocoSystemInterface::load_mujoco_plugins()
 {
