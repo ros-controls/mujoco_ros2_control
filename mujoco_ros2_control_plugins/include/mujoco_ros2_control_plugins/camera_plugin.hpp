@@ -91,6 +91,7 @@ struct CameraData
  *
  * mujoco_camera_plugin:
  *   type: "mujoco_ros2_control_plugins/CameraPlugin"
+ *   # All cameras will publish data at the same rate   
  *   camera_publish_rate: 6.0
  *   <camera_name>:
  *     frame_name: ""
