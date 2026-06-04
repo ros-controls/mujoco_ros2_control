@@ -97,6 +97,11 @@ if(BUILD_TESTING)
     "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
     "LINKER:--pop-state"
   )
+  target_link_options(test_camera_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
 
 endif()
 
