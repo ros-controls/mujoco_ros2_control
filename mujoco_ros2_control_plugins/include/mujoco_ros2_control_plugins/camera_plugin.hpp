@@ -96,7 +96,7 @@ struct CameraData
  *   <camera_name>:
  *     frame_name: ""
  *     info_topic: <camera_name>/camera_info
- *     image_topic: <camera_name>/colo
+ *     image_topic: <camera_name>/color
  *     depth_topic: <camera_name>/depth
  *
  * Implementation notes
