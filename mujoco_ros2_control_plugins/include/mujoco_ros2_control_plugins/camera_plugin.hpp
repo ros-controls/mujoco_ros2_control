@@ -104,7 +104,8 @@ struct CameraData
  * If the camera name, in the parameters, does not match any of the mujoco cameras
  * the data will not be published to ROS topics.
  * If no cameras parameters are given (but mujoco_camera_plugin and it's type are declared)
- * cameras topics will be namespace and given an index to avoid name collision.
+ * The camera name in the parameters must match the name of the mujoco camera in the MJCF.
+ * If no camera parameters are provided but the plugin is active, the topics will default to the above. 
  *
  */
 class CameraPlugin : public MuJoCoROS2ControlPluginBase
