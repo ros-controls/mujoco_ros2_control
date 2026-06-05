@@ -31,8 +31,8 @@ jobs:
       matrix:
         # TODO: Re-enable rolling when keys are available:
         # https://github.com/ros-controls/mujoco_ros2_control/issues/178
-        # ros_distro: [humble, jazzy, kilted, rolling]
-        ros_distro: [humble, jazzy, kilted]
+        # ros_distro: [humble, jazzy, kilted, lyrical, rolling]
+        ros_distro: [humble, jazzy, kilted, lyrical]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
