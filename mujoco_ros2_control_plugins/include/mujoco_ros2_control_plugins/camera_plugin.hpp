@@ -154,8 +154,6 @@ private:
 
   rclcpp::Node::SharedPtr node_;
 
-  bool is_initialized_{ false };
-
   // Ensures locked access to simulation data for rendering.
   std::recursive_mutex* sim_mutex_{ nullptr };
 
