@@ -62,6 +62,11 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
 
 void CameraPlugin::update(const mjModel* model_arg, mjData* data)
 {
+  if (!publish_images_)
+  {
+    return;
+  }
+
   // Check if it is time to publish
   // TODO: Support per-camera publish rates?
   auto now = node_->get_clock()->now();
