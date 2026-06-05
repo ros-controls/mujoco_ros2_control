@@ -38,10 +38,6 @@ Specify it in your URDF and point to a valid MJCF on launch:
             Defaults to /mujoco_robot_description. -->
        <param name="mujoco_model_topic">/mujoco_robot_description</param>
 
-       <!-- Optional: camera RGB-D image publish rate in Hz (all cameras share one rate).
-            Defaults to 5 Hz. -->
-       <param name="camera_publish_rate">6.0</param>
-
        <!-- Optional: lidar LaserScan publish rate in Hz (all lidar sensors share one rate). -->
        <param name="lidar_publish_rate">10.0</param>
 
@@ -244,6 +240,10 @@ Map to the corresponding ``ros2_control`` sensor:
 
 These sensor state interfaces work out of the box with the standard ROS 2 broadcasters.
 
+.. warning::
+
+   Cameras are no longer supported in the base interface, they are now provided as a ``mujoco_ros2_control_plugin``.
+   Refer to the :ref:`camera_plugin` for more information.
 
 Lidar
 -----
