@@ -40,7 +40,6 @@
 #include <mujoco/mujoco.h>
 
 #include "mujoco_ros2_control/data.hpp"
-#include "mujoco_ros2_control/mujoco_lidar.hpp"
 #include "mujoco_ros2_control/mujoco_simulation.hpp"
 
 #include <pluginlib/class_list_macros.hpp>
@@ -71,7 +70,7 @@ public:
   /**
    * @brief ros2_control SystemInterface to wrap Mujocos Simulate application.
    *
-   * Supports Actuators, Force Torque/IMU Sensors, and Lidar Sensors in ROS 2 simulations.
+   * Supports Actuators and Force Torque/IMU Sensors in ROS 2 simulations.
    * For more information on configuration refer to the docs, check the comment strings below, and refer to
    * the example in the test folder.
    */
@@ -281,6 +280,7 @@ private:
   bool auto_register_plugin_if_needed(const std::string& plugin_type, const std::string& plugin_ns,
                                       const std::vector<std::string>& loaded_plugins);
   void load_legacy_cameras(const std::vector<std::string>& plugins_ns);
+  void load_legacy_lidar(const std::vector<std::string>& plugins_ns);
 
   // Logger
   rclcpp::Logger logger_ = rclcpp::get_logger("MujocoSystemInterface");
@@ -309,9 +309,6 @@ private:
   int free_joint_id_ = -1;
   int free_joint_qpos_adr_ = -1;
   int free_joint_qvel_adr_ = -1;
-
-  // Containers for LIDAR sensors
-  std::unique_ptr<MujocoLidar> lidar_sensors_;
 
   // Data containers for the HW interface
   std::unordered_map<std::string, hardware_interface::ComponentInfo> joint_hw_info_;

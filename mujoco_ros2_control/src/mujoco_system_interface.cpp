@@ -243,11 +243,6 @@ MujocoSystemInterface::MujocoSystemInterface() = default;
 
 MujocoSystemInterface::~MujocoSystemInterface()
 {
-  if (lidar_sensors_)
-  {
-    lidar_sensors_->close();
-  }
-
   // Stop plugins
   for (auto& plugin : plugin_instances_)
   {
@@ -317,10 +312,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // Pull the initial speed factor from the hardware parameters, if present
   const double sim_speed_factor =
       std::stod(get_hardware_parameter(get_hardware_info(), "sim_speed_factor").value_or("-1"));
-
-  // Pull the lidar publish rate out of the info, if present, otherwise default to 5 hz.
-  const auto lidar_publish_rate =
-      std::stod(get_hardware_parameter(get_hardware_info(), "lidar_publish_rate").value_or("5.0"));
 
   // Check for headless mode
   const bool headless =
@@ -467,16 +458,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
 
   // This CB will be triggered by the MujocoSimulation after resettting the sim and qpos/qvel/ctrl have been restored.
   simulation_->set_reset_callback([this](bool fill_initial_state) { this->reset_simulation_state(fill_initial_state); });
-
-  // Configure Lidar sensors
-  RCLCPP_INFO(get_logger(), "Initializing lidar...");
-  lidar_sensors_ = std::make_unique<MujocoLidar>(get_node(), &simulation_->mutex(), simulation_->data(),
-                                                 simulation_->model(), lidar_publish_rate);
-  if (!lidar_sensors_->register_lidar(get_hardware_info()))
-  {
-    RCLCPP_INFO(get_logger(), "Failed to initialize lidar, exiting...");
-    return hardware_interface::CallbackReturn::FAILURE;
-  }
 
 #if !ROS_DISTRO_HUMBLE
   // Verify the update rate
@@ -2109,9 +2090,10 @@ void MujocoSystemInterface::load_mujoco_plugins()
       }
     }
 
-    // Support for legacy methods of loading cameras
-    // TODO: Delete when camera configuration through xacro is fully deprecated.
+    // Support for legacy methods of loading cameras and lidar.
+    // TODO: Delete when camera and lidar configuration through xacro is fully deprecated.
     load_legacy_cameras(plugins_ns);
+    load_legacy_lidar(plugins_ns);
   }
   catch (const pluginlib::PluginlibException& ex)
   {
@@ -2238,6 +2220,89 @@ void MujocoSystemInterface::load_legacy_cameras(const std::vector<std::string>& 
                 "  2. Set the hardware parameter 'auto_register_cameras' to 'false' to disable auto-registration.\n"
                 "For more information refer to the CameraPlugin documentation in mujoco_ros2_control_plugins.\n");
   }
+}
+
+void MujocoSystemInterface::load_legacy_lidar(const std::vector<std::string>& plugins_ns)
+{
+  // Check if any rangefinder sensors have legacy ros2_control xacro for lidar. Unlike cameras,
+  // lidar sensors required xacro entries, so if none exist there's nothing to do.
+  std::set<std::string> legacy_lidars;
+  for (int i = 0; i < simulation_->model()->nsensor; ++i)
+  {
+    if (simulation_->model()->sensor_type[i] != mjtSensor::mjSENS_RANGEFINDER)
+      continue;
+    const auto name = mj_id2name(simulation_->model(), mjtObj::mjOBJ_SENSOR, i);
+    if (!name)
+      continue;
+
+    const auto split = std::string(name).find_last_of("-");
+    if (split == std::string::npos)
+      continue;
+    const auto lidar_name = std::string(name).substr(0, split);
+    if (legacy_lidars.count(lidar_name))
+      continue;
+
+    if (get_sensor_from_info(get_hardware_info(), lidar_name).has_value())
+    {
+      legacy_lidars.insert(lidar_name);
+    }
+  }
+  if (legacy_lidars.empty())
+  {
+    return;
+  }
+
+  auto_register_plugin_if_needed(
+      "mujoco_ros2_control_plugins/RangefinderLidarPlugin", "mujoco_rangefinder_plugin", plugins_ns,
+      [&](const std::string& prefix) {
+        const auto rate_str = get_hardware_parameter_or(get_hardware_info(), "lidar_publish_rate", "5.0");
+        const std::string rate_param = prefix + "publish_rate";
+        if (!get_node()->has_parameter(rate_param))
+        {
+          get_node()->declare_parameter(rate_param, std::stod(rate_str));
+        }
+
+        for (const auto& lidar_name : legacy_lidars)
+        {
+          const auto sensor_info = get_sensor_from_info(get_hardware_info(), lidar_name);
+          const auto& params = sensor_info.value().parameters;
+          auto set = [&](const std::string& key) {
+            const std::string full = prefix + lidar_name + "." + key;
+            if (!get_node()->has_parameter(full))
+            {
+              auto it = params.find(key);
+              if (it != params.end())
+              {
+                get_node()->declare_parameter(full, it->second);
+              }
+            }
+          };
+          set("frame_name");
+          set("min_angle");
+          set("max_angle");
+          set("angle_increment");
+          set("range_min");
+          set("range_max");
+
+          // Map old param name to new
+          auto it = params.find("laserscan_topic");
+          if (it != params.end())
+          {
+            const std::string full = prefix + lidar_name + ".topic";
+            if (!get_node()->has_parameter(full))
+            {
+              get_node()->declare_parameter(full, it->second);
+            }
+          }
+        }
+
+        RCLCPP_WARN(get_logger(), "\nRangefinder based lidar sensors were automatically added due to existing "
+                                  "ros2_control xacro config!\n"
+                                  "Both these sensors and configuration mechanisms have been deprecated.\n"
+                                  "Users should migrate to using one of the updated Lidar plugins as noted in the "
+                                  "`mujoco_ros2_control_plugins` package.\n"
+                                  "Refer to the documentation for more details.\n");
+      });
 }
 
 }  // namespace mujoco_ros2_control
