@@ -2229,7 +2229,7 @@ void MujocoSystemInterface::load_legacy_cameras(const std::vector<std::string>& 
 
             RCLCPP_WARN(
                 get_logger(),
-                "\nCamera publishing is being auto-configured because camera were found in the MuJoCo model but"
+                "\nCamera publishing is being auto-configured because camera were found in the MuJoCo model but "
                 "no CameraPlugin was explicitly configured!\n"
                 "This automatic behavior is deprecated and will be removed in a future release.\n"
                 "To silence this warning, either:\n"
