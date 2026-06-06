@@ -2124,7 +2124,7 @@ void MujocoSystemInterface::load_mujoco_plugins()
 /// TODO: Delete these once camera / lidar configuration through xacro is fully deprecated.
 ///
 
-void MujocoSystemInterface::auto_register_plugin_if_needed(const std::string& plugin_type, const std::string& plugin_ns,
+bool MujocoSystemInterface::auto_register_plugin_if_needed(const std::string& plugin_type, const std::string& plugin_ns,
                                                            const std::vector<std::string>& loaded_plugins)
 {
   const std::string mujoco_plugins_param_prefix = "mujoco_plugins";
@@ -2136,7 +2136,7 @@ void MujocoSystemInterface::auto_register_plugin_if_needed(const std::string& pl
   // Nothing to do if it has already been loaded
   if (already_loaded)
   {
-    return;
+    return false;
   }
 
   try
@@ -2156,6 +2156,8 @@ void MujocoSystemInterface::auto_register_plugin_if_needed(const std::string& pl
   {
     RCLCPP_WARN(get_logger(), "Failed to auto-register plugin %s: %s", plugin_type.c_str(), ex.what());
   }
+
+  return true;
 }
 
 inline std::optional<hardware_interface::ComponentInfo>
@@ -2225,16 +2227,17 @@ void MujocoSystemInterface::load_legacy_cameras(const std::vector<std::string>& 
     set("depth_topic", std::string(cam_name) + "/depth");
   }
 
-  RCLCPP_WARN(get_logger(),
-              "\nCamera publishing is being auto-configured because cameras were found in the MuJoCo model but "
-              "no CameraPlugin was explicitly configured!\n"
-              "This automatic behavior is deprecated and will be removed in a future release.\n"
-              "To silence this warning, either:\n"
-              "  1. Add a CameraPlugin entry to your mujoco_plugins YAML config, or\n"
-              "  2. Set the hardware parameter 'auto_register_cameras' to 'false' to disable auto-registration.\n"
-              "For more information refer to the CameraPlugin documentation in mujoco_ros2_control_plugins.\n");
-
-  auto_register_plugin_if_needed("mujoco_ros2_control_plugins/CameraPlugin", "mujoco_camera_plugin", plugins_ns);
+  if (auto_register_plugin_if_needed("mujoco_ros2_control_plugins/CameraPlugin", "mujoco_camera_plugin", plugins_ns))
+  {
+    RCLCPP_WARN(get_logger(),
+                "\nCamera publishing is being auto-configured because cameras were found in the MuJoCo model but "
+                "no CameraPlugin was explicitly configured!\n"
+                "This automatic behavior is deprecated and will be removed in a future release.\n"
+                "To silence this warning, either:\n"
+                "  1. Add a CameraPlugin entry to your mujoco_plugins YAML config, or\n"
+                "  2. Set the hardware parameter 'auto_register_cameras' to 'false' to disable auto-registration.\n"
+                "For more information refer to the CameraPlugin documentation in mujoco_ros2_control_plugins.\n");
+  }
 }
 
 }  // namespace mujoco_ros2_control

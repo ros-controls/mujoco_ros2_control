@@ -278,7 +278,7 @@ private:
    *
    * TODO: Remove this once the camera / lidar xacro support have been officially removed.
    */
-  void auto_register_plugin_if_needed(const std::string& plugin_type, const std::string& plugin_ns,
+  bool auto_register_plugin_if_needed(const std::string& plugin_type, const std::string& plugin_ns,
                                       const std::vector<std::string>& loaded_plugins);
   void load_legacy_cameras(const std::vector<std::string>& plugins_ns);
 
