@@ -148,7 +148,6 @@ endif()
 add_library(mujoco_ros2_control SHARED
     src/mujoco_simulation.cpp
     src/mujoco_system_interface.cpp
-    src/mujoco_lidar.cpp
 )
 # Ensure MuJoCo library can be found at runtime regardless of how it was installed above.
 # mujoco_vendor installs libmujoco.so under opt/mujoco_vendor/lib/ relative to the
