@@ -103,7 +103,8 @@ struct CameraData
  * --------------------
  * If the camera name, in the parameters, does not match any of the mujoco cameras
  * the data will not be published to ROS topics.
- * If no cameras parameters are given (but mujoco_camera_plugin and it's type are declared)
+ * If no cameras parameters are given (but mujoco_camera_plugin and its type are declared)
+ * the default topics and frame are used automatically
  *
  */
 class CameraPlugin : public MuJoCoROS2ControlPluginBase
