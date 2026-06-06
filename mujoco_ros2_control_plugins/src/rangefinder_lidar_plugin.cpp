@@ -52,14 +52,14 @@ bool RangefinderLidarPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* m
   model_ = model;
   lidar_sensors_.clear();
 
-  const std::string param_prefix = "mujoco_plugins.mujoco_rangefinder_plugin.";
+  const std::string param_prefix = "mujoco_plugins.rangefinder_lidar_plugin.";
 
   // Read publish rate
-  if (!node_->has_parameter(param_prefix + "publish_rate"))
+  if (!node_->has_parameter(param_prefix + "lidar_publish_rate"))
   {
-    node_->declare_parameter(param_prefix + "publish_rate", publish_rate_);
+    node_->declare_parameter(param_prefix + "lidar_publish_rate", publish_rate_);
   }
-  publish_rate_ = node_->get_parameter(param_prefix + "publish_rate").as_double();
+  publish_rate_ = node_->get_parameter(param_prefix + "lidar_publish_rate").as_double();
 
   // Iterate over sensors and identify rangefinders, grouping by name
   for (int i = 0; i < model->nsensor; ++i)
@@ -117,59 +117,48 @@ bool RangefinderLidarPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* m
     lidar.raw_data.resize(lidar.num_rangefinders, 0.0);
   }
 
-  running_ = true;
-  publish_thread_ = std::thread(&RangefinderLidarPlugin::publish_loop, this);
+  RCLCPP_INFO(node_->get_logger(), "Publishing lidar at %f hertz", publish_rate_);
 
   return true;
 }
 
 bool RangefinderLidarPlugin::register_sensor(const std::string& lidar_name, const mjModel* model)
 {
-  const std::string param_prefix = "mujoco_plugins.mujoco_rangefinder_plugin.";
-  const std::string param_ns = param_prefix + lidar_name + ".";
+  const std::string ns = "mujoco_plugins.rangefinder_lidar_plugin." + lidar_name + ".";
 
-  RangefinderLidarData lidar;
-  lidar.name = lidar_name;
-
-  // Required parameters
-  auto declare_and_get = [&](const std::string& key, const std::string& default_val = "") -> std::string {
-    const std::string full = param_ns + key;
-    if (!node_->has_parameter(full))
-    {
-      if (default_val.empty())
-      {
-        RCLCPP_ERROR(node_->get_logger(), "Required parameter '%s' not found for lidar '%s'", key.c_str(),
-                     lidar_name.c_str());
-        return "";
-      }
-      node_->declare_parameter(full, default_val);
-    }
-    return node_->get_parameter(full).as_string();
-  };
-
-  auto frame_name = declare_and_get("frame_name");
-  auto min_angle = declare_and_get("min_angle");
-  auto max_angle = declare_and_get("max_angle");
-  auto angle_increment = declare_and_get("angle_increment");
-
-  if (frame_name.empty() || min_angle.empty() || max_angle.empty() || angle_increment.empty())
+  // Check required parameters
+  if (!node_->has_parameter(ns + "frame_name"))
   {
+    RCLCPP_ERROR(node_->get_logger(), "Required parameter '%sframe_name' not found for lidar '%s'", ns.c_str(),
+                 lidar_name.c_str());
+    return false;
+  }
+  if (!node_->has_parameter(ns + "min_angle") || !node_->has_parameter(ns + "max_angle") ||
+      !node_->has_parameter(ns + "angle_increment"))
+  {
+    RCLCPP_ERROR(node_->get_logger(), "Required angle parameters not found for lidar '%s'", lidar_name.c_str());
     return false;
   }
 
-  lidar.frame_name = frame_name;
-  lidar.min_angle = std::stod(min_angle);
-  lidar.max_angle = std::stod(max_angle);
-  lidar.angle_increment = std::stod(angle_increment);
+  // Declare optional parameters with defaults
+  if (!node_->has_parameter(ns + "range_min"))
+    node_->declare_parameter(ns + "range_min", 0.0);
+  if (!node_->has_parameter(ns + "range_max"))
+    node_->declare_parameter(ns + "range_max", 1000.0);
+  if (!node_->has_parameter(ns + "laserscan_topic"))
+    node_->declare_parameter(ns + "laserscan_topic", std::string("/scan"));
+
+  // Setup lidar data
+  RangefinderLidarData lidar;
+  lidar.name = lidar_name;
+  lidar.frame_name = node_->get_parameter(ns + "frame_name").as_string();
+  lidar.min_angle = node_->get_parameter(ns + "min_angle").as_double();
+  lidar.max_angle = node_->get_parameter(ns + "max_angle").as_double();
+  lidar.angle_increment = node_->get_parameter(ns + "angle_increment").as_double();
   lidar.num_rangefinders = static_cast<int>((lidar.max_angle - lidar.min_angle) / lidar.angle_increment) + 1;
-
-  auto topic = declare_and_get("topic", "/scan");
-  auto range_min = declare_and_get("range_min", "0.0");
-  auto range_max = declare_and_get("range_max", "1000.0");
-
-  lidar.laserscan_topic = topic;
-  lidar.range_min = std::stod(range_min);
-  lidar.range_max = std::stod(range_max);
+  lidar.laserscan_topic = node_->get_parameter(ns + "laserscan_topic").as_string();
+  lidar.range_min = node_->get_parameter(ns + "range_min").as_double();
+  lidar.range_max = node_->get_parameter(ns + "range_max").as_double();
   lidar.sensor_indexes.resize(lidar.num_rangefinders, 0);
 
   // Configure static message fields
@@ -184,7 +173,9 @@ bool RangefinderLidarPlugin::register_sensor(const std::string& lidar_name, cons
   lidar.laser_scan_msg.ranges.resize(lidar.num_rangefinders);
   lidar.laser_scan_msg.intensities.resize(0);
 
-  lidar.scan_pub = node_->create_publisher<sensor_msgs::msg::LaserScan>(lidar.laserscan_topic, 1);
+  // Initialize publisher
+  lidar.scan_pub_raw = node_->create_publisher<sensor_msgs::msg::LaserScan>(lidar.laserscan_topic, 1);
+  lidar.scan_pub = std::make_unique<realtime_tools::RealtimePublisher<sensor_msgs::msg::LaserScan>>(lidar.scan_pub_raw);
 
   RCLCPP_INFO(node_->get_logger(), "Adding rangefinder lidar: '%s'", lidar.name.c_str());
   RCLCPP_INFO(node_->get_logger(), "    frame_name: '%s'", lidar.frame_name.c_str());
@@ -202,66 +193,37 @@ bool RangefinderLidarPlugin::register_sensor(const std::string& lidar_name, cons
 
 void RangefinderLidarPlugin::update(const mjModel* /*model*/, mjData* data)
 {
-  bool any_new = false;
+  if (lidar_sensors_.empty())
   {
-    std::lock_guard<std::mutex> lock(data_mutex_);
-    for (auto& lidar : lidar_sensors_)
-    {
-      for (size_t idx = 0; idx < lidar.sensor_indexes.size(); ++idx)
-      {
-        lidar.raw_data[idx] = data->sensordata[lidar.sensor_indexes[idx]];
-      }
-      any_new = true;
-    }
-    if (any_new)
-    {
-      new_data_ = true;
-    }
+    return;
   }
-  if (any_new)
+
+  auto now = node_->get_clock()->now();
+  if ((now - last_publish_time_).seconds() < (1.0 / publish_rate_))
   {
-    data_cv_.notify_one();
+    return;
   }
-}
+  last_publish_time_ = now;
 
-void RangefinderLidarPlugin::publish_loop()
-{
-  while (running_)
+  for (auto& lidar : lidar_sensors_)
   {
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    data_cv_.wait(lock, [this] { return new_data_ || !running_; });
-
-    if (!running_)
+    for (size_t idx = 0; idx < lidar.sensor_indexes.size(); ++idx)
     {
-      break;
+      float range = static_cast<float>(data->sensordata[lidar.sensor_indexes[idx]]);
+      lidar.laser_scan_msg.ranges[idx] = (range < lidar.range_min || range > lidar.range_max) ? -1.0f : range;
     }
-    new_data_ = false;
+    lidar.laser_scan_msg.header.stamp = now;
 
-    for (auto& lidar : lidar_sensors_)
-    {
-      for (size_t idx = 0; idx < lidar.raw_data.size(); ++idx)
-      {
-        float range = static_cast<float>(lidar.raw_data[idx]);
-        lidar.laser_scan_msg.ranges[idx] = (range < lidar.range_min || range > lidar.range_max) ? -1.0f : range;
-      }
-
-      lidar.laser_scan_msg.header.stamp = node_->now();
-      lidar.scan_pub->publish(lidar.laser_scan_msg);
-    }
+#if REALTIME_TOOLS_VERSION_MAJOR > 2
+    lidar.scan_pub->try_publish(lidar.laser_scan_msg);
+#else
+    lidar.scan_pub->tryPublish(lidar.laser_scan_msg);
+#endif
   }
 }
 
 void RangefinderLidarPlugin::cleanup()
 {
-  {
-    std::lock_guard<std::mutex> lock(data_mutex_);
-    running_ = false;
-  }
-  data_cv_.notify_one();
-  if (publish_thread_.joinable())
-  {
-    publish_thread_.join();
-  }
   lidar_sensors_.clear();
 }
 

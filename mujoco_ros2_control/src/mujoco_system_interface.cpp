@@ -2256,7 +2256,7 @@ void MujocoSystemInterface::load_legacy_lidar(const std::vector<std::string>& pl
       "mujoco_ros2_control_plugins/RangefinderLidarPlugin", "mujoco_rangefinder_plugin", plugins_ns,
       [&](const std::string& prefix) {
         const auto rate_str = get_hardware_parameter_or(get_hardware_info(), "lidar_publish_rate", "5.0");
-        const std::string rate_param = prefix + "publish_rate";
+        const std::string rate_param = prefix + "lidar_publish_rate";
         if (!get_node()->has_parameter(rate_param))
         {
           get_node()->declare_parameter(rate_param, std::stod(rate_str));

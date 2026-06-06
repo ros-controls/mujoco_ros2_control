@@ -30,6 +30,7 @@
 
 #include <rclcpp/node.hpp>
 #include <rclcpp/publisher.hpp>
+#include <realtime_tools/realtime_publisher.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 
 #include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp>
@@ -58,7 +59,8 @@ struct RangefinderLidarData
   // For message publishing
   std::string laserscan_topic;
   sensor_msgs::msg::LaserScan laser_scan_msg;
-  rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_pub;
+  rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_pub_raw;
+  std::unique_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::LaserScan>> scan_pub;
 };
 
 /**
@@ -86,14 +88,9 @@ private:
   rclcpp::Node::SharedPtr node_;
   const mjModel* model_{ nullptr };
   double publish_rate_{ 5.0 };
+  rclcpp::Time last_publish_time_{ 0, 0, RCL_ROS_TIME };
 
   std::vector<RangefinderLidarData> lidar_sensors_;
-
-  std::thread publish_thread_;
-  std::mutex data_mutex_;
-  std::condition_variable data_cv_;
-  bool new_data_{ false };
-  std::atomic_bool running_{ false };
 };
 
 }  // namespace mujoco_ros2_control_plugins
