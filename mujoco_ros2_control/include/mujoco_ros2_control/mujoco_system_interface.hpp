@@ -270,7 +270,7 @@ private:
   void load_mujoco_plugins();
 
   /**
-   * Helper function to load plugins that have been specified in legacy ways, but aren't explicitly loaded.
+   * Helper functions to load plugins that have been specified in legacy ways, but aren't explicitly loaded.
    * For example, camera support was moved from the core hardware interface to a plugin method in
    * https://github.com/ros-controls/mujoco_ros2_control/pull/211, but to ensure we don't break existing
    * seems we conditionally load the camera plugin and translate hardware interface configs to the relevant
@@ -281,6 +281,7 @@ private:
   void auto_register_plugin_if_needed(const std::string& plugin_type, const std::string& plugin_ns,
                                       const std::vector<std::string>& loaded_plugins,
                                       std::function<void(const std::string& prefix)> inject_params);
+  void load_legacy_cameras(const std::vector<std::string>& plugins_ns);
 
   // Logger
   rclcpp::Logger logger_ = rclcpp::get_logger("MujocoSystemInterface");
