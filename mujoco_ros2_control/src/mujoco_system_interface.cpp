@@ -2125,8 +2125,7 @@ void MujocoSystemInterface::load_mujoco_plugins()
 ///
 
 void MujocoSystemInterface::auto_register_plugin_if_needed(const std::string& plugin_type, const std::string& plugin_ns,
-                                                           const std::vector<std::string>& loaded_plugins,
-                                                           std::function<void(const std::string& prefix)> inject_params)
+                                                           const std::vector<std::string>& loaded_plugins)
 {
   const std::string mujoco_plugins_param_prefix = "mujoco_plugins";
   bool already_loaded = std::any_of(loaded_plugins.begin(), loaded_plugins.end(), [&](const std::string& ns) {
@@ -2134,15 +2133,10 @@ void MujocoSystemInterface::auto_register_plugin_if_needed(const std::string& pl
     return get_node()->has_parameter(type_param) && get_node()->get_parameter(type_param).as_string() == plugin_type;
   });
 
+  // Nothing to do if it has already been loaded
   if (already_loaded)
   {
     return;
-  }
-
-  const std::string prefix = mujoco_plugins_param_prefix + "." + plugin_ns + ".";
-  if (inject_params)
-  {
-    inject_params(prefix);
   }
 
   try
@@ -2182,63 +2176,65 @@ void MujocoSystemInterface::load_legacy_cameras(const std::vector<std::string>& 
 {
   // For now we are manually checking for cameras in the sim, then loading the CameraPlugin
   // if it has not already been configured.
-  // TODO: Remove when camera support through ros2_control xacro has been fully deprecated.
-  if (simulation_->model()->ncam > 0)
+  if (simulation_->model()->ncam == 0)
   {
-    // Users using an alternative plugin to the existing CameraPlugin can explicitly set this
-    // to avoid plugin registration when they don't want it.
-    const bool auto_cameras =
-        hardware_interface::parse_bool(get_hardware_parameter_or(get_hardware_info(), "auto_register_cameras", "true"));
-    if (auto_cameras)
-    {
-      auto_register_plugin_if_needed(
-          "mujoco_ros2_control_plugins/CameraPlugin", "mujoco_camera_plugin", plugins_ns,
-          [&](const std::string& prefix) {
-            for (int i = 0; i < simulation_->model()->ncam; ++i)
-            {
-              // Legacy update rate
-              const auto camera_publish_rate =
-                  std::stod(get_hardware_parameter(get_hardware_info(), "camera_publish_rate").value_or("5.0"));
-              const std::string camera_rate_param = prefix + "camera_publish_rate";
-              if (!get_node()->has_parameter(camera_rate_param))
-              {
-                get_node()->declare_parameter(camera_rate_param, camera_publish_rate);
-              }
-
-              // Legacy ros2_control xacro params
-              const char* cam_name = simulation_->model()->names + simulation_->model()->name_camadr[i];
-              const auto sensor_info = get_sensor_from_info(get_hardware_info(), cam_name);
-              if (!sensor_info.has_value())
-                continue;
-
-              const auto& params = sensor_info.value().parameters;
-              auto set = [&](const std::string& key, const std::string& def) {
-                const std::string full = prefix + cam_name + "." + key;
-                if (!get_node()->has_parameter(full))
-                {
-                  auto it = params.find(key);
-                  get_node()->declare_parameter(full, it != params.end() ? it->second : def);
-                }
-              };
-              set("frame_name", std::string(cam_name) + "_frame");
-              set("frame_name", std::string(cam_name) + "_frame");
-              set("info_topic", std::string(cam_name) + "/camera_info");
-              set("image_topic", std::string(cam_name) + "/color");
-              set("depth_topic", std::string(cam_name) + "/depth");
-            }
-
-            RCLCPP_WARN(
-                get_logger(),
-                "\nCamera publishing is being auto-configured because camera were found in the MuJoCo model but "
-                "no CameraPlugin was explicitly configured!\n"
-                "This automatic behavior is deprecated and will be removed in a future release.\n"
-                "To silence this warning, either:\n"
-                "  1. Add a CameraPlugin entry to your mujoco_plugins YAML config, or\n"
-                "  2. Set the hardware parameter 'auto_register_cameras' to 'false' to disable auto-registration.\n"
-                "For more information refer to the CameraPlugin documentation in mujoco_ros2_control_plugins.\n");
-          });
-    }
+    return;
   }
+
+  // Users using an alternative plugin to the existing CameraPlugin can explicitly set this to avoid plugin
+  // registration when they don't want it.
+  const bool auto_cameras =
+      hardware_interface::parse_bool(get_hardware_parameter_or(get_hardware_info(), "auto_register_cameras", "true"));
+  if (!auto_cameras)
+  {
+    return;
+  }
+
+  // Parse and inject legacy parameters into the node before we initialize
+  const std::string prefix = "mujoco_plugins.mujoco_camera_plugin.";
+  const double camera_publish_rate =
+      std::stod(get_hardware_parameter_or(get_hardware_info(), "camera_publish_rate", "5.0"));
+  if (!get_node()->has_parameter(prefix + "camera_publish_rate"))
+  {
+    get_node()->declare_parameter(prefix + "camera_publish_rate", camera_publish_rate);
+  }
+
+  for (int i = 0; i < simulation_->model()->ncam; ++i)
+  {
+    const char* cam_name = simulation_->model()->names + simulation_->model()->name_camadr[i];
+    const auto sensor_info = get_sensor_from_info(get_hardware_info(), cam_name);
+    if (!sensor_info.has_value())
+    {
+      continue;
+    }
+
+    // Helper function to declare and set legacy params
+    const auto& params = sensor_info.value().parameters;
+    const std::string ns = prefix + cam_name + ".";
+    auto set = [&](const std::string& key, const std::string& def) {
+      if (!get_node()->has_parameter(ns + key))
+      {
+        auto it = params.find(key);
+        get_node()->declare_parameter(ns + key, it != params.end() ? it->second : def);
+      }
+    };
+
+    set("frame_name", std::string(cam_name) + "_frame");
+    set("info_topic", std::string(cam_name) + "/camera_info");
+    set("image_topic", std::string(cam_name) + "/color");
+    set("depth_topic", std::string(cam_name) + "/depth");
+  }
+
+  RCLCPP_WARN(get_logger(),
+              "\nCamera publishing is being auto-configured because cameras were found in the MuJoCo model but "
+              "no CameraPlugin was explicitly configured!\n"
+              "This automatic behavior is deprecated and will be removed in a future release.\n"
+              "To silence this warning, either:\n"
+              "  1. Add a CameraPlugin entry to your mujoco_plugins YAML config, or\n"
+              "  2. Set the hardware parameter 'auto_register_cameras' to 'false' to disable auto-registration.\n"
+              "For more information refer to the CameraPlugin documentation in mujoco_ros2_control_plugins.\n");
+
+  auto_register_plugin_if_needed("mujoco_ros2_control_plugins/CameraPlugin", "mujoco_camera_plugin", plugins_ns);
 }
 
 }  // namespace mujoco_ros2_control
