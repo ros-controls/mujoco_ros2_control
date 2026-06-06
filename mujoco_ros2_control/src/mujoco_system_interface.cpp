@@ -2290,15 +2290,16 @@ void MujocoSystemInterface::load_legacy_lidar(const std::vector<std::string>& pl
       get_node()->declare_parameter(ns + "laserscan_topic", it->second);
   }
 
-  RCLCPP_WARN(get_logger(), "\nRangefinder based lidar sensors were automatically added due to existing "
-                            "ros2_control xacro config. Both these sensors and configuration mechanisms "
-                            "have been deprecated!\n"
-                            "Users should migrate to using one of the updated Lidar plugins as noted in the "
-                            "`mujoco_ros2_control_plugins` package.\n"
-                            "Refer to the documentation for more details.\n");
-
-  auto_register_plugin_if_needed("mujoco_ros2_control_plugins/RangefinderLidarPlugin", "rangefinder_lidar_plugin",
-                                 plugins_ns);
+  if (auto_register_plugin_if_needed("mujoco_ros2_control_plugins/RangefinderLidarPlugin", "rangefinder_lidar_plugin",
+                                     plugins_ns))
+  {
+    RCLCPP_WARN(get_logger(), "\nRangefinder based lidar sensors were automatically added due to existing "
+                              "ros2_control xacro config. Both these sensors and configuration mechanisms "
+                              "have been deprecated!\n"
+                              "Users should migrate to using one of the updated Lidar plugins as noted in the "
+                              "`mujoco_ros2_control_plugins` package.\n"
+                              "Refer to the documentation for more details.\n");
+  }
 }
 
 }  // namespace mujoco_ros2_control
