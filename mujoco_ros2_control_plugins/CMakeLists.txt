@@ -11,13 +11,10 @@ find_package(backward_ros REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(pluginlib REQUIRED)
-find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(mujoco_ros2_control_msgs REQUIRED)
-find_package(glfw3 REQUIRED)
-find_package(OpenGL REQUIRED COMPONENTS EGL)
 
 # Attempt to link MuJoCo via the vendor package, if available
 find_package(mujoco_vendor QUIET)
@@ -48,6 +45,7 @@ add_library(mujoco_ros2_control_plugins_impl SHARED
   src/heartbeat_publisher_plugin.cpp
   src/external_wrench_plugin.cpp
   src/camera_plugin.cpp
+  src/mujoco_3d_lidar_plugin.cpp
   # TODO: Remove once this has been fully deprecated
   src/rangefinder_lidar_plugin.cpp
 )
@@ -60,9 +58,6 @@ target_link_libraries(mujoco_ros2_control_plugins_impl PUBLIC
   ${std_srvs_TARGETS}
   ${visualization_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
-  glfw
-  OpenGL::EGL
-  OpenGL::OpenGL
 )
 target_compile_definitions(mujoco_ros2_control_plugins_impl PRIVATE
   REALTIME_TOOLS_VERSION_MAJOR=${realtime_tools_VERSION_MAJOR}
@@ -108,6 +103,7 @@ if(BUILD_TESTING)
     ${sensor_msgs_TARGETS}
     ${std_srvs_TARGETS}
   )
+
   # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
   # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
   # Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
@@ -118,12 +114,19 @@ if(BUILD_TESTING)
     "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
     "LINKER:--pop-state"
   )
-  target_link_options(test_camera_plugin PUBLIC
+
+  ament_add_gtest(test_3d_lidar_plugin
+    test/test_3d_lidar_plugin.cpp
+  )
+  target_link_libraries(test_3d_lidar_plugin
+    mujoco_ros2_control_plugins_impl
+    ${sensor_msgs_TARGETS}
+  )
+  target_link_options(test_3d_lidar_plugin PUBLIC
     "LINKER:--push-state,--no-as-needed"
     "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
     "LINKER:--pop-state"
   )
-
 endif()
 
 # Install include directory
