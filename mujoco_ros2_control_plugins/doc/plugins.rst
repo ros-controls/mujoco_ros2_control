@@ -43,7 +43,6 @@ A simple demonstration plugin that publishes a heartbeat message every second to
    # Terminal 2: echo the heartbeat messages
    ros2 topic echo /mujoco_heartbeat
 
-
 .. _camera_plugin:
 
 CameraPlugin

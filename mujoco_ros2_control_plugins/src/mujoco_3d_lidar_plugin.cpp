@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "mujoco_ros2_control_plugins/mujoco_3d_lidar_plugin.hpp"
+#include "mujoco_3d_lidar_plugin.hpp"
 
 #include <cmath>
 #include <limits>
