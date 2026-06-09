@@ -28,7 +28,7 @@
 #include <ament_index_cpp/get_resource.hpp>
 #include <rclcpp/rclcpp.hpp>
 
-#include <mujoco_ros2_control_plugins/mujoco_3d_lidar_plugin.hpp>
+#include "mujoco_3d_lidar_plugin.hpp"
 
 class Mujoco3dLidarPluginTest : public ::testing::Test
 {
