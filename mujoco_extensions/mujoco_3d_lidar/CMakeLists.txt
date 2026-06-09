@@ -5,8 +5,6 @@ find_package(ament_cmake QUIET)
 # Link MuJoCo via the vendor package
 find_package(mujoco_vendor REQUIRED)
 
-include_directories(include)
-
 add_library(mujoco_3d_lidar SHARED)
 target_sources(mujoco_3d_lidar PRIVATE
   src/register.cpp
@@ -14,6 +12,10 @@ target_sources(mujoco_3d_lidar PRIVATE
 )
 target_link_libraries(mujoco_3d_lidar PRIVATE mujoco::mujoco)
 target_compile_options(mujoco_3d_lidar PRIVATE ${mujoco_SILENCE_COMPILER_WARNINGS})
+target_include_directories(mujoco_3d_lidar PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
 
 # Install in the local package, and export
 install(TARGETS mujoco_3d_lidar
@@ -23,6 +25,7 @@ install(TARGETS mujoco_3d_lidar
 install(TARGETS mujoco_3d_lidar
   LIBRARY DESTINATION lib/${PROJECT_NAME}/mujoco_plugin
 )
+install(DIRECTORY include/ DESTINATION include)
 
 # Duplicate the install to be next to the simulate application so this works there, as well.
 # This is best effort because it may not be writeable...
@@ -31,6 +34,7 @@ find_program(mujoco_SIMULATE NAMES simulate mujoco-simulate)
 if(mujoco_SIMULATE)
   cmake_path(SET mujoco_BIN_PATH NORMALIZE ${mujoco_SIMULATE}/..)
   install(CODE "
+    file(MAKE_DIRECTORY \"${mujoco_BIN_PATH}/mujoco_plugin\")
     execute_process(
       COMMAND cp -f \"\${CMAKE_INSTALL_PREFIX}/lib/${PROJECT_NAME}/mujoco_plugin/libmujoco_3d_lidar.so\"
                     \"${mujoco_BIN_PATH}/mujoco_plugin/\"

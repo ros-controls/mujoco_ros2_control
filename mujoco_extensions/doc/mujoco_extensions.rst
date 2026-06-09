@@ -1,3 +1,5 @@
+.. _custom_mujoco_extensions:
+
 Custom MuJoCo Extensions
 ========================
 
