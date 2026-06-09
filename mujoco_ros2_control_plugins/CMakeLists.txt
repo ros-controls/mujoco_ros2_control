@@ -11,9 +11,12 @@ find_package(backward_ros REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(pluginlib REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(mujoco_ros2_control_msgs REQUIRED)
+find_package(glfw3 REQUIRED)
+find_package(OpenGL REQUIRED COMPONENTS EGL)
 
 # Attempt to link MuJoCo via the vendor package, if available
 find_package(mujoco_vendor QUIET)
@@ -48,9 +51,13 @@ target_link_libraries(mujoco_ros2_control_plugins PUBLIC
   rclcpp::rclcpp
   realtime_tools::realtime_tools
   pluginlib::pluginlib
+  ${sensor_msgs_TARGETS}
   ${std_msgs_TARGETS}
   ${visualization_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
+  glfw
+  OpenGL::EGL
+  OpenGL::OpenGL
 )
 target_compile_definitions(mujoco_ros2_control_plugins PRIVATE
   REALTIME_TOOLS_VERSION_MAJOR=${realtime_tools_VERSION_MAJOR}
@@ -81,6 +88,19 @@ if(BUILD_TESTING)
   # TODO: Remove this after the following is resolved and the next ROS sync
   # https://github.com/pal-robotics/mujoco_vendor/issues/2
   target_link_options(test_external_wrench_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
+
+  ament_add_gtest(test_camera_plugin
+    test/test_camera_plugin.cpp
+  )
+  target_link_libraries(test_camera_plugin
+    mujoco_ros2_control_plugins
+    ${sensor_msgs_TARGETS}
+  )
+  target_link_options(test_camera_plugin PUBLIC
     "LINKER:--push-state,--no-as-needed"
     "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
     "LINKER:--pop-state"
