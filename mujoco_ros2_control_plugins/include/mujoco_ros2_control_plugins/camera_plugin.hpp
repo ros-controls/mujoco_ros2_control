@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025, United States Government, as represented by the
+ * Copyright (c) 2026, United States Government, as represented by the
  * Administrator of the National Aeronautics and Space Administration.
  *
  * All rights reserved.
@@ -19,25 +19,35 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <mutex>
+#include <queue>
+#include <string>
 #include <thread>
 #include <vector>
+
+#include "sensor_msgs/image_encodings.hpp"
+
+#include <dlfcn.h>
+
+#include "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLFW/glfw3.h>
 #include <mujoco/mujoco.h>
 
-#include <hardware_interface/hardware_info.hpp>
 #include <rclcpp/node.hpp>
 #include <rclcpp/publisher.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
-namespace mujoco_ros2_control
+#include <pluginlib/class_list_macros.hpp>
+
+namespace mujoco_ros2_control_plugins
 {
 
 struct CameraData
@@ -68,37 +78,60 @@ struct CameraData
 };
 
 /**
- * @brief Wraps MuJoCo cameras for publishing ROS 2 RGB-D streams.
+ * @brief Plugin that publishes the mujoco camera data to ROS 2 topics.
+ *
+ * Camera topics can be named in the ROS 2 controls plugins YAML config file
+ * and loaded as node parameters.
+ * If any of the parameters are not specified default topic names will be assigned.
+ * A user can provide topic names for multiple cameras as long as cameras are not named the same.
+ * Name collision is resolved by last name in the yaml file.
+ *
+ * Plugin Parameters Structure (and default topics)
+ * ---------------------------
+ *
+ * mujoco_camera_plugin:
+ *   type: "mujoco_ros2_control_plugins/CameraPlugin"
+ *   # All cameras will publish data at the same rate
+ *   camera_publish_rate: 6.0
+ *   <camera_name>:
+ *     frame_name: ""
+ *     info_topic: <camera_name>/camera_info
+ *     image_topic: <camera_name>/color
+ *     depth_topic: <camera_name>/depth
+ *
+ * Implementation notes
+ * --------------------
+ * If the camera name, in the parameters, does not match any of the mujoco cameras
+ * the data will not be published to ROS topics.
+ * If no cameras parameters are given (but mujoco_camera_plugin and its type are declared)
+ * the default topics and frame are used automatically
+ *
  */
-class MujocoCameras
+class CameraPlugin : public MuJoCoROS2ControlPluginBase
 {
 public:
   /** Signature of the GLFW initializer; injectable for testing. */
   using GlfwInitFn = std::function<int()>;
 
-  /**
-   * @brief Constructs a new MujocoCameras wrapper object.
-   *
-   * @param node Will be used to construct image publishers
-   * @param sim_mutex Provides synchronized access to the mujoco_data object for rendering
-   * @param mujoco_data MuJoCo data for the simulation
-   * @param mujoco_model MuJoCo model for the simulation
-   * @param camera_publish_rate The rate to publish all camera images, for now all images are published at the same rate.
-   */
-  explicit MujocoCameras(rclcpp::Node::SharedPtr node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
-                         mjModel* mujoco_model, double camera_publish_rate);
+  CameraPlugin() = default;
+  ~CameraPlugin() override = default;
+
+  bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
+  bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data, GlfwInitFn glfw_init_fn);
+  void update(const mjModel* model, mjData* data) override;
+  void cleanup() override;
 
   /**
-   * @brief Starts the image processing thread in the background.
+   * @brief Manually force the cameras to publish their updates.
    *
-   * Does nothing when no cameras have been registered. The background thread will initialize
-   * its own offscreen GLFW context for rendering images that is separate from the Simulate
-   * application, as the context must be created in the running thread.
-   *
-   * @param glfw_init_fn Callable used to initialize GLFW; defaults to ::glfwInit. Override in
-   *                     tests to simulate a display-capable environment without a real GPU.
+   * This is included for test purposes only, as the plumbing to manually force a data
+   * sync in WIP.
    */
-  void init(GlfwInitFn glfw_init_fn = glfwInit);
+  void trigger_update();
+
+private:
+  // ROS interfaces
+  rclcpp::Logger logger_{ rclcpp::get_logger("CameraPlugin") };
 
   /**
    * @brief Stops the camera processing thread and closes the relevant objects, call before shutdown.
@@ -108,9 +141,8 @@ public:
   /**
    * @brief Parses camera information from the mujoco model.
    */
-  void register_cameras(const hardware_interface::HardwareInfo& hardware_info);
+  void register_cameras();
 
-private:
   /**
    * @brief Initializes the rendering context and starts processing.
    */
@@ -119,7 +151,7 @@ private:
   /**
    * @brief Updates the camera images and publishes info, images, and depth maps.
    */
-  void update();
+  void update_cameras();
 
   rclcpp::Node::SharedPtr node_;
 
@@ -127,11 +159,12 @@ private:
   std::recursive_mutex* sim_mutex_{ nullptr };
 
   mjData* mj_data_;
-  mjModel* mj_model_;
+  const mjModel* mj_model_;
   mjData* mj_camera_data_;
 
   // Image publishing rate
-  double camera_publish_rate_;
+  double camera_publish_rate_{ 5.0 };
+  rclcpp::Time last_publish_time_{ 0, 0, RCL_ROS_TIME };
 
   // Rendering options for the cameras, currently hard coded to defaults
   mjvOption mjv_opt_;
@@ -141,9 +174,12 @@ private:
   // Containers for camera data and ROS constructs
   std::vector<CameraData> cameras_;
 
-  // Camera processing thread
+  // Camera processing thread and objects for syncing
   std::thread rendering_thread_;
-  std::atomic_bool publish_images_;
+  std::atomic_bool publish_images_{ false };
+  std::mutex data_mutex_;
+  std::condition_variable data_cv_;
+  bool new_data_{ false };
 
   // EGL context for headless rendering (used when GLFW is unavailable)
   EGLDisplay egl_display_{ EGL_NO_DISPLAY };
@@ -163,4 +199,4 @@ private:
   void cleanup_egl_context();
 };
 
-}  // namespace mujoco_ros2_control
+}  // namespace mujoco_ros2_control_plugins

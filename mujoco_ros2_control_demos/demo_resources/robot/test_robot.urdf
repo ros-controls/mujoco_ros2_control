@@ -335,9 +335,6 @@
       <!-- If set to true, will not launch the Simulate App window -->
       <param name="headless">$(arg headless)</param>
 
-      <!-- Publish camera images at 6 hz -->
-      <param name="camera_publish_rate">6.0</param>
-
       <!-- Publish lidar scans at 10 hz -->
       <param name="lidar_publish_rate">1.0</param>
     </hardware>

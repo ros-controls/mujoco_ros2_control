@@ -82,6 +82,7 @@ bool is_mimic_joint(const std::string& joint_name, const hardware_interface::Har
   }
   return false;
 }
+
 }  // namespace
 namespace mujoco_ros2_control
 {
@@ -242,11 +243,6 @@ MujocoSystemInterface::MujocoSystemInterface() = default;
 
 MujocoSystemInterface::~MujocoSystemInterface()
 {
-  // Stop sensor threads that hold model and data pointers BEFORE the simulation is torn down.
-  if (cameras_)
-  {
-    cameras_->close();
-  }
   if (lidar_sensors_)
   {
     lidar_sensors_->close();
@@ -322,9 +318,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   const double sim_speed_factor =
       std::stod(get_hardware_parameter(get_hardware_info(), "sim_speed_factor").value_or("-1"));
 
-  // Pull the camera publish rate out of the info, if present, otherwise default to 5 hz.
-  const auto camera_publish_rate =
-      std::stod(get_hardware_parameter(get_hardware_info(), "camera_publish_rate").value_or("5.0"));
   // Pull the lidar publish rate out of the info, if present, otherwise default to 5 hz.
   const auto lidar_publish_rate =
       std::stod(get_hardware_parameter(get_hardware_info(), "lidar_publish_rate").value_or("5.0"));
@@ -474,12 +467,6 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
 
   // This CB will be triggered by the MujocoSimulation after resettting the sim and qpos/qvel/ctrl have been restored.
   simulation_->set_reset_callback([this](bool fill_initial_state) { this->reset_simulation_state(fill_initial_state); });
-
-  // Ready cameras
-  RCLCPP_INFO(get_logger(), "Initializing cameras...");
-  cameras_ = std::make_unique<MujocoCameras>(get_node(), &simulation_->mutex(), simulation_->data(),
-                                             simulation_->model(), camera_publish_rate);
-  cameras_->register_cameras(get_hardware_info());
 
   // Configure Lidar sensors
   RCLCPP_INFO(get_logger(), "Initializing lidar...");
@@ -708,10 +695,6 @@ std::vector<hardware_interface::CommandInterface> MujocoSystemInterface::export_
 hardware_interface::CallbackReturn MujocoSystemInterface::on_activate(const rclcpp_lifecycle::State& /*previous_state*/)
 {
   RCLCPP_INFO(get_logger(), "Activating MuJoCo hardware interface and starting Simulate threads...");
-
-  // Start camera and sensor rendering loops
-  cameras_->init();
-  lidar_sensors_->init();
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -2125,10 +2108,135 @@ void MujocoSystemInterface::load_mujoco_plugins()
         throw;  // re-throw to be caught by the outer catch block
       }
     }
+
+    // Support for legacy methods of loading cameras
+    // TODO: Delete when camera configuration through xacro is fully deprecated.
+    load_legacy_cameras(plugins_ns);
   }
   catch (const pluginlib::PluginlibException& ex)
   {
     RCLCPP_ERROR(get_logger(), "Failed to create plugin loader: %s", ex.what());
+  }
+}
+
+///
+/// Functions added to support migration of cameras and lidars to plugins, and out of the core hardware interface.
+/// TODO: Delete these once camera / lidar configuration through xacro is fully deprecated.
+///
+
+bool MujocoSystemInterface::auto_register_plugin_if_needed(const std::string& plugin_type, const std::string& plugin_ns,
+                                                           const std::vector<std::string>& loaded_plugins)
+{
+  const std::string mujoco_plugins_param_prefix = "mujoco_plugins";
+  bool already_loaded = std::any_of(loaded_plugins.begin(), loaded_plugins.end(), [&](const std::string& ns) {
+    const std::string type_param = mujoco_plugins_param_prefix + "." + ns + ".type";
+    return get_node()->has_parameter(type_param) && get_node()->get_parameter(type_param).as_string() == plugin_type;
+  });
+
+  // Nothing to do if it has already been loaded
+  if (already_loaded)
+  {
+    return false;
+  }
+
+  try
+  {
+    auto plugin = plugin_loader_->createSharedInstance(plugin_type);
+    if (plugin->init(get_node()->create_sub_node(plugin_ns), simulation_->model(), simulation_->data()))
+    {
+      plugin_instances_.push_back(plugin);
+      RCLCPP_INFO(get_logger(), "Auto-registered plugin: %s", plugin_type.c_str());
+    }
+    else
+    {
+      RCLCPP_WARN(get_logger(), "Failed to initialize auto-registered plugin: %s", plugin_type.c_str());
+    }
+  }
+  catch (const pluginlib::PluginlibException& ex)
+  {
+    RCLCPP_WARN(get_logger(), "Failed to auto-register plugin %s: %s", plugin_type.c_str(), ex.what());
+  }
+
+  return true;
+}
+
+inline std::optional<hardware_interface::ComponentInfo>
+get_sensor_from_info(const hardware_interface::HardwareInfo& hardware_info, const std::string& name)
+{
+  for (size_t sensor_index = 0; sensor_index < hardware_info.sensors.size(); sensor_index++)
+  {
+    const auto& sensor = hardware_info.sensors.at(sensor_index);
+    if (hardware_info.sensors.at(sensor_index).name == name)
+    {
+      return sensor;
+    }
+  }
+  return std::nullopt;
+}
+
+void MujocoSystemInterface::load_legacy_cameras(const std::vector<std::string>& plugins_ns)
+{
+  // For now we are manually checking for cameras in the sim, then loading the CameraPlugin
+  // if it has not already been configured.
+  if (simulation_->model()->ncam == 0)
+  {
+    return;
+  }
+
+  // Users using an alternative plugin to the existing CameraPlugin can explicitly set this to avoid plugin
+  // registration when they don't want it.
+  const bool auto_cameras =
+      hardware_interface::parse_bool(get_hardware_parameter_or(get_hardware_info(), "auto_register_cameras", "true"));
+  if (!auto_cameras)
+  {
+    return;
+  }
+
+  // Parse and inject legacy parameters into the node before we initialize
+  const std::string prefix = "mujoco_plugins.mujoco_camera_plugin.";
+  const double camera_publish_rate =
+      std::stod(get_hardware_parameter_or(get_hardware_info(), "camera_publish_rate", "5.0"));
+  if (!get_node()->has_parameter(prefix + "camera_publish_rate"))
+  {
+    get_node()->declare_parameter(prefix + "camera_publish_rate", camera_publish_rate);
+  }
+
+  for (int i = 0; i < simulation_->model()->ncam; ++i)
+  {
+    const char* cam_name = simulation_->model()->names + simulation_->model()->name_camadr[i];
+    const auto sensor_info = get_sensor_from_info(get_hardware_info(), cam_name);
+    if (!sensor_info.has_value())
+    {
+      continue;
+    }
+
+    // Helper function to declare and set legacy params
+    const auto& params = sensor_info.value().parameters;
+    const std::string ns = prefix + cam_name + ".";
+    auto set = [&](const std::string& key, const std::string& def) {
+      if (!get_node()->has_parameter(ns + key))
+      {
+        auto it = params.find(key);
+        get_node()->declare_parameter(ns + key, it != params.end() ? it->second : def);
+      }
+    };
+
+    set("frame_name", std::string(cam_name) + "_frame");
+    set("info_topic", std::string(cam_name) + "/camera_info");
+    set("image_topic", std::string(cam_name) + "/color");
+    set("depth_topic", std::string(cam_name) + "/depth");
+  }
+
+  if (auto_register_plugin_if_needed("mujoco_ros2_control_plugins/CameraPlugin", "mujoco_camera_plugin", plugins_ns))
+  {
+    RCLCPP_WARN(get_logger(),
+                "\nCamera publishing is being auto-configured because cameras were found in the MuJoCo model but "
+                "no CameraPlugin was explicitly configured!\n"
+                "This automatic behavior is deprecated and will be removed in a future release.\n"
+                "To silence this warning, either:\n"
+                "  1. Add a CameraPlugin entry to your mujoco_plugins YAML config, or\n"
+                "  2. Set the hardware parameter 'auto_register_cameras' to 'false' to disable auto-registration.\n"
+                "For more information refer to the CameraPlugin documentation in mujoco_ros2_control_plugins.\n");
   }
 }
 
