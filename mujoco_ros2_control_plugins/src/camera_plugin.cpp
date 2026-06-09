@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025, United States Government, as represented by the
+ * Copyright (c) 2026, United States Government, as represented by the
  * Administrator of the National Aeronautics and Space Administration.
  *
  * All rights reserved.
@@ -17,30 +17,96 @@
  * under the License.
  */
 
-#include "mujoco_ros2_control/mujoco_cameras.hpp"
-#include "mujoco_ros2_control/utils.hpp"
+#include "mujoco_ros2_control_plugins/camera_plugin.hpp"
 
-#include "sensor_msgs/image_encodings.hpp"
-
-#include <dlfcn.h>
-
-using namespace std::chrono_literals;
-
-namespace mujoco_ros2_control
+namespace mujoco_ros2_control_plugins
 {
 
-MujocoCameras::MujocoCameras(rclcpp::Node::SharedPtr node, std::recursive_mutex* sim_mutex, mjData* mujoco_data,
-                             mjModel* mujoco_model, double camera_publish_rate)
-  : node_(node)
-  , sim_mutex_(sim_mutex)
-  , mj_data_(mujoco_data)
-  , mj_model_(mujoco_model)
-  , camera_publish_rate_(camera_publish_rate)
+bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data)
 {
+  // by default use `glfwInit` to check if the GLFW is initialized.
+  return this->init(node, model, data, glfwInit);
 }
 
-void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& hardware_info)
+bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data, GlfwInitFn glfw_init_fn)
 {
+  node_ = node;
+  mj_model_ = model;
+  mj_data_ = data;
+
+  // Ensure the logger has a name
+  logger_ = node_->get_logger().get_child(node->get_sub_namespace());
+  RCLCPP_INFO(node_->get_logger(), "CameraPlugin initializing cameras...");
+
+  // Read the mj_model_, identify the number of cameras, and populate containers for them.
+  register_cameras();
+  if (cameras_.empty())
+  {
+    return true;
+  }
+
+  // Start the rendering thread process
+  // Try GLFW first, fall back to EGL for headless environments
+  if (glfw_init_fn())
+  {
+    use_egl_ = false;
+  }
+  else
+  {
+    RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Attempting EGL for headless rendering.");
+    use_egl_ = true;
+  }
+  rendering_thread_ = std::thread(&CameraPlugin::update_loop, this);
+  return true;
+}
+
+void CameraPlugin::update(const mjModel* model_arg, mjData* data)
+{
+  if (!publish_images_)
+  {
+    return;
+  }
+
+  // Check if it is time to publish
+  // TODO: Support per-camera publish rates?
+  auto now = node_->get_clock()->now();
+  if ((now - last_publish_time_).seconds() < (1.0 / camera_publish_rate_))
+  {
+    return;
+  }
+  last_publish_time_ = now;
+
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    mjv_copyData(mj_camera_data_, model_arg, data);
+    new_data_ = true;
+  }
+  data_cv_.notify_one();
+}
+
+void CameraPlugin::cleanup()
+{
+  close();
+}
+
+void CameraPlugin::trigger_update()
+{
+  std::lock_guard<std::mutex> lock(data_mutex_);
+  update_cameras();
+}
+
+void CameraPlugin::register_cameras()
+{
+  const std::string param_prefix = "mujoco_plugins.mujoco_camera_plugin.";
+
+  if (!node_->has_parameter(param_prefix + "camera_publish_rate"))
+  {
+    node_->declare_parameter(param_prefix + "camera_publish_rate", 5.0);
+  }
+
+  camera_publish_rate_ = node_->get_parameter(param_prefix + "camera_publish_rate").as_double();
+  RCLCPP_INFO(node_->get_logger(), "Publishing camera data at rate %f per second.", camera_publish_rate_);
+
   cameras_.resize(0);
   for (auto i = 0; i < mj_model_->ncam; ++i)
   {
@@ -57,24 +123,32 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
     camera.height = static_cast<uint32_t>(cam_resolution[1]);
     camera.viewport = { 0, 0, cam_resolution[0], cam_resolution[1] };
 
-    // If the hardware_info has a camera of the same name then we pull parameters from there.
-    const auto camera_info_maybe = get_sensor_from_info(hardware_info, cam_name);
-    if (camera_info_maybe.has_value())
+    const std::string param_ns = param_prefix + cam_name + ".";
+
+    const std::string frame_param = param_ns + "frame_name";
+    if (!node_->has_parameter(frame_param))
     {
-      const auto camera_info = camera_info_maybe.value();
-      camera.frame_name = camera_info.parameters.at("frame_name");
-      camera.info_topic = camera_info.parameters.at("info_topic");
-      camera.image_topic = camera_info.parameters.at("image_topic");
-      camera.depth_topic = camera_info.parameters.at("depth_topic");
+      node_->declare_parameter(frame_param, "");
     }
-    // Otherwise set default values for the frame and topics.
-    else
+    camera.frame_name = node_->get_parameter(frame_param).as_string();
+
+    if (!node_->has_parameter(param_ns + "info_topic"))
     {
-      camera.frame_name = camera.name + "_frame";
-      camera.info_topic = camera.name + "/camera_info";
-      camera.image_topic = camera.name + "/color";
-      camera.depth_topic = camera.name + "/depth";
+      node_->declare_parameter(param_ns + "info_topic", camera.name + "/camera_info");
     }
+    camera.info_topic = node_->get_parameter(param_ns + "info_topic").as_string();
+
+    if (!node_->has_parameter(param_ns + "image_topic"))
+    {
+      node_->declare_parameter(param_ns + "image_topic", camera.name + "/color");
+    }
+    camera.image_topic = node_->get_parameter(param_ns + "image_topic").as_string();
+
+    if (!node_->has_parameter(param_ns + "depth_topic"))
+    {
+      node_->declare_parameter(param_ns + "depth_topic", camera.name + "/depth");
+    }
+    camera.depth_topic = node_->get_parameter(param_ns + "depth_topic").as_string();
 
     RCLCPP_INFO(node_->get_logger(), "Adding camera: '%s'", cam_name);
     RCLCPP_INFO(node_->get_logger(), "    frame_name: '%s'", camera.frame_name.c_str());
@@ -130,38 +204,20 @@ void MujocoCameras::register_cameras(const hardware_interface::HardwareInfo& har
   }
 }
 
-void MujocoCameras::init(GlfwInitFn glfw_init_fn)
+void CameraPlugin::close()
 {
-  if (cameras_.empty())
   {
-    return;
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    publish_images_ = false;
   }
-
-  // Start the rendering thread process
-  // Try GLFW first, fall back to EGL for headless environments
-  if (glfw_init_fn())
-  {
-    use_egl_ = false;
-  }
-  else
-  {
-    RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Attempting EGL for headless rendering.");
-    use_egl_ = true;
-  }
-  publish_images_ = true;
-  rendering_thread_ = std::thread(&MujocoCameras::update_loop, this);
-}
-
-void MujocoCameras::close()
-{
-  publish_images_ = false;
+  data_cv_.notify_one();
   if (rendering_thread_.joinable())
   {
     rendering_thread_.join();
   }
 }
 
-bool MujocoCameras::init_egl_context()
+bool CameraPlugin::init_egl_context()
 {
   // Get EGL display
   egl_display_ = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, NULL);
@@ -248,7 +304,7 @@ bool MujocoCameras::init_egl_context()
   return true;
 }
 
-void MujocoCameras::cleanup_egl_context()
+void CameraPlugin::cleanup_egl_context()
 {
   if (egl_display_ != EGL_NO_DISPLAY)
   {
@@ -268,7 +324,7 @@ void MujocoCameras::cleanup_egl_context()
   }
 }
 
-void MujocoCameras::update_loop()
+void CameraPlugin::update_loop()
 {
   GLFWwindow* window = nullptr;
 
@@ -332,12 +388,27 @@ void MujocoCameras::update_loop()
   mjr_resizeOffscreen(max_width, max_height, &mjr_con_);
   RCLCPP_INFO(node_->get_logger(), "Resized offscreen buffer to %d x %d", max_width, max_height);
 
-  // TODO: Support per-camera publish rates?
-  rclcpp::Rate rate(camera_publish_rate_);
+  // Only process images once all data has been initialized, and do it until told to stop.
+  publish_images_ = true;
   while (rclcpp::ok() && publish_images_)
   {
-    update();
-    rate.sleep();
+    std::unique_lock<std::mutex> lock(data_mutex_);
+
+    // Wait for the main thread to copy the data and trigger this to process and publish
+    // images. Note that condition_variables can be awoken spuriously, so the additional
+    // checks are necessary to avoid doing work excepting when updated rendering data has
+    // been made available.
+    data_cv_.wait(lock, [this] { return new_data_ || !publish_images_; });
+
+    // Shutdown triggered, kill the loop and clean up.
+    if (!publish_images_)
+    {
+      break;
+    }
+    new_data_ = false;
+    lock.unlock();
+
+    update_cameras();
   }
 
   mjv_freeScene(&mjv_scn_);
@@ -354,16 +425,11 @@ void MujocoCameras::update_loop()
   }
 }
 
-void MujocoCameras::update()
+void CameraPlugin::update_cameras()
 {
+  // Step 1: Done in the `update` cb to copy rendering data
   // Rendering is done offscreen
   mjr_setBuffer(mjFB_OFFSCREEN, &mjr_con_);
-
-  // Step 1: Lock the sim and copy data for use in all camera rendering.
-  {
-    std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-    mjv_copyData(mj_camera_data_, mj_model_, mj_data_);
-  }
 
   // Step 2: Render the scene and copy images to relevant camera data containers.
   for (auto& camera : cameras_)
@@ -422,4 +488,8 @@ void MujocoCameras::update()
   }
 }
 
-}  // namespace mujoco_ros2_control
+}  // namespace mujoco_ros2_control_plugins
+
+// Export the plugin
+PLUGINLIB_EXPORT_CLASS(mujoco_ros2_control_plugins::CameraPlugin,
+                       mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase)

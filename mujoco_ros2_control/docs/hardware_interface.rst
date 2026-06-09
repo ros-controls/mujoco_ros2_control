@@ -38,10 +38,6 @@ Specify it in your URDF and point to a valid MJCF on launch:
             Defaults to /mujoco_robot_description. -->
        <param name="mujoco_model_topic">/mujoco_robot_description</param>
 
-       <!-- Optional: camera RGB-D image publish rate in Hz (all cameras share one rate).
-            Defaults to 5 Hz. -->
-       <param name="camera_publish_rate">6.0</param>
-
        <!-- Optional: lidar LaserScan publish rate in Hz (all lidar sensors share one rate). -->
        <param name="lidar_publish_rate">10.0</param>
 
@@ -244,64 +240,10 @@ Map to the corresponding ``ros2_control`` sensor:
 
 These sensor state interfaces work out of the box with the standard ROS 2 broadcasters.
 
-Cameras
--------
+.. warning::
 
-Any ``camera`` included in the MJCF will automatically have its RGB-D images and camera info published to ROS topics.
-
-The camera ``name`` attribute sets the defaults for the frame and topic names:
-
-- Frame: ``<name>_frame``
-- Topics: ``<name>/camera_info``, ``<name>/color``, ``<name>/depth``
-
-For example:
-
-.. code-block:: xml
-
-   <camera name="wrist_mounted_camera" fovy="58" mode="fixed" resolution="640 480" pos="0 0 0" quat="0 0 0 1"/>
-
-Publishes the following topics:
-
-.. code-block:: bash
-
-   $ ros2 topic info /wrist_mounted_camera/camera_info
-   Type: sensor_msgs/msg/CameraInfo
-   $ ros2 topic info /wrist_mounted_camera/color
-   Type: sensor_msgs/msg/Image
-   $ ros2 topic info /wrist_mounted_camera/depth
-   Type: sensor_msgs/msg/Image
-
-Frame and topic names can be overridden via ``ros2_control`` xacro:
-
-.. code-block:: xml
-
-   <!-- The sensor name must match the camera name in the MJCF -->
-   <sensor name="wrist_mounted_camera">
-     <param name="frame_name">wrist_mounted_camera_mujoco_frame</param>
-     <param name="info_topic">/wrist_mounted_camera/color/camera_info</param>
-     <param name="image_topic">/wrist_mounted_camera/color/image_raw</param>
-     <param name="depth_topic">/wrist_mounted_camera/aligned_depth_to_color/image_raw</param>
-   </sensor>
-
-.. note::
-
-   MuJoCo's camera coordinate conventions differ from ROS. Refer to the MuJoCo documentation for details.
-
-Headless Rendering
-~~~~~~~~~~~~~~~~~~
-
-Camera rendering is supported in headless environments (without a display).
-The system automatically detects whether a display is available:
-
-* With display: Uses GLFW for OpenGL context creation (default behavior)
-* Without display: Falls back to EGL for GPU-accelerated headless rendering
-
-This allows camera topics to be published even when running in headless mode (e.g., on a server, in Docker containers, or in CI environments).
-
-.. note::
-   EGL requires proper GPU drivers and EGL libraries to be installed (e.g., libegl1-mesa on Ubuntu).
-   If both GLFW and EGL fail to initialize, camera publishing will be disabled with a warning.
-
+   Cameras are no longer supported in the base interface, they are now provided as a ``mujoco_ros2_control_plugin``.
+   Refer to the :ref:`camera_plugin` for more information.
 
 Lidar
 -----

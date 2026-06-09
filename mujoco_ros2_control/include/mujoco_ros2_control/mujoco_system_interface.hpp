@@ -40,7 +40,6 @@
 #include <mujoco/mujoco.h>
 
 #include "mujoco_ros2_control/data.hpp"
-#include "mujoco_ros2_control/mujoco_cameras.hpp"
 #include "mujoco_ros2_control/mujoco_lidar.hpp"
 #include "mujoco_ros2_control/mujoco_simulation.hpp"
 
@@ -72,7 +71,7 @@ public:
   /**
    * @brief ros2_control SystemInterface to wrap Mujocos Simulate application.
    *
-   * Supports Actuators, Force Torque/IMU Sensors, and RGB-D camera, and Lidar Sensors in ROS 2 simulations.
+   * Supports Actuators, Force Torque/IMU Sensors, and Lidar Sensors in ROS 2 simulations.
    * For more information on configuration refer to the docs, check the comment strings below, and refer to
    * the example in the test folder.
    */
@@ -270,6 +269,19 @@ private:
    */
   void load_mujoco_plugins();
 
+  /**
+   * Helper functions to load plugins that have been specified in legacy ways, but aren't explicitly loaded.
+   * For example, camera support was moved from the core hardware interface to a plugin method in
+   * https://github.com/ros-controls/mujoco_ros2_control/pull/211, but to ensure we don't break existing
+   * seems we conditionally load the camera plugin and translate hardware interface configs to the relevant
+   * node parameters.
+   *
+   * TODO: Remove this once the camera / lidar xacro support have been officially removed.
+   */
+  bool auto_register_plugin_if_needed(const std::string& plugin_type, const std::string& plugin_ns,
+                                      const std::vector<std::string>& loaded_plugins);
+  void load_legacy_cameras(const std::vector<std::string>& plugins_ns);
+
   // Logger
   rclcpp::Logger logger_ = rclcpp::get_logger("MujocoSystemInterface");
 
@@ -297,9 +309,6 @@ private:
   int free_joint_id_ = -1;
   int free_joint_qpos_adr_ = -1;
   int free_joint_qvel_adr_ = -1;
-
-  // Containers for RGB-D cameras
-  std::unique_ptr<MujocoCameras> cameras_;
 
   // Containers for LIDAR sensors
   std::unique_ptr<MujocoLidar> lidar_sensors_;
