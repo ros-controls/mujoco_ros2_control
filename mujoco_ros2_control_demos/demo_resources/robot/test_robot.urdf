@@ -335,8 +335,6 @@
       <!-- If set to true, will not launch the Simulate App window -->
       <param name="headless">$(arg headless)</param>
 
-      <!-- Publish lidar scans at 10 hz -->
-      <param name="lidar_publish_rate">1.0</param>
     </hardware>
     <joint name="joint1">
       <command_interface name="position"/>
@@ -424,10 +422,7 @@
       <param name="depth_topic">/camera/aligned_depth_to_color/image_raw</param>
     </sensor>
 
-    <!-- Lidar sensors are matched to a set of rangefinder sensors in the MJCF, which should be -->
-    <!-- generated with the "<lidar>" inputs in the conversion script. The consiste of N rangefinders -->
-    <!-- and will generally be of the form "<sensor_name>-01". These parameters should line up with -->
-    <!-- those documented in the laserscan message. -->
+    <!-- WARNING: These lidar sensors are deprecated, including for test and legacy support only! -->
     <sensor name="lidar">
       <param name="frame_name">lidar_sensor_frame</param>
       <param name="angle_increment">0.025</param>
