@@ -121,7 +121,7 @@ Lidar* Lidar::Create(const mjModel* m, mjData* d, int instance)
   }
   if (azimuth_range[0] >= azimuth_range[1])
   {
-    mju_error("`azimuth_range minimum` must less than 'azimuth_range maximum");
+    mju_error("`azimuth_range minimum` must less than `azimuth_range maximum`");
     return nullptr;
   }
 
@@ -133,7 +133,7 @@ Lidar* Lidar::Create(const mjModel* m, mjData* d, int instance)
   {
     if (elevation_range.size() == 0)
     {
-      mju_error("Mininimum elevation angle must be specified");
+      mju_error("Minimum elevation angle must be specified");
       return nullptr;
     }
     if (elevation_range.size() == 1)
@@ -162,7 +162,7 @@ Lidar* Lidar::Create(const mjModel* m, mjData* d, int instance)
   }
   if ((resolution[1] > 1) && (elevation_range[0] >= elevation_range[1]))
   {
-    mju_error("`elevation_range minimum` must less than 'elevation_range maximum");
+    mju_error("`elevation_range minimum` must less than `elevation_range maximum`");
     return nullptr;
   }
 
@@ -225,16 +225,16 @@ Lidar::Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNu
 
   // set up the vectors for the raycasters
   vectors_.reserve(resolution_[0] * resolution_[1] * 3);
-  std::vector<mjtNum> azmuthAngles(resolution_[0]);
+  std::vector<mjtNum> azimuthAngles(resolution_[0]);
   std::vector<mjtNum> elevationAngles(resolution_[1]);
 
   if (resolution_[0] > 1)
   {
-    LinSpace(azimuth_range[0], azimuth_range[1], resolution_[0], azmuthAngles);
+    LinSpace(azimuth_range[0], azimuth_range[1], resolution_[0], azimuthAngles);
   }
   else
   {
-    azmuthAngles.push_back(0.0);
+    azimuthAngles.push_back(0.0);
   }
   if (resolution_[1] > 1)
   {
@@ -249,12 +249,9 @@ Lidar::Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNu
   {
     for (int32_t a = 0; a < resolution_[0]; ++a)
     {
-      // x
-      vectors_.push_back(std::cos(azmuthAngles[a]) * std::cos(elevationAngles[e]));
-      // y
-      vectors_.push_back(std::sin(azmuthAngles[a]) * std::cos(elevationAngles[e]));
-      // z
-      vectors_.push_back(std::sin(elevationAngles[e]));
+      vectors_.push_back(std::cos(azimuthAngles[a]) * std::cos(elevationAngles[e]));  // x
+      vectors_.push_back(std::sin(azimuthAngles[a]) * std::cos(elevationAngles[e]));  // y
+      vectors_.push_back(std::sin(elevationAngles[e]));                               // z
     }
   }
 
@@ -352,9 +349,10 @@ void Lidar::Visualize(const mjModel* m, mjData* d, const mjvOption* opt, mjvScen
     mjtNum dist = dataptr[idx];
     if (dist >= 0 && scn->ngeom < scn->maxgeom)
     {
-      point[0] = site_pos[0] + rotated_vectors_[idx * 3] * dist;
-      point[1] = site_pos[1] + rotated_vectors_[idx * 3 + 1] * dist;
-      point[2] = site_pos[2] + rotated_vectors_[idx * 3 + 2] * dist;
+      for (uint8_t i = 0; i < 3; ++i)
+      {
+        point[i] = site_pos[i] + rotated_vectors_[idx * 3 + i] * dist;
+      }
 
       mjvGeom* thisgeom = scn->geoms + scn->ngeom;
       mjv_initGeom(thisgeom, mjGEOM_LINE, nullptr, nullptr, nullptr, m->vis.rgba.rangefinder);

@@ -89,7 +89,7 @@ The vectors are determined by the size and field of view parameters.
 - ``min_range``: Minimum detection distance in meters (optional, defaults to 0).
 - ``update_rate``: Sensor update frequency in Hz (optional, defaults to every timestep).
 
-    * Setting an update can drastically save time when calling ``mj_step``.
+    * Setting an ``update_rate`` can drastically save time when calling ``mj_step``.
     * This may be removed in future versions after the `interval attribute <https://mujoco.readthedocs.io/en/stable/modeling.html#sensors>`_ is available for sensors.
 
 Note that rays that hit nothing or fall outside the min/max range return ``-1``.

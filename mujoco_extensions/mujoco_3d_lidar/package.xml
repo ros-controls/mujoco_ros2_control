@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>mujoco_3d_lidar</name>
-  <version>1.0.0</version>
+  <version>0.0.3</version>
   <description>Plugin for mujoco to use raycasters to simulate lidar</description>
   <maintainer email="jodi.s.graf@nasa.gov">Jodi Graf</maintainer>
 

@@ -9,10 +9,10 @@ The vectors are determined by the size and field of view parameters.
 
 The sensor is parametrizable with the following:
 
-1. Horizontal resolution (size[0]). _positive integer_
-2. Vertical resolution (size[1]). _positive integer_
-3. Horizontal field-of-view (fov[0]). _positive float in (0, 2 $\pi$.] radians_
-4. Vertical field-of-view(fov[1]). _positive float in (0, $\pi$] radians_
+1. Horizontal resolution (`size[0]`). _positive integer_
+2. Vertical resolution (`size[1]`). _positive integer_
+3. Horizontal field-of-view (`fov[0]`). _positive float in (0, 2 $\pi$.] radians_
+4. Vertical field-of-view(`fov[1]`). _positive float in (0, $\pi$] radians_
 5. Maximum Range. _positive float greater than 0.0 (m)_
 6. Minimum Range. _positive float greater than 0.0 (m)_ (Optional, defaults to 0.0)
 7. Update Rate. _positive float greater than 0.0 (Hz)_ (Optional, defaults to 0.0)
@@ -20,9 +20,9 @@ The sensor is parametrizable with the following:
 
 Field of view should always be in radians regardless of the compiler options.
 
-The horizontal fov is divided by the horizontal resolution (hn) to get hn azmuth angles.
-The vertical fov is divided by the vertical resolution (vn) to gt vn elevation angles.
-Each azmuth/elevation pair defines a vector.
+The horizontal fov is divided by the horizontal resolution to compute the number of azimuth angles.
+The vertical fov is divided by the vertical resolution to compute the number of elevation angles.
+Each azimuth/elevation pair defines a vector.
 The distance result is the set of distances to collision from the site origin along that vector.
 
 These parameters are passed as extension config attributes:
@@ -47,10 +47,10 @@ These parameters are passed as extension config attributes:
 
 Note the following:
 
-- The dimensionality of the sensor output is `size_x *size_y`.
-- `objtype="site" objname="lidar"` specify that the sensor is associated with a
+* The dimensionality of the sensor output is `size_x *size_y`.
+* `objtype="site" objname="lidar"` specify that the sensor is associated with a
   site, and the name of the specific site.
-- Field-of-view angles are always in radians
+* Field-of-view angles are always in radians
 
 ### Example model
 

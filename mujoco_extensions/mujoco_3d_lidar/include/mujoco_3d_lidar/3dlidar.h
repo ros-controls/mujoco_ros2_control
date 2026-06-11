@@ -31,15 +31,6 @@
 namespace mujoco::plugin::lidar
 {
 
-// The sensor has a number of parameters:
-//  1. (int) Horizontal resolution.
-//  2. (int) Vertical resolution.
-//  3. (double) Horizontal field-of-view (fov_x), in degrees.
-//  4. (double) Vertical field-of-view (fov_y), in degrees.
-//  5. (double) Maximum range, in m.
-//  6. (double) Minimum range, in m (optional, defaults to 0).
-//  7. (double) Rate at which to update sensor readings, in Hz (optional, defaults to 0).
-
 class Lidar
 {
 public:
