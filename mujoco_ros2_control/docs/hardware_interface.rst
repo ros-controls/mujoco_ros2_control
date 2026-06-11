@@ -38,9 +38,6 @@ Specify it in your URDF and point to a valid MJCF on launch:
             Defaults to /mujoco_robot_description. -->
        <param name="mujoco_model_topic">/mujoco_robot_description</param>
 
-       <!-- Optional: lidar LaserScan publish rate in Hz (all lidar sensors share one rate). -->
-       <param name="lidar_publish_rate">10.0</param>
-
        <!-- Optional: run the simulator without a GUI window. Defaults to false. -->
        <param name="headless">false</param>
 
@@ -242,49 +239,8 @@ These sensor state interfaces work out of the box with the standard ROS 2 broadc
 
 .. warning::
 
-   Cameras are no longer supported in the base interface, they are now provided as a ``mujoco_ros2_control_plugin``.
-   Refer to the :ref:`camera_plugin` for more information.
-
-Lidar
------
-
-MuJoCo does not include native lidar support.
-This package implements a ROS 2-like lidar by wrapping sets of
-`rangefinders <https://mujoco.readthedocs.io/en/stable/XMLreference.html#sensor-rangefinder>`_ together.
-
-MuJoCo rangefinders measure the distance to the nearest surface along the positive ``Z`` axis of the sensor site.
-The first rangefinder's ``Z`` axis (e.g. ``rf-00``) must align with the ROS 2 lidar sensor's positive ``X`` axis,
-consistent with the `LaserScan <https://github.com/ros2/common_interfaces/blob/rolling/sensor_msgs/msg/LaserScan.msg#L10>`_ convention.
-
-Use the ``replicate`` tag to add N sites at regular angular offsets:
-
-.. code-block:: xml
-
-   <replicate count="12" sep="-" offset="0 0 0" euler="0 0.025 0">
-     <site name="rf" size="0.01" pos="0.0 0.0 0.0" quat="0.0 0.0 0.0 1.0"/>
-   </replicate>
-
-Attach rangefinder sensors to each site:
-
-.. code-block:: xml
-
-   <sensor>
-     <rangefinder name="lidar" site="rf"/>
-   </sensor>
-
-Configure the lidar through ``ros2_control`` xacro:
-
-.. code-block:: xml
-
-   <sensor name="lidar">
-     <param name="frame_name">lidar_sensor_frame</param>
-     <param name="angle_increment">0.025</param>
-     <param name="min_angle">-0.3</param>
-     <param name="max_angle">0.3</param>
-     <param name="range_min">0.05</param>
-     <param name="range_max">10</param>
-     <param name="laserscan_topic">/scan</param>
-   </sensor>
+   Cameras and lidar sensors are no longer supported in the base interface, they are now provided as ``mujoco_ros2_control_plugins``.
+   Refer to the :ref:`camera_plugin` and :ref:`lidar_plugin` for more information.
 
 Simulation Topics and Services
 ================================

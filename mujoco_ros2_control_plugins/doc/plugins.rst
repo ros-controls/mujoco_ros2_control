@@ -109,6 +109,18 @@ This allows camera topics to be published even when running in headless mode (e.
    EGL requires proper GPU drivers and EGL libraries to be installed (e.g., libegl1-mesa on Ubuntu).
    If both GLFW and EGL fail to initialize, camera publishing will be disabled with a warning.
 
+
+.. _lidar_plugin:
+
+RangefinderLidarPlugin
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. warning::
+
+   This plugin is included to support legacy implementations of rangefinder based lidar sensors.
+   We do not recommend using this, and instead would direct users to the 3d lidar plugin for improved
+   features and performance.
+
 ExternalWrenchPlugin
 ~~~~~~~~~~~~~~~~~~~~~
 
