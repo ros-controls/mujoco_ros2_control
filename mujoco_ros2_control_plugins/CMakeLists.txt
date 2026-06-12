@@ -116,7 +116,7 @@ install(DIRECTORY include/
 pluginlib_export_plugin_description_file(mujoco_ros2_control_plugins mujoco_ros2_control_plugins.xml)
 
 ament_export_include_directories(include)
-ament_export_dependencies(mujoco_vendor rclcpp realtime_tools pluginlib std_msgs visualization_msgs mujoco_ros2_control_msgs ros2_control_cmake)
+ament_export_dependencies(mujoco_vendor rclcpp realtime_tools pluginlib std_msgs visualization_msgs mujoco_ros2_control_msgs ros2_control_cmake OpenGL)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 
 ament_package()
