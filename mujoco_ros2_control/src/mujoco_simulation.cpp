@@ -18,6 +18,7 @@
  */
 
 #include "mujoco_ros2_control/mujoco_simulation.hpp"
+#include "mujoco_ros2_control/sim_display_text.hpp"
 #include "array_safety.h"
 
 #include <unistd.h>
@@ -1269,15 +1270,13 @@ void MujocoSimulation::update_sim_display()
   // suppress the display when there is no forward progress).
   const double actual_pct = sim_->run ? (100.0 / sim_->measured_slowdown) : 0.0;
 
-  char desired_buf[16], actual_buf[16];
-  std::snprintf(desired_buf, sizeof(desired_buf), "%.1f%%", desired_pct);
-  std::snprintf(actual_buf, sizeof(actual_buf), "%.1f%%", actual_pct);
+  // mj_data_ is owned by this (the physics) thread, so reading time/ncon needs no extra locking.
+  // Contacts surface why the sim slows down: a spike here usually explains a drop in actual speed.
+  const auto [title, content] = compose_sim_display_text(sim_->run, step_count_.load(), mj_data_->time, desired_pct,
+                                                         actual_pct, mj_data_->ncon);
 
-  const std::string status = sim_->run ? "Running" : "Paused";
   sim_->user_texts_new_.clear();
-  sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, "Status\nSteps\nDesired Speed\nActual Speed",
-                                     status + "\n" + std::to_string(step_count_.load()) + "\n" + desired_buf + "\n" +
-                                         actual_buf);
+  sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, title, content);
 }
 
 }  // namespace mujoco_ros2_control

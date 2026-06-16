@@ -212,9 +212,6 @@ TEST_F(HeadlessInitTest, HeadlessActivateWithoutCameras)
   EXPECT_EQ(activate_result, hardware_interface::CallbackReturn::SUCCESS);
 }
 
-// Verify that the sim_speed_factor parameter is accepted and the simulation runs.
-// The native-viewer overlay displays desired and actual speed only in non-headless mode;
-// this test exercises the initialization path that feeds the desired-speed display value.
 TEST_F(HeadlessInitTest, SpeedFactorParamInitialization)
 {
   hardware_info_.hardware_parameters["sim_speed_factor"] = "0.5";
@@ -254,6 +251,29 @@ TEST_F(HeadlessInitTest, SpeedFactorParamInitialization)
 
   // sim_time should have advanced from zero
   EXPECT_GT(test_data->time, 0.0) << "Simulation time did not advance with sim_speed_factor=0.5";
+}
+
+TEST(SimDisplayTextTest, ComposesAllRowsWhenRunning)
+{
+  const auto [title, content] = mujoco_ros2_control::compose_sim_display_text(
+      /*running=*/true, /*step_count=*/1234, /*sim_time=*/2.5,
+      /*desired_pct=*/50.0, /*actual_pct=*/48.3, /*ncon=*/7);
+
+  EXPECT_EQ(title, "Status\nSteps\nSim Time\nDesired Speed\nActual Speed\nContacts");
+  EXPECT_EQ(content, "Running\n1234\n2.500 s\n50.0%\n48.3%\n7");
+
+  // Title and content must line up row-for-row, otherwise the overlay is misaligned.
+  const auto count_rows = [](const std::string& s) { return std::count(s.begin(), s.end(), '\n'); };
+  EXPECT_EQ(count_rows(title), count_rows(content));
+}
+
+TEST(SimDisplayTextTest, ReportsPausedStatus)
+{
+  const auto [title, content] = mujoco_ros2_control::compose_sim_display_text(
+      /*running=*/false, /*step_count=*/0, /*sim_time=*/0.0,
+      /*desired_pct=*/100.0, /*actual_pct=*/0.0, /*ncon=*/0);
+
+  EXPECT_EQ(content, "Paused\n0\n0.000 s\n100.0%\n0.0%\n0");
 }
 
 int main(int argc, char** argv)
