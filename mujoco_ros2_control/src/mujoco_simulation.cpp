@@ -18,8 +18,8 @@
  */
 
 #include "mujoco_ros2_control/mujoco_simulation.hpp"
-#include "mujoco_ros2_control/sim_display_text.hpp"
 #include "array_safety.h"
+#include "mujoco_ros2_control/sim_display_text.hpp"
 
 #include <unistd.h>
 #include <cerrno>
@@ -1272,8 +1272,8 @@ void MujocoSimulation::update_sim_display()
 
   // mj_data_ is owned by this (the physics) thread, so reading time/ncon needs no extra locking.
   // Contacts surface why the sim slows down: a spike here usually explains a drop in actual speed.
-  const auto [title, content] = compose_sim_display_text(sim_->run, step_count_.load(), mj_data_->time, desired_pct,
-                                                         actual_pct, mj_data_->ncon);
+  const auto [title, content] =
+      compose_sim_display_text(sim_->run, step_count_.load(), mj_data_->time, desired_pct, actual_pct, mj_data_->ncon);
 
   sim_->user_texts_new_.clear();
   sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, title, content);
