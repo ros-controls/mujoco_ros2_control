@@ -125,6 +125,32 @@ void CameraPlugin::register_cameras()
 
     const std::string param_ns = param_prefix + cam_name + ".";
 
+    const std::string type_param = param_ns + "camera_type";
+    if (!node_->has_parameter(type_param))
+    {
+      node_->declare_parameter(type_param, "streaming");
+    }
+    std::string type_str = node_->get_parameter(type_param).as_string();
+    if (type_str == "streaming")
+    {
+      camera.type = CameraType::STREAMING;
+    }
+    else if (type_str == "polled")
+    {
+      camera.type = CameraType::POLLED;
+    }
+    else if (type_str == "disabled")
+    {
+      camera.type = CameraType::DISABLED;
+    }
+    else
+    {
+      RCLCPP_ERROR(node_->get_logger(), "Invalid camera type for camera '%s': '%s'. Disabling.", cam_name,
+                   type_str.c_str());
+      camera.type = CameraType::DISABLED;
+      type_str = "disabled";
+    }
+
     const std::string frame_param = param_ns + "frame_name";
     if (!node_->has_parameter(frame_param))
     {
@@ -150,17 +176,38 @@ void CameraPlugin::register_cameras()
     }
     camera.depth_topic = node_->get_parameter(param_ns + "depth_topic").as_string();
 
-    RCLCPP_INFO(node_->get_logger(), "Adding camera: '%s'", cam_name);
-    RCLCPP_INFO(node_->get_logger(), "    frame_name: '%s'", camera.frame_name.c_str());
-    RCLCPP_INFO(node_->get_logger(), "    info_topic: '%s'", camera.info_topic.c_str());
-    RCLCPP_INFO(node_->get_logger(), "    image_topic: '%s'", camera.image_topic.c_str());
-    RCLCPP_INFO(node_->get_logger(), "    depth_topic: '%s'", camera.depth_topic.c_str());
+    if (!node_->has_parameter(param_ns + "trigger_service_name"))
+    {
+      node_->declare_parameter(param_ns + "trigger_service_name", camera.name + "/trigger");
+    }
+    camera.trigger_service_name = node_->get_parameter(param_ns + "trigger_service_name").as_string();
 
-    // Configure publishers
+    RCLCPP_INFO(node_->get_logger(), "Adding camera: '%s'", cam_name);
+    RCLCPP_INFO(node_->get_logger(), "    camera_type: '%s'", type_str.c_str());
+    RCLCPP_INFO(node_->get_logger(), "    frame_name: '%s'", camera.frame_name.c_str());
+    if (camera.type != CameraType::DISABLED)
+    {
+      RCLCPP_INFO(node_->get_logger(), "    info_topic: '%s'", camera.info_topic.c_str());
+      RCLCPP_INFO(node_->get_logger(), "    image_topic: '%s'", camera.image_topic.c_str());
+      RCLCPP_INFO(node_->get_logger(), "    depth_topic: '%s'", camera.depth_topic.c_str());
+      if (camera.type == CameraType::POLLED)
+      {
+        RCLCPP_INFO(node_->get_logger(), "    trigger_service_name: '%s'", camera.trigger_service_name.c_str());
+      }
+    }
+
+    // Configure publishers and services
     camera.camera_info_pub = node_->create_publisher<sensor_msgs::msg::CameraInfo>(camera.info_topic, 1);
     camera.image_pub = node_->create_publisher<sensor_msgs::msg::Image>(camera.image_topic, 1);
     camera.depth_image_pub = node_->create_publisher<sensor_msgs::msg::Image>(camera.depth_topic, 1);
-
+    if (camera.type == CameraType::POLLED)
+    {
+      camera.trigger_service = node_->create_service<std_srvs::srv::Trigger>(
+          camera.trigger_service_name, [this, i](const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+                                                 std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+            this->handle_trigger(request, response, i);
+          });
+    }
     // Setup containers for color image data
     camera.image.header.frame_id = camera.frame_name;
 
@@ -427,65 +474,75 @@ void CameraPlugin::update_loop()
 
 void CameraPlugin::update_cameras()
 {
-  // Step 1: Done in the `update` cb to copy rendering data
-  // Rendering is done offscreen
+  // Done in the `update` cb to copy rendering data
+  // Rendering is done offscreen,
   mjr_setBuffer(mjFB_OFFSCREEN, &mjr_con_);
 
-  // Step 2: Render the scene and copy images to relevant camera data containers.
-  for (auto& camera : cameras_)
-  {
-    // Render scene
-    mjv_updateScene(mj_model_, mj_camera_data_, &mjv_opt_, NULL, &camera.mjv_cam, mjCAT_ALL, &mjv_scn_);
-    mjr_render(camera.viewport, &mjv_scn_, &mjr_con_);
-
-    // Copy image into relevant buffers
-    mjr_readPixels(camera.image_buffer.data(), camera.depth_buffer.data(), camera.viewport, &mjr_con_);
-  }
-
-  // Step 3: Adjust the images and copy depth data.
-  const float near = static_cast<float>(mj_model_->vis.map.znear * mj_model_->stat.extent);
+  camera_near_distance_ = static_cast<float>(mj_model_->vis.map.znear * mj_model_->stat.extent);
   const float far = static_cast<float>(mj_model_->vis.map.zfar * mj_model_->stat.extent);
-  const float depth_scale = 1.0f - near / far;
+  camera_depth_scale_ = 1.0f - camera_near_distance_ / far;
+
   for (auto& camera : cameras_)
   {
-    // Fix non-linear projections in the depth image and flip the data.
-    // https://github.com/google-deepmind/mujoco/blob/3.4.0/python/mujoco/renderer.py#L190
-    for (uint32_t h = 0; h < camera.height; h++)
+    if ((camera.type == CameraType::STREAMING) || (camera.type == CameraType::POLLED && camera.triggered))
     {
-      for (uint32_t w = 0; w < camera.width; w++)
-      {
-        auto idx = h * camera.width + w;
-        auto idx_flipped = (camera.height - 1 - h) * camera.width + w;
-        camera.depth_buffer[idx] = near / (1.0f - camera.depth_buffer[idx] * (depth_scale));
-        camera.depth_buffer_flipped[idx_flipped] = camera.depth_buffer[idx];
-      }
-    }
-    // Copy flipped data into the depth image message, floats -> unsigned chars
-    std::memcpy(&camera.depth_image.data[0], camera.depth_buffer_flipped.data(), camera.depth_image.data.size());
-
-    // OpenGL's coordinate system's origin is in the bottom left, so we invert the images row-by-row
-    auto row_size = camera.width * 3;
-    for (uint32_t h = 0; h < camera.height; h++)
-    {
-      auto src_idx = h * row_size;
-      auto dest_idx = (camera.height - 1 - h) * row_size;
-      std::memcpy(&camera.image.data[dest_idx], &camera.image_buffer[src_idx], row_size);
+      render_and_publish_camera(camera);
     }
   }
+}
 
-  // Step 4: Publish the images.
-  for (auto& camera : cameras_)
+void CameraPlugin::render_and_publish_camera(CameraData& camera)
+{
+  // Step 1: Render the scene and copy images to relevant camera data containers.
+  // Render scene
+  mjv_updateScene(mj_model_, mj_camera_data_, &mjv_opt_, NULL, &camera.mjv_cam, mjCAT_ALL, &mjv_scn_);
+  mjr_render(camera.viewport, &mjv_scn_, &mjr_con_);
+
+  // Copy image into relevant buffers
+  mjr_readPixels(camera.image_buffer.data(), camera.depth_buffer.data(), camera.viewport, &mjr_con_);
+
+  // Step 2: Adjust the images and copy depth data.
+  // Fix non-linear projections in the depth image and flip the data.
+  // https://github.com/google-deepmind/mujoco/blob/3.4.0/python/mujoco/renderer.py#L190
+  for (uint32_t h = 0; h < camera.height; h++)
   {
-    // Publish images and camera info
-    const auto time = node_->now();
-    camera.image.header.stamp = time;
-    camera.depth_image.header.stamp = time;
-    camera.camera_info.header.stamp = time;
-
-    camera.image_pub->publish(camera.image);
-    camera.depth_image_pub->publish(camera.depth_image);
-    camera.camera_info_pub->publish(camera.camera_info);
+    for (uint32_t w = 0; w < camera.width; w++)
+    {
+      auto idx = h * camera.width + w;
+      auto idx_flipped = (camera.height - 1 - h) * camera.width + w;
+      camera.depth_buffer[idx] = camera_near_distance_ / (1.0f - camera.depth_buffer[idx] * camera_depth_scale_);
+      camera.depth_buffer_flipped[idx_flipped] = camera.depth_buffer[idx];
+    }
   }
+  // Copy flipped data into the depth image message, floats -> unsigned chars
+  std::memcpy(&camera.depth_image.data[0], camera.depth_buffer_flipped.data(), camera.depth_image.data.size());
+
+  // OpenGL's coordinate system's origin is in the bottom left, so we invert the images row-by-row
+  auto row_size = camera.width * 3;
+  for (uint32_t h = 0; h < camera.height; h++)
+  {
+    auto src_idx = h * row_size;
+    auto dest_idx = (camera.height - 1 - h) * row_size;
+    std::memcpy(&camera.image.data[dest_idx], &camera.image_buffer[src_idx], row_size);
+  }
+
+  // Step 3: Publish the images and camera info.
+  const auto time = node_->now();
+  camera.image.header.stamp = time;
+  camera.depth_image.header.stamp = time;
+  camera.camera_info.header.stamp = time;
+
+  camera.image_pub->publish(camera.image);
+  camera.depth_image_pub->publish(camera.depth_image);
+  camera.camera_info_pub->publish(camera.camera_info);
+}
+
+void CameraPlugin::handle_trigger(const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+                                  std::shared_ptr<std_srvs::srv::Trigger::Response> response, const int camera_idx)
+{
+  auto& camera = cameras_.at(camera_idx);
+  camera.triggered = true;
+  response->success = true;
 }
 
 }  // namespace mujoco_ros2_control_plugins

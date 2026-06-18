@@ -44,14 +44,25 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 #include <pluginlib/class_list_macros.hpp>
 
 namespace mujoco_ros2_control_plugins
 {
 
+enum class CameraType
+{
+  DISABLED = 0,  // Publishing is disabled.
+  STREAMING,     // Publishing is constant at the specified publish rate.
+  POLLED         // Publishing happens only when triggered by a service.
+};
+
 struct CameraData
 {
+  CameraType type = CameraType::STREAMING;
+  bool triggered{ false };
+
   mjvCamera mjv_cam;
   mjrRect viewport;
 
@@ -60,6 +71,7 @@ struct CameraData
   std::string info_topic;
   std::string image_topic;
   std::string depth_topic;
+  std::string trigger_service_name;
 
   uint32_t width;
   uint32_t height;
@@ -75,6 +87,8 @@ struct CameraData
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr image_pub;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr depth_image_pub;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_pub;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr trigger_service;
+  rclcpp::CallbackGroup::SharedPtr service_callback_group_;
 };
 
 /**
@@ -94,17 +108,19 @@ struct CameraData
  *   # All cameras will publish data at the same rate
  *   camera_publish_rate: 6.0
  *   <camera_name>:
+ *     camera_type: <camera_type>  # "disabled", "polled", or "streaming"
  *     frame_name: ""
  *     info_topic: <camera_name>/camera_info
  *     image_topic: <camera_name>/color
  *     depth_topic: <camera_name>/depth
+ *     trigger_service: <camera_name>/trigger
  *
  * Implementation notes
  * --------------------
  * If the camera name, in the parameters, does not match any of the mujoco cameras
  * the data will not be published to ROS topics.
  * If no cameras parameters are given (but mujoco_camera_plugin and its type are declared)
- * the default topics and frame are used automatically
+ * the default type (streaming), topics, and frame are used automatically.
  *
  */
 class CameraPlugin : public MuJoCoROS2ControlPluginBase
@@ -153,6 +169,19 @@ private:
    */
   void update_cameras();
 
+  /**
+   * @brief Renders and publishes data for a specific camera.
+   * @param camera The camera data structure.
+   */
+  void render_and_publish_camera(CameraData& camera);
+
+  /**
+   * @brief Handles a polled camera trigger to render and publish messages.
+   * @param camera The camera data structure.
+   */
+  void handle_trigger(const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+                      std::shared_ptr<std_srvs::srv::Trigger::Response> response, const int camera_idx);
+
   rclcpp::Node::SharedPtr node_;
 
   // Ensures locked access to simulation data for rendering.
@@ -170,6 +199,10 @@ private:
   mjvOption mjv_opt_;
   mjvScene mjv_scn_;
   mjrContext mjr_con_;
+
+  // Scene parameters to keep around to avoid recomputing
+  float camera_near_distance_;
+  float camera_depth_scale_;
 
   // Containers for camera data and ROS constructs
   std::vector<CameraData> cameras_;
