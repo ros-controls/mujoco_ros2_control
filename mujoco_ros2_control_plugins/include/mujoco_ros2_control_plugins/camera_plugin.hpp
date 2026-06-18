@@ -88,7 +88,6 @@ struct CameraData
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr depth_image_pub;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_pub;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr trigger_service;
-  rclcpp::CallbackGroup::SharedPtr service_callback_group_;
 };
 
 /**
@@ -96,7 +95,7 @@ struct CameraData
  *
  * Camera topics can be named in the ROS 2 controls plugins YAML config file
  * and loaded as node parameters.
- * If any of the parameters are not specified default topic names will be assigned.
+ * If any of the parameters are not specified, default topic names will be assigned.
  * A user can provide topic names for multiple cameras as long as cameras are not named the same.
  * Name collision is resolved by last name in the yaml file.
  *
@@ -113,7 +112,7 @@ struct CameraData
  *     info_topic: <camera_name>/camera_info
  *     image_topic: <camera_name>/color
  *     depth_topic: <camera_name>/depth
- *     trigger_service: <camera_name>/trigger
+ *     trigger_service_name: <camera_name>/trigger
  *
  * Implementation notes
  * --------------------

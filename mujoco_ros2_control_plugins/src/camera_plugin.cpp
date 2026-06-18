@@ -487,6 +487,7 @@ void CameraPlugin::update_cameras()
     if ((camera.type == CameraType::STREAMING) || (camera.type == CameraType::POLLED && camera.triggered))
     {
       render_and_publish_camera(camera);
+      camera.triggered &= false;
     }
   }
 }
