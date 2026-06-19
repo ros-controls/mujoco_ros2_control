@@ -67,21 +67,59 @@ void CameraPlugin::update(const mjModel* model_arg, mjData* data)
     return;
   }
 
-  // Check if it is time to publish
+  // Streaming cameras render on a fixed-rate clock; polled cameras render as soon as a
+  // trigger has been received. Both are serviced here, on the sim thread, because this is
+  // the only place we can safely snapshot the live mjData without racing the simulation.
   // TODO: Support per-camera publish rates?
-  auto now = node_->get_clock()->now();
-  if ((now - last_publish_time_).seconds() < (1.0 / camera_publish_rate_))
+  const auto now = node_->get_clock()->now();
+  const bool stream_due =
+      has_streaming_cameras_ && (now - last_publish_time_).seconds() >= (1.0 / camera_publish_rate_);
+  const bool poll_due = poll_pending_.load();
+
+  // Nothing to do this step: avoid taking the lock or copying data.
+  if (!stream_due && !poll_due)
   {
     return;
   }
-  last_publish_time_ = now;
 
+  bool any_selected = false;
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
-    mjv_copyData(mj_camera_data_, model_arg, data);
-    new_data_ = true;
+
+    // Flag streaming cameras when their interval is due and any polled cameras that have a
+    // pending trigger (consuming the one-shot request so they render exactly once).
+    for (auto& camera : cameras_)
+    {
+      if (camera.type == CameraType::STREAMING && stream_due)
+      {
+        camera.render_pending = true;
+        any_selected = true;
+      }
+      else if (camera.type == CameraType::POLLED && camera.poll_requested)
+      {
+        camera.poll_requested = false;
+        camera.render_pending = true;
+        any_selected = true;
+      }
+    }
+    poll_pending_ = false;
+    if (stream_due)
+    {
+      last_publish_time_ = now;
+    }
+
+    // Only snapshot the simulation data when there is actually a camera to render.
+    if (any_selected)
+    {
+      mjv_copyData(mj_camera_data_, model_arg, data);
+      new_data_ = true;
+    }
   }
-  data_cv_.notify_one();
+
+  if (any_selected)
+  {
+    data_cv_.notify_one();
+  }
 }
 
 void CameraPlugin::cleanup()
@@ -92,6 +130,19 @@ void CameraPlugin::cleanup()
 void CameraPlugin::trigger_update()
 {
   std::lock_guard<std::mutex> lock(data_mutex_);
+  // Force every streaming camera and consume any pending polls, then render synchronously.
+  for (auto& camera : cameras_)
+  {
+    if (camera.type == CameraType::STREAMING)
+    {
+      camera.render_pending = true;
+    }
+    else if (camera.type == CameraType::POLLED && camera.poll_requested)
+    {
+      camera.poll_requested = false;
+      camera.render_pending = true;
+    }
+  }
   update_cameras();
 }
 
@@ -249,12 +300,19 @@ void CameraPlugin::register_cameras()
     // Add to list of cameras
     cameras_.push_back(camera);
   }
+
+  has_streaming_cameras_ = std::any_of(cameras_.begin(), cameras_.end(),
+                                       [](const CameraData& cam) { return cam.type == CameraType::STREAMING; });
+
+  // Reserve once so the per-pass render bookkeeping in `update_cameras()` never allocates.
+  render_indices_.reserve(cameras_.size());
 }
 
 void CameraPlugin::close()
 {
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
+    stop_requested_ = true;
     publish_images_ = false;
   }
   data_cv_.notify_one();
@@ -436,8 +494,13 @@ void CameraPlugin::update_loop()
   RCLCPP_INFO(node_->get_logger(), "Resized offscreen buffer to %d x %d", max_width, max_height);
 
   // Only process images once all data has been initialized, and do it until told to stop.
-  publish_images_ = true;
-  while (rclcpp::ok() && publish_images_)
+  // Publishing is enabled under the lock so that a shutdown requested during the (possibly
+  // slow) initialization above is observed here rather than being clobbered.
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    publish_images_ = !stop_requested_;
+  }
+  while (rclcpp::ok() && !stop_requested_)
   {
     std::unique_lock<std::mutex> lock(data_mutex_);
 
@@ -445,10 +508,10 @@ void CameraPlugin::update_loop()
     // images. Note that condition_variables can be awoken spuriously, so the additional
     // checks are necessary to avoid doing work excepting when updated rendering data has
     // been made available.
-    data_cv_.wait(lock, [this] { return new_data_ || !publish_images_; });
+    data_cv_.wait(lock, [this] { return new_data_ || stop_requested_; });
 
     // Shutdown triggered, kill the loop and clean up.
-    if (!publish_images_)
+    if (stop_requested_)
     {
       break;
     }
@@ -457,6 +520,7 @@ void CameraPlugin::update_loop()
 
     update_cameras();
   }
+  publish_images_ = false;
 
   mjv_freeScene(&mjv_scn_);
   mjr_freeContext(&mjr_con_);
@@ -474,21 +538,32 @@ void CameraPlugin::update_loop()
 
 void CameraPlugin::update_cameras()
 {
-  // Done in the `update` cb to copy rendering data
-  // Rendering is done offscreen,
+  // Gather the cameras flagged for rendering this pass, clearing the flag as we go.
+  render_indices_.clear();
+  for (size_t i = 0; i < cameras_.size(); ++i)
+  {
+    auto& camera = cameras_[i];
+    if (camera.render_pending)
+    {
+      camera.render_pending = false;
+      render_indices_.push_back(i);
+    }
+  }
+  if (render_indices_.empty())
+  {
+    return;
+  }
+
+  // Rendering is done offscreen using the data snapshot taken in `update`.
   mjr_setBuffer(mjFB_OFFSCREEN, &mjr_con_);
 
   camera_near_distance_ = static_cast<float>(mj_model_->vis.map.znear * mj_model_->stat.extent);
   const float far = static_cast<float>(mj_model_->vis.map.zfar * mj_model_->stat.extent);
   camera_depth_scale_ = 1.0f - camera_near_distance_ / far;
 
-  for (auto& camera : cameras_)
+  for (const auto idx : render_indices_)
   {
-    if ((camera.type == CameraType::STREAMING) || (camera.type == CameraType::POLLED && camera.triggered))
-    {
-      render_and_publish_camera(camera);
-      camera.triggered &= false;
-    }
+    render_and_publish_camera(cameras_[idx]);
   }
 }
 
@@ -541,8 +616,12 @@ void CameraPlugin::render_and_publish_camera(CameraData& camera)
 void CameraPlugin::handle_trigger(const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
                                   std::shared_ptr<std_srvs::srv::Trigger::Response> response, const int camera_idx)
 {
-  auto& camera = cameras_.at(camera_idx);
-  camera.triggered = true;
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    cameras_.at(camera_idx).poll_requested = true;
+  }
+  // Wake the fast path in `update()` so the request is picked up on the next sim step.
+  poll_pending_.store(true);
   response->success = true;
 }
 

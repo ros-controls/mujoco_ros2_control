@@ -26,6 +26,7 @@
 
 #include <mujoco/mujoco.h>
 #include <rclcpp/rclcpp.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 #include <mujoco_ros2_control_plugins/camera_plugin.hpp>
 
@@ -106,6 +107,22 @@ protected:
     ASSERT_NE(model_, nullptr) << "mj_loadXML failed: " << error;
     data_ = mj_makeData(model_);
     ASSERT_NE(data_, nullptr);
+  }
+
+  // Calls a Trigger service and returns whether the call succeeded.
+  bool call_trigger(const std::string& service_name)
+  {
+    auto client = node_->create_client<std_srvs::srv::Trigger>(service_name);
+    if (!client->wait_for_service(std::chrono::seconds(2)))
+    {
+      return false;
+    }
+    auto future = client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+    if (future.wait_for(std::chrono::seconds(2)) != std::future_status::ready)
+    {
+      return false;
+    }
+    return future.get()->success;
   }
 
   std::unique_ptr<rclcpp::executors::MultiThreadedExecutor> executor_;
@@ -193,6 +210,110 @@ TEST_F(CameraPluginTest, InitAndPublish)
   ASSERT_TRUE(received_image);
   ASSERT_TRUE(received_depth);
   ASSERT_TRUE(received_info);
+
+  plugin.cleanup();
+}
+
+// Only polled cameras should expose a trigger service; streaming cameras should not.
+TEST_F(CameraPluginTest, OnlyPolledCamerasCreateTriggerService)
+{
+  plugin_node_->declare_parameter("mujoco_plugins.mujoco_camera_plugin.stream_cam.camera_type",
+                                  std::string("streaming"));
+  plugin_node_->declare_parameter("mujoco_plugins.mujoco_camera_plugin.poll_cam.camera_type", std::string("polled"));
+  load_model(R"(<?xml version="1.0"?>
+<mujoco model="two_cameras">
+  <worldbody>
+    <body name="box" pos="0 0 0.1">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+      <geom type="box" size="0.05 0.05 0.05"/>
+    </body>
+    <camera name="stream_cam" pos="0 -1 1" xyaxes="1 0 0 0 0.707 0.707"
+            fovy="60" resolution="64 48"/>
+    <camera name="poll_cam" pos="0 1 1" xyaxes="-1 0 0 0 0.707 -0.707"
+            fovy="60" resolution="64 48"/>
+  </worldbody>
+</mujoco>
+)");
+  ASSERT_EQ(model_->ncam, 2);
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, []() { return 0; }));
+
+  // The polled camera's trigger service must come up.
+  auto poll_client = node_->create_client<std_srvs::srv::Trigger>("/camera_plugin/poll_cam/trigger");
+  EXPECT_TRUE(poll_client->wait_for_service(std::chrono::seconds(2)));
+
+  // The streaming camera must not have a trigger service registered.
+  const auto services = node_->get_service_names_and_types();
+  EXPECT_EQ(services.count("/camera_plugin/stream_cam/trigger"), 0u);
+
+  // Both cameras still publish their image/info topics.
+  EXPECT_EQ(plugin_node_->count_publishers("/camera_plugin/stream_cam/color"), 1u);
+  EXPECT_EQ(plugin_node_->count_publishers("/camera_plugin/poll_cam/color"), 1u);
+
+  plugin.cleanup();
+}
+
+// A polled camera must publish only in response to a trigger, never on the streaming clock,
+// and exactly once per trigger.
+TEST_F(CameraPluginTest, PolledCameraPublishesOncePerTrigger)
+{
+  load_model(R"(<?xml version="1.0"?>
+<mujoco model="polled_only">
+  <worldbody>
+    <body name="box" pos="0 0 0.1">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+      <geom type="box" size="0.05 0.05 0.05"/>
+    </body>
+    <camera name="poll_cam" pos="0 -1 1" xyaxes="1 0 0 0 0.707 0.707"
+            fovy="60" resolution="64 48"/>
+  </worldbody>
+</mujoco>
+)");
+  ASSERT_EQ(model_->ncam, 1);
+
+  plugin_node_->declare_parameter("mujoco_plugins.mujoco_camera_plugin.poll_cam.camera_type", std::string("polled"));
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, []() { return 0; }));
+
+  std::atomic<int> image_count{ 0 };
+  auto image_sub = node_->create_subscription<sensor_msgs::msg::Image>(
+      "/camera_plugin/poll_cam/color", 10, [&](sensor_msgs::msg::Image::SharedPtr) { ++image_count; });
+
+  // Wait for the rendering thread to come up (so a forced render is safe).
+  for (auto i = 0; i < 50 && !plugin.is_rendering_available(); ++i)
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  ASSERT_TRUE(plugin.is_rendering_available()) << "Rendering context unavailable in this environment";
+
+  // Without a trigger, running render cycles must not publish anything for a polled camera.
+  for (auto i = 0; i < 5; ++i)
+  {
+    plugin.trigger_update();
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  EXPECT_EQ(image_count.load(), 0);
+
+  // Trigger once; the next render cycle should publish exactly one image.
+  ASSERT_TRUE(call_trigger("/camera_plugin/poll_cam/trigger"));
+  plugin.trigger_update();
+  for (auto i = 0; i < 20 && image_count.load() < 1; ++i)
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  EXPECT_EQ(image_count.load(), 1);
+
+  // The trigger is one-shot: subsequent render cycles without a new trigger publish nothing more.
+  for (auto i = 0; i < 5; ++i)
+  {
+    plugin.trigger_update();
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  EXPECT_EQ(image_count.load(), 1);
 
   plugin.cleanup();
 }
