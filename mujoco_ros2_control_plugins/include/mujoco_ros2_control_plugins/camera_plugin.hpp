@@ -117,7 +117,7 @@ struct CameraData
  *     info_topic: <camera_name>/camera_info
  *     image_topic: <camera_name>/color
  *     depth_topic: <camera_name>/depth
- *     trigger_service_name: <camera_name>/trigger
+ *     trigger_service_name: <camera_name>/trigger  # only used for polling camera type
  *
  * Implementation notes
  * --------------------
