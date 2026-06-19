@@ -84,7 +84,6 @@ struct CameraData
 
   std::vector<uint8_t> image_buffer;
   std::vector<float> depth_buffer;
-  std::vector<float> depth_buffer_flipped;
 
   sensor_msgs::msg::Image image;
   sensor_msgs::msg::Image depth_image;
@@ -191,8 +190,9 @@ private:
   /**
    * @brief Renders and publishes data for a specific camera.
    * @param camera The camera data structure.
+   * @param stamp Timestamp applied to all messages published this step.
    */
-  void render_and_publish_camera(CameraData& camera);
+  void render_and_publish_camera(CameraData& camera, const rclcpp::Time& stamp);
 
   /**
    * @brief Handles a polled camera trigger to render and publish messages.

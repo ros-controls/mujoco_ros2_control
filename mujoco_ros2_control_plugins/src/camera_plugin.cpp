@@ -273,7 +273,6 @@ void CameraPlugin::register_cameras()
     // Depth image data
     camera.depth_image.header.frame_id = camera.frame_name;
     camera.depth_buffer.resize(camera.width * camera.height);
-    camera.depth_buffer_flipped.resize(camera.width * camera.height);
     camera.depth_image.data.resize(camera.width * camera.height * sizeof(float));
     camera.depth_image.width = camera.width;
     camera.depth_image.height = camera.height;
@@ -563,11 +562,11 @@ void CameraPlugin::update_cameras()
 
   for (const auto idx : render_indices_)
   {
-    render_and_publish_camera(cameras_[idx]);
+    render_and_publish_camera(cameras_[idx], node_->now());
   }
 }
 
-void CameraPlugin::render_and_publish_camera(CameraData& camera)
+void CameraPlugin::render_and_publish_camera(CameraData& camera, const rclcpp::Time& stamp)
 {
   // Step 1: Render the scene and copy images to relevant camera data containers.
   // Render scene
@@ -578,35 +577,32 @@ void CameraPlugin::render_and_publish_camera(CameraData& camera)
   mjr_readPixels(camera.image_buffer.data(), camera.depth_buffer.data(), camera.viewport, &mjr_con_);
 
   // Step 2: Adjust the images and copy depth data.
-  // Fix non-linear projections in the depth image and flip the data.
+  // Fix non-linear depth buffer and flip it vertically (OpenGL's origin is the bottom left)
   // https://github.com/google-deepmind/mujoco/blob/3.4.0/python/mujoco/renderer.py#L190
-  for (uint32_t h = 0; h < camera.height; h++)
+  auto* depth_out = reinterpret_cast<float*>(camera.depth_image.data.data());
+  for (uint32_t h = 0; h < camera.height; ++h)
   {
-    for (uint32_t w = 0; w < camera.width; w++)
+    const float* src_row = camera.depth_buffer.data() + static_cast<size_t>(h) * camera.width;
+    float* dst_row = depth_out + static_cast<size_t>(camera.height - 1 - h) * camera.width;
+    for (uint32_t w = 0; w < camera.width; ++w)
     {
-      auto idx = h * camera.width + w;
-      auto idx_flipped = (camera.height - 1 - h) * camera.width + w;
-      camera.depth_buffer[idx] = camera_near_distance_ / (1.0f - camera.depth_buffer[idx] * camera_depth_scale_);
-      camera.depth_buffer_flipped[idx_flipped] = camera.depth_buffer[idx];
+      dst_row[w] = camera_near_distance_ / (1.0f - src_row[w] * camera_depth_scale_);
     }
   }
-  // Copy flipped data into the depth image message, floats -> unsigned chars
-  std::memcpy(&camera.depth_image.data[0], camera.depth_buffer_flipped.data(), camera.depth_image.data.size());
 
   // OpenGL's coordinate system's origin is in the bottom left, so we invert the images row-by-row
-  auto row_size = camera.width * 3;
-  for (uint32_t h = 0; h < camera.height; h++)
+  const auto row_size = camera.width * 3;
+  for (uint32_t h = 0; h < camera.height; ++h)
   {
-    auto src_idx = h * row_size;
-    auto dest_idx = (camera.height - 1 - h) * row_size;
+    const auto src_idx = h * row_size;
+    const auto dest_idx = (camera.height - 1 - h) * row_size;
     std::memcpy(&camera.image.data[dest_idx], &camera.image_buffer[src_idx], row_size);
   }
 
   // Step 3: Publish the images and camera info.
-  const auto time = node_->now();
-  camera.image.header.stamp = time;
-  camera.depth_image.header.stamp = time;
-  camera.camera_info.header.stamp = time;
+  camera.image.header.stamp = stamp;
+  camera.depth_image.header.stamp = stamp;
+  camera.camera_info.header.stamp = stamp;
 
   camera.image_pub->publish(camera.image);
   camera.depth_image_pub->publish(camera.depth_image);
