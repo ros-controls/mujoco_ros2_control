@@ -51,7 +51,7 @@
 namespace mujoco_ros2_control_plugins
 {
 
-enum class CameraType
+enum class CameraPolicy
 {
   DISABLED = 0,  // Publishing is disabled.
   STREAMING,     // Publishing is constant at the specified publish rate.
@@ -60,7 +60,7 @@ enum class CameraType
 
 struct CameraData
 {
-  CameraType type = CameraType::STREAMING;
+  CameraPolicy policy = CameraPolicy::STREAMING;
 
   // Set by the trigger service for polled cameras to request a one-shot capture.
   bool poll_requested{ false };
@@ -117,14 +117,14 @@ struct CameraData
  *     info_topic: <camera_name>/camera_info
  *     image_topic: <camera_name>/color
  *     depth_topic: <camera_name>/depth
- *     trigger_service_name: <camera_name>/trigger  # only used for polling camera type
+ *     trigger_service_name: <camera_name>/trigger  # only used for polling camera policy
  *
  * Implementation notes
  * --------------------
  * If the camera name, in the parameters, does not match any of the mujoco cameras
  * the data will not be published to ROS topics.
- * If no cameras parameters are given (but mujoco_camera_plugin and its type are declared)
- * the default type (streaming), topics, and frame are used automatically.
+ * If no camera parameters are given, but the mujoco_camera_plugin and its policy are
+ * declared, the default policy (streaming), topics, and frame are used automatically.
  *
  */
 class CameraPlugin : public MuJoCoROS2ControlPluginBase
@@ -173,9 +173,10 @@ private:
   void close();
 
   /**
-   * @brief Parses camera information from the mujoco model.
+   * @brief Parses camera information from the mujoco model and node parameters.
+   * @return true if registering cameras succeeds, otherwise false.
    */
-  void register_cameras();
+  bool register_cameras();
 
   /**
    * @brief Initializes the rendering context and starts processing.

@@ -39,7 +39,11 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
   RCLCPP_INFO(node_->get_logger(), "CameraPlugin initializing cameras...");
 
   // Read the mj_model_, identify the number of cameras, and populate containers for them.
-  register_cameras();
+  if (!register_cameras())
+  {
+    RCLCPP_ERROR(node_->get_logger(), "Failed to register cameras.");
+    return false;
+  }
   if (cameras_.empty())
   {
     return true;
@@ -74,7 +78,7 @@ void CameraPlugin::update(const mjModel* model_arg, mjData* data)
   const auto now = node_->get_clock()->now();
   const bool stream_due =
       has_streaming_cameras_ && (now - last_publish_time_).seconds() >= (1.0 / camera_publish_rate_);
-  const bool poll_due = poll_pending_.load();
+  const bool poll_due = poll_pending_.exchange(false);
 
   // Nothing to do this step: avoid taking the lock or copying data.
   if (!stream_due && !poll_due)
@@ -90,19 +94,19 @@ void CameraPlugin::update(const mjModel* model_arg, mjData* data)
     // pending trigger (consuming the one-shot request so they render exactly once).
     for (auto& camera : cameras_)
     {
-      if (camera.type == CameraType::STREAMING && stream_due)
+      if (camera.policy == CameraPolicy::STREAMING && stream_due)
       {
         camera.render_pending = true;
         any_selected = true;
       }
-      else if (camera.type == CameraType::POLLED && camera.poll_requested)
+      else if (camera.policy == CameraPolicy::POLLED && camera.poll_requested)
       {
         camera.poll_requested = false;
         camera.render_pending = true;
         any_selected = true;
       }
     }
-    poll_pending_ = false;
+
     if (stream_due)
     {
       last_publish_time_ = now;
@@ -133,11 +137,11 @@ void CameraPlugin::trigger_update()
   // Force every streaming camera and consume any pending polls, then render synchronously.
   for (auto& camera : cameras_)
   {
-    if (camera.type == CameraType::STREAMING)
+    if (camera.policy == CameraPolicy::STREAMING)
     {
       camera.render_pending = true;
     }
-    else if (camera.type == CameraType::POLLED && camera.poll_requested)
+    else if (camera.policy == CameraPolicy::POLLED && camera.poll_requested)
     {
       camera.poll_requested = false;
       camera.render_pending = true;
@@ -146,7 +150,7 @@ void CameraPlugin::trigger_update()
   update_cameras();
 }
 
-void CameraPlugin::register_cameras()
+bool CameraPlugin::register_cameras()
 {
   const std::string param_prefix = "mujoco_plugins.mujoco_camera_plugin.";
 
@@ -176,30 +180,28 @@ void CameraPlugin::register_cameras()
 
     const std::string param_ns = param_prefix + cam_name + ".";
 
-    const std::string type_param = param_ns + "camera_type";
-    if (!node_->has_parameter(type_param))
+    const std::string policy_param = param_ns + "policy";
+    if (!node_->has_parameter(policy_param))
     {
-      node_->declare_parameter(type_param, "streaming");
+      node_->declare_parameter(policy_param, "streaming");
     }
-    std::string type_str = node_->get_parameter(type_param).as_string();
-    if (type_str == "streaming")
+    std::string policy_str = node_->get_parameter(policy_param).as_string();
+    if (policy_str == "streaming")
     {
-      camera.type = CameraType::STREAMING;
+      camera.policy = CameraPolicy::STREAMING;
     }
-    else if (type_str == "polled")
+    else if (policy_str == "polled")
     {
-      camera.type = CameraType::POLLED;
+      camera.policy = CameraPolicy::POLLED;
     }
-    else if (type_str == "disabled")
+    else if (policy_str == "disabled")
     {
-      camera.type = CameraType::DISABLED;
+      camera.policy = CameraPolicy::DISABLED;
     }
     else
     {
-      RCLCPP_ERROR(node_->get_logger(), "Invalid camera type for camera '%s': '%s'. Disabling.", cam_name,
-                   type_str.c_str());
-      camera.type = CameraType::DISABLED;
-      type_str = "disabled";
+      RCLCPP_ERROR(node_->get_logger(), "Invalid policy for camera '%s': '%s'", cam_name);
+      return false;
     }
 
     const std::string frame_param = param_ns + "frame_name";
@@ -234,14 +236,14 @@ void CameraPlugin::register_cameras()
     camera.trigger_service_name = node_->get_parameter(param_ns + "trigger_service_name").as_string();
 
     RCLCPP_INFO(node_->get_logger(), "Adding camera: '%s'", cam_name);
-    RCLCPP_INFO(node_->get_logger(), "    camera_type: '%s'", type_str.c_str());
+    RCLCPP_INFO(node_->get_logger(), "    camera_type: '%s'", policy_str.c_str());
     RCLCPP_INFO(node_->get_logger(), "    frame_name: '%s'", camera.frame_name.c_str());
-    if (camera.type != CameraType::DISABLED)
+    if (camera.policy != CameraPolicy::DISABLED)
     {
       RCLCPP_INFO(node_->get_logger(), "    info_topic: '%s'", camera.info_topic.c_str());
       RCLCPP_INFO(node_->get_logger(), "    image_topic: '%s'", camera.image_topic.c_str());
       RCLCPP_INFO(node_->get_logger(), "    depth_topic: '%s'", camera.depth_topic.c_str());
-      if (camera.type == CameraType::POLLED)
+      if (camera.policy == CameraPolicy::POLLED)
       {
         RCLCPP_INFO(node_->get_logger(), "    trigger_service_name: '%s'", camera.trigger_service_name.c_str());
       }
@@ -251,7 +253,7 @@ void CameraPlugin::register_cameras()
     camera.camera_info_pub = node_->create_publisher<sensor_msgs::msg::CameraInfo>(camera.info_topic, 1);
     camera.image_pub = node_->create_publisher<sensor_msgs::msg::Image>(camera.image_topic, 1);
     camera.depth_image_pub = node_->create_publisher<sensor_msgs::msg::Image>(camera.depth_topic, 1);
-    if (camera.type == CameraType::POLLED)
+    if (camera.policy == CameraPolicy::POLLED)
     {
       camera.trigger_service = node_->create_service<std_srvs::srv::Trigger>(
           camera.trigger_service_name, [this, i](const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
@@ -301,10 +303,12 @@ void CameraPlugin::register_cameras()
   }
 
   has_streaming_cameras_ = std::any_of(cameras_.begin(), cameras_.end(),
-                                       [](const CameraData& cam) { return cam.type == CameraType::STREAMING; });
+                                       [](const CameraData& cam) { return cam.policy == CameraPolicy::STREAMING; });
 
   // Reserve once so the per-pass render bookkeeping in `update_cameras()` never allocates.
   render_indices_.reserve(cameras_.size());
+
+  return true;
 }
 
 void CameraPlugin::close()
@@ -560,9 +564,13 @@ void CameraPlugin::update_cameras()
   const float far = static_cast<float>(mj_model_->vis.map.zfar * mj_model_->stat.extent);
   camera_depth_scale_ = 1.0f - camera_near_distance_ / far;
 
+  // Use the snapshotted data's timestamp in the ROS header, as that is when the data was actually pulled.
+  const rclcpp::Duration duration = rclcpp::Duration::from_seconds(mj_camera_data_->time);
+  rclcpp::Time stamp(duration.nanoseconds(), RCL_ROS_TIME);
+
   for (const auto idx : render_indices_)
   {
-    render_and_publish_camera(cameras_[idx], node_->now());
+    render_and_publish_camera(cameras_[idx], stamp);
   }
 }
 
