@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -26,6 +27,7 @@
 #include <mujoco/mujoco.h>
 #include <hardware_interface/hardware_info.hpp>
 #include <mujoco_ros2_control/mujoco_system_interface.hpp>
+#include <mujoco_ros2_control/sim_display_text.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #define ROS_DISTRO_HUMBLE (HARDWARE_INTERFACE_VERSION_MAJOR < 3)
@@ -208,6 +210,70 @@ TEST_F(HeadlessInitTest, HeadlessActivateWithoutCameras)
   rclcpp_lifecycle::State active_state(0, "active");
   auto activate_result = interface_->on_activate(active_state);
   EXPECT_EQ(activate_result, hardware_interface::CallbackReturn::SUCCESS);
+}
+
+TEST_F(HeadlessInitTest, SpeedFactorParamInitialization)
+{
+  hardware_info_.hardware_parameters["sim_speed_factor"] = "0.5";
+
+#if ROS_DISTRO_HUMBLE
+  auto result = interface_->on_init(hardware_info_);
+#else
+  hardware_interface::HardwareComponentInterfaceParams params;
+  params.hardware_info = hardware_info_;
+  auto result = interface_->on_init(params);
+#endif
+  ASSERT_EQ(result, hardware_interface::CallbackReturn::SUCCESS);
+
+  // Wait for the model to load so the physics thread starts.
+  auto start = std::chrono::steady_clock::now();
+  mjModel* test_model = nullptr;
+  mjData* test_data = nullptr;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(2))
+  {
+    interface_->get_model(test_model);
+    interface_->get_data(test_data);
+    if (test_model != nullptr && test_data != nullptr)
+    {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  ASSERT_NE(test_model, nullptr) << "Model failed to initialize within timeout";
+  ASSERT_NE(test_data, nullptr) << "Data failed to initialize within timeout";
+
+  // Let the physics thread run a few steps to confirm sim_speed_factor does not
+  // cause a crash and the sim advances time.
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+  // Re-snapshot data after physics has had time to run (get_data copies the current state).
+  interface_->get_data(test_data);
+
+  // sim_time should have advanced from zero
+  EXPECT_GT(test_data->time, 0.0) << "Simulation time did not advance with sim_speed_factor=0.5";
+}
+
+TEST(SimDisplayTextTest, ComposesAllRowsWhenRunning)
+{
+  const auto [title, content] = mujoco_ros2_control::compose_sim_display_text(
+      /*running=*/true, /*step_count=*/1234, /*sim_time=*/2.5,
+      /*desired_pct=*/50.0, /*actual_pct=*/48.3, /*ncon=*/7);
+
+  EXPECT_EQ(title, "Status\nSteps\nSim Time\nDesired Speed\nActual Speed\nContacts");
+  EXPECT_EQ(content, "Running\n1234\n2.500 s\n50.0%\n48.3%\n7");
+
+  // Title and content must line up row-for-row, otherwise the overlay is misaligned.
+  const auto count_rows = [](const std::string& s) { return std::count(s.begin(), s.end(), '\n'); };
+  EXPECT_EQ(count_rows(title), count_rows(content));
+}
+
+TEST(SimDisplayTextTest, ReportsPausedStatus)
+{
+  const auto [title, content] = mujoco_ros2_control::compose_sim_display_text(
+      /*running=*/false, /*step_count=*/0, /*sim_time=*/0.0,
+      /*desired_pct=*/100.0, /*actual_pct=*/0.0, /*ncon=*/0);
+
+  EXPECT_EQ(content, "Paused\n0\n0.000 s\n100.0%\n0.0%\n0");
 }
 
 int main(int argc, char** argv)

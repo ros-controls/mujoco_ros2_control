@@ -13,6 +13,7 @@ find_package(realtime_tools REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(mujoco_ros2_control_msgs REQUIRED)
 find_package(glfw3 REQUIRED)
@@ -52,6 +53,7 @@ target_link_libraries(mujoco_ros2_control_plugins PUBLIC
   pluginlib::pluginlib
   ${sensor_msgs_TARGETS}
   ${std_msgs_TARGETS}
+  ${std_srvs_TARGETS}
   ${visualization_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
   glfw
