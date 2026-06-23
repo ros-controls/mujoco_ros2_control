@@ -200,7 +200,7 @@ bool CameraPlugin::register_cameras()
     }
     else
     {
-      RCLCPP_ERROR(node_->get_logger(), "Invalid policy for camera '%s': '%s'", cam_name);
+      RCLCPP_ERROR(node_->get_logger(), "Invalid policy for camera '%s'", cam_name);
       return false;
     }
 
