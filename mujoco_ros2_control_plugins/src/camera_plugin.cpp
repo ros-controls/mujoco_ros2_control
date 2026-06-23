@@ -236,17 +236,18 @@ bool CameraPlugin::register_cameras()
     camera.trigger_service_name = node_->get_parameter(param_ns + "trigger_service_name").as_string();
 
     RCLCPP_INFO(node_->get_logger(), "Adding camera: '%s'", cam_name);
-    RCLCPP_INFO(node_->get_logger(), "    camera_type: '%s'", policy_str.c_str());
+    RCLCPP_INFO(node_->get_logger(), "    policy: '%s'", policy_str.c_str());
     RCLCPP_INFO(node_->get_logger(), "    frame_name: '%s'", camera.frame_name.c_str());
-    if (camera.policy != CameraPolicy::DISABLED)
+    if (camera.policy == CameraPolicy::DISABLED)
     {
-      RCLCPP_INFO(node_->get_logger(), "    info_topic: '%s'", camera.info_topic.c_str());
-      RCLCPP_INFO(node_->get_logger(), "    image_topic: '%s'", camera.image_topic.c_str());
-      RCLCPP_INFO(node_->get_logger(), "    depth_topic: '%s'", camera.depth_topic.c_str());
-      if (camera.policy == CameraPolicy::POLLED)
-      {
-        RCLCPP_INFO(node_->get_logger(), "    trigger_service_name: '%s'", camera.trigger_service_name.c_str());
-      }
+      continue;
+    }
+    RCLCPP_INFO(node_->get_logger(), "    info_topic: '%s'", camera.info_topic.c_str());
+    RCLCPP_INFO(node_->get_logger(), "    image_topic: '%s'", camera.image_topic.c_str());
+    RCLCPP_INFO(node_->get_logger(), "    depth_topic: '%s'", camera.depth_topic.c_str());
+    if (camera.policy == CameraPolicy::POLLED)
+    {
+      RCLCPP_INFO(node_->get_logger(), "    trigger_service_name: '%s'", camera.trigger_service_name.c_str());
     }
 
     // Configure publishers and services

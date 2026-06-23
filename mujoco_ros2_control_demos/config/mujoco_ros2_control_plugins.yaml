@@ -8,7 +8,7 @@
         type: "mujoco_ros2_control_plugins/CameraPlugin"
         camera_publish_rate: 6.0
         camera:
-          camera_type: streaming
+          policy: streaming
           frame_name: camera_color_optical_frame
           info_topic: /camera/color/camera_info
           image_topic: /camera/color/image_raw

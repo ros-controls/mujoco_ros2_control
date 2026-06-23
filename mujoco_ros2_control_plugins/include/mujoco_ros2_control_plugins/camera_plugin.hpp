@@ -112,7 +112,7 @@ struct CameraData
  *   # All cameras will publish data at the same rate
  *   camera_publish_rate: 6.0
  *   <camera_name>:
- *     camera_type: <camera_type>  # "disabled", "polled", or "streaming"
+ *     policy: <policy>  # "disabled", "polled", or "streaming"
  *     frame_name: ""
  *     info_topic: <camera_name>/camera_info
  *     image_topic: <camera_name>/color
