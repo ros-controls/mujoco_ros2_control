@@ -44,14 +44,31 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 #include <pluginlib/class_list_macros.hpp>
 
 namespace mujoco_ros2_control_plugins
 {
 
+enum class CameraPolicy
+{
+  DISABLED = 0,  // Publishing is disabled.
+  STREAMING,     // Publishing is constant at the specified publish rate.
+  POLLED         // Publishing happens only when triggered by a service.
+};
+
 struct CameraData
 {
+  CameraPolicy policy = CameraPolicy::STREAMING;
+
+  // Set by the trigger service for polled cameras to request a one-shot capture.
+  bool poll_requested{ false };
+
+  // Set when this camera is selected to render on the next pass and is waiting
+  // for the rendering thread to consume it, then clear it when rendering occurs.
+  bool render_pending{ false };
+
   mjvCamera mjv_cam;
   mjrRect viewport;
 
@@ -60,13 +77,13 @@ struct CameraData
   std::string info_topic;
   std::string image_topic;
   std::string depth_topic;
+  std::string trigger_service_name;
 
   uint32_t width;
   uint32_t height;
 
   std::vector<uint8_t> image_buffer;
   std::vector<float> depth_buffer;
-  std::vector<float> depth_buffer_flipped;
 
   sensor_msgs::msg::Image image;
   sensor_msgs::msg::Image depth_image;
@@ -75,6 +92,7 @@ struct CameraData
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr image_pub;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr depth_image_pub;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_pub;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr trigger_service;
 };
 
 /**
@@ -82,7 +100,7 @@ struct CameraData
  *
  * Camera topics can be named in the ROS 2 controls plugins YAML config file
  * and loaded as node parameters.
- * If any of the parameters are not specified default topic names will be assigned.
+ * If any of the parameters are not specified, default topic names will be assigned.
  * A user can provide topic names for multiple cameras as long as cameras are not named the same.
  * Name collision is resolved by last name in the yaml file.
  *
@@ -94,17 +112,19 @@ struct CameraData
  *   # All cameras will publish data at the same rate
  *   camera_publish_rate: 6.0
  *   <camera_name>:
+ *     policy: <policy>  # "disabled", "polled", or "streaming"
  *     frame_name: ""
  *     info_topic: <camera_name>/camera_info
  *     image_topic: <camera_name>/color
  *     depth_topic: <camera_name>/depth
+ *     trigger_service_name: <camera_name>/trigger  # only used for polling camera policy
  *
  * Implementation notes
  * --------------------
  * If the camera name, in the parameters, does not match any of the mujoco cameras
  * the data will not be published to ROS topics.
- * If no cameras parameters are given (but mujoco_camera_plugin and its type are declared)
- * the default topics and frame are used automatically
+ * If no camera parameters are given, but the mujoco_camera_plugin and its policy are
+ * declared, the default policy (streaming), topics, and frame are used automatically.
  *
  */
 class CameraPlugin : public MuJoCoROS2ControlPluginBase
@@ -122,12 +142,26 @@ public:
   void cleanup() override;
 
   /**
-   * @brief Manually force the cameras to publish their updates.
+   * @brief Synchronously run a single render/publish cycle in the calling thread.
    *
-   * This is included for test purposes only, as the plumbing to manually force a data
-   * sync in WIP.
+   * This mirrors what the rendering thread does on each pass: streaming cameras are
+   * always selected, and polled cameras are selected only if their trigger service has
+   * been called since the last cycle. It is intended for tests, where it lets the camera
+   * selection logic be exercised deterministically without relying on the asynchronous
+   * rendering thread or a live GL context.
    */
   void trigger_update();
+
+  /**
+   * @brief Whether the rendering thread has successfully initialized its GL context.
+   *
+   * Primarily useful for tests that need to wait for the asynchronous rendering thread to
+   * come up before forcing a render.
+   */
+  bool is_rendering_available() const
+  {
+    return publish_images_.load();
+  }
 
 private:
   // ROS interfaces
@@ -139,9 +173,10 @@ private:
   void close();
 
   /**
-   * @brief Parses camera information from the mujoco model.
+   * @brief Parses camera information from the mujoco model and node parameters.
+   * @return true if registering cameras succeeds, otherwise false.
    */
-  void register_cameras();
+  bool register_cameras();
 
   /**
    * @brief Initializes the rendering context and starts processing.
@@ -149,9 +184,23 @@ private:
   void update_loop();
 
   /**
-   * @brief Updates the camera images and publishes info, images, and depth maps.
+   * @brief Renders and publishes every camera that is flagged to render.
    */
   void update_cameras();
+
+  /**
+   * @brief Renders and publishes data for a specific camera.
+   * @param camera The camera data structure.
+   * @param stamp Timestamp applied to all messages published this step.
+   */
+  void render_and_publish_camera(CameraData& camera, const rclcpp::Time& stamp);
+
+  /**
+   * @brief Handles a polled camera trigger to render and publish messages.
+   * @param camera The camera data structure.
+   */
+  void handle_trigger(const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+                      std::shared_ptr<std_srvs::srv::Trigger::Response> response, const int camera_idx);
 
   rclcpp::Node::SharedPtr node_;
 
@@ -162,21 +211,37 @@ private:
   const mjModel* mj_model_;
   mjData* mj_camera_data_;
 
-  // Image publishing rate
+  // Image publishing rate (applies to streaming cameras only)
   double camera_publish_rate_{ 5.0 };
   rclcpp::Time last_publish_time_{ 0, 0, RCL_ROS_TIME };
+
+  // Whether any streaming camera is registered. This lets the update loop skip the
+  // streaming time check entirely when only polled/disabled cameras exist.
+  bool has_streaming_cameras_{ false };
+
+  // Whether at least one polled camera has a pending trigger request.
+  std::atomic_bool poll_pending_{ false };
 
   // Rendering options for the cameras, currently hard coded to defaults
   mjvOption mjv_opt_;
   mjvScene mjv_scn_;
   mjrContext mjr_con_;
 
+  // Scene parameters to keep around to avoid recomputing
+  float camera_near_distance_;
+  float camera_depth_scale_;
+
   // Containers for camera data and ROS constructs
   std::vector<CameraData> cameras_;
+
+  // List of camera indices to render on a given pass.
+  // Reserved once to the camera count so we do not allocate.
+  std::vector<size_t> render_indices_;
 
   // Camera processing thread and objects for syncing
   std::thread rendering_thread_;
   std::atomic_bool publish_images_{ false };
+  std::atomic_bool stop_requested_{ false };
   std::mutex data_mutex_;
   std::condition_variable data_cv_;
   bool new_data_{ false };
