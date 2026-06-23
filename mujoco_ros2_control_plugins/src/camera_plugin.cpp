@@ -39,7 +39,11 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
   RCLCPP_INFO(node_->get_logger(), "CameraPlugin initializing cameras...");
 
   // Read the mj_model_, identify the number of cameras, and populate containers for them.
-  register_cameras();
+  if (!register_cameras())
+  {
+    RCLCPP_ERROR(node_->get_logger(), "Failed to register cameras.");
+    return false;
+  }
   if (cameras_.empty())
   {
     return true;
@@ -67,21 +71,59 @@ void CameraPlugin::update(const mjModel* model_arg, mjData* data)
     return;
   }
 
-  // Check if it is time to publish
+  // Streaming cameras render on a fixed-rate clock; polled cameras render as soon as a
+  // trigger has been received. Both are serviced here, on the sim thread, because this is
+  // the only place we can safely snapshot the live mjData without racing the simulation.
   // TODO: Support per-camera publish rates?
-  auto now = node_->get_clock()->now();
-  if ((now - last_publish_time_).seconds() < (1.0 / camera_publish_rate_))
+  const auto now = node_->get_clock()->now();
+  const bool stream_due =
+      has_streaming_cameras_ && (now - last_publish_time_).seconds() >= (1.0 / camera_publish_rate_);
+  const bool poll_due = poll_pending_.exchange(false);
+
+  // Nothing to do this step: avoid taking the lock or copying data.
+  if (!stream_due && !poll_due)
   {
     return;
   }
-  last_publish_time_ = now;
 
+  bool any_selected = false;
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
-    mjv_copyData(mj_camera_data_, model_arg, data);
-    new_data_ = true;
+
+    // Flag streaming cameras when their interval is due and any polled cameras that have a
+    // pending trigger (consuming the one-shot request so they render exactly once).
+    for (auto& camera : cameras_)
+    {
+      if (camera.policy == CameraPolicy::STREAMING && stream_due)
+      {
+        camera.render_pending = true;
+        any_selected = true;
+      }
+      else if (camera.policy == CameraPolicy::POLLED && camera.poll_requested)
+      {
+        camera.poll_requested = false;
+        camera.render_pending = true;
+        any_selected = true;
+      }
+    }
+
+    if (stream_due)
+    {
+      last_publish_time_ = now;
+    }
+
+    // Only snapshot the simulation data when there is actually a camera to render.
+    if (any_selected)
+    {
+      mjv_copyData(mj_camera_data_, model_arg, data);
+      new_data_ = true;
+    }
   }
-  data_cv_.notify_one();
+
+  if (any_selected)
+  {
+    data_cv_.notify_one();
+  }
 }
 
 void CameraPlugin::cleanup()
@@ -92,10 +134,23 @@ void CameraPlugin::cleanup()
 void CameraPlugin::trigger_update()
 {
   std::lock_guard<std::mutex> lock(data_mutex_);
+  // Force every streaming camera and consume any pending polls, then render synchronously.
+  for (auto& camera : cameras_)
+  {
+    if (camera.policy == CameraPolicy::STREAMING)
+    {
+      camera.render_pending = true;
+    }
+    else if (camera.policy == CameraPolicy::POLLED && camera.poll_requested)
+    {
+      camera.poll_requested = false;
+      camera.render_pending = true;
+    }
+  }
   update_cameras();
 }
 
-void CameraPlugin::register_cameras()
+bool CameraPlugin::register_cameras()
 {
   const std::string param_prefix = "mujoco_plugins.mujoco_camera_plugin.";
 
@@ -125,6 +180,30 @@ void CameraPlugin::register_cameras()
 
     const std::string param_ns = param_prefix + cam_name + ".";
 
+    const std::string policy_param = param_ns + "policy";
+    if (!node_->has_parameter(policy_param))
+    {
+      node_->declare_parameter(policy_param, "streaming");
+    }
+    std::string policy_str = node_->get_parameter(policy_param).as_string();
+    if (policy_str == "streaming")
+    {
+      camera.policy = CameraPolicy::STREAMING;
+    }
+    else if (policy_str == "polled")
+    {
+      camera.policy = CameraPolicy::POLLED;
+    }
+    else if (policy_str == "disabled")
+    {
+      camera.policy = CameraPolicy::DISABLED;
+    }
+    else
+    {
+      RCLCPP_ERROR(node_->get_logger(), "Invalid policy for camera '%s'", cam_name);
+      return false;
+    }
+
     const std::string frame_param = param_ns + "frame_name";
     if (!node_->has_parameter(frame_param))
     {
@@ -150,17 +229,39 @@ void CameraPlugin::register_cameras()
     }
     camera.depth_topic = node_->get_parameter(param_ns + "depth_topic").as_string();
 
+    if (!node_->has_parameter(param_ns + "trigger_service_name"))
+    {
+      node_->declare_parameter(param_ns + "trigger_service_name", camera.name + "/trigger");
+    }
+    camera.trigger_service_name = node_->get_parameter(param_ns + "trigger_service_name").as_string();
+
     RCLCPP_INFO(node_->get_logger(), "Adding camera: '%s'", cam_name);
+    RCLCPP_INFO(node_->get_logger(), "    policy: '%s'", policy_str.c_str());
     RCLCPP_INFO(node_->get_logger(), "    frame_name: '%s'", camera.frame_name.c_str());
+    if (camera.policy == CameraPolicy::DISABLED)
+    {
+      continue;
+    }
     RCLCPP_INFO(node_->get_logger(), "    info_topic: '%s'", camera.info_topic.c_str());
     RCLCPP_INFO(node_->get_logger(), "    image_topic: '%s'", camera.image_topic.c_str());
     RCLCPP_INFO(node_->get_logger(), "    depth_topic: '%s'", camera.depth_topic.c_str());
+    if (camera.policy == CameraPolicy::POLLED)
+    {
+      RCLCPP_INFO(node_->get_logger(), "    trigger_service_name: '%s'", camera.trigger_service_name.c_str());
+    }
 
-    // Configure publishers
+    // Configure publishers and services
     camera.camera_info_pub = node_->create_publisher<sensor_msgs::msg::CameraInfo>(camera.info_topic, 1);
     camera.image_pub = node_->create_publisher<sensor_msgs::msg::Image>(camera.image_topic, 1);
     camera.depth_image_pub = node_->create_publisher<sensor_msgs::msg::Image>(camera.depth_topic, 1);
-
+    if (camera.policy == CameraPolicy::POLLED)
+    {
+      camera.trigger_service = node_->create_service<std_srvs::srv::Trigger>(
+          camera.trigger_service_name, [this, i](const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+                                                 std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+            this->handle_trigger(request, response, i);
+          });
+    }
     // Setup containers for color image data
     camera.image.header.frame_id = camera.frame_name;
 
@@ -175,7 +276,6 @@ void CameraPlugin::register_cameras()
     // Depth image data
     camera.depth_image.header.frame_id = camera.frame_name;
     camera.depth_buffer.resize(camera.width * camera.height);
-    camera.depth_buffer_flipped.resize(camera.width * camera.height);
     camera.depth_image.data.resize(camera.width * camera.height * sizeof(float));
     camera.depth_image.width = camera.width;
     camera.depth_image.height = camera.height;
@@ -202,12 +302,21 @@ void CameraPlugin::register_cameras()
     // Add to list of cameras
     cameras_.push_back(camera);
   }
+
+  has_streaming_cameras_ = std::any_of(cameras_.begin(), cameras_.end(),
+                                       [](const CameraData& cam) { return cam.policy == CameraPolicy::STREAMING; });
+
+  // Reserve once so the per-pass render bookkeeping in `update_cameras()` never allocates.
+  render_indices_.reserve(cameras_.size());
+
+  return true;
 }
 
 void CameraPlugin::close()
 {
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
+    stop_requested_ = true;
     publish_images_ = false;
   }
   data_cv_.notify_one();
@@ -389,8 +498,13 @@ void CameraPlugin::update_loop()
   RCLCPP_INFO(node_->get_logger(), "Resized offscreen buffer to %d x %d", max_width, max_height);
 
   // Only process images once all data has been initialized, and do it until told to stop.
-  publish_images_ = true;
-  while (rclcpp::ok() && publish_images_)
+  // Publishing is enabled under the lock so that a shutdown requested during the (possibly
+  // slow) initialization above is observed here rather than being clobbered.
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    publish_images_ = !stop_requested_;
+  }
+  while (rclcpp::ok() && !stop_requested_)
   {
     std::unique_lock<std::mutex> lock(data_mutex_);
 
@@ -398,10 +512,10 @@ void CameraPlugin::update_loop()
     // images. Note that condition_variables can be awoken spuriously, so the additional
     // checks are necessary to avoid doing work excepting when updated rendering data has
     // been made available.
-    data_cv_.wait(lock, [this] { return new_data_ || !publish_images_; });
+    data_cv_.wait(lock, [this] { return new_data_ || stop_requested_; });
 
     // Shutdown triggered, kill the loop and clean up.
-    if (!publish_images_)
+    if (stop_requested_)
     {
       break;
     }
@@ -410,6 +524,7 @@ void CameraPlugin::update_loop()
 
     update_cameras();
   }
+  publish_images_ = false;
 
   mjv_freeScene(&mjv_scn_);
   mjr_freeContext(&mjr_con_);
@@ -427,65 +542,92 @@ void CameraPlugin::update_loop()
 
 void CameraPlugin::update_cameras()
 {
-  // Step 1: Done in the `update` cb to copy rendering data
-  // Rendering is done offscreen
+  // Gather the cameras flagged for rendering this pass, clearing the flag as we go.
+  render_indices_.clear();
+  for (size_t i = 0; i < cameras_.size(); ++i)
+  {
+    auto& camera = cameras_[i];
+    if (camera.render_pending)
+    {
+      camera.render_pending = false;
+      render_indices_.push_back(i);
+    }
+  }
+  if (render_indices_.empty())
+  {
+    return;
+  }
+
+  // Rendering is done offscreen using the data snapshot taken in `update`.
   mjr_setBuffer(mjFB_OFFSCREEN, &mjr_con_);
 
-  // Step 2: Render the scene and copy images to relevant camera data containers.
-  for (auto& camera : cameras_)
-  {
-    // Render scene
-    mjv_updateScene(mj_model_, mj_camera_data_, &mjv_opt_, NULL, &camera.mjv_cam, mjCAT_ALL, &mjv_scn_);
-    mjr_render(camera.viewport, &mjv_scn_, &mjr_con_);
-
-    // Copy image into relevant buffers
-    mjr_readPixels(camera.image_buffer.data(), camera.depth_buffer.data(), camera.viewport, &mjr_con_);
-  }
-
-  // Step 3: Adjust the images and copy depth data.
-  const float near = static_cast<float>(mj_model_->vis.map.znear * mj_model_->stat.extent);
+  camera_near_distance_ = static_cast<float>(mj_model_->vis.map.znear * mj_model_->stat.extent);
   const float far = static_cast<float>(mj_model_->vis.map.zfar * mj_model_->stat.extent);
-  const float depth_scale = 1.0f - near / far;
-  for (auto& camera : cameras_)
-  {
-    // Fix non-linear projections in the depth image and flip the data.
-    // https://github.com/google-deepmind/mujoco/blob/3.4.0/python/mujoco/renderer.py#L190
-    for (uint32_t h = 0; h < camera.height; h++)
-    {
-      for (uint32_t w = 0; w < camera.width; w++)
-      {
-        auto idx = h * camera.width + w;
-        auto idx_flipped = (camera.height - 1 - h) * camera.width + w;
-        camera.depth_buffer[idx] = near / (1.0f - camera.depth_buffer[idx] * (depth_scale));
-        camera.depth_buffer_flipped[idx_flipped] = camera.depth_buffer[idx];
-      }
-    }
-    // Copy flipped data into the depth image message, floats -> unsigned chars
-    std::memcpy(&camera.depth_image.data[0], camera.depth_buffer_flipped.data(), camera.depth_image.data.size());
+  camera_depth_scale_ = 1.0f - camera_near_distance_ / far;
 
-    // OpenGL's coordinate system's origin is in the bottom left, so we invert the images row-by-row
-    auto row_size = camera.width * 3;
-    for (uint32_t h = 0; h < camera.height; h++)
+  // Use the snapshotted data's timestamp in the ROS header, as that is when the data was actually pulled.
+  const rclcpp::Duration duration = rclcpp::Duration::from_seconds(mj_camera_data_->time);
+  rclcpp::Time stamp(duration.nanoseconds(), RCL_ROS_TIME);
+
+  for (const auto idx : render_indices_)
+  {
+    render_and_publish_camera(cameras_[idx], stamp);
+  }
+}
+
+void CameraPlugin::render_and_publish_camera(CameraData& camera, const rclcpp::Time& stamp)
+{
+  // Step 1: Render the scene and copy images to relevant camera data containers.
+  // Render scene
+  mjv_updateScene(mj_model_, mj_camera_data_, &mjv_opt_, NULL, &camera.mjv_cam, mjCAT_ALL, &mjv_scn_);
+  mjr_render(camera.viewport, &mjv_scn_, &mjr_con_);
+
+  // Copy image into relevant buffers
+  mjr_readPixels(camera.image_buffer.data(), camera.depth_buffer.data(), camera.viewport, &mjr_con_);
+
+  // Step 2: Adjust the images and copy depth data.
+  // Fix non-linear depth buffer and flip it vertically (OpenGL's origin is the bottom left)
+  // https://github.com/google-deepmind/mujoco/blob/3.4.0/python/mujoco/renderer.py#L190
+  auto* depth_out = reinterpret_cast<float*>(camera.depth_image.data.data());
+  for (uint32_t h = 0; h < camera.height; ++h)
+  {
+    const float* src_row = camera.depth_buffer.data() + static_cast<size_t>(h) * camera.width;
+    float* dst_row = depth_out + static_cast<size_t>(camera.height - 1 - h) * camera.width;
+    for (uint32_t w = 0; w < camera.width; ++w)
     {
-      auto src_idx = h * row_size;
-      auto dest_idx = (camera.height - 1 - h) * row_size;
-      std::memcpy(&camera.image.data[dest_idx], &camera.image_buffer[src_idx], row_size);
+      dst_row[w] = camera_near_distance_ / (1.0f - src_row[w] * camera_depth_scale_);
     }
   }
 
-  // Step 4: Publish the images.
-  for (auto& camera : cameras_)
+  // OpenGL's coordinate system's origin is in the bottom left, so we invert the images row-by-row
+  const auto row_size = camera.width * 3;
+  for (uint32_t h = 0; h < camera.height; ++h)
   {
-    // Publish images and camera info
-    const auto time = node_->now();
-    camera.image.header.stamp = time;
-    camera.depth_image.header.stamp = time;
-    camera.camera_info.header.stamp = time;
-
-    camera.image_pub->publish(camera.image);
-    camera.depth_image_pub->publish(camera.depth_image);
-    camera.camera_info_pub->publish(camera.camera_info);
+    const auto src_idx = h * row_size;
+    const auto dest_idx = (camera.height - 1 - h) * row_size;
+    std::memcpy(&camera.image.data[dest_idx], &camera.image_buffer[src_idx], row_size);
   }
+
+  // Step 3: Publish the images and camera info.
+  camera.image.header.stamp = stamp;
+  camera.depth_image.header.stamp = stamp;
+  camera.camera_info.header.stamp = stamp;
+
+  camera.image_pub->publish(camera.image);
+  camera.depth_image_pub->publish(camera.depth_image);
+  camera.camera_info_pub->publish(camera.camera_info);
+}
+
+void CameraPlugin::handle_trigger(const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+                                  std::shared_ptr<std_srvs::srv::Trigger::Response> response, const int camera_idx)
+{
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    cameras_.at(camera_idx).poll_requested = true;
+  }
+  // Wake the fast path in `update()` so the request is picked up on the next sim step.
+  poll_pending_.store(true);
+  response->success = true;
 }
 
 }  // namespace mujoco_ros2_control_plugins
