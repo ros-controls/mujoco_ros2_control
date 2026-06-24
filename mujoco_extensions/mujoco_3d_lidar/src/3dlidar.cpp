@@ -146,7 +146,8 @@ Lidar* Lidar::Create(const mjModel* m, mjData* d, int instance)
       }
       else
       {
-        elevation_range[1] = elevation_range[0];
+        // It will need to grow
+        elevation_range.push_back(elevation_range[0]);
       }
     }
   }
