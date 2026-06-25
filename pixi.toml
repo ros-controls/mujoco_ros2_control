@@ -5,7 +5,7 @@ channels = [
   "https://prefix.dev/robostack-jazzy",
 ]
 name = "mujoco_ros2_control_ws"
-platforms = ["linux-aarch64", "linux-64"]
+platforms = ["linux-aarch64", "linux-64", "osx-arm64"]
 version = "0.1.0"
 preview = ["pixi-build"]
 
@@ -13,8 +13,14 @@ preview = ["pixi-build"]
 CMAKE_INSTALL_MODE          = "SYMLINK"
 COLCON_DEFAULT_OUTPUT_STYLE = "catkin_tools"
 LIBRARY_PATH = "${CONDA_PREFIX}/lib:${LIBRARY_PATH}"
+
+[target.linux.activation.env]
 LD_LIBRARY_PATH = "${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}"
 LDFLAGS = "-L${CONDA_PREFIX}/lib -Wl,-rpath,${CONDA_PREFIX}/lib -fuse-ld=mold"
+
+[target.osx-arm64.activation.env]
+DYLD_LIBRARY_PATH = "${CONDA_PREFIX}/lib:${DYLD_LIBRARY_PATH}"
+LDFLAGS = "-L${CONDA_PREFIX}/lib -Wl,-rpath,${CONDA_PREFIX}/lib"
 
 [tasks]
 # Setup tasks
@@ -42,10 +48,8 @@ python = ">=3.11,<3.13"
 cmake = ">=4.1.2,<5"
 ninja = ">=1.13.1,<2"
 sccache = ">=0.11.0,<0.12"
-mold = ">=2.40.2,<3"
 colcon-common-extensions = ">=0.3.0,<0.4"
 colcon-mixin = ">=0.2.3,<0.3"
-libcap = ">=2.76,<3"
 glfw = ">=3.4,<4"
 pip = "*"
 numpy = "*"
@@ -54,6 +58,10 @@ ros-jazzy-urdfdom-py = "*"
 
 # Not necessary for building, but for tests/running in isolated environments
 ros-jazzy-ros-base = "*"
+
+[target.linux.dependencies]
+mold = ">=2.40.2,<3"
+libcap = ">=2.76,<3"
 
 [pypi-dependencies]
 xacro = ">=2.1.1, <3"

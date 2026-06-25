@@ -10,8 +10,6 @@ find_package(controller_manager REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(fmt REQUIRED)
 find_package(glfw3 REQUIRED)
-find_package(OpenGL REQUIRED COMPONENTS EGL)
-
 find_package(control_toolbox REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -25,6 +23,26 @@ find_package(transmission_interface REQUIRED)
 find_package(backward_ros REQUIRED)
 find_package(tinyxml2_vendor QUIET)
 find_package(TinyXML2 REQUIRED)
+
+# EGL is only available on Linux
+if(APPLE)
+  find_package(OpenGL REQUIRED)
+  set(_opengl_libs OpenGL::GL)
+else()
+  find_package(OpenGL REQUIRED COMPONENTS EGL)
+  set(_opengl_libs OpenGL::OpenGL OpenGL::EGL)
+endif()
+
+# Collect OpenGL link targets (EGL is Linux-only)
+if(NOT APPLE)
+  list(APPEND _opengl_libs OpenGL::EGL)
+endif()
+
+# On macOS, transitive ROS 2 deps from message generation reference Python symbols that
+# must be explicitly linked into executables.
+if(APPLE)
+  find_package(Python3 REQUIRED COMPONENTS Development)
+endif()
 
 # Link MuJoCo via the vendor package
 find_package(mujoco_vendor REQUIRED)
@@ -84,8 +102,11 @@ set(MUJOCO_SILENCE_COMPILER_WARNINGS
   -Wno-missing-field-initializers
   -Wno-unused-parameter
   -Wno-sign-compare
-  -Wno-psabi
 )
+# -Wno-psabi is GCC-only (ARM ABI change warnings); Clang rejects it
+if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  list(APPEND MUJOCO_SILENCE_COMPILER_WARNINGS -Wno-psabi)
+endif()
 
 # Check if MuJoCo's simulate application is available for linking. The github tarfiles packaged
 # by the vendor package has the simulate application compiled with -flto=auto, so we cannot
@@ -149,22 +170,29 @@ add_library(mujoco_ros2_control SHARED
     src/mujoco_simulation.cpp
     src/mujoco_system_interface.cpp
 )
-# Ensure MuJoCo library can be found at runtime regardless of how it was installed above.
-# mujoco_vendor installs libmujoco.so under opt/mujoco_vendor/lib/ relative to the
-# install prefix, so that directory must be in the RPATH alongside the standard lib/.
-set_target_properties(mujoco_ros2_control PROPERTIES
-  INSTALL_RPATH "\$ORIGIN/../lib;\$ORIGIN/../opt/mujoco_vendor/lib;${CMAKE_INSTALL_PREFIX}/lib"
-)
+
+# Platform-appropriate RPATH
+if(APPLE)
+  set_target_properties(mujoco_ros2_control PROPERTIES
+    INSTALL_RPATH "@loader_path/../lib;@loader_path/../opt/mujoco_vendor/lib;${CMAKE_INSTALL_PREFIX}/lib"
+  )
+else()
+  set_target_properties(mujoco_ros2_control PROPERTIES
+    INSTALL_RPATH "\$ORIGIN/../lib;\$ORIGIN/../opt/mujoco_vendor/lib;${CMAKE_INSTALL_PREFIX}/lib"
+  )
+endif()
+
 # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
 # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
-# Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
-# TODO: Remove this after the following is resolved and the next ROS sync
-# https://github.com/pal-robotics/mujoco_vendor/issues/2
-target_link_options(mujoco_ros2_control PUBLIC
-  "LINKER:--push-state,--no-as-needed"
-  "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
-  "LINKER:--pop-state"
-)
+# This workaround uses GNU ld specific flags and is not needed on macOS.
+if(NOT APPLE)
+  target_link_options(mujoco_ros2_control PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
+endif()
+
 target_link_libraries(mujoco_ros2_control
 PUBLIC
   hardware_interface::hardware_interface
@@ -182,10 +210,14 @@ PRIVATE
   Threads::Threads
   lodepng
   glfw
-  OpenGL::EGL
-  OpenGL::OpenGL
+  ${_opengl_libs}
   ${CMAKE_DL_LIBS}
 )
+
+# Manual python linking is required on MacOS
+if(APPLE)
+  target_link_libraries(mujoco_ros2_control PUBLIC Python3::Python)
+endif()
 
 # Note: the transmissions_interface must NOT be statically linked against the library, only headers
 # should be used. Otherwise it will be loaded by the linker at process startup and its
@@ -223,6 +255,9 @@ add_executable(ros2_control_node src/mujoco_ros2_control_node.cpp)
 target_link_libraries(ros2_control_node PUBLIC
   controller_manager::controller_manager
 )
+if(APPLE)
+  target_link_libraries(ros2_control_node PUBLIC Python3::Python)
+endif()
 install(
   TARGETS ros2_control_node
   RUNTIME DESTINATION lib/${PROJECT_NAME}

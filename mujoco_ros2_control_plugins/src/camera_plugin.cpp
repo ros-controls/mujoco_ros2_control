@@ -30,6 +30,15 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
 
 bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data, GlfwInitFn glfw_init_fn)
 {
+
+#ifdef __APPLE__
+  // macOS requires all GLFW be on the main thread, this will not work here.
+  RCLCPP_WARN(node->get_logger(),
+              "Camera rendering is not supported on macOS — GLFW requires the main thread and EGL "
+              "is not available. Camera topics will not be published.");
+  return true;
+#endif
+
   node_ = node;
   mj_model_ = model;
   mj_data_ = data;
@@ -326,6 +335,7 @@ void CameraPlugin::close()
   }
 }
 
+#ifndef __APPLE__
 bool CameraPlugin::init_egl_context()
 {
   // Get EGL display
@@ -432,11 +442,13 @@ void CameraPlugin::cleanup_egl_context()
     egl_display_ = EGL_NO_DISPLAY;
   }
 }
+#endif
 
 void CameraPlugin::update_loop()
 {
   GLFWwindow* window = nullptr;
 
+#ifndef __APPLE__
   if (use_egl_)
   {
     // Initialize EGL for headless rendering
@@ -448,6 +460,7 @@ void CameraPlugin::update_loop()
     }
   }
   else
+#endif
   {
     // Use GLFW for offscreen context (display available)
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
@@ -462,7 +475,11 @@ void CameraPlugin::update_loop()
   }
 
   // Determine rendering backend name for logging
+#ifndef __APPLE__
   const char* backend = use_egl_ ? "EGL" : "GLFW";
+#else
+  const char* backend = "GLFW";
+#endif
 
   // Initialization of the context and data structures has to happen in the rendering thread
   RCLCPP_INFO(node_->get_logger(), "Initializing rendering for cameras (using %s)", backend);
@@ -530,11 +547,13 @@ void CameraPlugin::update_loop()
   mjr_freeContext(&mjr_con_);
   mj_deleteData(mj_camera_data_);
 
+#ifndef __APPLE__
   if (use_egl_)
   {
     cleanup_egl_context();
   }
-  else if (window)
+  else
+#endif
   {
     glfwDestroyWindow(window);
   }

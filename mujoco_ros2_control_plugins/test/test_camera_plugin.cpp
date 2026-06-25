@@ -157,6 +157,7 @@ TEST_F(CameraPluginTest, InitSucceedsWithNoCameras)
   plugin.cleanup();
 }
 
+#ifndef __APPLE__
 // Verify init finds cameras and returns true, ensure the egl context does the rendering.
 TEST_F(CameraPluginTest, InitAndPublish)
 {
@@ -316,6 +317,7 @@ TEST_F(CameraPluginTest, PolledCameraPublishesOncePerTrigger)
 
   plugin.cleanup();
 }
+#endif
 
 int main(int argc, char** argv)
 {

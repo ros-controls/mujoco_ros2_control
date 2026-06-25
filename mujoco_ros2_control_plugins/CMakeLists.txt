@@ -17,7 +17,25 @@ find_package(std_srvs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(mujoco_ros2_control_msgs REQUIRED)
 find_package(glfw3 REQUIRED)
-find_package(OpenGL REQUIRED COMPONENTS EGL)
+
+# EGL is only available on Linux
+if(APPLE)
+  find_package(OpenGL REQUIRED)
+  set(_opengl_libs OpenGL::GL)
+else()
+  find_package(OpenGL REQUIRED COMPONENTS EGL)
+  set(_opengl_libs OpenGL::OpenGL OpenGL::EGL)
+endif()
+
+if(NOT APPLE)
+  list(APPEND _opengl_libs OpenGL::EGL)
+endif()
+
+# On macOS, transitive ROS 2 deps from message generation reference Python symbols that
+# must be explicitly linked into executables.
+if(APPLE)
+  find_package(Python3 REQUIRED COMPONENTS Development)
+endif()
 
 # Attempt to link MuJoCo via the vendor package, if available
 find_package(mujoco_vendor QUIET)
@@ -25,7 +43,6 @@ if(mujoco_vendor_FOUND)
   set(MUJOCO_LIB mujoco::mujoco)
   set(MUJOCO_INCLUDE_DIR ${mujoco_vendor_INCLUDE_DIRS})
 else()
-  # Fallback to system MuJoCo or other methods if needed
   message(FATAL_ERROR "mujoco_vendor not found!")
 endif()
 
@@ -46,6 +63,7 @@ target_include_directories(mujoco_ros2_control_plugins PUBLIC
 target_include_directories(mujoco_ros2_control_plugins SYSTEM PUBLIC
   $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
 )
+
 target_link_libraries(mujoco_ros2_control_plugins PUBLIC
   ${MUJOCO_LIB}
   rclcpp::rclcpp
@@ -57,9 +75,12 @@ target_link_libraries(mujoco_ros2_control_plugins PUBLIC
   ${visualization_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
   glfw
-  OpenGL::EGL
-  OpenGL::OpenGL
+  ${_opengl_libs}
 )
+# Manual python linking is required on MacOS
+if(APPLE)
+  target_link_libraries(mujoco_ros2_control_plugins PUBLIC Python3::Python)
+endif()
 target_compile_definitions(mujoco_ros2_control_plugins PRIVATE
   REALTIME_TOOLS_VERSION_MAJOR=${realtime_tools_VERSION_MAJOR}
 )
@@ -91,21 +112,26 @@ if(BUILD_TESTING)
     mujoco_ros2_control_plugins
     ${sensor_msgs_TARGETS}
   )
-  # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
-  # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
-  # Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
-  # TODO: Remove this after the following is resolved and the next ROS sync
-  # https://github.com/pal-robotics/mujoco_vendor/issues/2
-  target_link_options(test_external_wrench_plugin PUBLIC
-    "LINKER:--push-state,--no-as-needed"
-    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
-    "LINKER:--pop-state"
-  )
-  target_link_options(test_camera_plugin PUBLIC
-    "LINKER:--push-state,--no-as-needed"
-    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
-    "LINKER:--pop-state"
-  )
+
+  # Manual python linking is required on MacOS
+  if(APPLE)
+    target_link_libraries(test_external_wrench_plugin Python3::Python)
+    target_link_libraries(test_camera_plugin Python3::Python)
+  endif()
+
+  # TinyXML2 load-order workaround (GNU ld only)
+  if(NOT APPLE)
+    target_link_options(test_external_wrench_plugin PUBLIC
+      "LINKER:--push-state,--no-as-needed"
+      "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+      "LINKER:--pop-state"
+    )
+    target_link_options(test_camera_plugin PUBLIC
+      "LINKER:--push-state,--no-as-needed"
+      "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+      "LINKER:--pop-state"
+    )
+  endif()
 
 endif()
 

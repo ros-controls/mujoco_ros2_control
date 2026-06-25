@@ -34,8 +34,13 @@
 
 #include "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
 
+#ifndef __APPLE__
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#endif
+#include <GLFW/glfw3.h>
+#include <mujoco/mujoco.h>
+
 #include <GLFW/glfw3.h>
 #include <mujoco/mujoco.h>
 
@@ -246,12 +251,12 @@ private:
   std::condition_variable data_cv_;
   bool new_data_{ false };
 
+  bool use_egl_{ false };
+#ifndef __APPLE__
   // EGL context for headless rendering (used when GLFW is unavailable)
   EGLDisplay egl_display_{ EGL_NO_DISPLAY };
   EGLContext egl_context_{ EGL_NO_CONTEXT };
   EGLSurface egl_surface_{ EGL_NO_SURFACE };
-  bool use_egl_{ false };
-
   /**
    * @brief Initializes EGL context for headless rendering.
    * @return true if EGL initialization succeeded, false otherwise.
@@ -262,6 +267,7 @@ private:
    * @brief Cleans up EGL resources.
    */
   void cleanup_egl_context();
+#endif
 };
 
 }  // namespace mujoco_ros2_control_plugins

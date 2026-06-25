@@ -489,6 +489,16 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
   sim_speed_factor_ = sim_speed_factor;
   headless_ = headless;
 
+#ifdef __APPLE__
+  if (!headless)
+  {
+    RCLCPP_WARN(get_logger(),
+                "The MuJoCo GUI viewer is not supported on macOS because GLFW requires the main thread, "
+                "which is occupied by the ROS 2 executor. Forcing headless mode.");
+    headless = true;
+  }
+#endif
+
   if (sim_speed_factor_ > 0)
   {
     RCLCPP_INFO(get_logger(), "Running the simulation at %.2f percent speed", sim_speed_factor_ * 100.0);
