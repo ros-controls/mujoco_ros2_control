@@ -48,6 +48,7 @@ add_library(mujoco_ros2_control_plugins_impl SHARED
   src/heartbeat_publisher_plugin.cpp
   src/external_wrench_plugin.cpp
   src/camera_plugin.cpp
+  src/mujoco_3d_lidar_plugin.cpp
   # TODO: Remove once this has been fully deprecated
   src/rangefinder_lidar_plugin.cpp
 )
@@ -97,6 +98,17 @@ if(BUILD_TESTING)
     ${visualization_msgs_TARGETS}
   )
 
+  # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
+  # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
+  # Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
+  # TODO: Remove this after the following is resolved and the next ROS sync
+  # https://github.com/pal-robotics/mujoco_vendor/issues/2
+  target_link_options(test_external_wrench_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
+
   ament_add_gtest(test_camera_plugin
     test/test_camera_plugin.cpp
   )
@@ -108,22 +120,27 @@ if(BUILD_TESTING)
     ${sensor_msgs_TARGETS}
     ${std_srvs_TARGETS}
   )
-  # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
-  # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
-  # Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
-  # TODO: Remove this after the following is resolved and the next ROS sync
-  # https://github.com/pal-robotics/mujoco_vendor/issues/2
-  target_link_options(test_external_wrench_plugin PUBLIC
-    "LINKER:--push-state,--no-as-needed"
-    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
-    "LINKER:--pop-state"
-  )
   target_link_options(test_camera_plugin PUBLIC
     "LINKER:--push-state,--no-as-needed"
     "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
     "LINKER:--pop-state"
   )
 
+  ament_add_gtest(test_3d_lidar_plugin
+    test/test_3d_lidar_plugin.cpp
+  )
+  target_include_directories(test_3d_lidar_plugin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(test_3d_lidar_plugin
+    mujoco_ros2_control_plugins_impl
+    ${sensor_msgs_TARGETS}
+  )
+  target_link_options(test_3d_lidar_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
 endif()
 
 # Install include directory
