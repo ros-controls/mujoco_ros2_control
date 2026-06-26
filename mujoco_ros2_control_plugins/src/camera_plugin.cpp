@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "mujoco_ros2_control_plugins/camera_plugin.hpp"
+#include "camera_plugin.hpp"
 
 namespace mujoco_ros2_control_plugins
 {
