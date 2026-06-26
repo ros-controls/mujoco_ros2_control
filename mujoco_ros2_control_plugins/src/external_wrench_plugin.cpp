@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mujoco_ros2_control_plugins/external_wrench_plugin.hpp"
+#include "external_wrench_plugin.hpp"
 
 #include <algorithm>
 #include <string>

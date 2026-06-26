@@ -418,6 +418,7 @@ Create ``my_plugins.xml``:
 
    target_link_libraries(my_plugin_library
      ${mujoco_ros2_control_plugins_TARGETS}
+     pluginlib::pluginlib
      # ... other dependencies
    )
 
