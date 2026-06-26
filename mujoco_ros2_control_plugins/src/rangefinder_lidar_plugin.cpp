@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "mujoco_ros2_control_plugins/rangefinder_lidar_plugin.hpp"
+#include "rangefinder_lidar_plugin.hpp"
 
 #include <algorithm>
 #include <cmath>
