@@ -29,6 +29,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <future>
 #include <iostream>
 #include <memory>
@@ -44,6 +45,9 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include "lodepng.h"
+
+#include <ament_index_cpp/get_resource.hpp>
+#include <ament_index_cpp/get_resources.hpp>
 
 #define ROS_DISTRO_HUMBLE (HARDWARE_INTERFACE_VERSION_MAJOR < 3)
 
@@ -215,45 +219,14 @@ private:
 static std::string getExecutableDir()
 {
   constexpr char kPathSep = '/';
-  const char* path = "/proc/self/exe";
 
+  // Determine the executable location while respecting symlinks, as the plugins are installed
+  // next to the ros2 control node's executable
   std::string real_path = [&]() -> std::string {
-    std::unique_ptr<char[]> realpath(nullptr);
-    std::uint32_t buf_size = 128;
-    bool success = false;
-    while (!success)
-    {
-      realpath.reset(new (std::nothrow) char[buf_size]);
-      if (!realpath)
-      {
-        std::cerr << "cannot allocate memory to store executable path\n";
-        return "";
-      }
-
-      auto written = readlink(path, realpath.get(), buf_size);
-      if (written < buf_size)
-      {
-        realpath.get()[written] = '\0';
-        success = true;
-      }
-      else if (written == -1)
-      {
-        if (errno == EINVAL)
-        {
-          // path is already not a symlink, just use it
-          return path;
-        }
-
-        std::cerr << "error while resolving executable path: " << strerror(errno) << '\n';
-        return "";
-      }
-      else
-      {
-        // realpath is too small, grow and retry
-        buf_size *= 2;
-      }
-    }
-    return realpath.get();
+    std::ifstream f("/proc/self/cmdline");
+    std::string argv0;
+    std::getline(f, argv0, '\0');
+    return argv0;
   }();
 
   if (real_path.empty())
@@ -273,6 +246,46 @@ static std::string getExecutableDir()
   return "";
 }
 
+// Load all .so plugins from a directory, following symlinks, this is different from the upstream
+static void loadPluginsFromDirectory(const std::string& plugin_dir)
+{
+  std::error_code ec;
+  if (!std::filesystem::is_directory(plugin_dir, ec))
+  {
+    return;
+  }
+
+  for (const auto& entry : std::filesystem::directory_iterator(plugin_dir, ec))
+  {
+    if (!entry.is_regular_file(ec))
+    {
+      continue;
+    }
+
+    const auto& path = entry.path();
+    if (path.extension() != ".so")
+    {
+      continue;
+    }
+
+    int before = mjp_pluginCount();
+    mj_loadPluginLibrary(path.c_str());
+    int after = mjp_pluginCount();
+    if (after > before)
+    {
+      std::printf("Plugins registered by library '%s':\n", path.filename().c_str());
+      for (int i = before; i < after; ++i)
+      {
+        std::printf("    %s\n", mjp_getPluginAtSlot(i)->name);
+      }
+    }
+    else
+    {
+      std::printf("No plugins loaded from: '%s':\n", path.filename().c_str());
+    }
+  }
+}
+
 // scan for libraries in the plugin directory to load additional plugins
 static void scanPluginLibraries()
 {
@@ -287,26 +300,29 @@ static void scanPluginLibraries()
     }
   }
 
-  const std::string sep = "/";
-
   // try to open the ${EXECDIR}/MUJOCO_PLUGIN_DIR directory
   // ${EXECDIR} is the directory containing the simulate binary itself
   // MUJOCO_PLUGIN_DIR is the MUJOCO_PLUGIN_DIR preprocessor macro
   const std::string executable_dir = getExecutableDir();
-  if (executable_dir.empty())
+  if (!executable_dir.empty())
   {
-    return;
+    const std::string plugin_dir = executable_dir + "/" + MUJOCO_PLUGIN_DIR;
+    loadPluginsFromDirectory(plugin_dir);
   }
 
-  const std::string plugin_dir = getExecutableDir() + sep + MUJOCO_PLUGIN_DIR;
-  mj_loadAllPluginLibraries(
-      plugin_dir.c_str(), +[](const char* filename, int first, int count) {
-        std::printf("Plugins registered by library '%s':\n", filename);
-        for (int i = first; i < first + count; ++i)
-        {
-          std::printf("    %s\n", mjp_getPluginAtSlot(i)->name);
-        }
-      });
+  // Then try to find all packages that registered mujoco plugins via the ament resource index
+  auto plugins = ament_index_cpp::get_resources("mujoco_plugins");
+  for (const auto& [package_name, _] : plugins)
+  {
+    std::string content;
+    std::string prefix;
+    if (ament_index_cpp::get_resource("mujoco_plugins", package_name, content, &prefix))
+    {
+      const std::string plugin_dir = prefix + "/" + content;
+      std::printf("Loading MuJoCo plugins from package '%s': %s\n", package_name.c_str(), plugin_dir.c_str());
+      loadPluginsFromDirectory(plugin_dir);
+    }
+  }
 }
 
 //------------------------------------------- simulation
@@ -412,7 +428,7 @@ static mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::stri
   {
     auto now = std::chrono::steady_clock::now();
 
-    RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Waiting for /mujoco_robot_description...");
+    RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000, "Waiting for '%s'...", topic_name.c_str());
 
     if (now - start > timeout)
     {
@@ -430,8 +446,14 @@ static mjModel* loadModelFromTopic(rclcpp::Node::SharedPtr node, const std::stri
 
     mjSpec* spec = nullptr;
     spec = mj_parseXMLString(robot_description.c_str(), nullptr, error, 1000);
-    mnew = mj_compile(spec, nullptr);
+    if (!spec)
+    {
+      RCLCPP_FATAL(node->get_logger(), "Failed to parse spec from XML topic string: %s", error);
+      mj_deleteSpec(spec);
+      return nullptr;
+    }
 
+    mnew = mj_compile(spec, nullptr);
     if (!mnew)
     {
       const char* myerr = mjs_getError(spec);
