@@ -51,7 +51,7 @@ add_library(mujoco_ros2_control_plugins_impl SHARED
   # TODO: Remove once this has been fully deprecated
   src/rangefinder_lidar_plugin.cpp
 )
-target_link_libraries(mujoco_ros2_control_plugins_impl
+target_link_libraries(mujoco_ros2_control_plugins_impl PUBLIC
   mujoco_ros2_control_plugins
   pluginlib::pluginlib
   realtime_tools::realtime_tools
@@ -68,12 +68,15 @@ target_compile_definitions(mujoco_ros2_control_plugins_impl PRIVATE
   REALTIME_TOOLS_VERSION_MAJOR=${realtime_tools_VERSION_MAJOR}
 )
 
-# Install the plugin library
+# Install the interface for external use
 install(
-  TARGETS
-    mujoco_ros2_control_plugins
-    mujoco_ros2_control_plugins_impl
+  TARGETS mujoco_ros2_control_plugins
   EXPORT export_${PROJECT_NAME}
+)
+
+# And we don't care about exporting the impl
+install(
+  TARGETS mujoco_ros2_control_plugins_impl
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
