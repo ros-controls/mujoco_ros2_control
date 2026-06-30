@@ -216,4 +216,11 @@ struct IMUSensorData
   std::vector<double> linear_acceleration_covariance;
 };
 
+struct PoseData
+{
+  std::string name;
+  SensorData<Eigen::Vector3d> position;
+  SensorData<Eigen::Quaterniond> orientation;
+};
+
 }  // namespace mujoco_ros2_control
