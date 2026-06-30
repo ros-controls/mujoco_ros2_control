@@ -1795,7 +1795,6 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
       ft_sensor_data_.push_back(sensor_data);
     }
-
     else if (mujoco_type == "imu")
     {
       IMUSensorData sensor_data;
