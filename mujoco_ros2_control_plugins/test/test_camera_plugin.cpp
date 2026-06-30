@@ -28,7 +28,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
-#include <mujoco_ros2_control_plugins/camera_plugin.hpp>
+#include "camera_plugin.hpp"
 
 class CameraPluginTest : public ::testing::Test
 {

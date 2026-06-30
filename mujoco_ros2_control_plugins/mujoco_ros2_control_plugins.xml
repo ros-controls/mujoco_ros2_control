@@ -1,4 +1,4 @@
-<library path="mujoco_ros2_control_plugins">
+<library path="mujoco_ros2_control_plugins_impl">
   <class name="mujoco_ros2_control_plugins/HeartbeatPublisherPlugin"
          type="mujoco_ros2_control_plugins::HeartbeatPublisherPlugin"
          base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
