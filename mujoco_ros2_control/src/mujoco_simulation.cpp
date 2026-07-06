@@ -19,6 +19,7 @@
 
 #include "mujoco_ros2_control/mujoco_simulation.hpp"
 #include "array_safety.h"
+#include "mujoco_ros2_control/sim_display_text.hpp"
 
 #include <unistd.h>
 #include <cerrno>
@@ -1248,22 +1249,35 @@ void MujocoSimulation::update_sim_display()
     return;
   }
 
-  // Only write user_texts_new_ when the render thread has consumed the previous
-  // update (newtextrequest == 0). Use compare_exchange to atomically claim the
-  // slot: if it fails, the render thread hasn't swapped yet, so skip this
-  // update — the display will be refreshed on the next physics step instead.
-  // This avoids a data race: the render thread swaps user_texts_new_ (without
-  // holding any mutex) while we clear/populate it.
-  int expected = 0;
-  if (!sim_->newtextrequest.compare_exchange_strong(expected, 1))
+  // Lock-free handoff to the render thread, which swaps user_texts_new_ without
+  // holding sim_->mtx (Simulate::Render runs outside the lock). newtextrequest is
+  // the single-producer/single-consumer flag: 0 = physics may write, 1 = render
+  // may consume. Skip if the last update hasn't been consumed yet.
+  if (sim_->newtextrequest.load(std::memory_order_acquire) != 0)
   {
-    return;  // render thread hasn't consumed the last update yet, skip
+    return;
   }
 
-  const std::string status = sim_->run ? "Running" : "Paused";
+  // Desired speed: from parameter override when set, otherwise from the UI slider.
+  const double desired_pct = sim_speed_factor_ < 0 ? static_cast<double>(sim_->percentRealTime[sim_->real_time_index]) :
+                                                     sim_speed_factor_ * 100.0;
+
+  // Actual speed: measured_slowdown = CPU_time / sim_time, so speed = 100 / slowdown.
+  // Falls back to 0 while paused (slowdown stays at its last measured value but we
+  // suppress the display when there is no forward progress).
+  const double actual_pct = sim_->run ? (100.0 / sim_->measured_slowdown) : 0.0;
+
+  // mj_data_ is owned by this (the physics) thread, so reading time/ncon needs no extra locking.
+  // Contacts surface why the sim slows down: a spike here usually explains a drop in actual speed.
+  const auto [title, content] =
+      compose_sim_display_text(sim_->run, step_count_.load(), mj_data_->time, desired_pct, actual_pct, mj_data_->ncon);
+
   sim_->user_texts_new_.clear();
-  sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, "Status\nSteps",
-                                     status + "\n" + std::to_string(step_count_.load()));
+  sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, title, content);
+
+  // Publish only after the vector is fully written; the release store pairs with
+  // the render thread's load.
+  sim_->newtextrequest.store(1, std::memory_order_release);
 }
 
 }  // namespace mujoco_ros2_control

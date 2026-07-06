@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -25,8 +26,8 @@
 #include <hardware_interface/version.h>
 #include <mujoco/mujoco.h>
 #include <hardware_interface/hardware_info.hpp>
-#include <mujoco_ros2_control/mujoco_cameras.hpp>
 #include <mujoco_ros2_control/mujoco_system_interface.hpp>
+#include <mujoco_ros2_control/sim_display_text.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #define ROS_DISTRO_HUMBLE (HARDWARE_INTERFACE_VERSION_MAJOR < 3)
@@ -211,63 +212,68 @@ TEST_F(HeadlessInitTest, HeadlessActivateWithoutCameras)
   EXPECT_EQ(activate_result, hardware_interface::CallbackReturn::SUCCESS);
 }
 
-// Unit test for MujocoCameras::init() — verifies glfwInit is never called when no cameras are
-// registered. Uses an injectable mock so the test is deterministic on any host (no display needed).
-// Without the cameras_.empty() guard this test fails; with the guard it passes.
-TEST(MujocoCamerasInitTest, InitDoesNotCallGlfwWhenNoCameras)
+TEST_F(HeadlessInitTest, SpeedFactorParamInitialization)
 {
-  if (!rclcpp::ok())
+  hardware_info_.hardware_parameters["sim_speed_factor"] = "0.5";
+
+#if ROS_DISTRO_HUMBLE
+  auto result = interface_->on_init(hardware_info_);
+#else
+  hardware_interface::HardwareComponentInterfaceParams params;
+  params.hardware_info = hardware_info_;
+  auto result = interface_->on_init(params);
+#endif
+  ASSERT_EQ(result, hardware_interface::CallbackReturn::SUCCESS);
+
+  // Wait for the model to load so the physics thread starts.
+  auto start = std::chrono::steady_clock::now();
+  mjModel* test_model = nullptr;
+  mjData* test_data = nullptr;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(2))
   {
-    rclcpp::init(0, nullptr);
+    interface_->get_model(test_model);
+    interface_->get_data(test_data);
+    if (test_model != nullptr && test_data != nullptr)
+    {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
+  ASSERT_NE(test_model, nullptr) << "Model failed to initialize within timeout";
+  ASSERT_NE(test_data, nullptr) << "Data failed to initialize within timeout";
 
-  // Write a minimal MuJoCo model with no cameras to a temp file.
-  const std::string model_path = "/tmp/test_cameras_unit_model.xml";
-  {
-    std::ofstream f(model_path);
-    f << R"(<?xml version="1.0"?>
-<mujoco model="no_cameras">
-  <worldbody>
-    <body name="box" pos="0 0 0.1">
-      <freejoint/>
-      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
-      <geom type="box" size="0.05 0.05 0.05"/>
-    </body>
-  </worldbody>
-</mujoco>
-)";
-  }
+  // Let the physics thread run a few steps to confirm sim_speed_factor does not
+  // cause a crash and the sim advances time.
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-  char error[1000] = "";
-  mjModel* model = mj_loadXML(model_path.c_str(), nullptr, error, sizeof(error));
-  ASSERT_NE(model, nullptr) << "mj_loadXML failed: " << error;
-  ASSERT_EQ(model->ncam, 0) << "Test model must have no cameras";
+  // Re-snapshot data after physics has had time to run (get_data copies the current state).
+  interface_->get_data(test_data);
 
-  mjData* data = mj_makeData(model);
-  ASSERT_NE(data, nullptr);
+  // sim_time should have advanced from zero
+  EXPECT_GT(test_data->time, 0.0) << "Simulation time did not advance with sim_speed_factor=0.5";
+}
 
-  auto node = rclcpp::Node::make_shared("test_cameras_unit_node");
-  std::recursive_mutex mutex;
+TEST(SimDisplayTextTest, ComposesAllRowsWhenRunning)
+{
+  const auto [title, content] = mujoco_ros2_control::compose_sim_display_text(
+      /*running=*/true, /*step_count=*/1234, /*sim_time=*/2.5,
+      /*desired_pct=*/50.0, /*actual_pct=*/48.3, /*ncon=*/7);
 
-  mujoco_ros2_control::MujocoCameras cameras(node, &mutex, data, model, 5.0);
+  EXPECT_EQ(title, "Status\nSteps\nSim Time\nDesired Speed\nActual Speed\nContacts");
+  EXPECT_EQ(content, "Running\n1234\n2.500 s\n50.0%\n48.3%\n7");
 
-  hardware_interface::HardwareInfo info;  // no camera sensors
-  cameras.register_cameras(info);
+  // Title and content must line up row-for-row, otherwise the overlay is misaligned.
+  const auto count_rows = [](const std::string& s) { return std::count(s.begin(), s.end(), '\n'); };
+  EXPECT_EQ(count_rows(title), count_rows(content));
+}
 
-  bool glfw_init_called = false;
-  auto mock_glfw_init = [&]() -> int {
-    glfw_init_called = true;
-    return 1;  // simulate a display-capable host
-  };
+TEST(SimDisplayTextTest, ReportsPausedStatus)
+{
+  const auto [title, content] = mujoco_ros2_control::compose_sim_display_text(
+      /*running=*/false, /*step_count=*/0, /*sim_time=*/0.0,
+      /*desired_pct=*/100.0, /*actual_pct=*/0.0, /*ncon=*/0);
 
-  cameras.init(mock_glfw_init);
-
-  EXPECT_FALSE(glfw_init_called) << "glfwInit must not be called when no cameras are registered";
-
-  cameras.close();
-  mj_deleteData(data);
-  mj_deleteModel(model);
-  std::filesystem::remove(model_path);
+  EXPECT_EQ(content, "Paused\n0\n0.000 s\n100.0%\n0.0%\n0");
 }
 
 int main(int argc, char** argv)

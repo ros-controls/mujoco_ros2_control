@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mujoco_ros2_control_plugins/heartbeat_publisher_plugin.hpp"
+#include "heartbeat_publisher_plugin.hpp"
 #include <pluginlib/class_list_macros.hpp>
 
 namespace mujoco_ros2_control_plugins

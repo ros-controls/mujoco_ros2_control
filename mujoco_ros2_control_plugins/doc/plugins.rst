@@ -42,6 +42,85 @@ A simple demonstration plugin that publishes a heartbeat message every second to
    ros2 topic echo /mujoco_heartbeat
 
 
+.. _camera_plugin:
+
+CameraPlugin
+~~~~~~~~~~~~
+
+Using the camera plugin will ensure that any ``camera`` included in the MJCF will automatically have its RGB-D images and camera info published to ROS topics.
+
+The camera ``name`` attribute sets the defaults for the frame and topic names:
+
+- Frame: ``<name>_frame``
+- Topics: ``<name>/camera_info``, ``<name>/color``, ``<name>/depth``
+
+For example, in an MJCF:
+
+.. code-block:: xml
+
+   <camera name="camera" fovy="58" mode="fixed" resolution="640 480" pos="0 0 0" quat="0 0 0 1"/>
+
+Then including the plugin will publish the following topics:
+
+.. code-block:: bash
+
+   $ ros2 topic info /camera/camera_info
+   Type: sensor_msgs/msg/CameraInfo
+   $ ros2 topic info /camera/color
+   Type: sensor_msgs/msg/Image
+   $ ros2 topic info /camera/depth
+   Type: sensor_msgs/msg/Image
+
+Frame and topic names can be overridden using the yaml configuration.
+Note that any number of cameras can be configured in the plugin configuration.
+
+**Example configuration**
+
+.. code-block:: yaml
+
+    mujoco_camera_plugin:
+      type: "mujoco_ros2_control_plugins/CameraPlugin"
+      # Note all cameras are published at the same rate
+      camera_publish_rate: 5.0
+      camera:
+        frame_name: camera_color_optical_frame
+        info_topic: /camera_topic/color/camera_info
+        image_topic: /camera_topic/color/image_raw
+        depth_topic: /camera_topic/aligned_depth_to_color/image_raw
+
+
+.. note::
+
+   MuJoCo's camera coordinate conventions differ from ROS.
+   Refer to the MuJoCo documentation for details.
+
+Headless Rendering
+^^^^^^^^^^^^^^^^^^
+
+Camera rendering is supported in headless environments (without a display).
+The system automatically detects whether a display is available:
+
+* With display: Uses GLFW for OpenGL context creation (default behavior)
+* Without display: Falls back to EGL for GPU-accelerated headless rendering
+
+This allows camera topics to be published even when running in headless mode (e.g., on a server, in Docker containers, or in CI environments).
+
+.. note::
+   EGL requires proper GPU drivers and EGL libraries to be installed (e.g., libegl1-mesa on Ubuntu).
+   If both GLFW and EGL fail to initialize, camera publishing will be disabled with a warning.
+
+
+.. _lidar_plugin:
+
+RangefinderLidarPlugin
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. warning::
+
+   This plugin is included to support legacy implementations of rangefinder based lidar sensors.
+   We do not recommend using this, and instead would direct users to the 3d lidar plugin for improved
+   features and performance.
+
 ExternalWrenchPlugin
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -218,7 +297,6 @@ Parameters
            force_arrow_scale: 0.01      # 100 N  → 1 m arrow
            torque_arrow_scale: 0.1      # 10 N·m → 1 m arrow
 
-
 Usage
 -----
 
@@ -340,6 +418,7 @@ Create ``my_plugins.xml``:
 
    target_link_libraries(my_plugin_library
      ${mujoco_ros2_control_plugins_TARGETS}
+     pluginlib::pluginlib
      # ... other dependencies
    )
 

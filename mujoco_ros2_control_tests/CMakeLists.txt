@@ -9,6 +9,22 @@ if(BUILD_TESTING)
   find_package(hardware_interface REQUIRED)
   find_package(pluginlib REQUIRED)
   find_package(rclcpp REQUIRED)
+  find_package(mujoco_ros2_control_plugins REQUIRED)
+
+  # Compile a test plugin alongside base plugins to make sure it works.
+  add_library(test_plugin SHARED src/test_plugin.cpp)
+  target_link_libraries(test_plugin
+    ${mujoco_ros2_control_plugins_TARGETS}
+    pluginlib::pluginlib
+  )
+
+  install(TARGETS test_plugin
+    LIBRARY DESTINATION lib
+  )
+
+  pluginlib_export_plugin_description_file(
+    mujoco_ros2_control_plugins src/test_plugin.xml
+  )
 
   install(
     DIRECTORY launch

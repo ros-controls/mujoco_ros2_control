@@ -11,9 +11,13 @@ find_package(backward_ros REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(pluginlib REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(mujoco_ros2_control_msgs REQUIRED)
+find_package(glfw3 REQUIRED)
+find_package(OpenGL REQUIRED COMPONENTS EGL)
 
 # Attempt to link MuJoCo via the vendor package, if available
 find_package(mujoco_vendor QUIET)
@@ -25,36 +29,54 @@ else()
   message(FATAL_ERROR "mujoco_vendor not found!")
 endif()
 
-
-# Build the plugin library (all plugins compiled into one shared library)
-add_library(mujoco_ros2_control_plugins SHARED
-  src/heartbeat_publisher_plugin.cpp
-  src/external_wrench_plugin.cpp
-)
-target_include_directories(mujoco_ros2_control_plugins PUBLIC
+# The base is just a header, so we can setup an interface library for external consumers.
+add_library(mujoco_ros2_control_plugins INTERFACE)
+target_include_directories(mujoco_ros2_control_plugins INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-# Mark MuJoCo source as system to avoid compiler warnings
-target_include_directories(mujoco_ros2_control_plugins SYSTEM PUBLIC
+target_include_directories(mujoco_ros2_control_plugins SYSTEM INTERFACE
   $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>
 )
-target_link_libraries(mujoco_ros2_control_plugins PUBLIC
+target_link_libraries(mujoco_ros2_control_plugins INTERFACE
   ${MUJOCO_LIB}
   rclcpp::rclcpp
-  realtime_tools::realtime_tools
+)
+
+# Build the base plugin library (all plugins compiled into one shared library)
+add_library(mujoco_ros2_control_plugins_impl SHARED
+  src/heartbeat_publisher_plugin.cpp
+  src/external_wrench_plugin.cpp
+  src/camera_plugin.cpp
+  # TODO: Remove once this has been fully deprecated
+  src/rangefinder_lidar_plugin.cpp
+)
+target_link_libraries(mujoco_ros2_control_plugins_impl PUBLIC
+  mujoco_ros2_control_plugins
   pluginlib::pluginlib
+  realtime_tools::realtime_tools
+  ${sensor_msgs_TARGETS}
   ${std_msgs_TARGETS}
+  ${std_srvs_TARGETS}
   ${visualization_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
+  glfw
+  OpenGL::EGL
+  OpenGL::OpenGL
 )
-target_compile_definitions(mujoco_ros2_control_plugins PRIVATE
+target_compile_definitions(mujoco_ros2_control_plugins_impl PRIVATE
   REALTIME_TOOLS_VERSION_MAJOR=${realtime_tools_VERSION_MAJOR}
 )
 
-# Install the plugin library
-install(TARGETS mujoco_ros2_control_plugins
+# Install the interface for external use
+install(
+  TARGETS mujoco_ros2_control_plugins
   EXPORT export_${PROJECT_NAME}
+)
+
+# And we don't care about exporting the impl
+install(
+  TARGETS mujoco_ros2_control_plugins_impl
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
@@ -66,10 +88,25 @@ if(BUILD_TESTING)
   ament_add_gtest(test_external_wrench_plugin
     test/test_external_wrench_plugin.cpp
   )
+  target_include_directories(test_external_wrench_plugin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
   target_link_libraries(test_external_wrench_plugin
-    mujoco_ros2_control_plugins
+    mujoco_ros2_control_plugins_impl
     ${mujoco_ros2_control_msgs_TARGETS}
     ${visualization_msgs_TARGETS}
+  )
+
+  ament_add_gtest(test_camera_plugin
+    test/test_camera_plugin.cpp
+  )
+  target_include_directories(test_camera_plugin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(test_camera_plugin
+    mujoco_ros2_control_plugins_impl
+    ${sensor_msgs_TARGETS}
+    ${std_srvs_TARGETS}
   )
   # MuJoCo has TinyXML2 statically linked, which conflicts with the system TinyXML2
   # used by FastDDS. We need to ensure the system TinyXML2 is loaded first.
@@ -77,6 +114,11 @@ if(BUILD_TESTING)
   # TODO: Remove this after the following is resolved and the next ROS sync
   # https://github.com/pal-robotics/mujoco_vendor/issues/2
   target_link_options(test_external_wrench_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
+  target_link_options(test_camera_plugin PUBLIC
     "LINKER:--push-state,--no-as-needed"
     "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
     "LINKER:--pop-state"
@@ -93,7 +135,7 @@ install(DIRECTORY include/
 pluginlib_export_plugin_description_file(mujoco_ros2_control_plugins mujoco_ros2_control_plugins.xml)
 
 ament_export_include_directories(include)
-ament_export_dependencies(mujoco_vendor rclcpp realtime_tools pluginlib std_msgs visualization_msgs mujoco_ros2_control_msgs ros2_control_cmake)
+ament_export_dependencies(mujoco_vendor rclcpp pluginlib ros2_control_cmake)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 
 ament_package()

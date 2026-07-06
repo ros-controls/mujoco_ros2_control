@@ -30,7 +30,7 @@
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
-#include "mujoco_ros2_control_plugins/external_wrench_plugin.hpp"
+#include "external_wrench_plugin.hpp"
 
 namespace
 {

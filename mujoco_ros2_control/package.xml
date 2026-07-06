@@ -31,7 +31,6 @@
   <depend>pluginlib</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>rclcpp</depend>
-  <depend>sensor_msgs</depend>
   <depend>mujoco_ros2_control_msgs</depend>
   <depend>mujoco_ros2_control_plugins</depend>
   <depend>transmission_interface</depend>
