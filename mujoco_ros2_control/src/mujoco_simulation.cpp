@@ -1276,8 +1276,7 @@ void MujocoSimulation::update_sim_display()
   sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, title, content);
 
   // Publish only after the vector is fully written; the release store pairs with
-  // the render thread's load so it never swaps a half-written vector. Publishing
-  // before writing was the heap-corruption race (bad_alloc / free: invalid pointer).
+  // the render thread's load.
   sim_->newtextrequest.store(1, std::memory_order_release);
 }
 
