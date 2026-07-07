@@ -636,7 +636,7 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   }
 
   // Add state interfaces for pose sensors
-  for (PoseData& sensor : pose_sensor_data_)
+  for (auto& sensor : pose_sensor_data_)
   {
     if (auto it = sensors_hw_info_.find(sensor.name); it != sensors_hw_info_.end())
     {
@@ -905,7 +905,7 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   }
 
   // pose sensor data
-  for (PoseData& data : pose_sensor_data_)
+  for (auto& data : pose_sensor_data_)
   {
     data.position.data.x() = mj_data_control_->sensordata[data.position.mj_sensor_index + 0];
     data.position.data.y() = mj_data_control_->sensordata[data.position.mj_sensor_index + 1];
@@ -1886,7 +1886,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     }
     else if (mujoco_type == "pose")
     {
-      PoseData sensor_data;
+      SitePoseData sensor_data;
       sensor_data.name = sensor_name;
       sensor_data.position.name =
           mujoco_sensor_name + get_hardware_parameter_or(get_hardware_info(), "position_mjcf_suffix", "_pos");

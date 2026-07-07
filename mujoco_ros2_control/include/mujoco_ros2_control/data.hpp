@@ -216,7 +216,7 @@ struct IMUSensorData
   std::vector<double> linear_acceleration_covariance;
 };
 
-struct PoseData
+struct SitePoseData
 {
   std::string name;
   SensorData<Eigen::Vector3d> position;
