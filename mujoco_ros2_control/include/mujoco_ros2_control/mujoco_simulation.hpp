@@ -362,11 +362,19 @@ private:
   std::vector<mjtNum> xfrc_viewer_capture_;  // Tracks forces from the viewer
   std::vector<mjtNum> xfrc_last_written_;    // tracks the last value written to xfrc_applied
 
-  // Guards mj_data_snapshot_ and the staged control inputs (ctrl_staged_, qfrc_applied_staged_,
-  // xfrc_plugin_desired_). Only ever held for the duration of a buffer copy, never while
-  // stepping, so waiting on it is cheap.
+  // Guards mj_data_snapshot_ only. Its critical sections are full mjData copies, which can be
+  // milliseconds on complex scenes — so nothing latency-critical may share this mutex. Its
+  // remaining users are the physics loop's refresh and the (latency-tolerant) full-snapshot
+  // consumers such as async plugin workers and the get_data service.
   // sim_mutex_, if needed, is always taken before this one.
   std::mutex data_exchange_mutex_;
+
+  // Guards the staged control inputs (ctrl_staged_, qfrc_applied_staged_, xfrc_plugin_desired_,
+  // control_inputs_staged_). Separate from data_exchange_mutex_ so that staging commands in
+  // write() and applying them before each physics step never queue behind a full mjData copy.
+  // Critical sections are all small buffer copies (microseconds).
+  // Lock order: sim_mutex_ (if needed) before this one; never held with data_exchange_mutex_.
+  std::mutex control_staging_mutex_;
 
   // Per-step control state served by copy_control_state. Guarded by its own mutex, separate
   // from data_exchange_mutex_, so the reduced control-state copies never queue behind a full

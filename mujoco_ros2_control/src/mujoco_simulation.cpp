@@ -796,7 +796,7 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state)
   {
     // Clear staged control inputs and plugin contributions so stale commands from before the
     // reset are not re-applied on the next step.
-    const std::lock_guard<std::mutex> data_lock(data_exchange_mutex_);
+    const std::lock_guard<std::mutex> staging_lock(control_staging_mutex_);
     control_inputs_staged_ = false;
     std::fill(ctrl_staged_.begin(), ctrl_staged_.end(), 0.0);
     std::fill(qfrc_applied_staged_.begin(), qfrc_applied_staged_.end(), 0.0);
@@ -992,7 +992,7 @@ void MujocoSimulation::copy_snapshot_data(mjData*& destination)
 
 void MujocoSimulation::apply_control_data(mjData* control_data)
 {
-  const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
+  const std::lock_guard<std::mutex> lock(control_staging_mutex_);
   mju_copy(ctrl_staged_.data(), control_data->ctrl, static_cast<int>(mj_model_->nu));
   mju_copy(qfrc_applied_staged_.data(), control_data->qfrc_applied, static_cast<int>(mj_model_->nv));
   mju_copy(xfrc_plugin_desired_.data(), control_data->xfrc_applied, 6 * static_cast<int>(mj_model_->nbody));
@@ -1025,7 +1025,7 @@ void MujocoSimulation::copy_control_state(ControlState& destination)
 
 void MujocoSimulation::apply_staged_control_inputs()
 {
-  const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
+  const std::lock_guard<std::mutex> lock(control_staging_mutex_);
 
   // Only apply ctrl / qfrc_applied once the hw interface has staged control inputs,
   // so that initial or reset values in mj_data_ are not overwritten with zeros.
