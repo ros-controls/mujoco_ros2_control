@@ -314,9 +314,9 @@ private:
   std::unordered_map<std::string, hardware_interface::ComponentInfo> joint_hw_info_;
   std::unordered_map<std::string, hardware_interface::ComponentInfo> sensors_hw_info_;
 
-  // Container for interacting with the underlying physics sim's data. Handed to plugins during
-  // `write` and used to stage control inputs. Its full-data refresh is skipped when no plugins
-  // are loaded.
+  // Container for interacting with the underlying physics sim's data.
+  // Handed to plugins during `write` and used to stage control inputs.
+  // Its full-data refresh is skipped when no plugins are loaded.
   mjData* mj_data_control_{ nullptr };
 
   // Per-step robot state snapshot used by `read` and `write`.

@@ -68,8 +68,7 @@ namespace mujoco_ros2_control
  * `copy_physics_data(...)` will lock the sim and do a full copy of the existing `mj_data_`
  * into the provided container, which can be used as the caller requires. Because the physics
  * loop can hold the sim mutex for a large fraction of a display refresh while it batches
- * steps, this can block the caller for several milliseconds and should not be used from
- * latency-sensitive threads.
+ * steps, this can block the caller and should not be used from latency-sensitive threads.
  *
  * `copy_snapshot_data(...)` copies the most recent post-step snapshot of `mj_data_` instead.
  * The snapshot is refreshed by the physics loop and is guarded by a dedicated mutex that is
@@ -240,8 +239,8 @@ public:
   /**
    * @brief Copies the latest per-step control state into the provided container.
    *
-   * The copy is a few KB under a dedicated mutex whose critical sections are all
-   * microsecond-scale, so this never stalls behind physics stepping or full-mjData copies.
+   * The copy is under a dedicated mutex and is significantly faster than
+   * physics stepping or full-mjData copies.
    * This is what the hardware interface uses in `read()` and `write()`.
    */
   void copy_control_state(ControlState& destination);
@@ -362,24 +361,28 @@ private:
   std::vector<mjtNum> xfrc_viewer_capture_;  // Tracks forces from the viewer
   std::vector<mjtNum> xfrc_last_written_;    // tracks the last value written to xfrc_applied
 
-  // Guards mj_data_snapshot_ only. Its critical sections are full mjData copies, which can be
-  // milliseconds on complex scenes — so nothing latency-critical may share this mutex. Its
-  // remaining users are the physics loop's refresh and the (latency-tolerant) full-snapshot
-  // consumers such as async plugin workers and the get_data service.
-  // sim_mutex_, if needed, is always taken before this one.
+  // Guards mj_data_snapshot_ only. Its critical sections are full mjData copies, so nothing
+  // latency-critical may share this mutex. Its remaining users are the physics loop's refresh
+  // and the (latency-tolerant) full-snapshot consumers such as the plugin data refresh in
+  // write() and the get_data service. sim_mutex_, if needed, is always taken before this one.
   std::mutex data_exchange_mutex_;
+
+  // Set by copy_snapshot_data when a consumer takes the snapshot; the physics loop only runs
+  // the expensive full refresh when this is set, so refresh bandwidth tracks consumer demand
+  // instead of the batch rate. Starts true so the first refresh happens.
+  std::atomic<bool> snapshot_refresh_requested_{ true };
 
   // Guards the staged control inputs (ctrl_staged_, qfrc_applied_staged_, xfrc_plugin_desired_,
   // control_inputs_staged_). Separate from data_exchange_mutex_ so that staging commands in
   // write() and applying them before each physics step never queue behind a full mjData copy.
-  // Critical sections are all small buffer copies (microseconds).
+  // Critical sections are all small buffer copies.
   // Lock order: sim_mutex_ (if needed) before this one; never held with data_exchange_mutex_.
   std::mutex control_staging_mutex_;
 
   // Per-step control state served by copy_control_state. Guarded by its own mutex, separate
   // from data_exchange_mutex_, so the reduced control-state copies never queue behind a full
-  // mjData snapshot copy. Lock order: sim_mutex_ (if needed) before this one; never held
-  // together with data_exchange_mutex_.
+  // mjData snapshot copy.
+  // Lock order: sim_mutex_ (if needed) before this one; never held with data_exchange_mutex_.
   ControlState control_state_;
   std::mutex control_state_mutex_;
 

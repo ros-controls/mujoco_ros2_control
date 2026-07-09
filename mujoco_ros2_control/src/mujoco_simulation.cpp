@@ -986,8 +986,15 @@ void MujocoSimulation::copy_snapshot_data(mjData*& destination)
     destination = mj_makeData(mj_model_);
   }
 
-  const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
-  mj_copyData(destination, mj_model_, mj_data_snapshot_);
+  {
+    const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
+    mj_copyData(destination, mj_model_, mj_data_snapshot_);
+  }
+
+  // Ask the physics loop for a fresh snapshot now that this one has been consumed. Data served
+  // here is therefore at most one consumer period + one physics batch old, while the expensive
+  // refresh runs at the aggregate consumer rate instead of every batch.
+  snapshot_refresh_requested_.store(true, std::memory_order_release);
 }
 
 void MujocoSimulation::apply_control_data(mjData* control_data)
@@ -1125,6 +1132,16 @@ void MujocoSimulation::physics_loop()
             steps_cv_.notify_all();
           }
 
+          // Refresh the full snapshot on demand, at the START of the iteration rather than
+          // right after stepping. The data is identical (nothing has stepped since the last
+          // batch), but the timing matters: batch end is exactly when the last /clock tick
+          // woke the controller cycle, so an mjData copy there competes with the controller
+          // for memory bandwidth.
+          if (snapshot_refresh_requested_.exchange(false, std::memory_order_acq_rel))
+          {
+            refresh_data_snapshot();
+          }
+
           bool stepped = false;
 
           // record cpu time at start of iteration
@@ -1239,11 +1256,6 @@ void MujocoSimulation::physics_loop()
           if (stepped)
           {
             apply_staged_control_inputs();
-
-            // Publish the post-step state for snapshot readers (the hw interface `read()`),
-            // so they never have to wait on the sim mutex while we batch steps.
-            refresh_data_snapshot();
-
             sim_->AddToHistory();
             update_sim_display();
           }
@@ -1301,7 +1313,10 @@ void MujocoSimulation::physics_loop()
           }
 
           // Keep the snapshots in sync while paused so reads reflect steps and UI edits
-          refresh_data_snapshot();
+          if (snapshot_refresh_requested_.exchange(false, std::memory_order_acq_rel))
+          {
+            refresh_data_snapshot();
+          }
           publish_control_state();
         }
 
