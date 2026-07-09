@@ -210,9 +210,41 @@ public:
    * for the physics loop to finish a stepping batch. The snapshot is refreshed by the physics
    * loop after each outer stepping iteration (and by any authoritative data change such as a
    * reset or `copy_physics_data`), so it is at most one physics iteration behind `mj_data_`.
+   *
+   * @note This copies the full mjData, which can take a while for complex scenes, and
+   *       can collide with the physics loop's own refresh under the same lock. Cyclic
+   *       consumers that only need robot state should use `copy_control_state` instead.
    * @note: If the destination is null it will be created.
    */
   void copy_snapshot_data(mjData*& destination);
+
+  /**
+   * @brief Small snapshot of the state the hardware interface needs every control cycle.
+   *
+   * This data structure is much smaller than a full mjData copy, so publishing and copying
+   * it is also far cheaper, regardless of scene complexity. Refreshed by the physics loop
+   * after every step, immediately before that step's /clock tick, so a consumer woken by a
+   * clock tick sees state that is synchronous with (or newer than) that tick's sim time.
+   */
+  struct ControlState
+  {
+    mjtNum time{ 0.0 };
+    std::vector<mjtNum> qpos;
+    std::vector<mjtNum> qvel;
+    std::vector<mjtNum> act;
+    std::vector<mjtNum> qfrc_actuator;
+    std::vector<mjtNum> sensordata;
+    std::vector<mjtNum> ctrl;
+  };
+
+  /**
+   * @brief Copies the latest per-step control state into the provided container.
+   *
+   * The copy is a few KB under a dedicated mutex whose critical sections are all
+   * microsecond-scale, so this never stalls behind physics stepping or full-mjData copies.
+   * This is what the hardware interface uses in `read()` and `write()`.
+   */
+  void copy_control_state(ControlState& destination);
 
   /**
    * @brief Stages control fields from `control_data` for the physics loop in a thread safe way.
@@ -250,6 +282,14 @@ private:
    * This should be called before stepping the simulation. Assumes the sim mutex is held.
    */
   void apply_staged_control_inputs();
+
+  /**
+   * @brief Publishes the per-step control state from `mj_data_`.
+   *
+   * Called after every mj_step (and forward/reset), before the corresponding /clock tick.
+   * Assumes the sim mutex is held; takes the control state mutex.
+   */
+  void publish_control_state();
 
   /**
    * @brief Refreshes `mj_data_snapshot_` from `mj_data_`.
@@ -327,6 +367,13 @@ private:
   // stepping, so waiting on it is cheap.
   // sim_mutex_, if needed, is always taken before this one.
   std::mutex data_exchange_mutex_;
+
+  // Per-step control state served by copy_control_state. Guarded by its own mutex, separate
+  // from data_exchange_mutex_, so the reduced control-state copies never queue behind a full
+  // mjData snapshot copy. Lock order: sim_mutex_ (if needed) before this one; never held
+  // together with data_exchange_mutex_.
+  ControlState control_state_;
+  std::mutex control_state_mutex_;
 
   // For rendering
   mjvCamera cam_;

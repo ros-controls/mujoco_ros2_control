@@ -663,6 +663,7 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
     if (mj_data_ && mj_data_snapshot_)
     {
       refresh_data_snapshot();
+      publish_control_state();
     }
   }
   if (!mj_data_ || !mj_data_snapshot_)
@@ -812,6 +813,7 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state)
 
   // Make the reset state visible to snapshot readers before HW-side bookkeeping runs
   refresh_data_snapshot();
+  publish_control_state();
 
   // Delegate HW-side bookkeeping (PID resets, command/state interface sync, etc.)
   if (reset_callback_)
@@ -959,6 +961,7 @@ void MujocoSimulation::overwrite_physics_data(mjData* source)
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
   mj_copyData(mj_data_, mj_model_, source);
   refresh_data_snapshot();
+  publish_control_state();
 }
 
 void MujocoSimulation::copy_physics_data(mjData*& destination)
@@ -969,9 +972,10 @@ void MujocoSimulation::copy_physics_data(mjData*& destination)
   }
 
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  // Authoritative copies also refresh the snapshot, so that snapshot readers immediately see
+  // Authoritative copies also refresh the snapshots, so that snapshot readers immediately see
   // any direct mj_data_ manipulation the caller performed before this call (e.g. during setup).
   refresh_data_snapshot();
+  publish_control_state();
   mj_copyData(destination, mj_model_, mj_data_);
 }
 
@@ -999,6 +1003,24 @@ void MujocoSimulation::refresh_data_snapshot()
 {
   const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
   mj_copyData(mj_data_snapshot_, mj_model_, mj_data_);
+}
+
+void MujocoSimulation::publish_control_state()
+{
+  const std::lock_guard<std::mutex> lock(control_state_mutex_);
+  control_state_.time = mj_data_->time;
+  control_state_.qpos.assign(mj_data_->qpos, mj_data_->qpos + mj_model_->nq);
+  control_state_.qvel.assign(mj_data_->qvel, mj_data_->qvel + mj_model_->nv);
+  control_state_.act.assign(mj_data_->act, mj_data_->act + mj_model_->na);
+  control_state_.qfrc_actuator.assign(mj_data_->qfrc_actuator, mj_data_->qfrc_actuator + mj_model_->nv);
+  control_state_.sensordata.assign(mj_data_->sensordata, mj_data_->sensordata + mj_model_->nsensordata);
+  control_state_.ctrl.assign(mj_data_->ctrl, mj_data_->ctrl + mj_model_->nu);
+}
+
+void MujocoSimulation::copy_control_state(ControlState& destination)
+{
+  const std::lock_guard<std::mutex> lock(control_state_mutex_);
+  destination = control_state_;
 }
 
 void MujocoSimulation::apply_staged_control_inputs()
@@ -1135,7 +1157,9 @@ void MujocoSimulation::physics_loop()
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
 
-            // Publish clock after each successful step
+            // Publish the per-step control state before the clock tick, so consumers woken
+            // by this tick read state synchronous with that sim time.
+            publish_control_state();
             publish_clock();
 
             const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
@@ -1184,7 +1208,8 @@ void MujocoSimulation::physics_loop()
               // call mj_step
               mj_step(mj_model_, mj_data_);
 
-              // Publish clock after each successful step
+              // Publish the per-step control state before the clock tick (see above)
+              publish_control_state();
               publish_clock();
 
               const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
@@ -1243,6 +1268,7 @@ void MujocoSimulation::physics_loop()
           if (pending_steps_.load() > 0)
           {
             mj_step(mj_model_, mj_data_);
+            publish_control_state();
             publish_clock();
 
             const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
@@ -1274,8 +1300,9 @@ void MujocoSimulation::physics_loop()
             update_sim_display();
           }
 
-          // Keep the snapshot in sync while paused so reads reflect steps and UI edits
+          // Keep the snapshots in sync while paused so reads reflect steps and UI edits
           refresh_data_snapshot();
+          publish_control_state();
         }
 
         // Update previous simulation time for next iteration

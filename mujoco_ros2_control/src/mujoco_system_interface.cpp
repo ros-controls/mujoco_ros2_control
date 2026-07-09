@@ -807,8 +807,10 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
 
 hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& time, const rclcpp::Duration& /*period*/)
 {
-  // Snapshot the latest physics state into our local copy to avoid locking for the whole method.
-  simulation_->copy_snapshot_data(mj_data_control_);
+  // Snapshot the per-step control state. This is a significantly smaller copy under a dedicated mutex,
+  // so its cost and collision window are small regardless of scene complexity, and the state is synchronous
+  // with the /clock tick that triggered this cycle.
+  simulation_->copy_control_state(control_state_);
 
   // Joint states
   actuator_state_msg_.header.stamp = time;
@@ -817,9 +819,9 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   actuator_state_msg_.effort.clear();
   for (auto& actuator_state : mujoco_actuator_data_)
   {
-    actuator_state.position_interface.state_ = mj_data_control_->qpos[actuator_state.mj_pos_adr];
-    actuator_state.velocity_interface.state_ = mj_data_control_->qvel[actuator_state.mj_vel_adr];
-    actuator_state.effort_interface.state_ = mj_data_control_->qfrc_actuator[actuator_state.mj_vel_adr];
+    actuator_state.position_interface.state_ = control_state_.qpos[actuator_state.mj_pos_adr];
+    actuator_state.velocity_interface.state_ = control_state_.qvel[actuator_state.mj_vel_adr];
+    actuator_state.effort_interface.state_ = control_state_.qfrc_actuator[actuator_state.mj_vel_adr];
     actuator_state_msg_.position.push_back(actuator_state.position_interface.state_);
     actuator_state_msg_.velocity.push_back(actuator_state.velocity_interface.state_);
     actuator_state_msg_.effort.push_back(actuator_state.effort_interface.state_);
@@ -839,30 +841,30 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // IMU Sensor data
   for (auto& data : imu_sensor_data_)
   {
-    data.orientation.data.w() = mj_data_control_->sensordata[data.orientation.mj_sensor_index];
-    data.orientation.data.x() = mj_data_control_->sensordata[data.orientation.mj_sensor_index + 1];
-    data.orientation.data.y() = mj_data_control_->sensordata[data.orientation.mj_sensor_index + 2];
-    data.orientation.data.z() = mj_data_control_->sensordata[data.orientation.mj_sensor_index + 3];
+    data.orientation.data.w() = control_state_.sensordata[data.orientation.mj_sensor_index];
+    data.orientation.data.x() = control_state_.sensordata[data.orientation.mj_sensor_index + 1];
+    data.orientation.data.y() = control_state_.sensordata[data.orientation.mj_sensor_index + 2];
+    data.orientation.data.z() = control_state_.sensordata[data.orientation.mj_sensor_index + 3];
 
-    data.angular_velocity.data.x() = mj_data_control_->sensordata[data.angular_velocity.mj_sensor_index];
-    data.angular_velocity.data.y() = mj_data_control_->sensordata[data.angular_velocity.mj_sensor_index + 1];
-    data.angular_velocity.data.z() = mj_data_control_->sensordata[data.angular_velocity.mj_sensor_index + 2];
+    data.angular_velocity.data.x() = control_state_.sensordata[data.angular_velocity.mj_sensor_index];
+    data.angular_velocity.data.y() = control_state_.sensordata[data.angular_velocity.mj_sensor_index + 1];
+    data.angular_velocity.data.z() = control_state_.sensordata[data.angular_velocity.mj_sensor_index + 2];
 
-    data.linear_acceleration.data.x() = mj_data_control_->sensordata[data.linear_acceleration.mj_sensor_index];
-    data.linear_acceleration.data.y() = mj_data_control_->sensordata[data.linear_acceleration.mj_sensor_index + 1];
-    data.linear_acceleration.data.z() = mj_data_control_->sensordata[data.linear_acceleration.mj_sensor_index + 2];
+    data.linear_acceleration.data.x() = control_state_.sensordata[data.linear_acceleration.mj_sensor_index];
+    data.linear_acceleration.data.y() = control_state_.sensordata[data.linear_acceleration.mj_sensor_index + 1];
+    data.linear_acceleration.data.z() = control_state_.sensordata[data.linear_acceleration.mj_sensor_index + 2];
   }
 
   // FT Sensor data
   for (auto& data : ft_sensor_data_)
   {
-    data.force.data.x() = -mj_data_control_->sensordata[data.force.mj_sensor_index];
-    data.force.data.y() = -mj_data_control_->sensordata[data.force.mj_sensor_index + 1];
-    data.force.data.z() = -mj_data_control_->sensordata[data.force.mj_sensor_index + 2];
+    data.force.data.x() = -control_state_.sensordata[data.force.mj_sensor_index];
+    data.force.data.y() = -control_state_.sensordata[data.force.mj_sensor_index + 1];
+    data.force.data.z() = -control_state_.sensordata[data.force.mj_sensor_index + 2];
 
-    data.torque.data.x() = -mj_data_control_->sensordata[data.torque.mj_sensor_index];
-    data.torque.data.y() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 1];
-    data.torque.data.z() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 2];
+    data.torque.data.x() = -control_state_.sensordata[data.torque.mj_sensor_index];
+    data.torque.data.y() = -control_state_.sensordata[data.torque.mj_sensor_index + 1];
+    data.torque.data.z() = -control_state_.sensordata[data.torque.mj_sensor_index + 2];
   }
 
   // Publish Odometry
@@ -871,25 +873,25 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     floating_base_msg_.header.stamp = time;
 
     // Position
-    floating_base_msg_.pose.pose.position.x = mj_data_control_->qpos[free_joint_qpos_adr_];
-    floating_base_msg_.pose.pose.position.y = mj_data_control_->qpos[free_joint_qpos_adr_ + 1];
-    floating_base_msg_.pose.pose.position.z = mj_data_control_->qpos[free_joint_qpos_adr_ + 2];
+    floating_base_msg_.pose.pose.position.x = control_state_.qpos[free_joint_qpos_adr_];
+    floating_base_msg_.pose.pose.position.y = control_state_.qpos[free_joint_qpos_adr_ + 1];
+    floating_base_msg_.pose.pose.position.z = control_state_.qpos[free_joint_qpos_adr_ + 2];
 
     // Orientation (MuJoCo is w, x, y, z)
-    floating_base_msg_.pose.pose.orientation.w = mj_data_control_->qpos[free_joint_qpos_adr_ + 3];
-    floating_base_msg_.pose.pose.orientation.x = mj_data_control_->qpos[free_joint_qpos_adr_ + 4];
-    floating_base_msg_.pose.pose.orientation.y = mj_data_control_->qpos[free_joint_qpos_adr_ + 5];
-    floating_base_msg_.pose.pose.orientation.z = mj_data_control_->qpos[free_joint_qpos_adr_ + 6];
+    floating_base_msg_.pose.pose.orientation.w = control_state_.qpos[free_joint_qpos_adr_ + 3];
+    floating_base_msg_.pose.pose.orientation.x = control_state_.qpos[free_joint_qpos_adr_ + 4];
+    floating_base_msg_.pose.pose.orientation.y = control_state_.qpos[free_joint_qpos_adr_ + 5];
+    floating_base_msg_.pose.pose.orientation.z = control_state_.qpos[free_joint_qpos_adr_ + 6];
 
     // Linear Velocity
-    floating_base_msg_.twist.twist.linear.x = mj_data_control_->qvel[free_joint_qvel_adr_];
-    floating_base_msg_.twist.twist.linear.y = mj_data_control_->qvel[free_joint_qvel_adr_ + 1];
-    floating_base_msg_.twist.twist.linear.z = mj_data_control_->qvel[free_joint_qvel_adr_ + 2];
+    floating_base_msg_.twist.twist.linear.x = control_state_.qvel[free_joint_qvel_adr_];
+    floating_base_msg_.twist.twist.linear.y = control_state_.qvel[free_joint_qvel_adr_ + 1];
+    floating_base_msg_.twist.twist.linear.z = control_state_.qvel[free_joint_qvel_adr_ + 2];
 
     // Angular Velocity
-    floating_base_msg_.twist.twist.angular.x = mj_data_control_->qvel[free_joint_qvel_adr_ + 3];
-    floating_base_msg_.twist.twist.angular.y = mj_data_control_->qvel[free_joint_qvel_adr_ + 4];
-    floating_base_msg_.twist.twist.angular.z = mj_data_control_->qvel[free_joint_qvel_adr_ + 5];
+    floating_base_msg_.twist.twist.angular.x = control_state_.qvel[free_joint_qvel_adr_ + 3];
+    floating_base_msg_.twist.twist.angular.y = control_state_.qvel[free_joint_qvel_adr_ + 4];
+    floating_base_msg_.twist.twist.angular.z = control_state_.qvel[free_joint_qvel_adr_ + 5];
 
 #if ROS_DISTRO_HUMBLE
     floating_base_realtime_publisher_->tryPublish(floating_base_msg_);
@@ -929,6 +931,17 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 #endif
   };
 
+  // Refresh the plugins' full mjData view. This is the only full-size copy left in the cyclic
+  // path, and is skipped entirely when no plugins are loaded.
+  if (!plugin_instances_.empty())
+  {
+    simulation_->copy_snapshot_data(mj_data_control_);
+  }
+
+  // Mirror the sim's actual ctrl so entries we do not command below (e.g., passive actuators)
+  // are staged with their current values rather than a stale full-data refresh.
+  mju_copy(mj_data_control_->ctrl, control_state_.ctrl.data(), static_cast<int>(control_state_.ctrl.size()));
+
   // Update control data based on the latest readings
   for (auto& actuator : mujoco_actuator_data_)
   {
@@ -942,7 +955,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     }
     else if (actuator.is_position_pid_control_enabled)
     {
-      const double error = actuator.position_interface.command_ - mj_data_control_->qpos[actuator.mj_pos_adr];
+      const double error = actuator.position_interface.command_ - control_state_.qpos[actuator.mj_pos_adr];
       mj_data_control_->ctrl[actuator.mj_actuator_id] = pid_compute_command(actuator.pos_pid, error, period);
     }
     else if (actuator.is_velocity_control_enabled)
@@ -951,7 +964,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     }
     else if (actuator.is_velocity_pid_control_enabled)
     {
-      const double error = actuator.velocity_interface.command_ - mj_data_control_->qvel[actuator.mj_vel_adr];
+      const double error = actuator.velocity_interface.command_ - control_state_.qvel[actuator.mj_vel_adr];
       mj_data_control_->ctrl[actuator.mj_actuator_id] = pid_compute_command(actuator.vel_pid, error, period);
     }
     else if (actuator.is_effort_control_enabled)
