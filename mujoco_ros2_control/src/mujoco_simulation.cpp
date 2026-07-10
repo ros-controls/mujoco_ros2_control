@@ -474,9 +474,12 @@ MujocoSimulation::~MujocoSimulation()
   {
     mj_deleteData(mj_data_);
   }
-  if (mj_data_snapshot_)
+  for (mjData* snapshot : { snapshot_write_, snapshot_read_ })
   {
-    mj_deleteData(mj_data_snapshot_);
+    if (snapshot)
+    {
+      mj_deleteData(snapshot);
+    }
   }
   if (mj_model_)
   {
@@ -650,7 +653,9 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
   {
     std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
     mj_data_ = mj_makeData(mj_model_);
-    mj_data_snapshot_ = mj_makeData(mj_model_);
+    snapshot_write_ = mj_makeData(mj_model_);
+    snapshot_read_ = mj_makeData(mj_model_);
+    snapshot_ready_ = false;
 
     // Initialize containers for data sharing
     ctrl_staged_.assign(mj_model_->nu, 0.0);
@@ -660,13 +665,16 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
     xfrc_viewer_capture_.assign(6 * mj_model_->nbody, 0.0);
     xfrc_last_written_.assign(6 * mj_model_->nbody, 0.0);
 
-    if (mj_data_ && mj_data_snapshot_)
+    if (mj_data_ && snapshot_write_ && snapshot_read_)
     {
+      // Seed both snapshot buffers so a consumer that arrives before the first physics-loop
+      // refresh still sees valid initial data.
+      mj_copyData(snapshot_read_, mj_model_, mj_data_);
       refresh_data_snapshot();
       publish_control_state();
     }
   }
-  if (!mj_data_ || !mj_data_snapshot_)
+  if (!mj_data_ || !snapshot_write_ || !snapshot_read_)
   {
     RCLCPP_FATAL(get_logger(), "Could not allocate mjData for '%s'", model_path_.c_str());
     return false;
@@ -979,22 +987,24 @@ void MujocoSimulation::copy_physics_data(mjData*& destination)
   mj_copyData(destination, mj_model_, mj_data_);
 }
 
-void MujocoSimulation::copy_snapshot_data(mjData*& destination)
+mjData* MujocoSimulation::acquire_data_snapshot()
 {
-  if (destination == nullptr)
-  {
-    destination = mj_makeData(mj_model_);
-  }
-
   {
     const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
-    mj_copyData(destination, mj_model_, mj_data_snapshot_);
+    if (snapshot_ready_)
+    {
+      // Take ownership of the completed snapshot and recycle the previous one back to the
+      // producer. O(1): the consumer never copies and never waits on a fill.
+      std::swap(snapshot_write_, snapshot_read_);
+      snapshot_ready_ = false;
+    }
   }
 
   // Ask the physics loop for a fresh snapshot now that this one has been consumed. Data served
   // here is therefore at most one consumer period + one physics batch old, while the expensive
   // refresh runs at the aggregate consumer rate instead of every batch.
   snapshot_refresh_requested_.store(true, std::memory_order_release);
+  return snapshot_read_;
 }
 
 void MujocoSimulation::apply_control_data(mjData* control_data)
@@ -1008,8 +1018,20 @@ void MujocoSimulation::apply_control_data(mjData* control_data)
 
 void MujocoSimulation::refresh_data_snapshot()
 {
+  {
+    // Reclaim the producer-side buffer. Once snapshot_ready_ is lowered the consumer can no
+    // longer swap it away mid-fill, so the copy below can safely run outside the lock. (If a
+    // previous fill was never consumed, it is simply overwritten with newer data.)
+    const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
+    snapshot_ready_ = false;
+  }
+
+  // Scene-sized copy, paid by the producer, outside any shared lock: writers are serialized
+  // by the sim mutex and the consumer never touches snapshot_write_.
+  mj_copyData(snapshot_write_, mj_model_, mj_data_);
+
   const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
-  mj_copyData(mj_data_snapshot_, mj_model_, mj_data_);
+  snapshot_ready_ = true;
 }
 
 void MujocoSimulation::publish_control_state()
