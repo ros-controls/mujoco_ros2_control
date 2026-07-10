@@ -807,9 +807,7 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
 
 hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& time, const rclcpp::Duration& /*period*/)
 {
-  // Snapshot the per-step control state. This is a significantly smaller copy under a dedicated mutex,
-  // so its cost and collision window are small regardless of scene complexity, and the state is synchronous
-  // with the /clock tick that triggered this cycle.
+  // Snapshot the per-step control state to avoid having to copy the whole scene data.
   simulation_->copy_control_state(control_state_);
 
   // Joint states
@@ -931,12 +929,6 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 #endif
   };
 
-  // Borrow the latest completed physics snapshot as this cycle's control-data view for the
-  // plugins. Producer-pays copying: the physics loop fills the snapshot buffers on its own
-  // thread, and acquiring one is an O(1) pointer swap — write() never executes a scene-sized
-  // copy, so contact bursts and page faults in mj_copyData can no longer appear as controller
-  // cycle spikes. Without plugins nothing here reads sim state, so the persistent local
-  // scratch container is used instead and no snapshot traffic is generated at all.
   mjData* control_data = plugin_instances_.empty() ? mj_data_control_ : simulation_->acquire_data_snapshot();
 
   // Mirror the sim's actual ctrl so entries we do not command below (e.g., passive actuators)

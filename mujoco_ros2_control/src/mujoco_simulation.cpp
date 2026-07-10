@@ -1000,9 +1000,9 @@ mjData* MujocoSimulation::acquire_data_snapshot()
     }
   }
 
-  // Ask the physics loop for a fresh snapshot now that this one has been consumed. Data served
-  // here is therefore at most one consumer period + one physics batch old, while the expensive
-  // refresh runs at the aggregate consumer rate instead of every batch.
+  // Ask the physics loop for a fresh snapshot now that this one has been consumed.
+  // Data is therefore at most one consumer period + one physics batch old, while the
+  // expensive refresh runs at the aggregate consumer rate instead of every batch.
   snapshot_refresh_requested_.store(true, std::memory_order_release);
   return snapshot_read_;
 }
@@ -1020,14 +1020,13 @@ void MujocoSimulation::refresh_data_snapshot()
 {
   {
     // Reclaim the producer-side buffer. Once snapshot_ready_ is lowered the consumer can no
-    // longer swap it away mid-fill, so the copy below can safely run outside the lock. (If a
-    // previous fill was never consumed, it is simply overwritten with newer data.)
+    // longer swap it away mid-fill, so the copy below can safely run outside the lock.
     const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
     snapshot_ready_ = false;
   }
 
-  // Scene-sized copy, paid by the producer, outside any shared lock: writers are serialized
-  // by the sim mutex and the consumer never touches snapshot_write_.
+  // Scene-sized copy, paid by the producer, outside any shared lock.
+  // Writers are serialized by the sim mutex and the consumer never touches snapshot_write_.
   mj_copyData(snapshot_write_, mj_model_, mj_data_);
 
   const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
@@ -1154,11 +1153,6 @@ void MujocoSimulation::physics_loop()
             steps_cv_.notify_all();
           }
 
-          // Refresh the full snapshot on demand, at the START of the iteration rather than
-          // right after stepping. The data is identical (nothing has stepped since the last
-          // batch), but the timing matters: batch end is exactly when the last /clock tick
-          // woke the controller cycle, so an mjData copy there competes with the controller
-          // for memory bandwidth.
           if (snapshot_refresh_requested_.exchange(false, std::memory_order_acq_rel))
           {
             refresh_data_snapshot();
@@ -1196,8 +1190,8 @@ void MujocoSimulation::physics_loop()
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
 
-            // Publish the per-step control state before the clock tick, so consumers woken
-            // by this tick read state synchronous with that sim time.
+            // Publish the per-step control state before the clock tick,
+            // so consumers woken by this tick read state synchronous with that sim time.
             publish_control_state();
             publish_clock();
 
