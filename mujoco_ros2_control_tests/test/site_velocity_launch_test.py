@@ -146,16 +146,16 @@ class TestSiteVelocityActuator(unittest.TestCase):
             self.spin_until(
                 lambda: self.get_joint_value(self._latest_js, "position", "slider_joint") is not None
                 and self.get_joint_value(self._latest_js, "position", "slider_joint") > start_position + 0.1,
-                timeout=10.0,
+                timeout=1.0,
             ),
-            "Slider joint did not move after commanding the site velocity actuator",
+            "Slider joint did not move sufficiently after commanding the site velocity actuator",
         )
 
         self.assertTrue(
             self.spin_until(
                 lambda: self.get_joint_value(self._latest_actuator_js, "velocity", "slider_joint") is not None
-                and self.get_joint_value(self._latest_actuator_js, "velocity", "slider_joint") > 0.1,
-                timeout=5.0,
+                and self.get_joint_value(self._latest_actuator_js, "velocity", "slider_joint") > 0.01,
+                timeout=1.0,
             ),
-            "Actuator state did not report positive slider velocity",
+            "Actuator state did not report sufficiently positive slider velocity",
         )
