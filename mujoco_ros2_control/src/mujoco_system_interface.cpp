@@ -907,7 +907,7 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // pose sensor data
   for (auto& data : pose_sensor_data_)
   {
-    data.position.data.x() = mj_data_control_->sensordata[data.position.mj_sensor_index + 0];
+    data.position.data.x() = mj_data_control_->sensordata[data.position.mj_sensor_index];
     data.position.data.y() = mj_data_control_->sensordata[data.position.mj_sensor_index + 1];
     data.position.data.z() = mj_data_control_->sensordata[data.position.mj_sensor_index + 2];
 
