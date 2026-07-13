@@ -1,0 +1,15 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 100
+
+joint_state_broadcaster:
+  ros__parameters:
+    update_rate: 50
+    type: joint_state_broadcaster/JointStateBroadcaster
+
+site_velocity_controller:
+  ros__parameters:
+    type: forward_command_controller/ForwardCommandController
+    interface_name: velocity
+    joints:
+      - slider_joint
