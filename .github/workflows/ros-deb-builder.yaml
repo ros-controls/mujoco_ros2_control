@@ -1,0 +1,29 @@
+name: ROS Debian Package Builder
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "README.md"
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - "README.md"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - {deb: noble,      ros: jazzy    }
+          - {deb: resolute,   ros: lyrical  }
+
+    steps:
+      - uses: jspricke/ros-deb-builder-action@main
+        with:
+          DEB_DISTRO: ${{ matrix.deb }}
+          ROS_DISTRO: ${{ matrix.ros }}
+          SBUILD_CONF: "$enable_network = 1;"
