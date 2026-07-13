@@ -4,3 +4,25 @@
       heart_beat_plugin:
         type: "mujoco_ros2_control_plugins/HeartbeatPublisherPlugin"
         update_rate: 1.0
+      mujoco_camera_plugin:
+        type: "mujoco_ros2_control_plugins/CameraPlugin"
+        camera_publish_rate: 6.0
+        camera:
+          policy: streaming
+          frame_name: camera_color_optical_frame
+          info_topic: /camera/color/camera_info
+          image_topic: /camera/color/image_raw
+          depth_topic: /camera/aligned_depth_to_color/image_raw
+      # Warning: This is included for test purposes only. We do not recommend users
+      # use this plugin.
+      rangefinder_lidar_plugin:
+        type: "mujoco_ros2_control_plugins/RangefinderLidarPlugin"
+        lidar_publish_rate: 5.0
+        lidar:
+          frame_name: lidar_sensor_frame
+          angle_increment: 0.025
+          min_angle: -0.3
+          max_angle: 0.3
+          range_min: 0.05
+          range_max: 10.0
+          laserscan_topic: /scan

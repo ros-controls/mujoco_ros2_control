@@ -1,0 +1,4 @@
+bool paused
+---
+bool success
+string message

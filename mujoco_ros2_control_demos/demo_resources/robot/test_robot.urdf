@@ -39,7 +39,7 @@
     </collision>
   </link>
   <joint name="joint1" type="revolute">
-    <axis rpy="0 0 0" xyz="0 0 1"/>
+    <axis rpy="0 0 0" xyz="0 1 0"/>
     <parent link="base"/>
     <child link="upperarm"/>
     <limit lower="-3.14" upper="3.14" velocity="3.14" effort="1000" />
@@ -68,7 +68,7 @@
     </collision>
   </link>
   <joint name="joint2" type="revolute">
-    <axis rpy="0 0 0" xyz="0 0 1"/>
+    <axis rpy="0 0 0" xyz="0 1 0"/>
     <parent link="upperarm"/>
     <child link="forearm"/>
     <origin rpy="0 0 0" xyz="1 0 0"/>
@@ -231,8 +231,8 @@
           </default>
 
           <actuator>
-            <position name="joint1" joint="joint1" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
-            <position name="joint2" joint="joint2" kp="1000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
+            <position name="joint1" joint="joint1" kp="25000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
+            <position name="joint2" joint="joint2" kp="25000" dampratio="1.0" ctrlrange="-3.14159 3.14159" />
             <position tendon="split" name="gripper_left_finger_joint" kp="1000" dampratio="3.0" ctrlrange="-0.09 0.005" />
           </actuator>
 
@@ -335,11 +335,6 @@
       <!-- If set to true, will not launch the Simulate App window -->
       <param name="headless">$(arg headless)</param>
 
-      <!-- Publish camera images at 6 hz -->
-      <param name="camera_publish_rate">6.0</param>
-
-      <!-- Publish lidar scans at 10 hz -->
-      <param name="lidar_publish_rate">1.0</param>
     </hardware>
     <joint name="joint1">
       <command_interface name="position"/>
@@ -427,10 +422,7 @@
       <param name="depth_topic">/camera/aligned_depth_to_color/image_raw</param>
     </sensor>
 
-    <!-- Lidar sensors are matched to a set of rangefinder sensors in the MJCF, which should be -->
-    <!-- generated with the "<lidar>" inputs in the conversion script. The consiste of N rangefinders -->
-    <!-- and will generally be of the form "<sensor_name>-01". These parameters should line up with -->
-    <!-- those documented in the laserscan message. -->
+    <!-- WARNING: These lidar sensors are deprecated, including for test and legacy support only! -->
     <sensor name="lidar">
       <param name="frame_name">lidar_sensor_frame</param>
       <param name="angle_increment">0.025</param>

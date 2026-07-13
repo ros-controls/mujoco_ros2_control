@@ -2,6 +2,22 @@
 Changelog for package mujoco_ros2_control_tests
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.0.3 (2026-05-01)
+------------------
+* Switch to forward_command_controller dependency (`#173 <https://github.com/ros-controls/mujoco_ros2_control/issues/173>`_)
+* Add epsilon to avoid floating point comparison (`#166 <https://github.com/ros-controls/mujoco_ros2_control/issues/166>`_)
+* Ensure the clock messages are flushed before time checking (`#153 <https://github.com/ros-controls/mujoco_ros2_control/issues/153>`_)
+* [Feature] Add ability to run the simulation progress by steps upon pause  (`#139 <https://github.com/ros-controls/mujoco_ros2_control/issues/139>`_)
+* Contributors: Christoph Fröhlich, Erik Holum, Sai Kishor Kothakota
+
+0.0.2 (2026-03-17)
+------------------
+* Fix reset simulation service for robots using PID control (`#140 <https://github.com/ros-controls/mujoco_ros2_control/issues/140>`_)
+* Use pixi-build-ros as the backend for pixi builds (`#130 <https://github.com/ros-controls/mujoco_ros2_control/issues/130>`_)
+* Improve integration test reliability and speed for CI (`#131 <https://github.com/ros-controls/mujoco_ros2_control/issues/131>`_)
+* Rename default node to mujoco_ros2_control_node (`#132 <https://github.com/ros-controls/mujoco_ros2_control/issues/132>`_)
+* Contributors: Erik Holum, Sai Kishor Kothakota
+
 0.0.1 (2026-02-24)
 ------------------
 * Updates docs and comments (`#113 <https://github.com/ros-controls/mujoco_ros2_control/issues/113>`_)

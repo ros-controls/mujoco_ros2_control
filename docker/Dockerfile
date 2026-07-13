@@ -35,7 +35,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       tmux \
       wget \
       xterm \
-      vim
+      vim \
+      libegl1 \
+      libgbm1
 
 # Setup a ROS workspace
 ENV ROS_WS="/opt/mujoco/ws"
@@ -50,7 +52,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     source /opt/ros/${ROS_DISTRO}/setup.bash && \
     apt-get update && \
     rosdep update && \
-    rosdep install -iry --from-paths src/
+    rosdep install -iy --from-paths src/
 
 # Copy remaining source
 COPY . ${ROS_WS}/src/mujoco_ros2_control/

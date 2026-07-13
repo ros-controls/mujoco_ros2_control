@@ -10,6 +10,7 @@ This project wraps MuJoCo as a hardware/system interface so you can use the ros2
 
 - `mujoco_ros2_control` - core system interface plugin and resources
 - `mujoco_ros2_control_msgs` - message/service definitions used by the plugin
+- `mujoco_ros2_control_plugins` - optional plugins that extend simulation capabilities
 - `mujoco_ros2_control_demos` - demo launch files, configs and example robots
 - `mujoco_ros2_control_tests` - integration / launch tests and simple examples
 - `docker/` - Dockerfiles and scripts to run CI/containers
@@ -18,6 +19,7 @@ This project wraps MuJoCo as a hardware/system interface so you can use the ros2
 
 - Full ros2_control SystemInterface plugin for MuJoCo
 - MJCF/URDF conversion utilities to auto-generate MuJoCo models
+- Optional plugin system for extending simulation with custom publishers and services
 - Example demos showing basic control, PID and transmission setups
 
 ## Quick start
