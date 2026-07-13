@@ -174,10 +174,10 @@ int get_actuator_id(const std::string& actuator_name, const mjModel* mj_model)
  * @param mj_model Pointer to the MuJoCo model.
  * @return The corresponding actuator name if found, otherwise returns the joint name.
  */
-std::string get_joint_actuator_name(const std::string& joint_name,
+std::vector<std::string> get_joint_actuator_names(const std::string& joint_name,
                                     const hardware_interface::HardwareInfo& hardware_info, const mjModel* mj_model)
 {
-  std::string actuator_name = joint_name;  // Default to joint name
+  std::vector<std::string> actuator_names = {joint_name};  // Default to joint name
 
   for (const auto& transmission : hardware_info.transmissions)
   {
@@ -187,29 +187,20 @@ std::string get_joint_actuator_name(const std::string& joint_name,
       {
         if (get_actuator_id(joint_name, mj_model) != -1)
         {
-          return joint_name;  // Direct match found
+          return actuator_names;  // Direct match found
         }
-        // replace "joint" with "actuator" for the corresponding role
-        const std::string corresponding_actuator_role = std::regex_replace(joint.role, std::regex("joint"), "actuator");
         for (const auto& actuator : transmission.actuators)
         {
-          if (actuator.role == corresponding_actuator_role)
-          {
-            RCLCPP_DEBUG(rclcpp::get_logger("MujocoSystemInterface"),
-                         "Mapped joint '%s' to actuator '%s' based on role '%s'", joint_name.c_str(),
-                         actuator.name.c_str(), corresponding_actuator_role.c_str());
-            return actuator.name;
-          }
+          actuator_names.push_back(actuator.name);
         }
-        RCLCPP_WARN(rclcpp::get_logger("MujocoSystemInterface"),
-                    "No matching actuator found for joint '%s' with role '%s'. Using joint name as actuator name.",
-                    joint_name.c_str(), joint.role.c_str());
-        break;
+        RCLCPP_WARN_EXPRESSIONS(rclcpp::get_logger("MujocoSystemInterface"), actuator_names.empty(),
+                    "No matching transmission actuator found for joint '%s'. Using joint name as actuator name.",
+                    joint_name.c_str());
       }
     }
   }
 
-  return actuator_name;
+  return actuator_names;
 }
 
 /**
@@ -758,22 +749,25 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
       return;
     }
 
-    const auto actuator_name = get_joint_actuator_name(joint_name, get_hardware_info(), simulation_->model());
+    const auto actuator_names = get_joint_actuator_names(joint_name, get_hardware_info(), simulation_->model());
 
+    for( const auto& actuator_name : actuator_names)
+    {
     auto actuator_it = std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
-                                    [&actuator_name, this](const MuJoCoActuatorData& actuator) {
-                                      return actuator.joint_name == actuator_name;
-                                    });
+                                      [&actuator_name, this](const MuJoCoActuatorData& actuator) {
+                                        return actuator.joint_name == actuator_name;
+                                      });
 
-    if (actuator_it == mujoco_actuator_data_.end())
-    {
-      RCLCPP_WARN(get_logger(), "Actuator %s not found in mujoco_actuator_data_", actuator_name.c_str());
-      return;
-    }
-    if (actuator_it->actuator_type == ActuatorType::PASSIVE)
-    {
-      RCLCPP_WARN(get_logger(), "Actuator %s is passive and cannot be controlled.", actuator_name.c_str());
-      return;
+      if (actuator_it == mujoco_actuator_data_.end())
+      {
+        RCLCPP_WARN(get_logger(), "Actuator %s not found in mujoco_actuator_data_", actuator_name.c_str());
+        return;
+      }
+      if (actuator_it->actuator_type == ActuatorType::PASSIVE)
+      {
+        RCLCPP_WARN(get_logger(), "Actuator %s is passive and cannot be controlled.", actuator_name.c_str());
+        return;
+      }
     }
 
     if (enabled)
@@ -1338,7 +1332,7 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
   for (size_t joint_index = 0; joint_index < hardware_info.joints.size(); joint_index++)
   {
     auto joint = hardware_info.joints.at(joint_index);
-    const std::string actuator_name = get_joint_actuator_name(joint.name, hardware_info, simulation_->model());
+    const auto actuator_names = get_joint_actuator_names(joint.name, hardware_info, simulation_->model());
 
     // Get the information for the URDF Joint data
     URDFJointData& joint_data = urdf_joint_data_.at(joint_index);
@@ -1383,27 +1377,30 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
       }
     }
 
-    const auto actuator_it = std::find_if(
-        mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
-        [&actuator_name, this](const MuJoCoActuatorData& actuator) {
-          return (actuator.actuator_type != ActuatorType::PASSIVE) &&
-                 ((mj_id2name(simulation_->model(), mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name) ||
-                  (actuator.joint_name == actuator_name));
-        });
-    const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
-    // This isn't a failure the joint just won't be controllable
-    RCLCPP_INFO_EXPRESSION(get_logger(), !actuator_exists && !joint_data.is_mimic,
-                           "Failed to find actuator for joint : %s. This joint will be treated as a passive joint.",
-                           joint.name.c_str());
-    RCLCPP_INFO_EXPRESSION(get_logger(), joint.command_interfaces.empty() && !joint_data.is_mimic,
-                           "Joint : %s is a passive joint", joint.name.c_str());
-    if (!joint.command_interfaces.empty() && !actuator_exists)
+    for(const auto &actuator_name : actuator_names)
     {
-      RCLCPP_ERROR(get_logger(),
-                   "Joint : %s has command interfaces defined but no matching actuator in the MuJoCo model. This joint "
-                   "will be treated as a passive joint and no command interfaces will be exported.",
-                   joint.name.c_str());
-      joint.command_interfaces.clear();
+      const auto actuator_it = std::find_if(
+          mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
+          [&actuator_name, this](const MuJoCoActuatorData& actuator) {
+            return (actuator.actuator_type != ActuatorType::PASSIVE) &&
+                  ((mj_id2name(simulation_->model(), mjOBJ_ACTUATOR, actuator.mj_actuator_id) == actuator_name) ||
+                    (actuator.joint_name == actuator_name));
+          });
+      const bool actuator_exists = actuator_it != mujoco_actuator_data_.end();
+      // This isn't a failure the joint just won't be controllable
+      RCLCPP_INFO_EXPRESSION(get_logger(), !actuator_exists && !joint_data.is_mimic,
+                            "Failed to find actuator for joint : %s. This joint will be treated as a passive joint.",
+                            joint.name.c_str());
+      RCLCPP_INFO_EXPRESSION(get_logger(), joint.command_interfaces.empty() && !joint_data.is_mimic,
+                            "Joint : %s is a passive joint", joint.name.c_str());
+      if (!joint.command_interfaces.empty() && !actuator_exists)
+      {
+        RCLCPP_ERROR(get_logger(),
+                    "Joint : %s has command interfaces defined but no matching actuator in the MuJoCo model. This joint "
+                    "will be treated as a passive joint and no command interfaces will be exported.",
+                    joint.name.c_str());
+        joint.command_interfaces.clear();
+      }
     }
 
     // Add to the joint hw information map
