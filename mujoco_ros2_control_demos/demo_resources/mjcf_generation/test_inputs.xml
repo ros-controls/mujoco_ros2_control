@@ -32,6 +32,8 @@
 
     <sensor>
       <rangefinder name="lidar" site="rf" />
+      <framequat name="body_quat" objtype="site" objname="base"/>
+      <framepos name="body_pos" objtype="site" objname="base"/>
     </sensor>
   </raw_inputs>
 

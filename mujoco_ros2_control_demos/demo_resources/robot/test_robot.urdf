@@ -249,6 +249,8 @@
 
           <sensor>
             <rangefinder name="lidar" site="rf" />
+            <framequat name="body_quat" objtype="site" objname="base"/>
+            <framepos name="body_pos" objtype="site" objname="base"/>
           </sensor>
         </raw_inputs>
 
@@ -432,5 +434,20 @@
       <param name="range_max">10</param>
       <param name="laserscan_topic">/scan</param>
     </sensor>
+
+    <sensor name="pose">
+      <param name="mujoco_type">pose</param>
+      <param name="mujoco_sensor_name">body</param>
+
+      <state_interface name="position.x" />
+      <state_interface name="position.y" />
+      <state_interface name="position.z" />
+
+      <state_interface name="orientation.x" />
+      <state_interface name="orientation.y" />
+      <state_interface name="orientation.z" />
+      <state_interface name="orientation.w" />
+    </sensor>
+
   </ros2_control>
 </robot>
