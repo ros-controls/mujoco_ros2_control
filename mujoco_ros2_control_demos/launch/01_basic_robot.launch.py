@@ -103,7 +103,7 @@ def launch_setup(context, *args, **kwargs):
     )
 
     # Controller spawners
-    controllers_to_spawn = ["joint_state_broadcaster", "position_controller", "gripper_controller"]
+    controllers_to_spawn = ["joint_state_broadcaster", "position_controller", "gripper_controller", "pose_broadcaster"]
     for controller in controllers_to_spawn:
         nodes.append(
             Node(

@@ -635,6 +635,45 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
     }
   }
 
+  // Add state interfaces for pose sensors
+  for (auto& sensor : pose_sensor_data_)
+  {
+    if (auto it = sensors_hw_info_.find(sensor.name); it != sensors_hw_info_.end())
+    {
+      for (const auto& state_if : it->second.state_interfaces)
+      {
+        if (state_if.name == "position.x")
+        {
+          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.position.data.x());
+        }
+        else if (state_if.name == "position.y")
+        {
+          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.position.data.y());
+        }
+        else if (state_if.name == "position.z")
+        {
+          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.position.data.z());
+        }
+        else if (state_if.name == "orientation.x")
+        {
+          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.x());
+        }
+        else if (state_if.name == "orientation.y")
+        {
+          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.y());
+        }
+        else if (state_if.name == "orientation.z")
+        {
+          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.z());
+        }
+        else if (state_if.name == "orientation.w")
+        {
+          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.w());
+        }
+      }
+    }
+  }
+
   return new_state_interfaces;
 }
 
@@ -863,6 +902,19 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.torque.data.x() = -mj_data_control_->sensordata[data.torque.mj_sensor_index];
     data.torque.data.y() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 1];
     data.torque.data.z() = -mj_data_control_->sensordata[data.torque.mj_sensor_index + 2];
+  }
+
+  // pose sensor data
+  for (auto& data : pose_sensor_data_)
+  {
+    data.position.data.x() = mj_data_control_->sensordata[data.position.mj_sensor_index];
+    data.position.data.y() = mj_data_control_->sensordata[data.position.mj_sensor_index + 1];
+    data.position.data.z() = mj_data_control_->sensordata[data.position.mj_sensor_index + 2];
+
+    data.orientation.data.w() = mj_data_control_->sensordata[data.orientation.mj_sensor_index];
+    data.orientation.data.x() = mj_data_control_->sensordata[data.orientation.mj_sensor_index + 1];
+    data.orientation.data.y() = mj_data_control_->sensordata[data.orientation.mj_sensor_index + 2];
+    data.orientation.data.z() = mj_data_control_->sensordata[data.orientation.mj_sensor_index + 3];
   }
 
   // Publish Odometry
@@ -1791,7 +1843,6 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
       ft_sensor_data_.push_back(sensor_data);
     }
-
     else if (mujoco_type == "imu")
     {
       IMUSensorData sensor_data;
@@ -1832,6 +1883,37 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.linear_acceleration.mj_sensor_index = simulation_->model()->sensor_adr[accel_id];
 
       imu_sensor_data_.push_back(sensor_data);
+    }
+    else if (mujoco_type == "pose")
+    {
+      SitePoseData sensor_data;
+      sensor_data.name = sensor_name;
+      sensor_data.position.name =
+          mujoco_sensor_name + get_hardware_parameter_or(get_hardware_info(), "position_mjcf_suffix", "_pos");
+      sensor_data.orientation.name =
+          mujoco_sensor_name + get_hardware_parameter_or(get_hardware_info(), "orientation_mjcf_suffix", "_quat");
+
+      const int pos_id = mj_name2id(simulation_->model(), mjOBJ_SENSOR, sensor_data.position.name.c_str());
+      const int quat_id = mj_name2id(simulation_->model(), mjOBJ_SENSOR, sensor_data.orientation.name.c_str());
+
+      if ((pos_id == -1) || (simulation_->model()->sensor_type[pos_id] != mjSENS_FRAMEPOS))
+      {
+        RCLCPP_ERROR(get_logger(), "Failed to find 'framepos' sensor '%s' in MuJoCo model",
+                     sensor_data.position.name.c_str());
+        continue;
+      }
+
+      if ((quat_id == -1) || (simulation_->model()->sensor_type[quat_id] != mjSENS_FRAMEQUAT))
+      {
+        RCLCPP_ERROR(get_logger(), "Failed to find 'framequat' sensor '%s' in MuJoCo model",
+                     sensor_data.orientation.name.c_str());
+        continue;
+      }
+
+      sensor_data.position.mj_sensor_index = simulation_->model()->sensor_adr[pos_id];
+      sensor_data.orientation.mj_sensor_index = simulation_->model()->sensor_adr[quat_id];
+
+      pose_sensor_data_.push_back(sensor_data);
     }
     else
     {
