@@ -42,7 +42,7 @@
 #include <hardware_interface/version.h>
 #include <rclcpp/version.h>
 #include "ament_index_cpp/version.h"
-#if AMENT_INDEX_CPP_VERSION_MINOR >= 13
+#if AMENT_INDEX_CPP_VERSION_GTE(1, 13, 2)
 #include <ament_index_cpp/get_package_share_path.hpp>
 #else
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -543,7 +543,7 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
                                             /* is_passive = */ false);
 
       // Add ros2 control icon for the taskbar
-#if AMENT_INDEX_CPP_VERSION_MINOR >= 13
+#if AMENT_INDEX_CPP_VERSION_GTE(1, 13, 2)
       std::string icon_location =
           (ament_index_cpp::get_package_share_path("mujoco_ros2_control") / "resources/mujoco_logo.png").string();
 #else
