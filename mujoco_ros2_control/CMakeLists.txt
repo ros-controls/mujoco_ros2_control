@@ -11,7 +11,6 @@ find_package(controller_manager REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(fmt REQUIRED)
 find_package(glfw3 REQUIRED)
-find_package(OpenGL REQUIRED COMPONENTS EGL)
 
 find_package(control_toolbox REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -189,8 +188,6 @@ PRIVATE
   Threads::Threads
   lodepng
   glfw
-  OpenGL::EGL
-  OpenGL::OpenGL
   ${CMAKE_DL_LIBS}
 )
 
