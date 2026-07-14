@@ -154,4 +154,5 @@ Further Documentation
    Modeling Tips <../mujoco_ros2_control/docs/modeling_tips>
    Tutorials <../mujoco_ros2_control_demos/doc/tutorials>
    Plugins <../mujoco_ros2_control_plugins/doc/plugins>
+   MuJoCo Extensions <../mujoco_extensions/doc/mujoco_extensions>
    Developers Guide <development>
