@@ -42,7 +42,12 @@
 
 #include <hardware_interface/version.h>
 #include <rclcpp/version.h>
+#include "ament_index_cpp/version.h"
+#if AMENT_INDEX_CPP_VERSION_GTE(1, 13, 2)
+#include <ament_index_cpp/get_package_share_path.hpp>
+#else
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#endif
 #include <rclcpp/rclcpp.hpp>
 #include "lodepng.h"
 
@@ -560,8 +565,13 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
                                             /* is_passive = */ false);
 
       // Add ros2 control icon for the taskbar
+#if AMENT_INDEX_CPP_VERSION_GTE(1, 13, 2)
+      std::string icon_location =
+          (ament_index_cpp::get_package_share_path("mujoco_ros2_control") / "resources/mujoco_logo.png").string();
+#else
       std::string icon_location =
           ament_index_cpp::get_package_share_directory("mujoco_ros2_control") + "/resources/mujoco_logo.png";
+#endif
       std::vector<unsigned char> image;
       unsigned width, height;
       unsigned error = lodepng::decode(image, width, height, icon_location);
@@ -1271,16 +1281,13 @@ void MujocoSimulation::update_sim_display()
     return;
   }
 
-  // Only write user_texts_new_ when the render thread has consumed the previous
-  // update (newtextrequest == 0). Use compare_exchange to atomically claim the
-  // slot: if it fails, the render thread hasn't swapped yet, so skip this
-  // update — the display will be refreshed on the next physics step instead.
-  // This avoids a data race: the render thread swaps user_texts_new_ (without
-  // holding any mutex) while we clear/populate it.
-  int expected = 0;
-  if (!sim_->newtextrequest.compare_exchange_strong(expected, 1))
+  // Lock-free handoff to the render thread, which swaps user_texts_new_ without
+  // holding sim_->mtx (Simulate::Render runs outside the lock). newtextrequest is
+  // the single-producer/single-consumer flag: 0 = physics may write, 1 = render
+  // may consume. Skip if the last update hasn't been consumed yet.
+  if (sim_->newtextrequest.load(std::memory_order_acquire) != 0)
   {
-    return;  // render thread hasn't consumed the last update yet, skip
+    return;
   }
 
   // Desired speed: from parameter override when set, otherwise from the UI slider.
@@ -1299,6 +1306,10 @@ void MujocoSimulation::update_sim_display()
 
   sim_->user_texts_new_.clear();
   sim_->user_texts_new_.emplace_back(mjFONT_NORMAL, mjGRID_TOPRIGHT, title, content);
+
+  // Publish only after the vector is fully written; the release store pairs with
+  // the render thread's load.
+  sim_->newtextrequest.store(1, std::memory_order_release);
 }
 
 }  // namespace mujoco_ros2_control
