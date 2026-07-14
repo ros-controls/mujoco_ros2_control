@@ -185,20 +185,24 @@ Lidar* Lidar::Create(const mjModel* m, mjData* d, int instance)
   {
     min_range = std::atof(min_range_str.c_str());
   }
-  mjtNum update_rate = 0.0;
+  if (min_range < 0.0)
+  {
+    mju_error("Lidar min range must be greater than 0.0");
+    return nullptr;
+  }
+
+  // Default to 1 hz
+  mjtNum update_rate = 1.0;
   std::string update_rate_str = std::string(mj_getPluginConfig(m, instance, "update_rate"));
   if (!update_rate_str.empty())
   {
     update_rate = std::atof(update_rate_str.c_str());
   }
-
-  // For debugging
-  // printf("     resolution = %d, %d\n", resolution[0], resolution[1]);
-  // printf("  azimuth_range = %.3lf - %.3lf\n", azimuth_range[0], azimuth_range[1]);
-  // printf("elevation_range = %.3lf - %.3lf\n", elevation_range[0], elevation_range[1]);
-  // printf("      max_range = %.3lf\n", max_range);
-  // printf("      min_range = %.3lf\n", min_range);
-  // printf("    update_rate = %.3lf\n", update_rate);
+  if (update_rate < 0.0)
+  {
+    mju_error("Lidar update rate must be greater than 0.0");
+    return nullptr;
+  }
 
   return new Lidar(m, d, instance, resolution.data(), azimuth_range.data(), elevation_range.data(), max_range,
                    min_range, update_rate);
