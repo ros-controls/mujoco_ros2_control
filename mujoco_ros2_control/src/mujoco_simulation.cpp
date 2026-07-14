@@ -501,6 +501,10 @@ MujocoSimulation::~MujocoSimulation()
   {
     mj_deleteData(mj_data_);
   }
+  if (snapshot_buf_)
+  {
+    mj_deleteData(snapshot_buf_);
+  }
   if (mj_model_)
   {
     mj_deleteModel(mj_model_);
@@ -679,12 +683,25 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
     std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
     mj_data_ = mj_makeData(mj_model_);
 
+    // Initialize the snapshot buffer with initial data
+    snapshot_buf_ = mj_makeData(mj_model_);
+    if (mj_data_ && snapshot_buf_)
+    {
+      mj_copyData(snapshot_buf_, mj_model_, mj_data_);
+    }
+
+    // Initialize staged control input buffers
+    ctrl_staged_.assign(mj_model_->nu, 0.0);
+    qfrc_applied_staged_.assign(mj_model_->nv, 0.0);
+    control_staged_ = false;
+
     // Initialize containers for data sharing
     xfrc_plugin_desired_.assign(6 * mj_model_->nbody, 0.0);
     xfrc_viewer_capture_.assign(6 * mj_model_->nbody, 0.0);
     xfrc_last_written_.assign(6 * mj_model_->nbody, 0.0);
   }
-  if (!mj_data_)
+
+  if (!mj_data_ || !snapshot_buf_)
   {
     RCLCPP_FATAL(get_logger(), "Could not allocate mjData for '%s'", model_path_.c_str());
     return false;
@@ -816,11 +833,24 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state)
   std::fill(xfrc_viewer_capture_.begin(), xfrc_viewer_capture_.end(), 0.0);
   std::fill(xfrc_last_written_.begin(), xfrc_last_written_.end(), 0.0);
 
+  // Clear staged control inputs so stale commands don't survive the reset
+  {
+    const std::lock_guard<std::mutex> lock(staging_mutex_);
+    control_staged_ = false;
+    std::fill(ctrl_staged_.begin(), ctrl_staged_.end(), 0.0);
+    std::fill(qfrc_applied_staged_.begin(), qfrc_applied_staged_.end(), 0.0);
+  }
+
   // Restore simulation time to preserve ROS clock continuity
   mj_data_->time = saved_time;
 
   // Run forward dynamics to update derived quantities
   mj_forward(mj_model_, mj_data_);
+
+  // Push snapshot so the consumer sees the reset state immediately
+  mj_copyData(snapshot_buf_, mj_model_, mj_data_);
+  want_copy_.store(false, std::memory_order_release);
+  copy_ready_.store(true, std::memory_order_release);
 
   // Delegate HW-side bookkeeping (PID resets, command/state interface sync, etc.)
   if (reset_callback_)
@@ -967,6 +997,11 @@ void MujocoSimulation::overwrite_physics_data(mjData* source)
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
   mj_copyData(mj_data_, mj_model_, source);
+
+  // Also set the snapshot so that any consumers see the updated state
+  mj_copyData(snapshot_buf_, mj_model_, mj_data_);
+  want_copy_.store(false, std::memory_order_release);
+  copy_ready_.store(true, std::memory_order_release);
 }
 
 void MujocoSimulation::copy_physics_data(mjData*& destination)
@@ -980,12 +1015,26 @@ void MujocoSimulation::copy_physics_data(mjData*& destination)
   mj_copyData(destination, mj_model_, mj_data_);
 }
 
+void MujocoSimulation::get_snapshot(mjData*& consumer_buf)
+{
+  // If the copy is ready... update the snapshot. Otherwise the consumer
+  // will get something stale. This happens once per iteration of the full
+  // physics loop, so nominally this should always be getting the latest data.
+  if (copy_ready_.load(std::memory_order_acquire))
+  {
+    std::swap(consumer_buf, snapshot_buf_);
+    copy_ready_.store(false, std::memory_order_release);
+    want_copy_.store(true, std::memory_order_release);
+  }
+}
+
 void MujocoSimulation::apply_control_data(mjData* control_data)
 {
-  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  mju_copy(mj_data_->ctrl, control_data->ctrl, static_cast<int>(mj_model_->nu));
-  mju_copy(mj_data_->qfrc_applied, control_data->qfrc_applied, static_cast<int>(mj_model_->nv));
+  const std::lock_guard<std::mutex> lock(staging_mutex_);
+  mju_copy(ctrl_staged_.data(), control_data->ctrl, static_cast<int>(mj_model_->nu));
+  mju_copy(qfrc_applied_staged_.data(), control_data->qfrc_applied, static_cast<int>(mj_model_->nv));
   mju_copy(xfrc_plugin_desired_.data(), control_data->xfrc_applied, 6 * static_cast<int>(mj_model_->nbody));
+  control_staged_ = true;
 }
 
 void MujocoSimulation::handle_xfrc_applied()
@@ -994,6 +1043,19 @@ void MujocoSimulation::handle_xfrc_applied()
   mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
   mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
   mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, nbody6);
+}
+
+void MujocoSimulation::apply_staged_control_inputs()
+{
+  {
+    const std::lock_guard<std::mutex> lock(staging_mutex_);
+    if (control_staged_)
+    {
+      mju_copy(mj_data_->ctrl, ctrl_staged_.data(), static_cast<int>(mj_model_->nu));
+      mju_copy(mj_data_->qfrc_applied, qfrc_applied_staged_.data(), static_cast<int>(mj_model_->nv));
+    }
+  }
+  handle_xfrc_applied();
 }
 
 // simulate in background thread (while rendering in main thread)
@@ -1108,7 +1170,7 @@ void MujocoSimulation::physics_loop()
             syncSim = mj_data_->time;
             sim_->speed_changed = false;
 
-            handle_xfrc_applied();
+            apply_staged_control_inputs();
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
 
@@ -1157,7 +1219,7 @@ void MujocoSimulation::physics_loop()
 #else
               sim_->InjectNoise(-1);
 #endif
-              handle_xfrc_applied();
+              apply_staged_control_inputs();
               // call mj_step
               mj_step(mj_model_, mj_data_);
 
@@ -1190,7 +1252,7 @@ void MujocoSimulation::physics_loop()
           // save current state to history buffer
           if (stepped)
           {
-            handle_xfrc_applied();
+            apply_staged_control_inputs();
             sim_->AddToHistory();
             update_sim_display();
           }
@@ -1208,7 +1270,7 @@ void MujocoSimulation::physics_loop()
 
           // Record so the next iteration can detect render thread changes, only necessary once
           // when paused
-          handle_xfrc_applied();
+          apply_staged_control_inputs();
 
           // Execute one pending step per physics loop iteration so the clock publisher
           // (try_publish) has time to flush between steps, matching play mode behavior.
@@ -1245,6 +1307,14 @@ void MujocoSimulation::physics_loop()
             sim_->speed_changed = true;
             update_sim_display();
           }
+        }
+
+        // Fill snapshot for the consumer if requested
+        if (want_copy_.load(std::memory_order_acquire))
+        {
+          mj_copyData(snapshot_buf_, mj_model_, mj_data_);
+          want_copy_.store(false, std::memory_order_release);
+          copy_ready_.store(true, std::memory_order_release);
         }
 
         // Update previous simulation time for next iteration

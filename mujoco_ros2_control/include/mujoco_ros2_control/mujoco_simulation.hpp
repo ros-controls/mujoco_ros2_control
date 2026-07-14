@@ -65,14 +65,19 @@ namespace mujoco_ros2_control
  *
  * The three functions relevant to interacting with the physics sim's mjData are:
  *
- * `copy_physics_data(...)` will lock the sim and do a full copy of the existing `mj_data_`
- * into the provided container, which can be used as the caller requires.
+ * `get_snapshot(...)` swaps the consumer's mjData pointer with the latest completed snapshot
+ * produced by the physics loop. The consumer reads freely from its buffer with no locking.
+ * The physics loop fills a snapshot once per outer iteration (after all batched steps) only
+ * when the consumer has taken the previous one and requested a new one. There is no mutex
+ * nor copy required from the consumer's perspective.
  *
- * `apply_control_data(...)` will copy control inputs from the provided mjData into the physics
- * loop. Specifically, it copies `ctrl`, `qfrc_applied`, and `xfrc_applied`. `ctrl` and
- * `qfrc_applied` are copied directly into their corresponding buffers in `mj_data_`. However
- * Cartesian forces from `xfrc_applied` competes with inputs from the Simulate's drag function,
- * and so is resolved separately.
+ * `apply_control_data(...)` stages control inputs (ctrl, qfrc_applied, xfrc_applied) into
+ * buffers under a lightweight mutex. The physics loop applies them to `mj_data_` before each
+ * step. This never locks the sim mutex.
+ *
+ * `copy_physics_data(...)` will lock the sim and do a full copy of the existing `mj_data_`
+ * into the provided container. Should be used sparingly (only during setup or reset) as it blocks the
+ * physics loop.
  *
  * `overwrite_physics_data(...)` will completely replace the data for the sim. Should be used
  * with extreme caution.
@@ -158,7 +163,7 @@ public:
    *
    * Users should generally not interact with the physics sim data excepting during setup and
    * other special circumstances. For "normal" processing it is recommended to use
-   * `control_data` or other containers populated by `copy_mj_data`.
+   * `get_snapshot` or other containers populated by `copy_physics_data`.
    */
   mjData* data()
   {
@@ -189,17 +194,25 @@ public:
    * @brief Copies `mj_data_` into the provided container in a thread safe way.
    *
    * This locks the sim mutex and will pause the physics loop, so should be used sparingly.
+   * For a faster result use `get_snapshot` instead.
    * @note: If the destination is null it will be created.
    */
   void copy_physics_data(mjData*& destination);
 
   /**
-   * @brief Copies control fields from `control_data` into the sim data in a thread safe way.
+   * @brief Swaps the consumer's buffer with the latest physics snapshot, if one is ready.
    *
-   * Specifically, copies `control_data->ctrl` and `control_data->qfrc_applied` into
-   * `mj_data_` to update the hw control inputs for the next iteration of the physics loop.
-   * `control_data->xfrc_applied` is copied into `xfrc_plugin_desired_` to avoid conflicts
-   * from the simulate app.
+   * If no new snapshot is available the consumer keeps its existing buffer unchanged.
+   * The consumer may freely read from its buffer after this call.
+   */
+  void get_snapshot(mjData*& consumer_buf);
+
+  /**
+   * @brief Stages control fields from `control_data` for the physics loop.
+   *
+   * Specifically, copies `control_data->ctrl` and `control_data->qfrc_applied` into staging
+   * buffers, and `control_data->xfrc_applied` into `xfrc_plugin_desired_`. The physics loop
+   * handles applying these these to `mj_data_` before each step in a thread safe manner.
    */
   void apply_control_data(mjData* control_data);
 
@@ -226,9 +239,16 @@ private:
   /**
    * @brief Helper function to compose hw interface and simulation provided Cartesian forces.
    *
-   * This should be called before stepping the simulation.
+   * This should be called before stepping the simulation. Assumes sim mutex is held.
    */
   void handle_xfrc_applied();
+
+  /**
+   * @brief Copies staged control inputs into mj_data_ and composes xfrc forces.
+   *
+   * Called before each mj_step from the physics loop (sim mutex already held).
+   */
+  void apply_staged_control_inputs();
 
   /**
    * @brief Loops the physics simulation until asked to terminate.
@@ -275,6 +295,20 @@ private:
   // Primary data container for the physics loop. We do not recommend interacting with this
   // directly unless you are sure of what you are doing.
   mjData* mj_data_{ nullptr };
+
+  // Double-buffered snapshot container: the physics process fills snapshot_buf_ when want_copy_
+  // is set, then a comsumer can swap it out using get_snapshot(). The atomics obviate the need
+  // to lock the mutex on the consumer's side.
+  mjData* snapshot_buf_{ nullptr };
+  std::atomic<bool> want_copy_{ true };
+  std::atomic<bool> copy_ready_{ false };
+
+  // Staged control inputs — written by apply_control_data under staging_mutex_,
+  // applied to mj_data_ by apply_staged_control_inputs in the physics loop.
+  std::vector<mjtNum> ctrl_staged_;
+  std::vector<mjtNum> qfrc_applied_staged_;
+  std::mutex staging_mutex_;
+  bool control_staged_{ false };
 
   // Buffers to track actively applied Cartesian forces from both the plugins and the Simulate /
   // viewer-only drag forces.

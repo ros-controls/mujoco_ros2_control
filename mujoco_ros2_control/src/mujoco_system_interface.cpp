@@ -847,7 +847,7 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
 hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& time, const rclcpp::Duration& /*period*/)
 {
   // Snapshot the latest physics state into our local copy to avoid locking for the whole method.
-  simulation_->copy_physics_data(mj_data_control_);
+  simulation_->get_snapshot(mj_data_control_);
 
   // Joint states
   actuator_state_msg_.header.stamp = time;
