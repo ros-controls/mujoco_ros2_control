@@ -63,16 +63,24 @@ namespace mujoco_ros2_control
  * Instead, consumers of this class are provided with functions to read all sim data and provide
  * control inputs from their own mjData containers.
  *
- * The three functions relevant to interacting with the physics sim's mjData are:
+ * The functions relevant to interacting with the physics sim's mjData are:
  *
  * `copy_physics_data(...)` will lock the sim and do a full copy of the existing `mj_data_`
- * into the provided container, which can be used as the caller requires.
+ * into the provided container, which can be used as the caller requires. Because the physics
+ * loop can hold the sim mutex for a large fraction of a display refresh while it batches
+ * steps, this can block the caller and should not be used from latency-sensitive threads.
  *
- * `apply_control_data(...)` will copy control inputs from the provided mjData into the physics
- * loop. Specifically, it copies `ctrl`, `qfrc_applied`, and `xfrc_applied`. `ctrl` and
- * `qfrc_applied` are copied directly into their corresponding buffers in `mj_data_`. However
- * Cartesian forces from `xfrc_applied` competes with inputs from the Simulate's drag function,
- * and so is resolved separately.
+ * `acquire_data_snapshot()` instead borrows the most recent completed post-step snapshot of
+ * `mj_data_`, produced by the physics loop into a separate buffer. Acquiring is a pointer
+ * swap under a mutex that is never held for longer than a swap, so the caller performs no
+ * scene-sized copy and never waits on physics stepping or refresh. The returned data may
+ * lag `mj_data_` by a few timesteps. This is what the hardware interface uses in `write()`.
+ *
+ * `apply_control_data(...)` will copy control inputs from the provided mjData into staging
+ * buffers that the physics loop applies to `mj_data_` immediately before each step.
+ * Specifically, it stages `ctrl`, `qfrc_applied`, and `xfrc_applied`. Cartesian forces from
+ * `xfrc_applied` compete with inputs from Simulate's drag function, so they are resolved
+ * separately. This only takes the control staging mutex and never blocks on physics stepping.
  *
  * `overwrite_physics_data(...)` will completely replace the data for the sim. Should be used
  * with extreme caution.
@@ -189,17 +197,65 @@ public:
    * @brief Copies `mj_data_` into the provided container in a thread safe way.
    *
    * This locks the sim mutex and will pause the physics loop, so should be used sparingly.
+   * Latency-sensitive callers should use `acquire_data_snapshot` or `copy_control_state` instead.
    * @note: If the destination is null it will be created.
    */
   void copy_physics_data(mjData*& destination);
 
   /**
-   * @brief Copies control fields from `control_data` into the sim data in a thread safe way.
+   * @brief Borrows the latest completed post-step snapshot of `mj_data_` (producer-pays copying).
    *
-   * Specifically, copies `control_data->ctrl` and `control_data->qfrc_applied` into
-   * `mj_data_` to update the hw control inputs for the next iteration of the physics loop.
+   * The physics loop fills snapshot buffers on its own thread; this call only swaps pointers
+   * to take ownership of the most recent completed one, so the caller never performs a scene-sized
+   * copy and never waits for a stepping batch,or in-process refresh. If no new snapshot has
+   * completed since the last call, the same buffer is returned again.
+   * Also requests a fresh snapshot for the next call.
+   *
+   * Ownership contract: there is a single borrower slot. The returned buffer remains valid and
+   * is never touched by the physics loop until the next `acquire_data_snapshot()` call, at
+   * which point the previous buffer is recycled back to the producer. The borrower may freely
+   * write to the buffer (e.g., plugins composing control inputs); all such writes are discarded
+   * when the buffer is recycled and refilled. Only one consumer may use this API — concurrent
+   * callers would swap each other's buffer out from underneath them.
+   * Cold-path consumers that need their own copy should use `copy_physics_data` instead.
+   */
+  mjData* acquire_data_snapshot();
+
+  /**
+   * @brief Small snapshot of the state the hardware interface needs every control cycle.
+   *
+   * This data structure is much smaller than a full mjData copy, so publishing and copying
+   * it is also far cheaper, regardless of scene complexity. Refreshed by the physics loop
+   * after every step, immediately before that step's /clock tick, so a consumer woken by a
+   * clock tick sees state that is synchronous with (or newer than) that tick's sim time.
+   */
+  struct ControlState
+  {
+    mjtNum time{ 0.0 };
+    std::vector<mjtNum> qpos;
+    std::vector<mjtNum> qvel;
+    std::vector<mjtNum> act;
+    std::vector<mjtNum> qfrc_actuator;
+    std::vector<mjtNum> sensordata;
+    std::vector<mjtNum> ctrl;
+  };
+
+  /**
+   * @brief Copies the latest per-step control state into the provided container.
+   *
+   * The copy is under a dedicated mutex and is significantly faster than
+   * physics stepping or full-mjData copies.
+   * This is what the hardware interface uses in `read()` and `write()`.
+   */
+  void copy_control_state(ControlState& destination);
+
+  /**
+   * @brief Stages control fields from `control_data` for the physics loop in a thread safe way.
+   *
+   * Specifically, copies `control_data->ctrl` and `control_data->qfrc_applied` into staging
+   * buffers which the physics loop copies into `mj_data_` immediately before each step.
    * `control_data->xfrc_applied` is copied into `xfrc_plugin_desired_` to avoid conflicts
-   * from the simulate app.
+   * from the simulate app. This does not lock the sim mutex and never waits on stepping.
    */
   void apply_control_data(mjData* control_data);
 
@@ -226,9 +282,26 @@ private:
   /**
    * @brief Helper function to compose hw interface and simulation provided Cartesian forces.
    *
-   * This should be called before stepping the simulation.
+   * This should be called before stepping the simulation. Assumes the sim mutex is held.
    */
-  void handle_xfrc_applied();
+  void apply_staged_control_inputs();
+
+  /**
+   * @brief Publishes the per-step control state from `mj_data_`.
+   *
+   * Called after every mj_step (and forward/reset), before the corresponding /clock tick.
+   * Assumes the sim mutex is held; takes the control state mutex.
+   */
+  void publish_control_state();
+
+  /**
+   * @brief Refreshes the consumer-facing snapshot from `mj_data_`.
+   *
+   * Reclaims the producer-side buffer (clearing snapshot_ready_ if a previous fill was never
+   * consumed), fills it outside any shared lock (the sim mutex serializes writers), then
+   * raises snapshot_ready_ for the consumer. Assumes the sim mutex is held.
+   */
+  void refresh_data_snapshot();
 
   /**
    * @brief Loops the physics simulation until asked to terminate.
@@ -276,11 +349,51 @@ private:
   // directly unless you are sure of what you are doing.
   mjData* mj_data_{ nullptr };
 
+  // Double-buffered snapshot of mj_data_: the physics loop pays for all scene-sized copies,
+  // the consumer borrows the result via acquire_data_snapshot() and performs no copy at all.
+  // The producer (any writer holding the sim mutex) fills snapshot_write_ outside any shared
+  // lock and raises snapshot_ready_; the consumer, when the flag is up, swaps the two pointers
+  // under data_exchange_mutex_ and reads snapshot_read_ in place.
+  mjData* snapshot_write_{ nullptr };
+  mjData* snapshot_read_{ nullptr };
+  bool snapshot_ready_{ false };
+
+  // Control inputs staged by apply_control_data, applied to mj_data_ before each step.
+  std::vector<mjtNum> ctrl_staged_;
+  std::vector<mjtNum> qfrc_applied_staged_;
+
+  // False until apply_control_data is first called (and cleared on reset), so that initial /
+  // reset ctrl values in mj_data_ are not clobbered by stale staging buffers.
+  bool control_inputs_staged_{ false };
+
   // Buffers to track actively applied Cartesian forces from both the plugins and the Simulate /
   // viewer-only drag forces.
   std::vector<mjtNum> xfrc_plugin_desired_;  // Tracks forces from plugins
   std::vector<mjtNum> xfrc_viewer_capture_;  // Tracks forces from the viewer
   std::vector<mjtNum> xfrc_last_written_;    // tracks the last value written to xfrc_applied
+
+  // Guards only the snapshot pointer swap and snapshot_ready_ flag.
+  // Lock order: sim_mutex_ (if needed) is always taken before this one.
+  std::mutex data_exchange_mutex_;
+
+  // Set by acquire_data_snapshot when a consumer takes the snapshot; the physics loop only
+  // runs the expensive full refresh when this is set, so refresh bandwidth tracks consumer
+  // demand instead of the batch rate. Starts true so the first refresh happens.
+  std::atomic<bool> snapshot_refresh_requested_{ true };
+
+  // Guards the staged control inputs (ctrl_staged_, qfrc_applied_staged_, xfrc_plugin_desired_,
+  // control_inputs_staged_). Separate from data_exchange_mutex_ so that staging commands in
+  // write() and applying them before each physics step never queue behind a full mjData copy.
+  // Critical sections are all small buffer copies.
+  // Lock order: sim_mutex_ (if needed) before this one; never held with data_exchange_mutex_.
+  std::mutex control_staging_mutex_;
+
+  // Per-step control state served by copy_control_state. Guarded by its own mutex, separate
+  // from data_exchange_mutex_, so the reduced control-state copies never queue behind a full
+  // mjData snapshot copy.
+  // Lock order: sim_mutex_ (if needed) before this one; never held with data_exchange_mutex_.
+  ControlState control_state_;
+  std::mutex control_state_mutex_;
 
   // For rendering
   mjvCamera cam_;
