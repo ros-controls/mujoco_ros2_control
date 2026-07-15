@@ -19,7 +19,8 @@ sphinx-autobuild = ">=2024,<2026"
 setup = """
 ln -sfn ../mujoco_ros2_control mujoco_ros2_control && \
 ln -sfn ../mujoco_ros2_control_demos mujoco_ros2_control_demos && \
-ln -sfn ../mujoco_ros2_control_plugins mujoco_ros2_control_plugins
+ln -sfn ../mujoco_ros2_control_plugins mujoco_ros2_control_plugins && \
+ln -sfn ../mujoco_extensions mujoco_extensions
 """
 build = { cmd = "sphinx-build -b html . _build/html", depends-on = ["setup"] }
 clean = "rm -rf _build mujoco_ros2_control*"

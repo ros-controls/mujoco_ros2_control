@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 # Copyright 2026 PAL Robotics S.L.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -103,7 +101,7 @@ def launch_setup(context, *args, **kwargs):
     )
 
     # Controller spawners
-    controllers_to_spawn = ["joint_state_broadcaster", "position_controller", "gripper_controller"]
+    controllers_to_spawn = ["joint_state_broadcaster", "position_controller", "gripper_controller", "pose_broadcaster"]
     for controller in controllers_to_spawn:
         nodes.append(
             Node(

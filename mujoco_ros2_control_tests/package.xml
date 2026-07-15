@@ -20,6 +20,7 @@
   <test_depend>hardware_interface</test_depend>
   <test_depend>joint_state_broadcaster</test_depend>
   <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>mujoco_3d_lidar</test_depend>
   <test_depend>mujoco_ros2_control</test_depend>
   <test_depend>mujoco_ros2_control_demos</test_depend>
   <test_depend>mujoco_ros2_control_msgs</test_depend>

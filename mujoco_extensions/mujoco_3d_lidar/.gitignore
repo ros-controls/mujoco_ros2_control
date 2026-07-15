@@ -1,0 +1,6 @@
+# .gitignore to support building this extension in isolation.
+MUJOCO_LOG.TXT
+build
+log
+install
+.vscode
