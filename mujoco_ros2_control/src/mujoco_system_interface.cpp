@@ -485,6 +485,10 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   // Load MuJoCo ROS2 Control plugins
   this->load_mujoco_plugins();
 
+  // Seed the control state before the component is activated.
+  // This prevents issues with unallocated memory the event of read() before write().
+  simulation_->copy_control_state(control_state_);
+
   RCLCPP_INFO(get_logger(), "on_init complete.");
   return hardware_interface::CallbackReturn::SUCCESS;
 }
