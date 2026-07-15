@@ -21,3 +21,9 @@ gripper_controller:
     interface_name: position
     joints:
       - gripper_left_finger_joint
+
+pose_broadcaster:
+  ros__parameters:
+    type: pose_broadcaster/PoseBroadcaster
+    pose_name: pose
+    frame_id: base

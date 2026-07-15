@@ -27,7 +27,7 @@ if(BUILD_TESTING)
   )
 
   install(
-    DIRECTORY launch
+    DIRECTORY launch config test_resources
     DESTINATION share/${PROJECT_NAME}
   )
 
@@ -54,6 +54,10 @@ if(BUILD_TESTING)
   )
 
   add_launch_test(test/robot_launch_transmission_pid_test.py
+    TIMEOUT 75
+  )
+
+  add_launch_test(test/site_velocity_launch_test.py
     TIMEOUT 75
   )
 endif()
