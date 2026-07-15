@@ -48,11 +48,11 @@
 #else
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #endif
-#include <rclcpp/rclcpp.hpp>
-#include "lodepng.h"
-
 #include <ament_index_cpp/get_resource.hpp>
 #include <ament_index_cpp/get_resources.hpp>
+
+#include <rclcpp/rclcpp.hpp>
+#include "lodepng.h"
 
 #define ROS_DISTRO_HUMBLE (HARDWARE_INTERFACE_VERSION_MAJOR < 3)
 
@@ -316,6 +316,16 @@ static void scanPluginLibraries()
   }
 
   // Then try to find all packages that registered mujoco plugins via the ament resource index
+  // get_resources/get_resource were deprecated in https://github.com/ament/ament_index/pull/120
+#if AMENT_INDEX_CPP_VERSION_GTE(1, 13, 2)
+  auto plugins = ament_index_cpp::get_resources_by_name("mujoco_plugins");
+  for (const auto& [package_name, _] : plugins)
+  {
+    auto resource = ament_index_cpp::get_resource("mujoco_plugins", package_name);
+    if (resource.resourcePath.has_value())
+    {
+      const std::string plugin_dir = (resource.resourcePath.value() / resource.contents).string();
+#else
   auto plugins = ament_index_cpp::get_resources("mujoco_plugins");
   for (const auto& [package_name, _] : plugins)
   {
@@ -324,6 +334,7 @@ static void scanPluginLibraries()
     if (ament_index_cpp::get_resource("mujoco_plugins", package_name, content, &prefix))
     {
       const std::string plugin_dir = prefix + "/" + content;
+#endif
       std::printf("Loading MuJoCo plugins from package '%s': %s\n", package_name.c_str(), plugin_dir.c_str());
       loadPluginsFromDirectory(plugin_dir);
     }
