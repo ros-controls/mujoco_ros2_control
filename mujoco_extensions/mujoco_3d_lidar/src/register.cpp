@@ -17,11 +17,12 @@
  * under the License.
  */
 
-#include <mujoco/mujoco.h>
 #include <mujoco/mjplugin.h>
+#include <mujoco/mujoco.h>
 #include "mujoco_3d_lidar/3dlidar.h"
 
-namespace mujoco::plugin::lidar {
+namespace mujoco::plugin::lidar
+{
 
 // Refer to
 // https://github.com/google-deepmind/mujoco/blob/main/doc/changelog.rst#version-370-april-14-2026
