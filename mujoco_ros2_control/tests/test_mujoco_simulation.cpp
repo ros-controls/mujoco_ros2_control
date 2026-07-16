@@ -29,6 +29,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <mujoco_ros2_control/mujoco_simulation.hpp>
+#include <mujoco_ros2_control_msgs/srv/set_free_joint_state.hpp>
 
 namespace
 {
@@ -45,6 +46,10 @@ constexpr const char* kTestModel = R"(<?xml version="1.0"?>
       <joint name="hinge" type="hinge" axis="0 1 0"/>
       <geom type="capsule" size="0.02" fromto="0 0 0 0.3 0 0" mass="1"/>
     </body>
+    <body name="free_object" pos="1 0 1">
+      <freejoint name="free_object_joint"/>
+      <geom type="box" size="0.05 0.05 0.05" mass="1"/>
+    </body>
   </worldbody>
 
   <actuator>
@@ -52,7 +57,7 @@ constexpr const char* kTestModel = R"(<?xml version="1.0"?>
   </actuator>
 
   <keyframe>
-    <key name="home" qpos="0.5"/>
+    <key name="home" qpos="0.5 1 0 1 1 0 0 0"/>
   </keyframe>
 </mujoco>
 )";
@@ -369,6 +374,56 @@ TEST_F(MujocoSimulationTest, ResetWorldTest)
       << "Time should advance after unpausing post-reset";
 }
 
+TEST_F(MujocoSimulationTest, SetFreeJointStateSetsPoseAndVelocity)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5))) << "set_free_joint_state service not found";
+
+  // Before the service call
+  const int qpos_adr = 1;
+  const int qvel_adr = 1;
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 0], 1.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 1], 0.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 2], 1.0);
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 3], 1.0, 1e-9);  // w
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 4], 0.0, 1e-9);  // x
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], 0.0, 1e-9);             // y
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, 1e-9);             // z
+
+  EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 0], 0.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 5], 0.0);
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
+  req->name = "free_object";
+  req->pose.position.x = 2.0;
+  req->pose.position.y = 3.0;
+  req->pose.position.z = 4.0;
+  req->pose.orientation.w = std::sqrt(0.5);
+  req->pose.orientation.x = std::sqrt(0.5);
+  req->pose.orientation.y = 0.0;
+  req->pose.orientation.z = 0.0;
+  req->twist.linear.x = 0.1;
+  req->twist.angular.z = 0.2;
+
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  auto resp = future.get();
+  ASSERT_TRUE(resp->success) << resp->message;
+
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 0], 2.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 1], 3.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 2], 4.0);
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 3], std::sqrt(0.5), 1e-9);  // w
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 4], std::sqrt(0.5), 1e-9);  // x
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], 0.0, 1e-9);             // y
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, 1e-9);             // z
+
+  EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 0], 0.1);
+  EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 5], 0.2);
+}
 int main(int argc, char** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
