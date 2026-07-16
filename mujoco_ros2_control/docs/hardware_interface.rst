@@ -242,6 +242,8 @@ These sensor state interfaces work out of the box with the standard ROS 2 broadc
    Cameras and lidar sensors are no longer supported in the base interface, they are now provided as ``mujoco_ros2_control_plugins``.
    Refer to the :ref:`camera_plugin` and :ref:`lidar_plugin` for more information.
 
+.. _simulation_topics_and_services:
+
 Simulation Topics and Services
 ================================
 
@@ -305,6 +307,28 @@ Services
 
       # Step the simulation forward by 100 physics steps
       ros2 service call /ros2_control_node/step_simulation mujoco_ros2_control_msgs/srv/StepSimulation "{steps: 100}"
+
+``~/set_free_joint_state`` (``mujoco_ros2_control_msgs/srv/SetFreeJointState``)
+   Directly sets the pose and velocity of a MuJoCo free-joint object (e.g. a manipulable prop),
+   identified by the name of the body its free joint drives. Useful for teleporting or resetting
+   an object's pose, similar to Gazebo's ``set_entity_state``.
+
+   - ``name`` (``string``): name of the MuJoCo body driven by the target free joint.
+   - ``pose`` (``geometry_msgs/Pose``): desired world-frame pose. An unset ``orientation``
+     defaults to identity.
+   - ``twist`` (``geometry_msgs/Twist``): desired world-frame velocity. Left at its default
+     (all-zero), the object comes to rest at the new pose.
+   - Returns ``success = false`` (with no data modified) if ``name`` is unknown or is not driven
+     by a free joint.
+   - To *observe* the current state of every free-joint object, see the ``FreeJointPlugin`` in
+     ``mujoco_ros2_control_plugins`` (published on its ``free_joint_states`` topic).
+
+   .. code-block:: bash
+
+      # Teleport "box_1" to (x=0, y=0, z=1) with identity orientation, at rest
+      ros2 service call /ros2_control_node/set_free_joint_state \
+        mujoco_ros2_control_msgs/srv/SetFreeJointState \
+        "{name: 'box_1', pose: {position: {x: 0.0, y: 0.0, z: 1.0}}}"
 
 Debugging
 =========
