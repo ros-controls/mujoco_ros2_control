@@ -32,7 +32,7 @@ mjPLUGIN_LIB_INIT(lidar)
 mjPLUGIN_LIB_INIT
 #endif
 {
-  mujoco::plugin::lidar::Lidar::RegisterPlugin();
+  Lidar::RegisterPlugin();
 }
 
 }  // namespace mujoco::plugin::lidar
