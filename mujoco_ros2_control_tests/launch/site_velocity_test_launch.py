@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # Copyright 2026 PAL Robotics S.L.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

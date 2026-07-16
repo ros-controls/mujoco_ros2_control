@@ -200,10 +200,17 @@ TEST_F(MujocoSimulationTest, ControlUpdateTests)
   control->ctrl[0] = 0.75;
   control->qfrc_applied[0] = 1.5;
 
-  // Apply to sim and verify
+  // Apply to sim. Inputs are staged and copied into the sim data by the physics loop
+  // immediately before each step, so they must not appear until stepping occurs.
   sim_->apply_control_data(control);
-  EXPECT_DOUBLE_EQ(sim_->data()->ctrl[0], 0.75);
-  EXPECT_DOUBLE_EQ(sim_->data()->qfrc_applied[0], 1.5);
+  EXPECT_DOUBLE_EQ(sim_->data()->ctrl[0], 0.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qfrc_applied[0], 0.0);
+
+  // Once the physics loop starts stepping, the staged inputs should land in the sim data
+  sim_->start_physics_thread();
+  EXPECT_TRUE(wait_until([this]() { return sim_->data()->ctrl[0] == 0.75 && sim_->data()->qfrc_applied[0] == 1.5; }))
+      << "Staged control inputs were not applied by the physics loop";
+
   mj_deleteData(control);
 }
 

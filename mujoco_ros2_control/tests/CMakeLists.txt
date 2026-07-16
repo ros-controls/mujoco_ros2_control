@@ -1,8 +1,8 @@
 find_package(ament_cmake_gtest REQUIRED)
 find_package(ament_cmake_pytest REQUIRED)
 
-ament_add_gtest(test_mujoco_simluation test_mujoco_simluation.cpp)
-target_link_libraries(test_mujoco_simluation
+ament_add_gtest(test_mujoco_simulation test_mujoco_simulation.cpp)
+target_link_libraries(test_mujoco_simulation
   mujoco_ros2_control
   rclcpp::rclcpp
 )
