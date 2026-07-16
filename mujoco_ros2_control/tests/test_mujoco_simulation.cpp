@@ -34,9 +34,11 @@
 namespace
 {
 
-// Basic model for executing unit tests, has a hinge joint and an
-// actuator. Most importantly:
-//    nu=1, nv=1, nq=1, nbody=2 (world + pendulum)
+// Basic model for executing unit tests, has a hinge joint with an actuator, plus a
+// free-floating body ("free_object") used to exercise the free-joint reset service.
+// Most importantly:
+//    nu=1, nq=8 (1 hinge + 7 free joint), nv=7 (1 hinge + 6 free joint), nbody=3
+//    (world + pendulum + free_object)
 constexpr const char* kTestModel = R"(<?xml version="1.0"?>
 <mujoco model="test_simulation">
   <option timestep="0.002"/>
