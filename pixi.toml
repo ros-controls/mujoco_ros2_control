@@ -40,6 +40,7 @@ ros-jazzy-mujoco-3d-lidar = { path = "./mujoco_extensions/mujoco_3d_lidar/packag
 
 [dependencies]
 python = ">=3.11,<3.13"
+pytest = ">=7,<8"
 cmake = ">=4.1.2,<5"
 ninja = ">=1.13.1,<2"
 sccache = ">=0.11.0,<0.12"
