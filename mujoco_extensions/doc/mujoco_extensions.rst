@@ -95,6 +95,7 @@ The vectors are determined by the size and field of view parameters.
 - ``async``: Whether or not to do raycasting synchronously or in a background thread.
 
     * For high density sensors, background processing will help avoid blocking ``mj_step`` for long periods.
+    * Async processing requires a copy of the entirety of ``mjData``, so consumers should decide if the tradeoff is worth it.
 
 Note that rays that hit nothing or fall outside the min/max range return ``-1``.
 

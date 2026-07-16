@@ -49,6 +49,9 @@ namespace mujoco::plugin::lidar
  * depending on whether or not the computation can be completed in one cycle. However, the included
  * timestamp will contain the simulation time that the data was copied from, so that consumers
  * can check how delayed sensor readings are.
+ *
+ * Note that copying mjData is expensive, so it is up to consumers of this plugin to decide if
+ * the timing tradeoff is worth it.
  */
 class Lidar
 {
@@ -95,12 +98,12 @@ private:
   std::vector<mjtNum> rotated_vecs_copy_;  // snapshot of rotated vectors for worker
   mjtNum result_timestamp_{ -1.0 };        // sim-time the result corresponds to
 
-  std::mutex mtx_;
+  std::mutex data_copy_mutex_;
   std::condition_variable cv_;
   std::thread worker_;
   bool worker_initialized_{ false };
-  std::atomic<bool> work_ready_{ false };
-  std::atomic<bool> result_ready_{ false };
+  bool work_ready_{ false };
+  bool result_ready_{ false };
   std::atomic<bool> shutdown_{ false };
 };
 

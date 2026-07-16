@@ -395,8 +395,9 @@ void Lidar::ComputeAsync(const mjModel* m, mjData* d, int instance)
   // TODO: When we bump to later versions of mujoco we could replace this with `interval`
   if (update_period_ > 0.0 && (d->time - last_compute_time_) < update_period_)
   {
-    // Still swap in finished results even when throttled
-    std::unique_lock<std::mutex> lock(mtx_, std::try_to_lock);
+    // Even when we're throttled we should still check if async work has completed
+    // and swap in results as soon as they are ready.
+    std::unique_lock<std::mutex> lock(data_copy_mutex_, std::try_to_lock);
     if (lock.owns_lock() && result_ready_)
     {
       mjtNum* sensordata = d->sensordata + sensor_address_;
@@ -408,9 +409,9 @@ void Lidar::ComputeAsync(const mjModel* m, mjData* d, int instance)
   }
   last_compute_time_ = d->time;
 
-  std::unique_lock<std::mutex> lock(mtx_);
+  std::unique_lock<std::mutex> lock(data_copy_mutex_);
 
-  // Swap in any finished results from the previous cycle
+  // If something is pending swap the data in
   if (result_ready_)
   {
     mjtNum* sensordata = d->sensordata + sensor_address_;
@@ -439,11 +440,12 @@ void Lidar::ComputeAsync(const mjModel* m, mjData* d, int instance)
     mju_mulMatVec3(&rotated_vectors_[idx * 3], site_mat, vec);
   }
 
-  // Snapshot mjData and rotated vectors for the worker thread
+  // Copy mjData and rotated vectors for the background process
   mj_copyData(d_copy_, m, d);
   rotated_vecs_copy_ = rotated_vectors_;
   result_timestamp_ = d->time;
 
+  // Notify the async processing thread new data is available
   work_ready_ = true;
   lock.unlock();
   cv_.notify_one();
@@ -453,7 +455,7 @@ void Lidar::ProcessRaycastAsync(const mjModel* m)
 {
   while (!shutdown_.load())
   {
-    std::unique_lock<std::mutex> lock(mtx_);
+    std::unique_lock<std::mutex> lock(data_copy_mutex_);
     cv_.wait(lock, [this] { return work_ready_ || shutdown_.load(); });
 
     if (shutdown_.load())
@@ -464,7 +466,7 @@ void Lidar::ProcessRaycastAsync(const mjModel* m)
     work_ready_ = false;
     lock.unlock();
 
-    // Raycast on the private mjData copy — no lock needed
+    // Run compute on the copied data
     mjtNum* site_pos = d_copy_->site_xpos + 3 * site_id_;
     mjtNum* sensordata = d_copy_->sensordata + sensor_address_;
     mju_zero(sensordata, dimension_);
@@ -497,7 +499,8 @@ void Lidar::ProcessRaycastAsync(const mjModel* m)
     }
 
     {
-      std::lock_guard<std::mutex> lg(mtx_);
+      // Let Compute know updated data is available
+      std::lock_guard<std::mutex> lg(data_copy_mutex_);
       result_ready_ = true;
     }
   }

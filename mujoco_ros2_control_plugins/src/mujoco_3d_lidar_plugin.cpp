@@ -33,7 +33,7 @@ namespace
 {
 
 // Evenly spaced numbers over a specified interval.
-void LinSpace(float lower, float upper, int n, std::vector<float>& array)
+void lin_space(float lower, float upper, int n, std::vector<float>& array)
 {
   if (static_cast<int>(array.size()) < n)
   {
@@ -47,7 +47,7 @@ void LinSpace(float lower, float upper, int n, std::vector<float>& array)
   }
 }
 
-void ComputeVectors(Lidar3dConfig& lidar)
+void compute_vectors(Lidar3dConfig& lidar)
 {
   lidar.vectors.clear();
   lidar.vectors.reserve(lidar.resolution[0] * lidar.resolution[1]);
@@ -56,8 +56,8 @@ void ComputeVectors(Lidar3dConfig& lidar)
 
   if (lidar.resolution[0] > 1)
   {
-    LinSpace(static_cast<float>(lidar.azimuth_range[0]), static_cast<float>(lidar.azimuth_range[1]),
-             lidar.resolution[0], azmuthAngles);
+    lin_space(static_cast<float>(lidar.azimuth_range[0]), static_cast<float>(lidar.azimuth_range[1]),
+              lidar.resolution[0], azmuthAngles);
   }
   else
   {
@@ -65,8 +65,8 @@ void ComputeVectors(Lidar3dConfig& lidar)
   }
   if (lidar.resolution[1] > 1)
   {
-    LinSpace(static_cast<float>(lidar.elevation_range[0]), static_cast<float>(lidar.elevation_range[1]),
-             lidar.resolution[1], elevationAngles);
+    lin_space(static_cast<float>(lidar.elevation_range[0]), static_cast<float>(lidar.elevation_range[1]),
+              lidar.resolution[1], elevationAngles);
   }
   else
   {
@@ -86,7 +86,7 @@ void ComputeVectors(Lidar3dConfig& lidar)
   }
 }
 
-bool IsBigEndian(void)
+bool is_big_endian(void)
 {
   union
   {
@@ -99,7 +99,7 @@ bool IsBigEndian(void)
 
 // Breaks a string into a generic T vector
 template <typename T>
-void ReadVector(std::vector<T>& output, const std::string& input)
+void read_vector(std::vector<T>& output, const std::string& input)
 {
   std::stringstream ss(input);
   std::string item;
@@ -174,7 +174,7 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   };
 
   // Resolution
-  ReadVector(lidar_config.resolution, get_cfg("resolution"));
+  read_vector(lidar_config.resolution, get_cfg("resolution"));
   if (lidar_config.resolution.size() != 2 || lidar_config.resolution[0] <= 0 || lidar_config.resolution[1] <= 0)
   {
     RCLCPP_ERROR(node_->get_logger(), "Invalid resolution for sensor '%s'", sensor_name);
@@ -183,10 +183,10 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   lidar_config.is_3d = lidar_config.resolution[1] > 1;
 
   // horizontal field of view
-  ReadVector(lidar_config.azimuth_range, get_cfg("azimuth_range"));
+  read_vector(lidar_config.azimuth_range, get_cfg("azimuth_range"));
 
   // vertical field of view
-  ReadVector(lidar_config.elevation_range, get_cfg("elevation_range"));
+  read_vector(lidar_config.elevation_range, get_cfg("elevation_range"));
   if (lidar_config.elevation_range.size() == 1)
   {
     lidar_config.elevation_range.push_back(lidar_config.elevation_range[0]);
@@ -230,7 +230,7 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   // Setup publishers and messages for the sensor type
   if (lidar_config.is_3d)
   {
-    ComputeVectors(lidar_config);
+    compute_vectors(lidar_config);
     sensor_msgs::PointCloud2Modifier modifier(lidar_config.point_cloud_msg);
     modifier.setPointCloud2Fields(3, "x", 1, sensor_msgs::msg::PointField::FLOAT32, "y", 1,
                                   sensor_msgs::msg::PointField::FLOAT32, "z", 1, sensor_msgs::msg::PointField::FLOAT32);
@@ -240,7 +240,7 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
     lidar_config.point_cloud_msg.width = lidar_config.resolution[0];
     lidar_config.point_cloud_msg.height = lidar_config.resolution[1];
     lidar_config.point_cloud_msg.point_step = 12;
-    lidar_config.point_cloud_msg.is_bigendian = IsBigEndian();
+    lidar_config.point_cloud_msg.is_bigendian = is_big_endian();
     lidar_config.point_cloud_msg.is_dense = false;
     lidar_config.point_cloud_msg.row_step =
         lidar_config.point_cloud_msg.point_step * lidar_config.point_cloud_msg.width;
