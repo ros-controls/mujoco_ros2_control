@@ -665,6 +665,7 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
   reset_world_cb_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
   set_pause_cb_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
   step_simulation_cb_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  set_free_joint_state_cb_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
   reset_world_service_ = node_->create_service<mujoco_ros2_control_msgs::srv::ResetWorld>(
       "~/reset_world",
@@ -683,6 +684,13 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
       std::bind(&MujocoSimulation::step_simulation_callback, this, std::placeholders::_1, std::placeholders::_2),
       qos_services, step_simulation_cb_group_);
   RCLCPP_INFO(get_logger(), "Created step_simulation service at: %s/step_simulation", node_->get_fully_qualified_name());
+
+  set_free_joint_state_service_ = node_->create_service<mujoco_ros2_control_msgs::srv::SetFreeJointState>(
+      "~/set_free_joint_state",
+      std::bind(&MujocoSimulation::set_free_joint_state_callback, this, std::placeholders::_1, std::placeholders::_2),
+      qos_services, set_free_joint_state_cb_group_);
+  RCLCPP_INFO(get_logger(), "Created set_free_joint_state service at: %s/set_free_joint_state",
+              node_->get_fully_qualified_name());
 
   // Finish initialization by loading the model and initializing the model and control data containers.
   RCLCPP_INFO(get_logger(), "Loading model...");
@@ -998,6 +1006,29 @@ void MujocoSimulation::step_simulation_callback(
     response->success = true;
     response->message = "Completed " + std::to_string(request->steps) + " simulation step(s).";
     RCLCPP_DEBUG(get_logger(), "%s", response->message.c_str());
+  }
+}
+
+bool MujocoSimulation::set_free_joint_state(const std::string& body_name, const geometry_msgs::msg::Pose& pose,
+                                            const geometry_msgs::msg::Twist& twist, std::string& error_message)
+{
+}
+
+void MujocoSimulation::set_free_joint_state_callback(
+    const std::shared_ptr<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request> request,
+    std::shared_ptr<mujoco_ros2_control_msgs::srv::SetFreeJointState::Response> response)
+{
+  std::string error_message;
+  response->success = set_free_joint_state(request->name, request->pose, request->twist, error_message);
+  if (response->success)
+  {
+    response->message = "Successfully set free joint state for body '" + request->name + "'.";
+    RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
+  }
+  else
+  {
+    response->message = error_message;
+    RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
   }
 }
 
