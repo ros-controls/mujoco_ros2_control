@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -113,6 +114,11 @@ protected:
   <actuator>
     <velocity name="actuator1" site="site1"/>
   </actuator>
+
+  <sensor>
+    <framepos name="pose_sensor_pos" objtype="site" objname="site1"/>
+    <framequat name="pose_sensor_quat" objtype="site" objname="site1"/>
+  </sensor>
 </mujoco>
 )";
     file.close();
@@ -256,6 +262,82 @@ TEST_F(HeadlessInitTest, SpeedFactorParamInitialization)
 
   // sim_time should have advanced from zero
   EXPECT_GT(test_data->time, 0.0) << "Simulation time did not advance with sim_speed_factor=0.5";
+}
+
+TEST_F(HeadlessInitTest, PoseSensorStateInterfacesRead)
+{
+  // Register a pose sensor mapped to the framepos/framequat sensors in the MJCF model.
+  hardware_interface::ComponentInfo sensor_info;
+  sensor_info.name = "pose_sensor";
+  sensor_info.parameters["mujoco_type"] = "pose";
+  for (const auto* interface_name :
+       { "position.x", "position.y", "position.z", "orientation.x", "orientation.y", "orientation.z", "orientation.w" })
+  {
+    hardware_interface::InterfaceInfo interface_info;
+    interface_info.name = interface_name;
+    sensor_info.state_interfaces.push_back(interface_info);
+  }
+  hardware_info_.sensors.push_back(sensor_info);
+
+#if ROS_DISTRO_HUMBLE
+  auto result = interface_->on_init(hardware_info_);
+#else
+  hardware_interface::HardwareComponentInterfaceParams params;
+  params.hardware_info = hardware_info_;
+  auto result = interface_->on_init(params);
+#endif
+  ASSERT_EQ(result, hardware_interface::CallbackReturn::SUCCESS);
+
+  // Wait for the model to load and for the physics loop to advance, so that the
+  // simulation has computed and published sensor data at least once.
+  auto start = std::chrono::steady_clock::now();
+  auto timeout = std::chrono::seconds(2);
+  mjModel* test_model = nullptr;
+  mjData* test_data = nullptr;
+  while (std::chrono::steady_clock::now() - start < timeout)
+  {
+    interface_->get_model(test_model);
+    interface_->get_data(test_data);
+    if (test_model != nullptr && test_data != nullptr && test_data->time > 0.0)
+    {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  ASSERT_NE(test_model, nullptr) << "Model failed to initialize within timeout";
+  ASSERT_NE(test_data, nullptr) << "Data failed to initialize within timeout";
+  ASSERT_GT(test_data->time, 0.0) << "Simulation time did not advance within timeout";
+
+  // read() should pull the latest sensor values into the exported state interfaces.
+  interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+
+  // The pose sensor is the only component registered, so its interfaces are exported
+  // in registration order: position.x/y/z, orientation.x/y/z/w.
+  const auto state_interfaces = interface_->export_state_interfaces();
+  ASSERT_EQ(state_interfaces.size(), 7u);
+  ASSERT_EQ(state_interfaces[0].get_name(), "pose_sensor/position.x");
+  ASSERT_EQ(state_interfaces[6].get_name(), "pose_sensor/orientation.w");
+
+#if ROS_DISTRO_HUMBLE
+  const double position_x = state_interfaces[0].get_value();
+  const double qx = state_interfaces[3].get_value();
+  const double qy = state_interfaces[4].get_value();
+  const double qz = state_interfaces[5].get_value();
+  const double qw = state_interfaces[6].get_value();
+#else
+  const double position_x = state_interfaces[0].get_optional().value();
+  const double qx = state_interfaces[3].get_optional().value();
+  const double qy = state_interfaces[4].get_optional().value();
+  const double qz = state_interfaces[5].get_optional().value();
+  const double qw = state_interfaces[6].get_optional().value();
+#endif
+
+  // The site sits on a body that starts upright at x=0.2, so the pose should be a
+  // unit quaternion and a position near the initial pose.
+  const double tol = 1e-3;
+  const double quat_norm = std::sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
+  EXPECT_NEAR(quat_norm, 1.0, tol);
+  EXPECT_NEAR(position_x, 0.2, tol);
 }
 
 TEST(SimDisplayTextTest, ComposesAllRowsWhenRunning)

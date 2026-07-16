@@ -911,14 +911,14 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // pose sensor data
   for (auto& data : pose_sensor_data_)
   {
-    data.position.data.x() = mj_data_control_->sensordata[data.position.mj_sensor_index];
-    data.position.data.y() = mj_data_control_->sensordata[data.position.mj_sensor_index + 1];
-    data.position.data.z() = mj_data_control_->sensordata[data.position.mj_sensor_index + 2];
+    data.position.data.x() = control_state_.sensordata[data.position.mj_sensor_index];
+    data.position.data.y() = control_state_.sensordata[data.position.mj_sensor_index + 1];
+    data.position.data.z() = control_state_.sensordata[data.position.mj_sensor_index + 2];
 
-    data.orientation.data.w() = mj_data_control_->sensordata[data.orientation.mj_sensor_index];
-    data.orientation.data.x() = mj_data_control_->sensordata[data.orientation.mj_sensor_index + 1];
-    data.orientation.data.y() = mj_data_control_->sensordata[data.orientation.mj_sensor_index + 2];
-    data.orientation.data.z() = mj_data_control_->sensordata[data.orientation.mj_sensor_index + 3];
+    data.orientation.data.w() = control_state_.sensordata[data.orientation.mj_sensor_index];
+    data.orientation.data.x() = control_state_.sensordata[data.orientation.mj_sensor_index + 1];
+    data.orientation.data.y() = control_state_.sensordata[data.orientation.mj_sensor_index + 2];
+    data.orientation.data.z() = control_state_.sensordata[data.orientation.mj_sensor_index + 3];
   }
 
   // Publish Odometry
