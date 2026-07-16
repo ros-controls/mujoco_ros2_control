@@ -17,14 +17,21 @@
  * under the License.
  */
 
+#include <mujoco/mujoco.h>
 #include <mujoco/mjplugin.h>
 #include "mujoco_3d_lidar/3dlidar.h"
 
-namespace mujoco::plugin::lidar
-{
+namespace mujoco::plugin::lidar {
+
+// Refer to
+// https://github.com/google-deepmind/mujoco/blob/main/doc/changelog.rst#version-370-april-14-2026
+#if mjVERSION_HEADER >= 3007000
+mjPLUGIN_LIB_INIT(lidar)
+#else
 mjPLUGIN_LIB_INIT
+#endif
 {
-  Lidar::RegisterPlugin();
+  mujoco::plugin::lidar::Lidar::RegisterPlugin();
 }
 
 }  // namespace mujoco::plugin::lidar
