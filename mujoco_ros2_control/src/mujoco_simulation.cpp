@@ -1012,6 +1012,60 @@ void MujocoSimulation::step_simulation_callback(
 bool MujocoSimulation::set_free_joint_state(const std::string& body_name, const geometry_msgs::msg::Pose& pose,
                                             const geometry_msgs::msg::Twist& twist, std::string& error_message)
 {
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+
+  const int body_id = mj_name2id(mj_model_, mjOBJ_BODY, body_name.c_str());
+  if (body_id == -1)
+  {
+    error_message = "Unknown body name: '" + body_name + "'.";
+    return false;
+  }
+
+  // Find the free joint driving this body. A body may have at most one free joint.
+  int qpos_adr = -1;
+  int qvel_adr = -1;
+  for (int i = 0; i < mj_model_->njnt; ++i)
+  {
+    if (mj_model_->jnt_bodyid[i] == body_id && mj_model_->jnt_type[i] == mjJNT_FREE)
+    {
+      qpos_adr = mj_model_->jnt_qposadr[i];
+      qvel_adr = mj_model_->jnt_dofadr[i];
+      break;
+    }
+  }
+
+  if (qpos_adr == -1)
+  {
+    error_message = "Body '" + body_name + "' is not driven by a free joint.";
+    RCLCPP_WARN(get_logger(), "%s", error_message.c_str());
+    return false;
+  }
+
+  // Position
+  mj_data_->qpos[qpos_adr + 0] = pose.position.x;
+  mj_data_->qpos[qpos_adr + 1] = pose.position.y;
+  mj_data_->qpos[qpos_adr + 2] = pose.position.z;
+
+  // Orientation: ROS (x, y, z, w) -> MuJoCo (w, x, y, z)
+  mj_data_->qpos[qpos_adr + 3] = pose.orientation.w;
+  mj_data_->qpos[qpos_adr + 4] = pose.orientation.x;
+  mj_data_->qpos[qpos_adr + 5] = pose.orientation.y;
+  mj_data_->qpos[qpos_adr + 6] = pose.orientation.z;
+
+  // Linear velocity
+  mj_data_->qvel[qvel_adr + 0] = twist.linear.x;
+  mj_data_->qvel[qvel_adr + 1] = twist.linear.y;
+  mj_data_->qvel[qvel_adr + 2] = twist.linear.z;
+
+  // Angular velocity
+  mj_data_->qvel[qvel_adr + 3] = twist.angular.x;
+  mj_data_->qvel[qvel_adr + 4] = twist.angular.y;
+  mj_data_->qvel[qvel_adr + 5] = twist.angular.z;
+
+  // Recompute derived quantities (xpos, xmat, sensor data, etc.) from the new state.
+  mj_forward(mj_model_, mj_data_);
+
+  return true;
 }
 
 void MujocoSimulation::set_free_joint_state_callback(
