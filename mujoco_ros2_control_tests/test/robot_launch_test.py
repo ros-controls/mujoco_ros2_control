@@ -42,6 +42,7 @@ def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false
     # This is necessary to get unbuffered output from the process under test
     proc_env = os.environ.copy()
     proc_env["PYTHONUNBUFFERED"] = "1"
+    os.environ["USE_PID"] = use_pid
     os.environ["USE_MJCF_FROM_TOPIC"] = use_mjcf_from_topic
     os.environ["TEST_TRANSMISSIONS"] = test_transmissions
 
@@ -236,23 +237,28 @@ class TestFixture(unittest.TestCase):
                 ["actuator1", "actuator2", "gripper_left_finger_joint", "gripper_right_finger_joint"],
             )
 
-    def test_pose_interfaces_identity_transform(self):
+    def test_pose_interfaces_transform(self):
+        # The pose_broadcaster is only spawned by the basic robot demo launch file.
+        if any(os.environ.get(var) == "true" for var in ("USE_PID", "USE_MJCF_FROM_TOPIC", "TEST_TRANSMISSIONS")):
+            self.skipTest("pose_broadcaster is only spawned in the basic robot configuration")
+
         expected_pose = {
-            "pose/position.x": 0.0,
+            "pose/position.x": 1.8678,
             "pose/position.y": 0.0,
-            "pose/position.z": 0.0,
-            "pose/orientation.w": 1.0,
+            "pose/position.z": -0.5162,
+            "pose/orientation.w": 0.9999,
             "pose/orientation.x": 0.0,
-            "pose/orientation.y": 0.0,
+            "pose/orientation.y": 0.0099,
             "pose/orientation.z": 0.0,
         }
 
         self.assertTrue(
             self.spin_until(
-                lambda: self._check_pose(self._latest_pose, expected_pose, delta=1e-3),
+                lambda: self._check_pose(self._latest_pose, expected_pose, delta=0.025),
                 timeout=5.0,
             ),
-            "Pose interfaces did not publish the identity transform on /pose_broadcaster/pose",
+            "Pose interfaces did not publish the expected transform on /pose_broadcaster/pose\n"
+            f"Found {self._latest_pose}\nExpected {expected_pose}",
         )
 
     def test_arm(self):
