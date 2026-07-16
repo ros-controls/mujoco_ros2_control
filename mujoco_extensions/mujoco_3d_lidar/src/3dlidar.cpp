@@ -478,8 +478,8 @@ void Lidar::ProcessRaycastAsync(const mjModel* m)
     mj_multiRay(m, d_copy_, site_pos, rotated_vecs_copy_.data(), geom_group, flg_static, body_exclude, geomid,
                 sensordata, NULL, dimension_, max_range_);
 #elif (mjVERSION_HEADER == 340)
-    mj_multiRay(m, d_copy_, site_pos, rotated_vecs_copy_.data(), geom_group, flg_static, body_exclude,
-                geomid_.data(), sensordata, dimension_, max_range_);
+    mj_multiRay(m, d_copy_, site_pos, rotated_vecs_copy_.data(), geom_group, flg_static, body_exclude, geomid_.data(),
+                sensordata, dimension_, max_range_);
 #else
     mju_error("Unsupported mujoco version (%d)\n", mjVERSION_HEADER);
 #endif
@@ -549,9 +549,8 @@ void Lidar::RegisterPlugin()
   plugin.capabilityflags |= mjPLUGIN_SENSOR;
 
   // Parameterizable attributes
-  const char* attributes[] = {
-    "resolution", "azimuth_range", "elevation_range", "max_range", "min_range", "update_rate", "async"
-  };
+  const char* attributes[] = { "resolution",  "azimuth_range", "elevation_range", "max_range", "min_range",
+                               "update_rate", "async" };
   plugin.nattribute = sizeof(attributes) / sizeof(attributes[0]);
   plugin.attributes = attributes;
 

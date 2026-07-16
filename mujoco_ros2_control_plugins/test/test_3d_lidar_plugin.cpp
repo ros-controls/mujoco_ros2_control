@@ -26,8 +26,8 @@
 
 #include <mujoco/mujoco.h>
 #include <ament_index_cpp/get_resource.hpp>
-#include "ament_index_cpp/version.h"
 #include <rclcpp/rclcpp.hpp>
+#include "ament_index_cpp/version.h"
 
 #include "mujoco_3d_lidar_plugin.hpp"
 

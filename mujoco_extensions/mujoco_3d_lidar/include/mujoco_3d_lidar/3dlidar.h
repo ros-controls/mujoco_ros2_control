@@ -38,7 +38,7 @@ namespace mujoco::plugin::lidar
 /**
  * @brief Lidar sensor implementation based on `mj_multiRay`.
  *
- * The sensor supports synchronous and asyncronous operations, as lidar computations can get
+ * The sensor supports synchronous and asynchronous operations, as lidar computations can get
  * quite heavy with many rays. In either mode, raycasting computations are done at the requested
  * `update_period_`. In synchronous operations, the computation will block `mj_step` and update
  * the sensor's data immediately.
@@ -90,18 +90,18 @@ private:
   bool async_;                // Whether or not to do raycasting in a background thread
 
   // Storage containers for asynchronous raycasting
-  mjData* d_copy_{nullptr};               // mjData snapshot for the worker thread
-  std::vector<mjtNum> result_buf_;        // worker writes finished ranges here
-  std::vector<mjtNum> rotated_vecs_copy_; // snapshot of rotated vectors for worker
-  mjtNum result_timestamp_{-1.0};         // sim-time the result corresponds to
+  mjData* d_copy_{ nullptr };              // mjData snapshot for the worker thread
+  std::vector<mjtNum> result_buf_;         // worker writes finished ranges here
+  std::vector<mjtNum> rotated_vecs_copy_;  // snapshot of rotated vectors for worker
+  mjtNum result_timestamp_{ -1.0 };        // sim-time the result corresponds to
 
   std::mutex mtx_;
   std::condition_variable cv_;
   std::thread worker_;
-  bool worker_initialized_{false};
-  std::atomic<bool> work_ready_{false};
-  std::atomic<bool> result_ready_{false};
-  std::atomic<bool> shutdown_{false};
+  bool worker_initialized_{ false };
+  std::atomic<bool> work_ready_{ false };
+  std::atomic<bool> result_ready_{ false };
+  std::atomic<bool> shutdown_{ false };
 };
 
 }  // namespace mujoco::plugin::lidar
