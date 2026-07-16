@@ -7,6 +7,13 @@ target_link_libraries(test_mujoco_simulation
   rclcpp::rclcpp
 )
 
+ament_add_gtest(test_mujoco_system_interface test_mujoco_system_interface.cpp)
+target_link_libraries(test_mujoco_system_interface
+  mujoco_ros2_control
+  rclcpp::rclcpp
+  hardware_interface::hardware_interface
+)
+
 ament_add_gtest(test_plugin test_plugin.cpp)
 target_link_libraries(test_plugin
   mujoco_ros2_control
