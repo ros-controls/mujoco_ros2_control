@@ -185,10 +185,12 @@ TEST_F(MujocoSimulationTest, TestInitialization)
   EXPECT_NE(sim_->model(), nullptr);
   EXPECT_NE(sim_->data(), nullptr);
 
-  EXPECT_EQ(sim_->model()->nq, 1);
-  EXPECT_EQ(sim_->model()->nv, 1);
+  // nq/nv account for the "hinge" joint (1 each) plus the "free_object" free joint
+  // (7 qpos: xyz + wxyz quat; 6 qvel: linear + angular).
+  EXPECT_EQ(sim_->model()->nq, 8);
+  EXPECT_EQ(sim_->model()->nv, 7);
   EXPECT_EQ(sim_->model()->nu, 1);
-  EXPECT_EQ(sim_->model()->nbody, 2);
+  EXPECT_EQ(sim_->model()->nbody, 3);
 }
 
 TEST_F(MujocoSimulationTest, ControlUpdateTests)
