@@ -426,6 +426,32 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateSetsPoseAndVelocity)
   EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 0], 0.1);
   EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 5], 0.2);
 }
+
+TEST_F(MujocoSimulationTest, SetFreeJointStateDefaultsToZeroVelocity)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  // Give the free object a non-zero velocity before resetting.
+  sim_->data()->qvel[1] = 5.0;
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
+  req->name = "free_object";
+  req->pose.position.z = 2.0;
+  // twist left at its default (all-zero) -- object should come to rest.
+
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  ASSERT_TRUE(future.get()->success);
+
+  for (int i = 1; i < 7; ++i)
+  {
+    EXPECT_DOUBLE_EQ(sim_->data()->qvel[i], 0.0) << "qvel[" << i << "] should be reset to zero";
+  }
+}
 int main(int argc, char** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
