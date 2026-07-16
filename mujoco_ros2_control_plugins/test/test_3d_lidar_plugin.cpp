@@ -26,6 +26,7 @@
 
 #include <mujoco/mujoco.h>
 #include <ament_index_cpp/get_resource.hpp>
+#include "ament_index_cpp/version.h"
 #include <rclcpp/rclcpp.hpp>
 
 #include "mujoco_3d_lidar_plugin.hpp"
@@ -54,11 +55,21 @@ protected:
     // Find and load the lidar plugin via the ament index, this is essentially what happens
     // in the system interface.
     std::string content, prefix;
+#if AMENT_INDEX_CPP_VERSION_GTE(1, 13, 2)
+    auto resource = ament_index_cpp::get_resource("mujoco_plugins", "mujoco_3d_lidar");
+    if (resource.resourcePath.has_value())
+    {
+      const std::string plugin_dir = (resource.resourcePath.value() / resource.contents).string();
+      mj_loadPluginLibrary((plugin_dir + "/libmujoco_3d_lidar.so").c_str());
+    }
+#else
+    std::string content, prefix;
     if (ament_index_cpp::get_resource("mujoco_plugins", "mujoco_3d_lidar", content, &prefix))
     {
       const std::string plugin_dir = prefix + "/" + content;
       mj_loadPluginLibrary((plugin_dir + "/libmujoco_3d_lidar.so").c_str());
     }
+#endif
 
     node_ = rclcpp::Node::make_shared("test_lidar_plugin_node");
     plugin_node_ = node_->create_sub_node("lidar_plugin");
