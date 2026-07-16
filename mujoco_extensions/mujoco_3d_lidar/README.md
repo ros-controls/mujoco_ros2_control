@@ -17,6 +17,7 @@ The sensor is parametrizable with the following:
 6. Minimum Range. _positive float greater than 0.0 (m)_ (Optional, defaults to 0.0)
 7. Update Rate. _positive float greater than 0.0 (Hz)_ (Optional, defaults to 0.0)
     * **Note**. This may be removed in future versions after the [interval attribute](https://mujoco.readthedocs.io/en/stable/modeling.html#sensors) is available for sensors.
+8. Async. _boolean int (0 for false, non-zero for true)_ (Optional, defaults to 0)
 
 Field of view should always be in radians regardless of the compiler options.
 
@@ -40,6 +41,7 @@ These parameters are passed as extension config attributes:
       <config key="max_range" value="13.0"/>
       <config key="min_range" value="1.0"/>
       <config key="update_rate" value="1.0"/>
+      <config key="async" value="0"/>
     </plugin>
   </sensor>
 </mujoco>
@@ -50,7 +52,8 @@ Note the following:
 * The dimensionality of the sensor output is `size_x *size_y`.
 * `objtype="site" objname="lidar"` specify that the sensor is associated with a
   site, and the name of the specific site.
-* Field-of-view angles are always in radians
+* Field-of-view angles are always in radians.
+* If async is specified, lidar computations are done in the background and data will be delayed.
 
 ### Example model
 

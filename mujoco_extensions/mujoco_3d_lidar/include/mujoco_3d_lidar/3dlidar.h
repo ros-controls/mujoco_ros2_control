@@ -20,7 +20,11 @@
 #ifndef MUJOCO_PLUGIN_SENSOR_LIDAR_H_
 #define MUJOCO_PLUGIN_SENSOR_LIDAR_H_
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <optional>
+#include <thread>
 #include <vector>
 
 #include <mujoco/mjdata.h>
@@ -31,12 +35,27 @@
 namespace mujoco::plugin::lidar
 {
 
+/**
+ * @brief Lidar sensor implementation based on `mj_multiRay`.
+ *
+ * The sensor supports synchronous and asyncronous operations, as lidar computations can get
+ * quite heavy with many rays. In either mode, raycasting computations are done at the requested
+ * `update_period_`. In synchronous operations, the computation will block `mj_step` and update
+ * the sensor's data immediately.
+ *
+ * In asynchronous operation, a copy of the data is taken and a background process will handle
+ * the expensive computations, then write data to the sensor's data block on the next update.
+ * This means that the readings may be 1 update rate timestep behind reality, or possibly longer
+ * depending on whether or not the computation can be completed in one cycle. However, the included
+ * timestamp will contain the simulation time that the data was copied from, so that consumers
+ * can check how delayed sensor readings are.
+ */
 class Lidar
 {
 public:
   static Lidar* Create(const mjModel* m, mjData* d, int instance);
   Lidar(Lidar&&) = default;
-  ~Lidar() = default;
+  ~Lidar();
 
   void Reset(const mjModel* m, int instance);
   void Compute(const mjModel* m, mjData* d, int instance);
@@ -46,7 +65,14 @@ public:
 
 private:
   Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNum azimuth_range[2],
-        mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate);
+        mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate, bool async);
+
+  void ComputeSync(const mjModel* m, mjData* d, int instance);
+
+  void ComputeAsync(const mjModel* m, mjData* d, int instance);
+
+  void ProcessRaycastAsync(const mjModel* m);
+
   std::vector<mjtNum> vectors_;
   std::vector<mjtNum> rotated_vectors_;
   std::vector<int> geomid_;
@@ -61,6 +87,21 @@ private:
   mjtNum min_range_;          // min range of lidar
   mjtNum update_period_;      // Update period to run
   mjtNum last_compute_time_;  // Sim time of the last reading
+  bool async_;                // Whether or not to do raycasting in a background thread
+
+  // Storage containers for asynchronous raycasting
+  mjData* d_copy_{nullptr};               // mjData snapshot for the worker thread
+  std::vector<mjtNum> result_buf_;        // worker writes finished ranges here
+  std::vector<mjtNum> rotated_vecs_copy_; // snapshot of rotated vectors for worker
+  mjtNum result_timestamp_{-1.0};         // sim-time the result corresponds to
+
+  std::mutex mtx_;
+  std::condition_variable cv_;
+  std::thread worker_;
+  bool worker_initialized_{false};
+  std::atomic<bool> work_ready_{false};
+  std::atomic<bool> result_ready_{false};
+  std::atomic<bool> shutdown_{false};
 };
 
 }  // namespace mujoco::plugin::lidar

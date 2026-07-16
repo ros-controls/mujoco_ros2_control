@@ -204,17 +204,27 @@ Lidar* Lidar::Create(const mjModel* m, mjData* d, int instance)
     return nullptr;
   }
 
+  // Default to synchronous (false)
+  bool async = false;
+  std::string async_str = std::string(mj_getPluginConfig(m, instance, "async"));
+  if (!async_str.empty())
+  {
+    // Anything non-zero is true
+    async = (std::atoi(async_str.c_str()) != 0);
+  }
+
   return new Lidar(m, d, instance, resolution.data(), azimuth_range.data(), elevation_range.data(), max_range,
-                   min_range, update_rate);
+                   min_range, update_rate, async);
 }
 
 Lidar::Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNum azimuth_range[2],
-             mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate)
+             mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate, bool async)
   : resolution_{ resolution[0], resolution[1] }
   , max_range_(max_range)
   , min_range_(min_range)
   , update_period_(update_rate > 0.0 ? 1.0 / update_rate : 0.0)
   , last_compute_time_(-1.0)
+  , async_(async)
 {
   // Make sure sensor is attached to a site.
   for (int i = 0; i < m->nsensor; ++i)
@@ -277,13 +287,50 @@ Lidar::Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNu
   // Allocate storage for data
   rotated_vectors_.resize(dimension_ * 3);
   geomid_.resize(resolution_[0] * resolution_[1]);
+
+  // Allocate async storage, noting that on extension construction mjData may still be
+  // being initialized. To handle that we allocate mjData lazily on the first computation
+  // request.
+  if (async_)
+  {
+    result_buf_.resize(dimension_, -1.0);
+    rotated_vecs_copy_.resize(dimension_ * 3);
+  }
+}
+
+Lidar::~Lidar()
+{
+  shutdown_.store(true);
+  cv_.notify_one();
+  if (worker_.joinable())
+  {
+    worker_.join();
+  }
+  if (d_copy_)
+  {
+    mj_deleteData(d_copy_);
+  }
 }
 
 void Lidar::Reset(const mjModel* m, int instance)
 {
+  // No-op
 }
 
 void Lidar::Compute(const mjModel* m, mjData* d, int instance)
+{
+  // Two different paths depending on if we want the computation to block
+  if (async_)
+  {
+    ComputeAsync(m, d, instance);
+  }
+  else
+  {
+    ComputeSync(m, d, instance);
+  }
+}
+
+void Lidar::ComputeSync(const mjModel* m, mjData* d, int instance)
 {
   // Throttle to the update rate, if it exists and is positive
   // TODO: When we bump to later versions of mujoco we could replace this with `interval`
@@ -335,6 +382,127 @@ void Lidar::Compute(const mjModel* m, mjData* d, int instance)
   }
 }
 
+void Lidar::ComputeAsync(const mjModel* m, mjData* d, int instance)
+{
+  if (!worker_initialized_)
+  {
+    d_copy_ = mj_copyData(nullptr, m, d);
+    worker_ = std::thread(&Lidar::ProcessRaycastAsync, this, m);
+    worker_initialized_ = true;
+  }
+
+  // Throttle to the update rate, if it exists and is positive
+  // TODO: When we bump to later versions of mujoco we could replace this with `interval`
+  if (update_period_ > 0.0 && (d->time - last_compute_time_) < update_period_)
+  {
+    // Still swap in finished results even when throttled
+    std::unique_lock<std::mutex> lock(mtx_, std::try_to_lock);
+    if (lock.owns_lock() && result_ready_)
+    {
+      mjtNum* sensordata = d->sensordata + sensor_address_;
+      std::copy(result_buf_.begin(), result_buf_.end(), sensordata);
+      d->plugin_state[m->plugin_stateadr[instance]] = result_timestamp_;
+      result_ready_ = false;
+    }
+    return;
+  }
+  last_compute_time_ = d->time;
+
+  std::unique_lock<std::mutex> lock(mtx_);
+
+  // Swap in any finished results from the previous cycle
+  if (result_ready_)
+  {
+    mjtNum* sensordata = d->sensordata + sensor_address_;
+    std::copy(result_buf_.begin(), result_buf_.end(), sensordata);
+
+    // Essentially a time stamp that can be accessed from consumers to know when the last
+    // reading was taken
+    d->plugin_state[m->plugin_stateadr[instance]] = result_timestamp_;
+    result_ready_ = false;
+  }
+
+  // If the worker is still busy, skip this cycle rather than blocking mj_step...
+  // The timestamp will still show the time that the snapshot was actually taken
+  if (work_ready_)
+  {
+    return;
+  }
+
+  // Get site frame.
+  mjtNum* site_pos = d->site_xpos + 3 * site_id_;
+  mjtNum* site_mat = d->site_xmat + 9 * site_id_;
+
+  for (int idx = 0; idx < dimension_; ++idx)
+  {
+    mjtNum vec[] = { vectors_[idx * 3], vectors_[idx * 3 + 1], vectors_[idx * 3 + 2] };
+    mju_mulMatVec3(&rotated_vectors_[idx * 3], site_mat, vec);
+  }
+
+  // Snapshot mjData and rotated vectors for the worker thread
+  mj_copyData(d_copy_, m, d);
+  rotated_vecs_copy_ = rotated_vectors_;
+  result_timestamp_ = d->time;
+
+  work_ready_ = true;
+  lock.unlock();
+  cv_.notify_one();
+}
+
+void Lidar::ProcessRaycastAsync(const mjModel* m)
+{
+  while (!shutdown_.load())
+  {
+    std::unique_lock<std::mutex> lock(mtx_);
+    cv_.wait(lock, [this] { return work_ready_ || shutdown_.load(); });
+
+    if (shutdown_.load())
+    {
+      break;
+    }
+
+    work_ready_ = false;
+    lock.unlock();
+
+    // Raycast on the private mjData copy — no lock needed
+    mjtNum* site_pos = d_copy_->site_xpos + 3 * site_id_;
+    mjtNum* sensordata = d_copy_->sensordata + sensor_address_;
+    mju_zero(sensordata, dimension_);
+
+    mjtByte* geom_group = nullptr;
+    mjtByte flg_static = -1;
+    int body_exclude = -1;
+
+#if (mjVERSION_HEADER >= 3005000)
+    int* geomid = nullptr;
+    mj_multiRay(m, d_copy_, site_pos, rotated_vecs_copy_.data(), geom_group, flg_static, body_exclude, geomid,
+                sensordata, NULL, dimension_, max_range_);
+#elif (mjVERSION_HEADER == 340)
+    mj_multiRay(m, d_copy_, site_pos, rotated_vecs_copy_.data(), geom_group, flg_static, body_exclude,
+                geomid_.data(), sensordata, dimension_, max_range_);
+#else
+    mju_error("Unsupported mujoco version (%d)\n", mjVERSION_HEADER);
+#endif
+
+    for (int32_t idx = 0; idx < dimension_; ++idx)
+    {
+      if (sensordata[idx] >= max_range_ || sensordata[idx] < min_range_)
+      {
+        result_buf_[idx] = -1.0;
+      }
+      else
+      {
+        result_buf_[idx] = sensordata[idx];
+      }
+    }
+
+    {
+      std::lock_guard<std::mutex> lg(mtx_);
+      result_ready_ = true;
+    }
+  }
+}
+
 void Lidar::Visualize(const mjModel* m, mjData* d, const mjvOption* opt, mjvScene* scn, int instance)
 {
   if (!opt->flags[mjVIS_RANGEFINDER])
@@ -382,7 +550,7 @@ void Lidar::RegisterPlugin()
 
   // Parameterizable attributes
   const char* attributes[] = {
-    "resolution", "azimuth_range", "elevation_range", "max_range", "min_range", "update_rate"
+    "resolution", "azimuth_range", "elevation_range", "max_range", "min_range", "update_rate", "async"
   };
   plugin.nattribute = sizeof(attributes) / sizeof(attributes[0]);
   plugin.attributes = attributes;
