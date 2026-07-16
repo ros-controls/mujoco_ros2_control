@@ -26,8 +26,8 @@
 
 #include <mujoco/mujoco.h>
 #include <ament_index_cpp/get_resource.hpp>
-#include <rclcpp/rclcpp.hpp>
 #include "ament_index_cpp/version.h"
+#include <rclcpp/rclcpp.hpp>
 
 #include "mujoco_3d_lidar_plugin.hpp"
 
@@ -54,7 +54,6 @@ protected:
   {
     // Find and load the lidar plugin via the ament index, this is essentially what happens
     // in the system interface.
-    std::string content, prefix;
 #if AMENT_INDEX_CPP_VERSION_GTE(1, 13, 2)
     auto resource = ament_index_cpp::get_resource("mujoco_plugins", "mujoco_3d_lidar");
     if (resource.resourcePath.has_value())
