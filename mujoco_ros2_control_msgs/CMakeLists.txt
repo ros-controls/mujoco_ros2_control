@@ -19,6 +19,7 @@ set(srv_files
   srv/SetPause.srv
   srv/StepSimulation.srv
   srv/ApplyExternalWrench.srv
+  srv/SetFreeJointState.srv
 )
 
 
