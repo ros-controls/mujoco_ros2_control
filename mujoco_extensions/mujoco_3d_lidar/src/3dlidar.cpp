@@ -328,11 +328,11 @@ void Lidar::Raycast(const mjModel* m, mjData* d, const mjtNum* rotated_vecs, mjt
 
 #if (mjVERSION_HEADER >= 3005000)
   int* geomid = nullptr;
-  mj_multiRay(m, d, site_pos, rotated_vecs, geom_group, flg_static, body_exclude, geomid, output, NULL,
-              dimension_, max_range_);
+  mj_multiRay(m, d, site_pos, rotated_vecs, geom_group, flg_static, body_exclude, geomid, output, NULL, dimension_,
+              max_range_);
 #elif (mjVERSION_HEADER == 340)
-  mj_multiRay(m, d, site_pos, rotated_vecs, geom_group, flg_static, body_exclude, geomid_.data(), output,
-              dimension_, max_range_);
+  mj_multiRay(m, d, site_pos, rotated_vecs, geom_group, flg_static, body_exclude, geomid_.data(), output, dimension_,
+              max_range_);
 #else
   mju_error("Unsupported mujoco version (%d)\n", mjVERSION_HEADER);
 #endif

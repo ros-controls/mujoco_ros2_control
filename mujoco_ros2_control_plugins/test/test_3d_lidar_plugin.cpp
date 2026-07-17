@@ -249,7 +249,8 @@ TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSyncAsync)
         <config key="max_range" value="10.0"/>
         <config key="min_range" value="0.05"/>
         <config key="update_rate" value="100.0"/>
-        <config key="async" value=")" + std::string(async_value) + R"("/>
+        <config key="async" value=")" +
+               std::string(async_value) + R"("/>
       </instance>
     </plugin>
   </extension>

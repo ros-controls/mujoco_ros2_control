@@ -215,7 +215,6 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
     lidar_config.async = (std::atoi(async_bool_str.c_str()) != 0);
   }
 
-
   // Grab the frame name and topic from the node parameters, the frame name will default to the
   // site name in the MJCF if not provided. Topics default to `/scan` and `/points` for 2-D and
   // 3-D scans, respectively.
