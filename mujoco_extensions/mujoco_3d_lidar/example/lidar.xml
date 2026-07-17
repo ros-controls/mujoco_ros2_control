@@ -10,7 +10,7 @@
                 <config key="max_range" value="10.0"/>
                 <config key="min_range" value="1.0"/>
                 <config key="update_rate" value="2.0"/>
-                <config key="async" value="1"/>
+                <config key="async" value="0"/>
             </instance>
         </plugin>
     </extension>
