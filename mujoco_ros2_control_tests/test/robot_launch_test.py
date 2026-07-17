@@ -242,15 +242,30 @@ class TestFixture(unittest.TestCase):
         if any(os.environ.get(var) == "true" for var in ("USE_PID", "USE_MJCF_FROM_TOPIC", "TEST_TRANSMISSIONS")):
             self.skipTest("pose_broadcaster is only spawned in the basic robot configuration")
 
-        expected_pose = {
-            "pose/position.x": 1.8678,
-            "pose/position.y": 0.0,
-            "pose/position.z": -0.5162,
-            "pose/orientation.w": 0.9999,
-            "pose/orientation.x": 0.0,
-            "pose/orientation.y": 0.0099,
-            "pose/orientation.z": 0.0,
-        }
+        # The settled contact pose differs between MuJoCo versions: the ROS binaries and pixi/conda environment
+        # ships different versions of libmujoco. Both are deterministic, so keep one exact expected pose per
+        # environment instead of a tolerance loose enough to span the gap between them.
+        # See https://github.com/pal-robotics/mujoco_vendor/issues/11 for more details.
+        if os.environ.get("PIXI_PROJECT_ROOT") or os.environ.get("CONDA_PREFIX"):
+            expected_pose = {
+                "pose/position.x": 1.8753,
+                "pose/position.y": 0.0,
+                "pose/position.z": -0.4885,
+                "pose/orientation.w": 1.0,
+                "pose/orientation.x": 0.0,
+                "pose/orientation.y": 0.0024,
+                "pose/orientation.z": 0.0,
+            }
+        else:
+            expected_pose = {
+                "pose/position.x": 1.8678,
+                "pose/position.y": 0.0,
+                "pose/position.z": -0.5162,
+                "pose/orientation.w": 0.9999,
+                "pose/orientation.x": 0.0,
+                "pose/orientation.y": 0.0099,
+                "pose/orientation.z": 0.0,
+            }
 
         self.assertTrue(
             self.spin_until(
