@@ -137,6 +137,7 @@ class TestFixture(unittest.TestCase):
         if msg is None:
             return False
         try:
+            assert "ee_link" == msg.header.frame_id
             actual_pose = {
                 "pose/orientation.w": msg.pose.orientation.w,
                 "pose/orientation.x": msg.pose.orientation.x,
