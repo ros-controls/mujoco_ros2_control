@@ -60,8 +60,8 @@ struct Lidar3dConfig
   std::string lidar_topic;
 
   // Tracking the last update and compute time from the plugin
-  mjtNum last_compute_time{ -1.0 };
-  mjtNum last_published_time{ -1.0 };
+  mjtNum last_compute_time{ 0.0 };
+  mjtNum last_published_time{ 0.0 };
 
   sensor_msgs::msg::LaserScan laser_scan_msg;
   rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_pub_raw;
