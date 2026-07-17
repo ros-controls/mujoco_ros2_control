@@ -16,6 +16,12 @@ geometry_msgs/Pose pose
 # Leave at the default (all-zero) to bring the object to rest at the new pose.
 geometry_msgs/Twist twist
 
+# Optional reference frame. If empty (default), `pose` is interpreted in the world
+# frame. If set to the name of another MuJoCo body, `pose` is interpreted relative
+# to that body's current world pose (i.e. world_pose = ref_world_pose * pose).
+# `twist` is always interpreted in the world frame.
+string reference_frame
+
 ---
 
 # True if `name` was found, is driven by a free joint, and the state was applied.
