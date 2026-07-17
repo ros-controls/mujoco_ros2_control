@@ -33,6 +33,7 @@ from rosgraph_msgs.msg import Clock
 from mujoco_ros2_control_msgs.srv import ResetWorld, SetFreeJointState, SetPause, StepSimulation
 from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState, Image, CameraInfo
+from geometry_msgs.msg import PoseStamped
 from controller_manager_msgs.srv import ListHardwareInterfaces, SwitchController
 
 
@@ -41,6 +42,7 @@ def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false
     # This is necessary to get unbuffered output from the process under test
     proc_env = os.environ.copy()
     proc_env["PYTHONUNBUFFERED"] = "1"
+    os.environ["USE_PID"] = use_pid
     os.environ["USE_MJCF_FROM_TOPIC"] = use_mjcf_from_topic
     os.environ["TEST_TRANSMISSIONS"] = test_transmissions
     os.environ["USE_PIDS"] = use_pid
@@ -91,10 +93,12 @@ class TestFixture(unittest.TestCase):
         self.node = rclpy.create_node("test_node")
         self._latest_js = None
         self._latest_actuator_js = None
+        self._latest_pose = None
         self._js_sub = self.node.create_subscription(JointState, "/joint_states", self.joint_state_cb, 10)
         self._actuator_sub = self.node.create_subscription(
             JointState, "/mujoco_actuators_states", self.actuator_joint_state_cb, 10
         )
+        self._pose_sub = self.node.create_subscription(PoseStamped, "/pose_broadcaster/pose", self.pose_cb, 10)
 
     def tearDown(self):
         self.node.destroy_node()
@@ -104,6 +108,9 @@ class TestFixture(unittest.TestCase):
 
     def actuator_joint_state_cb(self, msg):
         self._latest_actuator_js = msg
+
+    def pose_cb(self, msg):
+        self._latest_pose = msg
 
     def spin_until(self, predicate, timeout=20.0, spin_period=0.05):
         """Spin the node until predicate() returns True or timeout is reached.
@@ -124,6 +131,25 @@ class TestFixture(unittest.TestCase):
         try:
             return all(abs(msg.position[msg.name.index(jn)] - ep) <= delta for jn, ep in expected_positions.items())
         except ValueError:
+            return False
+
+    def _check_pose(self, msg, expected_pose, delta):
+        """Return True if all 7 pose interface elements are within delta in msg."""
+        if msg is None:
+            return False
+        try:
+            assert "ee_link" == msg.header.frame_id
+            actual_pose = {
+                "pose/orientation.w": msg.pose.orientation.w,
+                "pose/orientation.x": msg.pose.orientation.x,
+                "pose/orientation.y": msg.pose.orientation.y,
+                "pose/orientation.z": msg.pose.orientation.z,
+                "pose/position.x": msg.pose.position.x,
+                "pose/position.y": msg.pose.position.y,
+                "pose/position.z": msg.pose.position.z,
+            }
+            return all(abs(actual_pose[key] - value) <= delta for key, value in expected_pose.items())
+        except AttributeError:
             return False
 
     def check_controllers_running_with_retry(self, controller_names, timeout=15.0):
@@ -212,6 +238,45 @@ class TestFixture(unittest.TestCase):
                 "/mujoco_actuators_states",
                 ["actuator1", "actuator2", "gripper_left_finger_joint", "gripper_right_finger_joint"],
             )
+
+    def test_pose_interfaces_transform(self):
+        # The pose_broadcaster is only spawned by the basic robot demo launch file.
+        if any(os.environ.get(var) == "true" for var in ("USE_PID", "USE_MJCF_FROM_TOPIC", "TEST_TRANSMISSIONS")):
+            self.skipTest("pose_broadcaster is only spawned in the basic robot configuration")
+
+        # The settled contact pose differs between MuJoCo versions: the ROS binaries and pixi/conda environment
+        # ships different versions of libmujoco. Both are deterministic, so keep one exact expected pose per
+        # environment instead of a tolerance loose enough to span the gap between them.
+        # See https://github.com/pal-robotics/mujoco_vendor/issues/11 for more details.
+        if os.environ.get("PIXI_PROJECT_ROOT") or os.environ.get("CONDA_PREFIX"):
+            expected_pose = {
+                "pose/position.x": 1.8753,
+                "pose/position.y": 0.0,
+                "pose/position.z": -0.4885,
+                "pose/orientation.w": 1.0,
+                "pose/orientation.x": 0.0,
+                "pose/orientation.y": 0.0024,
+                "pose/orientation.z": 0.0,
+            }
+        else:
+            expected_pose = {
+                "pose/position.x": 1.8678,
+                "pose/position.y": 0.0,
+                "pose/position.z": -0.5162,
+                "pose/orientation.w": 0.9999,
+                "pose/orientation.x": 0.0,
+                "pose/orientation.y": 0.0099,
+                "pose/orientation.z": 0.0,
+            }
+
+        self.assertTrue(
+            self.spin_until(
+                lambda: self._check_pose(self._latest_pose, expected_pose, delta=1e-3),
+                timeout=5.0,
+            ),
+            "Pose interfaces did not publish the expected transform on /pose_broadcaster/pose\n"
+            f"Found {self._latest_pose}\nExpected {expected_pose}",
+        )
 
     def test_arm(self):
 
