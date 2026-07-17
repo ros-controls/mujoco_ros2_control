@@ -26,4 +26,4 @@ pose_broadcaster:
   ros__parameters:
     type: pose_broadcaster/PoseBroadcaster
     pose_name: pose
-    frame_id: base
+    frame_id: ee_link
