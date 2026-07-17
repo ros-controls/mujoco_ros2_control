@@ -254,7 +254,7 @@ class TestFixture(unittest.TestCase):
 
         self.assertTrue(
             self.spin_until(
-                lambda: self._check_pose(self._latest_pose, expected_pose, delta=0.025),
+                lambda: self._check_pose(self._latest_pose, expected_pose, delta=1e-3),
                 timeout=5.0,
             ),
             "Pose interfaces did not publish the expected transform on /pose_broadcaster/pose\n"
