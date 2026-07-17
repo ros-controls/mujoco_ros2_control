@@ -40,18 +40,20 @@ namespace mujoco::plugin::lidar
  *
  * The sensor supports synchronous and asynchronous operations, as lidar computations can get
  * quite heavy with many rays. In either mode, raycasting computations are done at the requested
- * `update_period_`. In synchronous operations, the computation will block `mj_step` and update
- * the sensor's data immediately.
+ * `update_period_`.
  *
- * In asynchronous operation, a copy of the data is taken and a background process will handle
- * the expensive computations, then write data to the sensor's data block on the next update.
- * This means that the readings may be 1 update rate timestep behind reality, or possibly longer
- * depending on whether or not the computation can be completed in one cycle. However, the included
- * timestamp will contain the simulation time that the data was copied from, so that consumers
- * can check how delayed sensor readings are.
+ * - **Synchronous**: the computation blocks `mj_step` and updates the sensor's data immediately.
  *
- * Note that copying mjData is expensive, so it is up to consumers of this plugin to decide if
- * the timing tradeoff is worth it.
+ * - **Asynchronous**: a copy of mjData is taken and a background thread handles the expensive
+ *   raycasting, then writes results to the sensor's data block on the next update. This means
+ *   readings may be 1 update rate timestep behind reality, or possibly longer if the computation
+ *   cannot complete in one cycle. The included timestamp contains the simulation time the data
+ *   was copied from, so consumers can check how delayed sensor readings are. Note that copying
+ *   mjData is expensive, so it is up to consumers of this plugin to decide if the timing
+ *   tradeoff is worth it.
+ *
+ * We recommend users try the simulate app's profiler function to weigh the benefits and time
+ * costs of both modes.
  */
 class Lidar
 {

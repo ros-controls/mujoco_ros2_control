@@ -289,7 +289,7 @@ Lidar::Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNu
   geomid_.resize(resolution_[0] * resolution_[1]);
 
   // Allocate async storage, noting that on extension construction mjData may still be
-  // being initialized. To handle that we allocate mjData lazily on the first computation
+  // initializing. To handle that we allocate mjData lazily on the first computation
   // request.
   if (async_)
   {
