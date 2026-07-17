@@ -394,8 +394,8 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateSetsPoseAndVelocity)
   EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 2], 1.0);
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 3], 1.0, 1e-9);  // w
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 4], 0.0, 1e-9);  // x
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], 0.0, 1e-9);             // y
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, 1e-9);             // z
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], 0.0, 1e-9);  // y
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, 1e-9);  // z
 
   EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 0], 0.0);
   EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 5], 0.0);
