@@ -317,57 +317,21 @@ void Lidar::Reset(const mjModel* m, int instance)
   // No-op
 }
 
-void Lidar::Compute(const mjModel* m, mjData* d, int instance)
+void Lidar::Raycast(const mjModel* m, mjData* d, const mjtNum* rotated_vecs, mjtNum* output)
 {
-  // Two different paths depending on if we want the computation to block
-  if (async_)
-  {
-    ComputeAsync(m, d, instance);
-  }
-  else
-  {
-    ComputeSync(m, d, instance);
-  }
-}
-
-void Lidar::ComputeSync(const mjModel* m, mjData* d, int instance)
-{
-  // Throttle to the update rate, if it exists and is positive
-  // TODO: When we bump to later versions of mujoco we could replace this with `interval`
-  if (update_period_ > 0.0 && (d->time - last_compute_time_) < update_period_)
-  {
-    return;
-  }
-  last_compute_time_ = d->time;
-
-  // Essentially a time stamp that can be accessed from consumers to know when the last
-  // reading was taken
-  d->plugin_state[m->plugin_stateadr[instance]] = last_compute_time_;
+  mjtNum* site_pos = d->site_xpos + 3 * site_id_;
+  mju_zero(output, dimension_);
 
   mjtByte* geom_group = nullptr;
   mjtByte flg_static = -1;
   int body_exclude = -1;
 
-  // Get site frame.
-  mjtNum* site_pos = d->site_xpos + 3 * site_id_;
-  mjtNum* site_mat = d->site_xmat + 9 * site_id_;
-
-  // Clear sensordata and distance matrix.
-  mjtNum* sensordata = d->sensordata + sensor_address_;
-  mju_zero(sensordata, dimension_);
-
-  for (int idx = 0; idx < dimension_; ++idx)
-  {
-    mjtNum vec[] = { vectors_[idx * 3], vectors_[idx * 3 + 1], vectors_[idx * 3 + 2] };
-    mju_mulMatVec3(&rotated_vectors_[idx * 3], site_mat, vec);
-  }
-
 #if (mjVERSION_HEADER >= 3005000)
   int* geomid = nullptr;
-  mj_multiRay(m, d, site_pos, rotated_vectors_.data(), geom_group, flg_static, body_exclude, geomid, sensordata, NULL,
+  mj_multiRay(m, d, site_pos, rotated_vecs, geom_group, flg_static, body_exclude, geomid, output, NULL,
               dimension_, max_range_);
 #elif (mjVERSION_HEADER == 340)
-  mj_multiRay(m, d, site_pos, rotated_vectors_.data(), geom_group, flg_static, body_exclude, geomid_.data(), sensordata,
+  mj_multiRay(m, d, site_pos, rotated_vecs, geom_group, flg_static, body_exclude, geomid_.data(), output,
               dimension_, max_range_);
 #else
   mju_error("Unsupported mujoco version (%d)\n", mjVERSION_HEADER);
@@ -375,80 +339,83 @@ void Lidar::ComputeSync(const mjModel* m, mjData* d, int instance)
 
   for (int32_t idx = 0; idx < dimension_; ++idx)
   {
-    if (sensordata[idx] >= max_range_ || sensordata[idx] < min_range_)
+    if (output[idx] >= max_range_ || output[idx] < min_range_)
     {
-      sensordata[idx] = -1.0;
+      output[idx] = -1.0;
     }
   }
 }
 
-void Lidar::ComputeAsync(const mjModel* m, mjData* d, int instance)
+void Lidar::Compute(const mjModel* m, mjData* d, int instance)
 {
-  if (!worker_initialized_)
+  // Throttle to the update rate, if it exists and is positive
+  // TODO: When we bump to later versions of mujoco we could replace this with `interval`
+  if (update_period_ > 0.0 && (d->time - last_compute_time_) < update_period_)
+  {
+    return;
+  }
+  last_compute_time_ = d->time;
+
+  // Lazy initialization handling for asynchronous processes. This is a one time cost to be sure
+  // that mjData is fully initialized when we make our first copy.
+  if (async_ && !worker_initialized_)
   {
     d_copy_ = mj_copyData(nullptr, m, d);
     worker_ = std::thread(&Lidar::ProcessRaycastAsync, this, m);
     worker_initialized_ = true;
   }
 
-  // Throttle to the update rate, if it exists and is positive
-  // TODO: When we bump to later versions of mujoco we could replace this with `interval`
-  if (update_period_ > 0.0 && (d->time - last_compute_time_) < update_period_)
+  // Swap in completed async results as soon as they're available
+  if (async_)
   {
-    // Even when we're throttled we should still check if async work has completed
-    // and swap in results as soon as they are ready.
     std::unique_lock<std::mutex> lock(data_copy_mutex_, std::try_to_lock);
     if (lock.owns_lock() && result_ready_)
     {
-      mjtNum* sensordata = d->sensordata + sensor_address_;
-      std::copy(result_buf_.begin(), result_buf_.end(), sensordata);
+      std::copy(result_buf_.begin(), result_buf_.end(), d->sensordata + sensor_address_);
       d->plugin_state[m->plugin_stateadr[instance]] = result_timestamp_;
       result_ready_ = false;
     }
-    return;
-  }
-  last_compute_time_ = d->time;
-
-  std::unique_lock<std::mutex> lock(data_copy_mutex_);
-
-  // If something is pending swap the data in
-  if (result_ready_)
-  {
-    mjtNum* sensordata = d->sensordata + sensor_address_;
-    std::copy(result_buf_.begin(), result_buf_.end(), sensordata);
-
-    // Essentially a time stamp that can be accessed from consumers to know when the last
-    // reading was taken
-    d->plugin_state[m->plugin_stateadr[instance]] = result_timestamp_;
-    result_ready_ = false;
   }
 
-  // If the worker is still busy, skip this cycle rather than blocking mj_step...
-  // The timestamp will still show the time that the snapshot was actually taken
-  if (work_ready_)
-  {
-    return;
-  }
-
-  // Get site frame.
-  mjtNum* site_pos = d->site_xpos + 3 * site_id_;
+  // Rotate ray vectors into the site's world frame
   mjtNum* site_mat = d->site_xmat + 9 * site_id_;
-
   for (int idx = 0; idx < dimension_; ++idx)
   {
     mjtNum vec[] = { vectors_[idx * 3], vectors_[idx * 3 + 1], vectors_[idx * 3 + 2] };
     mju_mulMatVec3(&rotated_vectors_[idx * 3], site_mat, vec);
   }
 
-  // Copy mjData and rotated vectors for the background process
-  mj_copyData(d_copy_, m, d);
-  rotated_vecs_copy_ = rotated_vectors_;
-  result_timestamp_ = d->time;
+  if (async_)
+  {
+    // If running asynchronously, we snapshot the data and signal the worker thread to trigger
+    // the raycasting. However, it is possible that the worker is still doing a compute. If that
+    // is the case we skip this cycle.
+    std::unique_lock<std::mutex> lock(data_copy_mutex_);
+    if (work_ready_)
+    {
+      return;
+    }
 
-  // Notify the async processing thread new data is available
-  work_ready_ = true;
-  lock.unlock();
-  cv_.notify_one();
+    // Copy the snapshot
+    mj_copyData(d_copy_, m, d);
+    rotated_vecs_copy_ = rotated_vectors_;
+    result_timestamp_ = d->time;
+
+    // Signal the worker thread
+    work_ready_ = true;
+    lock.unlock();
+    cv_.notify_one();
+  }
+  else
+  {
+    // Otherwise we compute and copy directly into the data container
+    mjtNum* sensordata = d->sensordata + sensor_address_;
+    Raycast(m, d, rotated_vectors_.data(), sensordata);
+
+    // Essentially a time stamp that can be accessed from consumers to know when the last
+    // reading was taken
+    d->plugin_state[m->plugin_stateadr[instance]] = last_compute_time_;
+  }
 }
 
 void Lidar::ProcessRaycastAsync(const mjModel* m)
@@ -466,37 +433,7 @@ void Lidar::ProcessRaycastAsync(const mjModel* m)
     work_ready_ = false;
     lock.unlock();
 
-    // Run compute on the copied data
-    mjtNum* site_pos = d_copy_->site_xpos + 3 * site_id_;
-    mjtNum* sensordata = d_copy_->sensordata + sensor_address_;
-    mju_zero(sensordata, dimension_);
-
-    mjtByte* geom_group = nullptr;
-    mjtByte flg_static = -1;
-    int body_exclude = -1;
-
-#if (mjVERSION_HEADER >= 3005000)
-    int* geomid = nullptr;
-    mj_multiRay(m, d_copy_, site_pos, rotated_vecs_copy_.data(), geom_group, flg_static, body_exclude, geomid,
-                sensordata, NULL, dimension_, max_range_);
-#elif (mjVERSION_HEADER == 340)
-    mj_multiRay(m, d_copy_, site_pos, rotated_vecs_copy_.data(), geom_group, flg_static, body_exclude, geomid_.data(),
-                sensordata, dimension_, max_range_);
-#else
-    mju_error("Unsupported mujoco version (%d)\n", mjVERSION_HEADER);
-#endif
-
-    for (int32_t idx = 0; idx < dimension_; ++idx)
-    {
-      if (sensordata[idx] >= max_range_ || sensordata[idx] < min_range_)
-      {
-        result_buf_[idx] = -1.0;
-      }
-      else
-      {
-        result_buf_[idx] = sensordata[idx];
-      }
-    }
+    Raycast(m, d_copy_, rotated_vecs_copy_.data(), result_buf_.data());
 
     {
       // Let Compute know updated data is available

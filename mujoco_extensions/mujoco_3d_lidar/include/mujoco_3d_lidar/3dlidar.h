@@ -70,9 +70,7 @@ private:
   Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNum azimuth_range[2],
         mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate, bool async);
 
-  void ComputeSync(const mjModel* m, mjData* d, int instance);
-
-  void ComputeAsync(const mjModel* m, mjData* d, int instance);
+  void Raycast(const mjModel* m, mjData* d, const mjtNum* rotated_vecs, mjtNum* output);
 
   void ProcessRaycastAsync(const mjModel* m);
 
@@ -98,6 +96,7 @@ private:
   std::vector<mjtNum> rotated_vecs_copy_;  // snapshot of rotated vectors for worker
   mjtNum result_timestamp_{ -1.0 };        // sim-time the result corresponds to
 
+  // The following are all used for asynchronous processing thread control.
   std::mutex data_copy_mutex_;
   std::condition_variable cv_;
   std::thread worker_;
