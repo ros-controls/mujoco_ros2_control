@@ -191,11 +191,16 @@ public:
    * recompute derived quantities.
    *
    * @param body_name Name of the MuJoCo body driven by the target free joint.
-   * @param pose Desired world-frame pose to write into qpos.
+   * @param pose Desired pose to write into qpos, interpreted relative to `reference_frame`
+   * (or the world frame if `reference_frame` is empty).
    * @param twist Desired world-frame velocity to write into qvel.
+   * @param reference_frame Name of the MuJoCo body `pose` is relative to. If empty, `pose` is
+   * interpreted directly in the world frame; otherwise it is composed onto that body's current
+   * world pose.
    * @param error_message Set to a human-readable description if this returns false.
-   * @return true if `body_name` was found and is driven by a free joint, and the state was
-   * applied; false otherwise (with `error_message` populated and no data modified).
+   * @return true if `body_name` was found and is driven by a free joint, and (if non-empty)
+   * `reference_frame` was found, and the state was applied; false otherwise (with
+   * `error_message` populated and no data modified).
    */
   bool set_free_joint_state(const std::string& body_name, const geometry_msgs::msg::Pose& pose,
                             const geometry_msgs::msg::Twist& twist, const std::string& reference_frame,

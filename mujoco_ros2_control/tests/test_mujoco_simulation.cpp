@@ -494,6 +494,10 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsNonFreeBody)
 TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
 {
   ASSERT_TRUE(initialize_sim());
+
+  // Rotate "pendulum" 90 degrees about its hinge axis (0 1 0), so its world pose becomes
+  // pos=(0, 0, 1), quat=(cos45, 0, sin45, 0). The hinge's own origin does not translate,
+  // only rotates, so this exercises the rotation part of the pose composition.
   sim_->data()->qpos[0] = M_PI_2;
   mj_forward(sim_->model(), sim_->data());
 

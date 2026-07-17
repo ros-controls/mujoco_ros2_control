@@ -314,12 +314,17 @@ Services
    an object's pose, similar to Gazebo's ``set_entity_state``.
 
    - ``name`` (``string``): name of the MuJoCo body driven by the target free joint.
-   - ``pose`` (``geometry_msgs/Pose``): desired world-frame pose. An unset ``orientation``
-     defaults to identity.
+   - ``pose`` (``geometry_msgs/Pose``): desired pose. An unset ``orientation`` defaults to
+     identity. Interpreted in the world frame unless ``reference_frame`` is set.
    - ``twist`` (``geometry_msgs/Twist``): desired world-frame velocity. Left at its default
-     (all-zero), the object comes to rest at the new pose.
+     (all-zero), the object comes to rest at the new pose. Always interpreted in the world
+     frame, regardless of ``reference_frame``.
+   - ``reference_frame`` (``string``): optional name of another MuJoCo body. If empty
+     (default), ``pose`` is interpreted directly in the world frame. If set, ``pose`` is
+     composed onto that body's current world pose, letting you place an object relative to a
+     link instead of computing its world pose yourself.
    - Returns ``success = false`` (with no data modified) if ``name`` is unknown or is not driven
-     by a free joint.
+     by a free joint, or if ``reference_frame`` is set but does not name a known body.
    - To *observe* the current state of every free-joint object, see the ``FreeJointPlugin`` in
      ``mujoco_ros2_control_plugins`` (published on its ``free_joint_states`` topic).
 
@@ -329,6 +334,11 @@ Services
       ros2 service call /ros2_control_node/set_free_joint_state \
         mujoco_ros2_control_msgs/srv/SetFreeJointState \
         "{name: 'box_1', pose: {position: {x: 0.0, y: 0.0, z: 1.0}}}"
+
+      # Place "box_1" 10 cm above the "gripper_link" body, in that link's frame
+      ros2 service call /ros2_control_node/set_free_joint_state \
+        mujoco_ros2_control_msgs/srv/SetFreeJointState \
+        "{name: 'box_1', reference_frame: 'gripper_link', pose: {position: {z: 0.1}}}"
 
 Debugging
 =========
