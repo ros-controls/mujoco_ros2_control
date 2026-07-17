@@ -72,8 +72,6 @@ private:
 
   void Raycast(const mjModel* m, mjData* d, const mjtNum* rotated_vecs, mjtNum* output);
 
-  void ProcessRaycastAsync(const mjModel* m);
-
   std::vector<mjtNum> vectors_;
   std::vector<mjtNum> rotated_vectors_;
   std::vector<int> geomid_;

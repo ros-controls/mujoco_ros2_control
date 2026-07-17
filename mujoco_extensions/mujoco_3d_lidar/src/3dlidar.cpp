@@ -361,7 +361,31 @@ void Lidar::Compute(const mjModel* m, mjData* d, int instance)
   if (async_ && !worker_initialized_)
   {
     d_copy_ = mj_copyData(nullptr, m, d);
-    worker_ = std::thread(&Lidar::ProcessRaycastAsync, this, m);
+
+    // Async thread process that waits to be notified to do the Raycasting, will go until shutdown
+    worker_ = std::thread([this, m]() {
+      while (!shutdown_.load())
+      {
+        std::unique_lock<std::mutex> lock(data_copy_mutex_);
+        cv_.wait(lock, [this] { return work_ready_ || shutdown_.load(); });
+
+        if (shutdown_.load())
+        {
+          break;
+        }
+
+        work_ready_ = false;
+        lock.unlock();
+
+        Raycast(m, d_copy_, rotated_vecs_copy_.data(), result_buf_.data());
+
+        // Notify consumers data is ready
+        {
+          std::lock_guard<std::mutex> lg(data_copy_mutex_);
+          result_ready_ = true;
+        }
+      }
+    });
     worker_initialized_ = true;
   }
 
@@ -415,31 +439,6 @@ void Lidar::Compute(const mjModel* m, mjData* d, int instance)
     // Essentially a time stamp that can be accessed from consumers to know when the last
     // reading was taken
     d->plugin_state[m->plugin_stateadr[instance]] = last_compute_time_;
-  }
-}
-
-void Lidar::ProcessRaycastAsync(const mjModel* m)
-{
-  while (!shutdown_.load())
-  {
-    std::unique_lock<std::mutex> lock(data_copy_mutex_);
-    cv_.wait(lock, [this] { return work_ready_ || shutdown_.load(); });
-
-    if (shutdown_.load())
-    {
-      break;
-    }
-
-    work_ready_ = false;
-    lock.unlock();
-
-    Raycast(m, d_copy_, rotated_vecs_copy_.data(), result_buf_.data());
-
-    {
-      // Let Compute know updated data is available
-      std::lock_guard<std::mutex> lg(data_copy_mutex_);
-      result_ready_ = true;
-    }
   }
 }
 
