@@ -1010,7 +1010,8 @@ void MujocoSimulation::step_simulation_callback(
 }
 
 bool MujocoSimulation::set_free_joint_state(const std::string& body_name, const geometry_msgs::msg::Pose& pose,
-                                            const geometry_msgs::msg::Twist& twist, std::string& error_message)
+                                            const geometry_msgs::msg::Twist& twist,
+                                            const std::string& reference_frame, std::string& error_message)
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
 
@@ -1041,16 +1042,41 @@ bool MujocoSimulation::set_free_joint_state(const std::string& body_name, const 
     return false;
   }
 
-  // Position
-  mj_data_->qpos[qpos_adr + 0] = pose.position.x;
-  mj_data_->qpos[qpos_adr + 1] = pose.position.y;
-  mj_data_->qpos[qpos_adr + 2] = pose.position.z;
+  mjtNum rel_pos[3] = { pose.position.x, pose.position.y, pose.position.z };
+  mjtNum rel_quat[4] = { pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z };
 
-  // Orientation: ROS (x, y, z, w) -> MuJoCo (w, x, y, z)
-  mj_data_->qpos[qpos_adr + 3] = pose.orientation.w;
-  mj_data_->qpos[qpos_adr + 4] = pose.orientation.x;
-  mj_data_->qpos[qpos_adr + 5] = pose.orientation.y;
-  mj_data_->qpos[qpos_adr + 6] = pose.orientation.z;
+  mjtNum world_pos[3];
+  mjtNum world_quat[4];
+
+  if (reference_frame.empty())
+  {
+    mju_copy3(world_pos, rel_pos);
+    mju_copy4(world_quat, rel_quat);
+  }
+  else
+  {
+    const int reference_body_id = mj_name2id(mj_model_, mjOBJ_BODY, reference_frame.c_str());
+    if (reference_body_id == -1)
+    {
+      error_message = "Unknown reference_frame body name: '" + reference_frame + "'.";
+      return false;
+    }
+
+    // Compose the requested pose onto the reference body's current world pose.
+    mju_mulPose(world_pos, world_quat, mj_data_->xpos + 3 * reference_body_id,
+                mj_data_->xquat + 4 * reference_body_id, rel_pos, rel_quat);
+  }
+
+  // Position
+  mj_data_->qpos[qpos_adr + 0] = world_pos[0];
+  mj_data_->qpos[qpos_adr + 1] = world_pos[1];
+  mj_data_->qpos[qpos_adr + 2] = world_pos[2];
+
+  // Orientation, already in MuJoCo's (w, x, y, z) convention.
+  mj_data_->qpos[qpos_adr + 3] = world_quat[0];
+  mj_data_->qpos[qpos_adr + 4] = world_quat[1];
+  mj_data_->qpos[qpos_adr + 5] = world_quat[2];
+  mj_data_->qpos[qpos_adr + 6] = world_quat[3];
 
   // Linear velocity
   mj_data_->qvel[qvel_adr + 0] = twist.linear.x;
@@ -1073,7 +1099,8 @@ void MujocoSimulation::set_free_joint_state_callback(
     std::shared_ptr<mujoco_ros2_control_msgs::srv::SetFreeJointState::Response> response)
 {
   std::string error_message;
-  response->success = set_free_joint_state(request->name, request->pose, request->twist, error_message);
+  response->success =
+      set_free_joint_state(request->name, request->pose, request->twist, request->reference_frame, error_message);
   if (response->success)
   {
     response->message = "Successfully set free joint state for body '" + request->name + "'.";

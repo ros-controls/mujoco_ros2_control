@@ -198,7 +198,8 @@ public:
    * applied; false otherwise (with `error_message` populated and no data modified).
    */
   bool set_free_joint_state(const std::string& body_name, const geometry_msgs::msg::Pose& pose,
-                            const geometry_msgs::msg::Twist& twist, std::string& error_message);
+                            const geometry_msgs::msg::Twist& twist, const std::string& reference_frame,
+                            std::string& error_message);
 
   /**
    * @brief Copies `mj_model_` into the provided container in a thread safe way.
