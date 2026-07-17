@@ -178,6 +178,7 @@ TEST_F(Mujoco3dLidarPluginTest, Test2dLidar)
         <config key="max_range" value="10.0"/>
         <config key="min_range" value="0.05"/>
         <config key="update_rate" value="100.0"/>
+        <config key="async" value="0"/>
       </instance>
     </plugin>
   </extension>
@@ -220,9 +221,15 @@ TEST_F(Mujoco3dLidarPluginTest, Test2dLidar)
   plugin.cleanup();
 }
 
-TEST_F(Mujoco3dLidarPluginTest, Test3dLidar)
+TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSyncAsync)
 {
-  load_model(R"(<?xml version="1.0"?>
+  // Just run this twice with the two different execution modes
+  for (const auto& async_value : { "0", "1" })
+  {
+    // Logs which path failed, if it fails
+    SCOPED_TRACE(std::string("async=") + async_value);
+
+    load_model(R"(<?xml version="1.0"?>
 <mujoco model="lidar_3d_model">
   <worldbody>
     <geom type="plane" size="5 5 0.1"/>
@@ -242,6 +249,7 @@ TEST_F(Mujoco3dLidarPluginTest, Test3dLidar)
         <config key="max_range" value="10.0"/>
         <config key="min_range" value="0.05"/>
         <config key="update_rate" value="100.0"/>
+        <config key="async" value=")" + std::string(async_value) + R"("/>
       </instance>
     </plugin>
   </extension>
@@ -251,35 +259,37 @@ TEST_F(Mujoco3dLidarPluginTest, Test3dLidar)
 </mujoco>
 )");
 
-  mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
-  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
+    mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
+    EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
 
-  // Create subscriber to default topic
-  std::atomic<bool> got_cloud{ false };
-  sensor_msgs::msg::PointCloud2::SharedPtr last_cloud;
-  auto cloud_sub = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
-      "/points", 1, [&](sensor_msgs::msg::PointCloud2::SharedPtr msg) {
-        last_cloud = msg;
-        got_cloud = true;
-      });
+    // Create subscriber to default topic
+    std::atomic<bool> got_cloud{ false };
+    sensor_msgs::msg::PointCloud2::SharedPtr last_cloud;
+    auto cloud_sub = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
+        "/points", 1, [&](sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+          last_cloud = msg;
+          got_cloud = true;
+        });
 
-  for (int i = 0; i < 20; ++i)
-  {
-    mj_step(model_, data_);
-    plugin.update(model_, data_);
-    if (got_cloud)
-      break;
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Helps to make sure the async thread has time to trigger
+    for (int i = 0; i < 60; ++i)
+    {
+      mj_step(model_, data_);
+      plugin.update(model_, data_);
+      if (got_cloud)
+        break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    EXPECT_TRUE(got_cloud) << "No PointCloud2 received";
+    if (last_cloud)
+    {
+      EXPECT_EQ(last_cloud->width, 8u);
+      EXPECT_EQ(last_cloud->height, 4u);
+    }
+
+    plugin.cleanup();
   }
-
-  EXPECT_TRUE(got_cloud) << "No PointCloud2 received";
-  if (last_cloud)
-  {
-    EXPECT_EQ(last_cloud->width, 8u);
-    EXPECT_EQ(last_cloud->height, 4u);
-  }
-
-  plugin.cleanup();
 }
 
 int main(int argc, char** argv)

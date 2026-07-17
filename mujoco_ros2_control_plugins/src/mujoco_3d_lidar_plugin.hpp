@@ -53,6 +53,9 @@ struct Lidar3dConfig
   double range_max;
   bool is_3d;
 
+  // Whether or not the underlying extension is async
+  bool async{ false };
+
   // For message publishing
   std::string lidar_topic;
 

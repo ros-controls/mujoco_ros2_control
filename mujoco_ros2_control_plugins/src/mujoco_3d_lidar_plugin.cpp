@@ -207,6 +207,15 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
     return false;
   }
 
+  // Whether or not is is asynchronous
+  std::string async_bool_str = get_cfg("async");
+  if (!async_bool_str.empty())
+  {
+    // Anything non-zero is true
+    lidar_config.async = (std::atoi(async_bool_str.c_str()) != 0);
+  }
+
+
   // Grab the frame name and topic from the node parameters, the frame name will default to the
   // site name in the MJCF if not provided. Topics default to `/scan` and `/points` for 2-D and
   // 3-D scans, respectively.
@@ -287,6 +296,7 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   RCLCPP_INFO(node_->get_logger(), "          range_min: %f", lidar_config.range_min);
   RCLCPP_INFO(node_->get_logger(), "          range_max: %f", lidar_config.range_max);
   RCLCPP_INFO(node_->get_logger(), "              topic: %s", lidar_config.lidar_topic.c_str());
+  RCLCPP_INFO(node_->get_logger(), "       asynchronous: %d", lidar_config.async);
 
   lidar_sensors_.push_back(std::move(lidar_config));
   return true;
