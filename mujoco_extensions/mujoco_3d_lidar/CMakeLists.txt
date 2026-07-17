@@ -29,12 +29,16 @@ install(DIRECTORY include/ DESTINATION include)
 
 # Duplicate the install to be next to the simulate application so this works there, as well.
 # This is best effort because it may not be writeable...
-# TODO: Have mujoco_vendor support a writeable plugin directory
-find_program(mujoco_SIMULATE NAMES simulate mujoco-simulate)
+# TODO: Have mujoco_vendor support a writeable plugin directory?
+cmake_path(SET _mujoco_vendor_prefix NORMALIZE "${mujoco_vendor_DIR}/../../..")
+find_program(mujoco_SIMULATE
+  NAMES simulate mujoco-simulate
+  HINTS "${_mujoco_vendor_prefix}/opt/mujoco_vendor/bin"
+        "${_mujoco_vendor_prefix}/lib/mujoco_vendor"
+)
 if(mujoco_SIMULATE)
   cmake_path(SET mujoco_BIN_PATH NORMALIZE ${mujoco_SIMULATE}/..)
   install(CODE "
-    file(MAKE_DIRECTORY \"${mujoco_BIN_PATH}/mujoco_plugin\")
     execute_process(
       COMMAND cp -f \"\${CMAKE_INSTALL_PREFIX}/lib/${PROJECT_NAME}/mujoco_plugin/libmujoco_3d_lidar.so\"
                     \"${mujoco_BIN_PATH}/mujoco_plugin/\"
