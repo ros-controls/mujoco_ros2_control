@@ -508,7 +508,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
   req->name = "free_object";
   req->reference_frame = "pendulum";
-  req->pose.position.x = 1.0;  // rel_pos, rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
+  req->pose.position.x = 1.0;     // rel_pos, rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
   req->pose.orientation.w = 1.0;  // identity relative orientation
 
   auto future = client->async_send_request(req);

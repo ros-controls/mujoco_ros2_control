@@ -1010,8 +1010,8 @@ void MujocoSimulation::step_simulation_callback(
 }
 
 bool MujocoSimulation::set_free_joint_state(const std::string& body_name, const geometry_msgs::msg::Pose& pose,
-                                            const geometry_msgs::msg::Twist& twist,
-                                            const std::string& reference_frame, std::string& error_message)
+                                            const geometry_msgs::msg::Twist& twist, const std::string& reference_frame,
+                                            std::string& error_message)
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
 
@@ -1063,8 +1063,8 @@ bool MujocoSimulation::set_free_joint_state(const std::string& body_name, const 
     }
 
     // Compose the requested pose onto the reference body's current world pose.
-    mju_mulPose(world_pos, world_quat, mj_data_->xpos + 3 * reference_body_id,
-                mj_data_->xquat + 4 * reference_body_id, rel_pos, rel_quat);
+    mju_mulPose(world_pos, world_quat, mj_data_->xpos + 3 * reference_body_id, mj_data_->xquat + 4 * reference_body_id,
+                rel_pos, rel_quat);
   }
 
   // Position
