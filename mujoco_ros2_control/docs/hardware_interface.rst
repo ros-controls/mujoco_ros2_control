@@ -319,13 +319,15 @@ Services
      - ``name`` (``string``): name of the MuJoCo body driven by the target free joint.
      - ``pose`` (``geometry_msgs/Pose``): desired pose. An unset ``orientation`` defaults to
        identity. Interpreted in the world frame unless ``reference_frame`` is set.
-     - ``twist`` (``geometry_msgs/Twist``): desired world-frame velocity. Left at its default
-       (all-zero), the object comes to rest at the new pose. Always interpreted in the world
-       frame, regardless of ``reference_frame``.
+     - ``twist`` (``geometry_msgs/Twist``): desired velocity. Left at its default (all-zero),
+       the object comes to rest at the new pose. Interpreted in the world frame unless
+       ``reference_frame`` is set.
      - ``reference_frame`` (``string``): optional name of another MuJoCo body. If empty
-       (default), ``pose`` is interpreted directly in the world frame. If set, ``pose`` is
-       composed onto that body's current world pose, letting you place an object relative to a
-       link instead of computing its world pose yourself.
+       (default), ``pose`` and ``twist`` are interpreted directly in the world frame. If set,
+       ``pose`` is composed onto that body's current world pose, letting you place an object
+       relative to a link instead of computing its world pose yourself; ``twist`` is rotated
+       into the world frame by that body's current world orientation (the reference body's own
+       velocity is not added).
 
    - Application is **atomic across the whole list**: every entry is validated (body exists, is
      driven by a free joint, and any ``reference_frame`` names a known body) before anything is

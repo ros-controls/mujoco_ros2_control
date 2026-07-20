@@ -8,15 +8,19 @@
 # Name of the MuJoCo body driven by the target free joint.
 string name
 
-# Desired world-frame pose to write into the object's qpos.
+# Desired pose to write into the object's qpos, interpreted relative to `reference_frame`
+# (or the world frame if `reference_frame` is empty).
 geometry_msgs/Pose pose
 
-# Desired world-frame velocity to write into the object's qvel.
-# Leave at the default (all-zero) to bring the object to rest at the new pose.
+# Desired velocity to write into the object's qvel, interpreted relative to `reference_frame`
+# (or the world frame if `reference_frame` is empty). Leave at the default (all-zero) to bring
+# the object to rest at the new pose.
 geometry_msgs/Twist twist
 
-# Optional reference frame. If empty (default), `pose` is interpreted in the world
-# frame. If set to the name of another MuJoCo body, `pose` is interpreted relative
-# to that body's current world pose (i.e. world_pose = ref_world_pose * pose).
-# `twist` is always interpreted in the world frame.
+# Optional reference frame. If empty (default), `pose` and `twist` are interpreted in the
+# world frame. If set to the name of another MuJoCo body:
+#   - `pose` is interpreted relative to that body's current world pose
+#     (i.e. world_pose = ref_world_pose * pose).
+#   - `twist` is rotated into the world frame by that body's current world orientation
+#     (the reference body's own velocity is not added).
 string reference_frame

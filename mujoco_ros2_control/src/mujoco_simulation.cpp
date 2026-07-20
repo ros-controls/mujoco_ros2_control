@@ -1040,15 +1040,21 @@ bool MujocoSimulation::resolve_free_joint_write(const mujoco_ros2_control_msgs::
 
   const mjtNum rel_pos[3] = { state.pose.position.x, state.pose.position.y, state.pose.position.z };
   const mjtNum rel_quat[4] = { state.pose.orientation.w, state.pose.orientation.x, state.pose.orientation.y,
-                              state.pose.orientation.z };
+                               state.pose.orientation.z };
+  const mjtNum rel_linvel[3] = { state.twist.linear.x, state.twist.linear.y, state.twist.linear.z };
+  const mjtNum rel_angvel[3] = { state.twist.angular.x, state.twist.angular.y, state.twist.angular.z };
 
   mjtNum world_pos[3];
   mjtNum world_quat[4];
+  mjtNum world_linvel[3];
+  mjtNum world_angvel[3];
 
   if (state.reference_frame.empty())
   {
     mju_copy3(world_pos, rel_pos);
     mju_copy4(world_quat, rel_quat);
+    mju_copy3(world_linvel, rel_linvel);
+    mju_copy3(world_angvel, rel_angvel);
   }
   else
   {
@@ -1059,16 +1065,24 @@ bool MujocoSimulation::resolve_free_joint_write(const mujoco_ros2_control_msgs::
       return false;
     }
 
+    const mjtNum* reference_quat = mj_data_->xquat + 4 * reference_body_id;
+
     // Compose the requested pose onto the reference body's current world pose.
-    mju_mulPose(world_pos, world_quat, mj_data_->xpos + 3 * reference_body_id, mj_data_->xquat + 4 * reference_body_id,
-                rel_pos, rel_quat);
+    mju_mulPose(world_pos, world_quat, mj_data_->xpos + 3 * reference_body_id, reference_quat, rel_pos, rel_quat);
+
+    // Rotate the requested velocity into the world frame using the reference body's current
+    // orientation.
+    /// @note The reference body's wn velocity is not added
+    mju_rotVecQuat(world_linvel, rel_linvel, reference_quat);
+    mju_rotVecQuat(world_angvel, rel_angvel, reference_quat);
   }
 
   out.qpos_adr = qpos_adr;
   out.qvel_adr = qvel_adr;
   mju_copy3(out.world_pos, world_pos);
   mju_copy4(out.world_quat, world_quat);
-  out.twist = state.twist;
+  mju_copy3(out.world_linvel, world_linvel);
+  mju_copy3(out.world_angvel, world_angvel);
 
   return true;
 }
@@ -1115,14 +1129,14 @@ bool MujocoSimulation::set_free_joint_states(
     mj_data_->qpos[write.qpos_adr + 6] = write.world_quat[3];
 
     // Linear velocity
-    mj_data_->qvel[write.qvel_adr + 0] = write.twist.linear.x;
-    mj_data_->qvel[write.qvel_adr + 1] = write.twist.linear.y;
-    mj_data_->qvel[write.qvel_adr + 2] = write.twist.linear.z;
+    mj_data_->qvel[write.qvel_adr + 0] = write.world_linvel[0];
+    mj_data_->qvel[write.qvel_adr + 1] = write.world_linvel[1];
+    mj_data_->qvel[write.qvel_adr + 2] = write.world_linvel[2];
 
     // Angular velocity
-    mj_data_->qvel[write.qvel_adr + 3] = write.twist.angular.x;
-    mj_data_->qvel[write.qvel_adr + 4] = write.twist.angular.y;
-    mj_data_->qvel[write.qvel_adr + 5] = write.twist.angular.z;
+    mj_data_->qvel[write.qvel_adr + 3] = write.world_angvel[0];
+    mj_data_->qvel[write.qvel_adr + 4] = write.world_angvel[1];
+    mj_data_->qvel[write.qvel_adr + 5] = write.world_angvel[2];
   }
 
   // Recompute derived quantities (xpos, xmat, sensor data, etc.) once for the whole batch.

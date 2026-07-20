@@ -548,6 +548,44 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, 1e-9);             // z
 }
 
+TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBodyRotatesTwist)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  // Rotate "pendulum" 90 degrees about its hinge axis (0 1 0), so its world pose becomes
+  // pos=(0, 0, 1), quat=(cos45, 0, sin45, 0) similar setup as SetFreeJointStateRelativeToBody,
+  // which rotates a reference-frame vector (1,0,0) to world (0,0,-1).
+  sim_->data()->qpos[0] = M_PI_2;
+  mj_forward(sim_->model(), sim_->data());
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+  mujoco_ros2_control_msgs::msg::FreeJointState entry;
+  entry.name = "free_object";
+  entry.reference_frame = "pendulum";
+  entry.pose.orientation.w = 1.0;  // identity relative orientation, pose not under test here
+  entry.twist.linear.x = 1.0;      // rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
+  entry.twist.angular.x = 1.0;     // rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
+  req->free_joints.push_back(entry);
+
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  auto resp = future.get();
+  ASSERT_TRUE(resp->success) << resp->message;
+
+  const int qvel_adr = 1;
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 0], 0.0, 1e-9);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 1], 0.0, 1e-9);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 2], -1.0, 1e-9);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 3], 0.0, 1e-9);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 4], 0.0, 1e-9);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 5], -1.0, 1e-9);
+}
+
 TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownReferenceFrame)
 {
   ASSERT_TRUE(initialize_sim());

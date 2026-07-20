@@ -187,10 +187,10 @@ public:
    * @brief Directly set the pose and velocity of one or more free-joint objects, each
    * identified by the name of the body it drives.
    *
-   * If any entry fails to resolve, the entire call returns false and no data is modified. 
-   * Only once every entry resolves successfully are the poses/velocities written into 
+   * If any entry fails to resolve, the entire call returns false and no data is modified.
+   * Only once every entry resolves successfully are the poses/velocities written into
    * `mj_data_->qpos`/`mj_data_->qvel`, followed by a single `mj_forward` call to recompute
-   * derived quantities. If the same body name appears more than once, entries are applied 
+   * derived quantities. If the same body name appears more than once, entries are applied
    * in order, so the last one wins.
    *
    * @param free_joints List of free-joint bodies to set. See `FreeJointState.msg` for the
@@ -355,7 +355,8 @@ private:
     int qvel_adr{ -1 };
     mjtNum world_pos[3];
     mjtNum world_quat[4];
-    geometry_msgs::msg::Twist twist;
+    mjtNum world_linvel[3];
+    mjtNum world_angvel[3];
   };
 
   /**
@@ -365,7 +366,9 @@ private:
    * Looks up `state.name`'s body id, finds the free joint driving it (a body may have at most
    * one), and computes the target world-frame pose -- composing `state.pose` onto
    * `state.reference_frame`'s current world pose if non-empty, or taking it directly as a
-   * world-frame pose otherwise.
+   * world-frame pose otherwise. `state.twist` is resolved the same way: rotated by
+   * `state.reference_frame`'s current world orientation if non-empty (the reference body's own
+   * velocity is not added), or taken directly as a world-frame velocity otherwise.
    *
    * @note Caller must hold the sim mutex, since this reads `mj_model_` and `mj_data_->xpos`/
    * `mj_data_->xquat`.
