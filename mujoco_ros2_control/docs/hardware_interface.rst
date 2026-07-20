@@ -240,7 +240,7 @@ These sensor state interfaces work out of the box with the standard ROS 2 broadc
 .. warning::
 
    Cameras and lidar sensors are no longer supported in the base interface, they are now provided as ``mujoco_ros2_control_plugins``.
-   Refer to the :ref:`camera_plugin` and :ref:`lidar_plugin` for more information.
+   Refer to the :ref:`CameraPlugin` and :ref:`RangefinderLidarPlugin` for more information.
 
 .. _simulation_topics_and_services:
 

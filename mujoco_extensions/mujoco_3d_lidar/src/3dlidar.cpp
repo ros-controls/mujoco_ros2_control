@@ -296,6 +296,9 @@ Lidar::Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNu
     result_buf_.resize(dimension_, -1.0);
     rotated_vecs_copy_.resize(dimension_ * 3);
   }
+
+  // Set the time point to a valid number
+  d->plugin_state[m->plugin_stateadr[instance]] = 0.0;
 }
 
 Lidar::~Lidar()
