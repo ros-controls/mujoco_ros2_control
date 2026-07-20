@@ -113,15 +113,14 @@ protected:
   // the test if the context never comes up because of a bad CI instance...
   void wait_for_rendering(mujoco_ros2_control_plugins::CameraPlugin& plugin)
   {
-    for (int i = 0; i < 50 && !plugin.is_rendering_available(); ++i)
+    for (int i = 0; i < 100 && !plugin.is_rendering_available(); ++i)
     {
       std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
-    if (!plugin.is_rendering_available())
-    {
-      plugin.cleanup();
-      GTEST_SKIP() << "OpenGL rendering unavailable in this environment!!! Skipping tests...";
-    }
+    // TODO: We could optionally skip the test in CI if this happens consistently. Though
+    // for now we hope that failures do to uninitialized contexts will be extremely rare.
+    // https://github.com/ros-controls/mujoco_ros2_control/issues/216
+    ASSERT_TRUE(plugin.is_rendering_available()) << "OpenGL rendering unavailable in this environment!!! Failing...";
   }
 
   // Block until every subscription in the list has matched at least one publisher.
