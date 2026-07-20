@@ -39,6 +39,7 @@
 
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <mujoco_ros2_control_msgs/msg/free_joint_state.hpp>
 #include <mujoco_ros2_control_msgs/srv/reset_world.hpp>
 #include <mujoco_ros2_control_msgs/srv/set_free_joint_state.hpp>
 #include <mujoco_ros2_control_msgs/srv/set_pause.hpp>
@@ -183,28 +184,25 @@ public:
   void reset_world_state(bool fill_initial_state);
 
   /**
-   * @brief Directly set the pose and velocity of a free-joint object, identified by the name of
-   * the body it drives.
+   * @brief Directly set the pose and velocity of one or more free-joint objects, each
+   * identified by the name of the body it drives.
    *
-   * This locks the sim mutex, writes the requested pose into `mj_data_->qpos` and the requested
-   * velocity into `mj_data_->qvel` at the free joint's address, then calls `mj_forward` to
-   * recompute derived quantities.
+   * If any entry fails to resolve, the entire call returns false and no data is modified. 
+   * Only once every entry resolves successfully are the poses/velocities written into 
+   * `mj_data_->qpos`/`mj_data_->qvel`, followed by a single `mj_forward` call to recompute
+   * derived quantities. If the same body name appears more than once, entries are applied 
+   * in order, so the last one wins.
    *
-   * @param body_name Name of the MuJoCo body driven by the target free joint.
-   * @param pose Desired pose to write into qpos, interpreted relative to `reference_frame`
-   * (or the world frame if `reference_frame` is empty).
-   * @param twist Desired world-frame velocity to write into qvel.
-   * @param reference_frame Name of the MuJoCo body `pose` is relative to. If empty, `pose` is
-   * interpreted directly in the world frame; otherwise it is composed onto that body's current
-   * world pose.
-   * @param error_message Set to a human-readable description if this returns false.
-   * @return true if `body_name` was found and is driven by a free joint, and (if non-empty)
-   * `reference_frame` was found, and the state was applied; false otherwise (with
-   * `error_message` populated and no data modified).
+   * @param free_joint_states List of free-joint bodies to set. See `FreeJointState.msg` for the
+   * per-entry fields (name, pose, twist, reference_frame).
+   * @param error_message Set to a human-readable description (identifying the offending entry
+   * by index and body name) if this returns false.
+   * @return true if every entry's body was found and driven by a free joint, and (if non-empty)
+   * every entry's `reference_frame` was found, and the state was applied for all entries; false
+   * otherwise (with `error_message` populated and no data modified).
    */
-  bool set_free_joint_state(const std::string& body_name, const geometry_msgs::msg::Pose& pose,
-                            const geometry_msgs::msg::Twist& twist, const std::string& reference_frame,
-                            std::string& error_message);
+  bool set_free_joint_states(const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joint_states,
+                             std::string& error_message);
 
   /**
    * @brief Copies `mj_model_` into the provided container in a thread safe way.
@@ -344,6 +342,41 @@ private:
    * @brief Progresses the simulate windows display if not running headless.
    */
   void update_sim_display();
+
+  /**
+   * @brief A single free-joint entry that has been fully resolved and is ready to write.
+   *
+   * Produced by `resolve_free_joint_write` without touching `mj_data_`, so that a whole batch
+   * of entries can be validated before any of them are applied (see `set_free_joint_states`).
+   */
+  struct FreeJointWrite
+  {
+    int qpos_adr{ -1 };
+    int qvel_adr{ -1 };
+    mjtNum world_pos[3];
+    mjtNum world_quat[4];
+    geometry_msgs::msg::Twist twist;
+  };
+
+  /**
+   * @brief Resolves a single `FreeJointState` entry into a `FreeJointWrite`, without writing
+   * anything into `mj_data_`.
+   *
+   * Looks up `state.name`'s body id, finds the free joint driving it (a body may have at most
+   * one), and computes the target world-frame pose -- composing `state.pose` onto
+   * `state.reference_frame`'s current world pose if non-empty, or taking it directly as a
+   * world-frame pose otherwise.
+   *
+   * @note Caller must hold the sim mutex, since this reads `mj_model_` and `mj_data_->xpos`/
+   * `mj_data_->xquat`.
+   * @param state Requested per-body free joint state.
+   * @param out Populated with the resolved write on success; left untouched on failure.
+   * @param error_message Set to a human-readable description if this returns false.
+   * @return true if `state.name` was found and is driven by a free joint, and (if non-empty)
+   * `state.reference_frame` was found; false otherwise.
+   */
+  bool resolve_free_joint_write(const mujoco_ros2_control_msgs::msg::FreeJointState& state, FreeJointWrite& out,
+                                std::string& error_message);
 
   // Service callbacks
   void reset_world_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Request> request,
