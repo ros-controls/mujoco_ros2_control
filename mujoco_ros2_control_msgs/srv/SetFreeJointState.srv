@@ -1,12 +1,10 @@
 # Directly set the pose and velocity of one or more MuJoCo free-joint objects, each
-# identified by the name of the body it drives. Intended for teleporting/resetting objects in
-# the world (e.g. a manipulable prop), similar to Gazebo's set_entity_state.
+# identified by the name of the body it drives. Useful for teleporting/resetting objects,
+# similar to Gazebo's set_entity_state.
 #
-# Application is atomic across the whole list: every entry is validated (body exists, is
-# driven by a free joint, and any pose/twist frame_id names a known body) before anything is
-# written. If any entry is invalid, the entire request is rejected and no sim data is
-# modified. If the same body name appears more than once, entries are applied in order, so
-# the last one wins.
+# Applied atomically: every entry is validated before anything is written, so a single invalid
+# entry rejects the whole request with no data modified. Duplicate body names are applied in
+# order, so the last one wins.
 
 # List of free-joint bodies to set, see FreeJointState.msg for per-entry fields.
 FreeJointState[] free_joints

@@ -1038,7 +1038,7 @@ bool MujocoSimulation::resolve_free_joint_write(const mujoco_ros2_control_msgs::
     return false;
   }
 
-  // Find the free joint driving this body. A body may have at most one free joint.
+  // A body has at most one free joint.
   int qpos_adr = -1;
   int qvel_adr = -1;
   for (int i = 0; i < mj_model_->njnt; ++i)
@@ -1079,7 +1079,6 @@ bool MujocoSimulation::resolve_free_joint_write(const mujoco_ros2_control_msgs::
   }
   else
   {
-    // Compose the requested pose onto the reference body's current world pose.
     mju_mulPose(world_pos, world_quat, mj_data_->xpos + 3 * pose_frame_body_id,
                 mj_data_->xquat + 4 * pose_frame_body_id, rel_pos, rel_quat);
   }
@@ -1100,8 +1099,7 @@ bool MujocoSimulation::resolve_free_joint_write(const mujoco_ros2_control_msgs::
   }
   else
   {
-    // Rotate the requested velocity into the world frame using the reference body's current
-    // orientation. The reference body's own velocity is not added.
+    // The reference body's own velocity is not added, only its orientation.
     const mjtNum* twist_frame_quat = mj_data_->xquat + 4 * twist_frame_body_id;
     mju_rotVecQuat(world_linvel, rel_linvel, twist_frame_quat);
     mju_rotVecQuat(world_angvel, rel_angvel, twist_frame_quat);
@@ -1122,8 +1120,8 @@ bool MujocoSimulation::set_free_joint_states(
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
 
-  // Resolve every entry first, without writing anything, so that a single invalid entry
-  // rejects the whole batch and leaves mj_data_ untouched (atomic apply).
+  // Resolve everything before writing anything, so a single invalid entry leaves mj_data_
+  // untouched.
   std::vector<FreeJointWrite> writes;
   writes.reserve(free_joints.size());
   for (size_t i = 0; i < free_joints.size(); ++i)
@@ -1141,35 +1139,30 @@ bool MujocoSimulation::set_free_joint_states(
 
   if (writes.empty())
   {
-    // Nothing to do; treat as a harmless no-op rather than paying for an unnecessary mj_forward.
     return true;
   }
 
   for (const FreeJointWrite& write : writes)
   {
-    // Position
     mj_data_->qpos[write.qpos_adr + 0] = write.world_pos[0];
     mj_data_->qpos[write.qpos_adr + 1] = write.world_pos[1];
     mj_data_->qpos[write.qpos_adr + 2] = write.world_pos[2];
 
-    // Orientation, already in MuJoCo's (w, x, y, z) convention.
+    // qpos orientation is (w, x, y, z), MuJoCo's convention.
     mj_data_->qpos[write.qpos_adr + 3] = write.world_quat[0];
     mj_data_->qpos[write.qpos_adr + 4] = write.world_quat[1];
     mj_data_->qpos[write.qpos_adr + 5] = write.world_quat[2];
     mj_data_->qpos[write.qpos_adr + 6] = write.world_quat[3];
 
-    // Linear velocity
     mj_data_->qvel[write.qvel_adr + 0] = write.world_linvel[0];
     mj_data_->qvel[write.qvel_adr + 1] = write.world_linvel[1];
     mj_data_->qvel[write.qvel_adr + 2] = write.world_linvel[2];
 
-    // Angular velocity
     mj_data_->qvel[write.qvel_adr + 3] = write.world_angvel[0];
     mj_data_->qvel[write.qvel_adr + 4] = write.world_angvel[1];
     mj_data_->qvel[write.qvel_adr + 5] = write.world_angvel[2];
   }
 
-  // Recompute derived quantities (xpos, xmat, sensor data, etc.) once for the whole batch.
   refresh_data_snapshot();
   publish_control_state();
   mj_forward(mj_model_, mj_data_);
