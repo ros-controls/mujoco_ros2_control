@@ -1126,8 +1126,9 @@ bool MujocoSimulation::set_free_joint_states(
   }
 
   // Recompute derived quantities (xpos, xmat, sensor data, etc.) once for the whole batch.
+  refresh_data_snapshot();
+  publish_control_state();
   mj_forward(mj_model_, mj_data_);
-
   return true;
 }
 
