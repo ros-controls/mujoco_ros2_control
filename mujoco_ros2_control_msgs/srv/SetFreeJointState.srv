@@ -3,7 +3,7 @@
 # the world (e.g. a manipulable prop), similar to Gazebo's set_entity_state.
 #
 # Application is atomic across the whole list: every entry is validated (body exists, is
-# driven by a free joint, and any reference_frame names a known body) before anything is
+# driven by a free joint, and any pose/twist frame_id names a known body) before anything is
 # written. If any entry is invalid, the entire request is rejected and no sim data is
 # modified. If the same body name appears more than once, entries are applied in order, so
 # the last one wins.

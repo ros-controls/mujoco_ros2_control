@@ -518,8 +518,8 @@ class TestFixture(unittest.TestCase):
         for body_name, target in (("cube1", (1.0, 1.0, 1.0)), ("cube2", (-1.0, 1.0, 1.0))):
             entry = FreeJointState()
             entry.name = body_name
-            entry.pose.position.x, entry.pose.position.y, entry.pose.position.z = target
-            entry.pose.orientation.w = 1.0
+            entry.pose.pose.position.x, entry.pose.pose.position.y, entry.pose.pose.position.z = target
+            entry.pose.pose.orientation.w = 1.0
             req.free_joints.append(entry)
 
         future = client.call_async(req)

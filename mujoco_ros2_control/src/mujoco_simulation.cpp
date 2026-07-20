@@ -1009,6 +1009,25 @@ void MujocoSimulation::step_simulation_callback(
   }
 }
 
+bool MujocoSimulation::resolve_frame_id(const std::string& frame_id, const std::string& field_label, int& body_id,
+                                        std::string& error_message)
+{
+  if (frame_id.empty())
+  {
+    body_id = -1;
+    return true;
+  }
+
+  body_id = mj_name2id(mj_model_, mjOBJ_BODY, frame_id.c_str());
+  if (body_id == -1)
+  {
+    error_message = "Unknown " + field_label + " frame_id body name: '" + frame_id + "'.";
+    return false;
+  }
+
+  return true;
+}
+
 bool MujocoSimulation::resolve_free_joint_write(const mujoco_ros2_control_msgs::msg::FreeJointState& state,
                                                 FreeJointWrite& out, std::string& error_message)
 {
@@ -1038,43 +1057,54 @@ bool MujocoSimulation::resolve_free_joint_write(const mujoco_ros2_control_msgs::
     return false;
   }
 
-  const mjtNum rel_pos[3] = { state.pose.position.x, state.pose.position.y, state.pose.position.z };
-  const mjtNum rel_quat[4] = { state.pose.orientation.w, state.pose.orientation.x, state.pose.orientation.y,
-                               state.pose.orientation.z };
-  const mjtNum rel_linvel[3] = { state.twist.linear.x, state.twist.linear.y, state.twist.linear.z };
-  const mjtNum rel_angvel[3] = { state.twist.angular.x, state.twist.angular.y, state.twist.angular.z };
+  const mjtNum rel_pos[3] = { state.pose.pose.position.x, state.pose.pose.position.y, state.pose.pose.position.z };
+  const mjtNum rel_quat[4] = { state.pose.pose.orientation.w, state.pose.pose.orientation.x,
+                               state.pose.pose.orientation.y, state.pose.pose.orientation.z };
+  const mjtNum rel_linvel[3] = { state.twist.twist.linear.x, state.twist.twist.linear.y, state.twist.twist.linear.z };
+  const mjtNum rel_angvel[3] = { state.twist.twist.angular.x, state.twist.twist.angular.y, state.twist.twist.angular.z };
 
   mjtNum world_pos[3];
   mjtNum world_quat[4];
-  mjtNum world_linvel[3];
-  mjtNum world_angvel[3];
 
-  if (state.reference_frame.empty())
+  int pose_frame_body_id = -1;
+  if (!resolve_frame_id(state.pose.header.frame_id, "pose", pose_frame_body_id, error_message))
+  {
+    return false;
+  }
+
+  if (pose_frame_body_id == -1)
   {
     mju_copy3(world_pos, rel_pos);
     mju_copy4(world_quat, rel_quat);
+  }
+  else
+  {
+    // Compose the requested pose onto the reference body's current world pose.
+    mju_mulPose(world_pos, world_quat, mj_data_->xpos + 3 * pose_frame_body_id,
+                mj_data_->xquat + 4 * pose_frame_body_id, rel_pos, rel_quat);
+  }
+
+  mjtNum world_linvel[3];
+  mjtNum world_angvel[3];
+
+  int twist_frame_body_id = -1;
+  if (!resolve_frame_id(state.twist.header.frame_id, "twist", twist_frame_body_id, error_message))
+  {
+    return false;
+  }
+
+  if (twist_frame_body_id == -1)
+  {
     mju_copy3(world_linvel, rel_linvel);
     mju_copy3(world_angvel, rel_angvel);
   }
   else
   {
-    const int reference_body_id = mj_name2id(mj_model_, mjOBJ_BODY, state.reference_frame.c_str());
-    if (reference_body_id == -1)
-    {
-      error_message = "Unknown reference_frame body name: '" + state.reference_frame + "'.";
-      return false;
-    }
-
-    const mjtNum* reference_quat = mj_data_->xquat + 4 * reference_body_id;
-
-    // Compose the requested pose onto the reference body's current world pose.
-    mju_mulPose(world_pos, world_quat, mj_data_->xpos + 3 * reference_body_id, reference_quat, rel_pos, rel_quat);
-
     // Rotate the requested velocity into the world frame using the reference body's current
-    // orientation.
-    /// @note The reference body's wn velocity is not added
-    mju_rotVecQuat(world_linvel, rel_linvel, reference_quat);
-    mju_rotVecQuat(world_angvel, rel_angvel, reference_quat);
+    // orientation. The reference body's own velocity is not added.
+    const mjtNum* twist_frame_quat = mj_data_->xquat + 4 * twist_frame_body_id;
+    mju_rotVecQuat(world_linvel, rel_linvel, twist_frame_quat);
+    mju_rotVecQuat(world_angvel, rel_angvel, twist_frame_quat);
   }
 
   out.qpos_adr = qpos_adr;

@@ -407,15 +407,15 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateSetsPoseAndVelocity)
 
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
   entry.name = "free_object";
-  entry.pose.position.x = 2.0;
-  entry.pose.position.y = 3.0;
-  entry.pose.position.z = 4.0;
-  entry.pose.orientation.w = std::sqrt(0.5);
-  entry.pose.orientation.x = std::sqrt(0.5);
-  entry.pose.orientation.y = 0.0;
-  entry.pose.orientation.z = 0.0;
-  entry.twist.linear.x = 0.1;
-  entry.twist.angular.z = 0.2;
+  entry.pose.pose.position.x = 2.0;
+  entry.pose.pose.position.y = 3.0;
+  entry.pose.pose.position.z = 4.0;
+  entry.pose.pose.orientation.w = std::sqrt(0.5);
+  entry.pose.pose.orientation.x = std::sqrt(0.5);
+  entry.pose.pose.orientation.y = 0.0;
+  entry.pose.pose.orientation.z = 0.0;
+  entry.twist.twist.linear.x = 0.1;
+  entry.twist.twist.angular.z = 0.2;
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
   req->free_joints.push_back(entry);
@@ -450,7 +450,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateDefaultsToZeroVelocity)
 
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
   entry.name = "free_object";
-  entry.pose.position.z = 2.0;
+  entry.pose.pose.position.z = 2.0;
   // twist left at its default (all-zero) -- object should come to rest.
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
@@ -524,9 +524,11 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
 
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
   entry.name = "free_object";
-  entry.reference_frame = "pendulum";
-  entry.pose.position.x = 1.0;     // rel_pos, rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
-  entry.pose.orientation.w = 1.0;  // identity relative orientation
+  entry.pose.header.frame_id = "pendulum";
+  entry.pose.pose.position.x = 1.0;     // rel_pos, rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
+  entry.pose.pose.orientation.w = 1.0;  // identity relative orientation
+  // twist.header.frame_id left empty (world frame), independent of the pose's reference frame.
+  entry.twist.twist.linear.x = 5.0;
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
   req->free_joints.push_back(entry);
@@ -537,6 +539,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
   ASSERT_TRUE(resp->success) << resp->message;
 
   const int qpos_adr = 1;
+  const int qvel_adr = 1;
   // world_pos = ref_pos(0,0,1) + rotate_by_ref_quat(rel_pos(1,0,0)) = (0,0,1) + (0,0,-1) = (0,0,0)
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 0], 0.0, 1e-9);
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 1], 0.0, 1e-9);
@@ -546,6 +549,8 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 4], 0.0, 1e-9);             // x
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], std::sqrt(0.5), 1e-9);  // y
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, 1e-9);             // z
+  // twist stayed in the world frame, unaffected by the pose's reference frame.
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 0], 5.0, 1e-9);
 }
 
 TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBodyRotatesTwist)
@@ -562,12 +567,13 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBodyRotatesTwist)
   auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
+  // pose.header.frame_id is left empty (world frame) -- pose is not under test here, and this
+  // demonstrates that twist's reference frame is resolved independently of pose's.
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
   entry.name = "free_object";
-  entry.reference_frame = "pendulum";
-  entry.pose.orientation.w = 1.0;  // identity relative orientation, pose not under test here
-  entry.twist.linear.x = 1.0;      // rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
-  entry.twist.angular.x = 1.0;     // rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
+  entry.twist.header.frame_id = "pendulum";
+  entry.twist.twist.linear.x = 1.0;   // rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
+  entry.twist.twist.angular.x = 1.0;  // rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
   req->free_joints.push_back(entry);
@@ -586,7 +592,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBodyRotatesTwist)
   EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 5], -1.0, 1e-9);
 }
 
-TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownReferenceFrame)
+TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownPoseFrame)
 {
   ASSERT_TRUE(initialize_sim());
 
@@ -599,8 +605,8 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownReferenceFrame)
 
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
   entry.name = "free_object";
-  entry.reference_frame = "nonexistent_body";
-  entry.pose.position.x = 5.0;
+  entry.pose.header.frame_id = "nonexistent_body";
+  entry.pose.pose.position.x = 5.0;
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
   req->free_joints.push_back(entry);
@@ -611,6 +617,37 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownReferenceFrame)
   EXPECT_FALSE(resp->success);
   EXPECT_FALSE(resp->message.empty());
   EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 0], original_x);
+}
+
+TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownTwistFrame)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+  const int qpos_adr = 1;
+  const int qvel_adr = 1;
+  const double original_x = sim_->data()->qpos[qpos_adr + 0];
+  const double original_qvel_x = sim_->data()->qvel[qvel_adr + 0];
+
+  mujoco_ros2_control_msgs::msg::FreeJointState entry;
+  entry.name = "free_object";
+  entry.pose.pose.position.x = 5.0;  // valid, world-frame pose -- must not be applied either
+  entry.twist.header.frame_id = "nonexistent_body";
+  entry.twist.twist.linear.x = 1.0;
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
+  req->free_joints.push_back(entry);
+
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  auto resp = future.get();
+  EXPECT_FALSE(resp->success);
+  EXPECT_FALSE(resp->message.empty());
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 0], original_x);
+  EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 0], original_qvel_x);
 }
 
 TEST_F(MujocoSimulationTest, SetFreeJointStateSetsMultipleBodies)
@@ -658,19 +695,19 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateSetsMultipleBodies)
 
   mujoco_ros2_control_msgs::msg::FreeJointState entry_1;
   entry_1.name = "free_object";
-  entry_1.pose.position.x = 2.0;
-  entry_1.pose.position.y = 3.0;
-  entry_1.pose.position.z = 4.0;
-  entry_1.pose.orientation.w = 1.0;
-  entry_1.twist.linear.x = 0.1;
+  entry_1.pose.pose.position.x = 2.0;
+  entry_1.pose.pose.position.y = 3.0;
+  entry_1.pose.pose.position.z = 4.0;
+  entry_1.pose.pose.orientation.w = 1.0;
+  entry_1.twist.twist.linear.x = 0.1;
 
   mujoco_ros2_control_msgs::msg::FreeJointState entry_2;
   entry_2.name = "free_object_2";
-  entry_2.pose.position.x = 5.0;
-  entry_2.pose.position.y = 6.0;
-  entry_2.pose.position.z = 7.0;
-  entry_2.pose.orientation.w = 1.0;
-  entry_2.twist.linear.y = 0.2;
+  entry_2.pose.pose.position.x = 5.0;
+  entry_2.pose.pose.position.y = 6.0;
+  entry_2.pose.pose.position.z = 7.0;
+  entry_2.pose.pose.orientation.w = 1.0;
+  entry_2.twist.twist.linear.y = 0.2;
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
   req->free_joints.push_back(entry_1);
@@ -708,7 +745,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsBatchAtomically)
   // must be left untouched.
   mujoco_ros2_control_msgs::msg::FreeJointState valid_entry;
   valid_entry.name = "free_object";
-  valid_entry.pose.position.x = 42.0;
+  valid_entry.pose.pose.position.x = 42.0;
 
   mujoco_ros2_control_msgs::msg::FreeJointState invalid_entry;
   invalid_entry.name = "nonexistent_body";
