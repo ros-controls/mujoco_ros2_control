@@ -1074,21 +1074,21 @@ bool MujocoSimulation::resolve_free_joint_write(const mujoco_ros2_control_msgs::
 }
 
 bool MujocoSimulation::set_free_joint_states(
-    const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joint_states, std::string& error_message)
+    const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joints, std::string& error_message)
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
 
   // Resolve every entry first, without writing anything, so that a single invalid entry
   // rejects the whole batch and leaves mj_data_ untouched (atomic apply).
   std::vector<FreeJointWrite> writes;
-  writes.reserve(free_joint_states.size());
-  for (size_t i = 0; i < free_joint_states.size(); ++i)
+  writes.reserve(free_joints.size());
+  for (size_t i = 0; i < free_joints.size(); ++i)
   {
     FreeJointWrite write;
     std::string entry_error;
-    if (!resolve_free_joint_write(free_joint_states[i], write, entry_error))
+    if (!resolve_free_joint_write(free_joints[i], write, entry_error))
     {
-      error_message = "Entry " + std::to_string(i) + " ('" + free_joint_states[i].name + "'): " + entry_error;
+      error_message = "Entry " + std::to_string(i) + " ('" + free_joints[i].name + "'): " + entry_error;
       RCLCPP_WARN(get_logger(), "%s", error_message.c_str());
       return false;
     }
@@ -1136,12 +1136,11 @@ void MujocoSimulation::set_free_joint_state_callback(
     std::shared_ptr<mujoco_ros2_control_msgs::srv::SetFreeJointState::Response> response)
 {
   std::string error_message;
-  response->success = set_free_joint_states(request->free_joint_states, error_message);
+  response->success = set_free_joint_states(request->free_joints, error_message);
   if (response->success)
   {
-    response->message =
-        "Successfully set free joint state for " + std::to_string(request->free_joint_states.size()) + " bod" +
-        (request->free_joint_states.size() == 1 ? "y" : "ies") + ".";
+    response->message = "Successfully set free joint state for " + std::to_string(request->free_joints.size()) +
+                        " bod" + (request->free_joints.size() == 1 ? "y" : "ies") + ".";
     RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
   }
   else

@@ -520,7 +520,7 @@ class TestFixture(unittest.TestCase):
             entry.name = body_name
             entry.pose.position.x, entry.pose.position.y, entry.pose.position.z = target
             entry.pose.orientation.w = 1.0
-            req.free_joint_states.append(entry)
+            req.free_joints.append(entry)
 
         future = client.call_async(req)
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)

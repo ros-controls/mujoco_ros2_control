@@ -9,7 +9,7 @@
 # the last one wins.
 
 # List of free-joint bodies to set, see FreeJointState.msg for per-entry fields.
-FreeJointState[] free_joint_states
+FreeJointState[] free_joints
 
 ---
 

@@ -313,7 +313,7 @@ Services
    props) in a single call, each identified by the name of the body its free joint drives. Useful
    for teleporting or resetting object poses.
 
-   - ``free_joint_states`` (``mujoco_ros2_control_msgs/FreeJointState[]``): list of free-joint
+   - ``free_joints`` (``mujoco_ros2_control_msgs/FreeJointState[]``): list of free-joint
      bodies to set. Each entry has:
 
      - ``name`` (``string``): name of the MuJoCo body driven by the target free joint.
@@ -341,17 +341,17 @@ Services
       # Teleport "box_1" to (x=0, y=0, z=1) with identity orientation, at rest
       ros2 service call /ros2_control_node/set_free_joint_state \
         mujoco_ros2_control_msgs/srv/SetFreeJointState \
-        "{free_joint_states: [{name: 'box_1', pose: {position: {x: 0.0, y: 0.0, z: 1.0}}}]}"
+        "{free_joints: [{name: 'box_1', pose: {position: {x: 0.0, y: 0.0, z: 1.0}}}]}"
 
       # Place "box_1" 10 cm above the "gripper_link" body, in that link's frame
       ros2 service call /ros2_control_node/set_free_joint_state \
         mujoco_ros2_control_msgs/srv/SetFreeJointState \
-        "{free_joint_states: [{name: 'box_1', reference_frame: 'gripper_link', pose: {position: {z: 0.1}}}]}"
+        "{free_joints: [{name: 'box_1', reference_frame: 'gripper_link', pose: {position: {z: 0.1}}}]}"
 
       # Teleport both "box_1" and "box_2" in a single, atomic call
       ros2 service call /ros2_control_node/set_free_joint_state \
         mujoco_ros2_control_msgs/srv/SetFreeJointState \
-        "{free_joint_states: [
+        "{free_joints: [
           {name: 'box_1', pose: {position: {x: 0.0, y: 0.0, z: 1.0}}},
           {name: 'box_2', pose: {position: {x: 1.0, y: 0.0, z: 1.0}}}
         ]}"

@@ -418,7 +418,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateSetsPoseAndVelocity)
   entry.twist.angular.z = 0.2;
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->free_joint_states.push_back(entry);
+  req->free_joints.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -454,7 +454,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateDefaultsToZeroVelocity)
   // twist left at its default (all-zero) -- object should come to rest.
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->free_joint_states.push_back(entry);
+  req->free_joints.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -478,7 +478,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownBody)
   entry.name = "nonexistent_body";
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->free_joint_states.push_back(entry);
+  req->free_joints.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -499,7 +499,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsNonFreeBody)
   entry.name = "pendulum";  // driven by a hinge joint, not a free joint
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->free_joint_states.push_back(entry);
+  req->free_joints.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -529,7 +529,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
   entry.pose.orientation.w = 1.0;  // identity relative orientation
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->free_joint_states.push_back(entry);
+  req->free_joints.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -565,7 +565,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownReferenceFrame)
   entry.pose.position.x = 5.0;
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->free_joint_states.push_back(entry);
+  req->free_joints.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -635,8 +635,8 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateSetsMultipleBodies)
   entry_2.twist.linear.y = 0.2;
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->free_joint_states.push_back(entry_1);
-  req->free_joint_states.push_back(entry_2);
+  req->free_joints.push_back(entry_1);
+  req->free_joints.push_back(entry_2);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -676,8 +676,8 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsBatchAtomically)
   invalid_entry.name = "nonexistent_body";
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->free_joint_states.push_back(valid_entry);
-  req->free_joint_states.push_back(invalid_entry);
+  req->free_joints.push_back(valid_entry);
+  req->free_joints.push_back(invalid_entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);

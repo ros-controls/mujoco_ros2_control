@@ -193,7 +193,7 @@ public:
    * derived quantities. If the same body name appears more than once, entries are applied 
    * in order, so the last one wins.
    *
-   * @param free_joint_states List of free-joint bodies to set. See `FreeJointState.msg` for the
+   * @param free_joints List of free-joint bodies to set. See `FreeJointState.msg` for the
    * per-entry fields (name, pose, twist, reference_frame).
    * @param error_message Set to a human-readable description (identifying the offending entry
    * by index and body name) if this returns false.
@@ -201,7 +201,7 @@ public:
    * every entry's `reference_frame` was found, and the state was applied for all entries; false
    * otherwise (with `error_message` populated and no data modified).
    */
-  bool set_free_joint_states(const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joint_states,
+  bool set_free_joint_states(const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joints,
                              std::string& error_message);
 
   /**
