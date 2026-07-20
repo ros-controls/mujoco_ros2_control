@@ -78,6 +78,7 @@ void write_test_model()
   file.close();
 }
 
+constexpr double TEST_TOLERANCE = 1e-9;
 }  // namespace
 
 class MujocoSimulationTest : public ::testing::Test
@@ -294,7 +295,8 @@ TEST_F(MujocoSimulationTest, PauseStepUnpause)
   ASSERT_TRUE(step_future.get()->success);
 
   const double expected_time = time_after_pause + num_steps * sim_->model()->opt.timestep;
-  EXPECT_NEAR(sim_->data()->time, expected_time, 1e-9) << "Time should advance by exactly " << num_steps << " steps";
+  EXPECT_NEAR(sim_->data()->time, expected_time, TEST_TOLERANCE)
+      << "Time should advance by exactly " << num_steps << " steps";
 
   // Verify still paused after stepping
   const double time_after_step = sim_->data()->time;
@@ -358,9 +360,9 @@ TEST_F(MujocoSimulationTest, ResetWorldTest)
   ASSERT_TRUE(reset_resp->success) << "reset_world failed: " << reset_resp->message;
 
   // Verify state was restored to initial conditions from the start
-  EXPECT_NEAR(sim_->data()->qpos[0], 0.0, 1e-9);
-  EXPECT_NEAR(sim_->data()->qvel[0], 0.0, 1e-9);
-  EXPECT_NEAR(sim_->data()->ctrl[0], 0.0, 1e-9);
+  EXPECT_NEAR(sim_->data()->qpos[0], 0.0, TEST_TOLERANCE);
+  EXPECT_NEAR(sim_->data()->qvel[0], 0.0, TEST_TOLERANCE);
+  EXPECT_NEAR(sim_->data()->ctrl[0], 0.0, TEST_TOLERANCE);
 
   // Verify applied forces were cleared
   EXPECT_DOUBLE_EQ(sim_->data()->qfrc_applied[0], 0.0) << "qfrc_applied should be zero after reset";
@@ -397,10 +399,10 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateSetsPoseAndVelocity)
   EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 0], 1.0);
   EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 1], 0.0);
   EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 2], 1.0);
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 3], 1.0, 1e-9);  // w
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 4], 0.0, 1e-9);  // x
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], 0.0, 1e-9);  // y
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, 1e-9);  // z
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 3], 1.0, TEST_TOLERANCE);  // w
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 4], 0.0, TEST_TOLERANCE);  // x
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], 0.0, TEST_TOLERANCE);  // y
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, TEST_TOLERANCE);  // z
 
   EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 0], 0.0);
   EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 5], 0.0);
@@ -428,10 +430,10 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateSetsPoseAndVelocity)
   EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 0], 2.0);
   EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 1], 3.0);
   EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 2], 4.0);
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 3], std::sqrt(0.5), 1e-9);  // w
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 4], std::sqrt(0.5), 1e-9);  // x
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], 0.0, 1e-9);             // y
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, 1e-9);             // z
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 3], std::sqrt(0.5), TEST_TOLERANCE);  // w
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 4], std::sqrt(0.5), TEST_TOLERANCE);  // x
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], 0.0, TEST_TOLERANCE);             // y
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, TEST_TOLERANCE);             // z
 
   EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 0], 0.1);
   EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 5], 0.2);
@@ -541,16 +543,16 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
   const int qpos_adr = 1;
   const int qvel_adr = 1;
   // world_pos = ref_pos(0,0,1) + rotate_by_ref_quat(rel_pos(1,0,0)) = (0,0,1) + (0,0,-1) = (0,0,0)
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 0], 0.0, 1e-9);
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 1], 0.0, 1e-9);
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 2], 0.0, 1e-9);
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 0], 0.0, TEST_TOLERANCE);
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 1], 0.0, TEST_TOLERANCE);
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 2], 0.0, TEST_TOLERANCE);
   // world_quat = ref_quat * identity = ref_quat = (cos45, 0, sin45, 0)
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 3], std::sqrt(0.5), 1e-9);  // w
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 4], 0.0, 1e-9);             // x
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], std::sqrt(0.5), 1e-9);  // y
-  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, 1e-9);             // z
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 3], std::sqrt(0.5), TEST_TOLERANCE);  // w
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 4], 0.0, TEST_TOLERANCE);             // x
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], std::sqrt(0.5), TEST_TOLERANCE);  // y
+  EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, TEST_TOLERANCE);             // z
   // twist stayed in the world frame, unaffected by the pose's reference frame.
-  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 0], 5.0, 1e-9);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 0], 5.0, TEST_TOLERANCE);
 }
 
 TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBodyRotatesTwist)
@@ -584,12 +586,12 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBodyRotatesTwist)
   ASSERT_TRUE(resp->success) << resp->message;
 
   const int qvel_adr = 1;
-  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 0], 0.0, 1e-9);
-  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 1], 0.0, 1e-9);
-  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 2], -1.0, 1e-9);
-  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 3], 0.0, 1e-9);
-  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 4], 0.0, 1e-9);
-  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 5], -1.0, 1e-9);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 0], 0.0, TEST_TOLERANCE);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 1], 0.0, TEST_TOLERANCE);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 2], -1.0, TEST_TOLERANCE);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 3], 0.0, TEST_TOLERANCE);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 4], 0.0, TEST_TOLERANCE);
+  EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 5], -1.0, TEST_TOLERANCE);
 }
 
 TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownPoseFrame)
