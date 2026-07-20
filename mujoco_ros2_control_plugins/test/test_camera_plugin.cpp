@@ -109,6 +109,33 @@ protected:
     ASSERT_NE(data_, nullptr);
   }
 
+  // Blocks until the rendering thread has finished initializing its GL context, or skip
+  // the test if the context never comes up because of a bad CI instance...
+  void wait_for_rendering(mujoco_ros2_control_plugins::CameraPlugin& plugin)
+  {
+    for (int i = 0; i < 50 && !plugin.is_rendering_available(); ++i)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    if (!plugin.is_rendering_available())
+    {
+      plugin.cleanup();
+      GTEST_SKIP() << "OpenGL rendering unavailable in this environment!!! Skipping tests...";
+    }
+  }
+
+  // Block until every subscription in the list has matched at least one publisher.
+  template <typename... Subs>
+  void wait_for_subscriber_match(const Subs&... subs)
+  {
+    auto all_matched = [&]() { return ((subs->get_publisher_count() > 0) && ...); };
+    for (int i = 0; i < 50 && !all_matched(); ++i)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    ASSERT_TRUE(all_matched()) << "Subscribers never matched publishers within 2 s";
+  }
+
   // Calls a Trigger service and returns whether the call succeeded.
   bool call_trigger(const std::string& service_name)
   {
@@ -178,7 +205,9 @@ TEST_F(CameraPluginTest, InitAndPublish)
   mujoco_ros2_control_plugins::CameraPlugin plugin;
   // GLFW is not initialized, and No OpenGL framebuffer will be available so we make the init fall back on to EGL.
   EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, []() { return 0; }));
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  // Wait for the rendering thread to come up... If it doesn't we're going to skip this
+  wait_for_rendering(plugin);
 
   // Verify publishers were created
   EXPECT_EQ(plugin_node_->count_publishers("/camera_plugin/test_cam/color"), 1u);
@@ -190,12 +219,14 @@ TEST_F(CameraPluginTest, InitAndPublish)
   std::atomic<bool> received_depth{ false };
   std::atomic<bool> received_info{ false };
   auto image_sub = node_->create_subscription<sensor_msgs::msg::Image>(
-      "/camera_plugin/test_cam/color", 1, [&](sensor_msgs::msg::Image::SharedPtr msg) { received_image = true; });
+      "/camera_plugin/test_cam/color", 1, [&](sensor_msgs::msg::Image::SharedPtr) { received_image = true; });
   auto depth_sub = node_->create_subscription<sensor_msgs::msg::Image>(
-      "/camera_plugin/test_cam/depth", 1, [&](sensor_msgs::msg::Image::SharedPtr msg) { received_depth = true; });
+      "/camera_plugin/test_cam/depth", 1, [&](sensor_msgs::msg::Image::SharedPtr) { received_depth = true; });
   auto info_sub = node_->create_subscription<sensor_msgs::msg::CameraInfo>(
-      "/camera_plugin/test_cam/camera_info", 1,
-      [&](sensor_msgs::msg::CameraInfo::SharedPtr msg) { received_info = true; });
+      "/camera_plugin/test_cam/camera_info", 1, [&](sensor_msgs::msg::CameraInfo::SharedPtr) { received_info = true; });
+
+  // Ensure publishers are connected to subscribers
+  wait_for_subscriber_match(image_sub, depth_sub, info_sub);
 
   // Force a publish and verify we get results
   plugin.trigger_update();
@@ -282,12 +313,11 @@ TEST_F(CameraPluginTest, PolledCameraPublishesOncePerTrigger)
   auto image_sub = node_->create_subscription<sensor_msgs::msg::Image>(
       "/camera_plugin/poll_cam/color", 10, [&](sensor_msgs::msg::Image::SharedPtr) { ++image_count; });
 
-  // Wait for the rendering thread to come up (so a forced render is safe).
-  for (auto i = 0; i < 50 && !plugin.is_rendering_available(); ++i)
-  {
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
-  ASSERT_TRUE(plugin.is_rendering_available()) << "Rendering context unavailable in this environment";
+  // Wait for the rendering thread to come up... If it doesn't we're going to skip this
+  wait_for_rendering(plugin);
+
+  // Ensure publishers are connected to subscribers
+  wait_for_subscriber_match(image_sub);
 
   // Without a trigger, running render cycles must not publish anything for a polled camera.
   for (auto i = 0; i < 5; ++i)
