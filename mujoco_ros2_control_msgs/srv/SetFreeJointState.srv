@@ -1,18 +1,21 @@
-# Directly set the pose and velocity of a MuJoCo free-joint object, identified by
-# the name of the body it drives. Intended for teleporting/resetting objects in
+# Directly set the pose and velocity of one or more MuJoCo free-joint objects, each
+# identified by the name of the body it drives. Intended for teleporting/resetting objects in
 # the world (e.g. a manipulable prop), similar to Gazebo's set_entity_state.
 #
-# An unset orientation defaults to identity (w=1, per the Quaternion.msg default)
-# and an unset twist defaults to all-zero, so the common "reset to a pose, at
-# rest" case only needs to fill in `name` and `pose`.
+# Application is atomic across the whole list: every entry is validated (body exists, is
+# driven by a free joint, and any reference_frame names a known body) before anything is
+# written. If any entry is invalid, the entire request is rejected and no sim data is
+# modified. If the same body name appears more than once, entries are applied in order, so
+# the last one wins.
 
 # List of free-joint bodies to set, see FreeJointState.msg for per-entry fields.
 FreeJointState[] free_joint_states
 
 ---
 
-# True if `name` was found, is driven by a free joint, and the state was applied.
+# True if every entry's body was found, driven by a free joint, and the state was applied.
 bool success
 
 # Human-readable status / error description (e.g. unknown body, not a free joint).
+# On failure, identifies which entry (index and body name) caused the rejection.
 string message
