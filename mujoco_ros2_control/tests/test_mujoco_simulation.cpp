@@ -35,9 +35,8 @@
 namespace
 {
 
-// Basic model for executing unit tests, has a hinge joint with an actuator, plus two
-// free-floating bodies ("free_object", "free_object_2") used to exercise the free-joint
-// reset service (including its list/batch behaviour). Most importantly:
+// Basic model for executing unit tests: a hinge joint with an actuator, plus two free-floating
+// bodies ("free_object", "free_object_2") for exercising the free-joint state service.
 //    nu=1, nq=15 (1 hinge + 7 + 7 free joint), nv=13 (1 hinge + 6 + 6 free joint), nbody=4
 //    (world + pendulum + free_object + free_object_2)
 constexpr const char* kTestModel = R"(<?xml version="1.0"?>
@@ -514,9 +513,8 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
 {
   ASSERT_TRUE(initialize_sim());
 
-  // Rotate "pendulum" 90 degrees about its hinge axis (0 1 0), so its world pose becomes
-  // pos=(0, 0, 1), quat=(cos45, 0, sin45, 0). The hinge's own origin does not translate,
-  // only rotates, so this exercises the rotation part of the pose composition.
+  // Rotate "pendulum" 90 degrees about Y, so its world pose becomes pos=(0,0,1),
+  // quat=(cos45,0,sin45,0).
   sim_->data()->qpos[0] = M_PI_2;
   mj_forward(sim_->model(), sim_->data());
 
@@ -527,9 +525,9 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
   entry.name = "free_object";
   entry.pose.header.frame_id = "pendulum";
-  entry.pose.pose.position.x = 1.0;     // rel_pos, rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
-  entry.pose.pose.orientation.w = 1.0;  // identity relative orientation
-  // twist.header.frame_id left empty (world frame), independent of the pose's reference frame.
+  entry.pose.pose.position.x = 1.0;     // rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
+  entry.pose.pose.orientation.w = 1.0;
+  // twist.header.frame_id left empty: world frame, independent of pose's reference frame.
   entry.twist.twist.linear.x = 5.0;
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
@@ -542,7 +540,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
 
   const int qpos_adr = 1;
   const int qvel_adr = 1;
-  // world_pos = ref_pos(0,0,1) + rotate_by_ref_quat(rel_pos(1,0,0)) = (0,0,1) + (0,0,-1) = (0,0,0)
+  // world_pos = ref_pos(0,0,1) + rotate(rel_pos(1,0,0)) = (0,0,0)
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 0], 0.0, TEST_TOLERANCE);
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 1], 0.0, TEST_TOLERANCE);
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 2], 0.0, TEST_TOLERANCE);
@@ -551,7 +549,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 4], 0.0, TEST_TOLERANCE);             // x
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 5], std::sqrt(0.5), TEST_TOLERANCE);  // y
   EXPECT_NEAR(sim_->data()->qpos[qpos_adr + 6], 0.0, TEST_TOLERANCE);             // z
-  // twist stayed in the world frame, unaffected by the pose's reference frame.
+  // twist stayed in the world frame.
   EXPECT_NEAR(sim_->data()->qvel[qvel_adr + 0], 5.0, TEST_TOLERANCE);
 }
 
@@ -559,9 +557,9 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBodyRotatesTwist)
 {
   ASSERT_TRUE(initialize_sim());
 
-  // Rotate "pendulum" 90 degrees about its hinge axis (0 1 0), so its world pose becomes
-  // pos=(0, 0, 1), quat=(cos45, 0, sin45, 0) similar setup as SetFreeJointStateRelativeToBody,
-  // which rotates a reference-frame vector (1,0,0) to world (0,0,-1).
+  // Same rotated "pendulum" setup as SetFreeJointStateRelativeToBody, but here it is the
+  // twist's reference frame -- pose.header.frame_id is left empty (world) to show they
+  // resolve independently.
   sim_->data()->qpos[0] = M_PI_2;
   mj_forward(sim_->model(), sim_->data());
 
@@ -569,8 +567,6 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBodyRotatesTwist)
   auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
-  // pose.header.frame_id is left empty (world frame) -- pose is not under test here, and this
-  // demonstrates that twist's reference frame is resolved independently of pose's.
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
   entry.name = "free_object";
   entry.twist.header.frame_id = "pendulum";
@@ -742,9 +738,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsBatchAtomically)
   const int qpos_adr = 1;
   const double original_x = sim_->data()->qpos[qpos_adr + 0];
 
-  // One valid entry followed by one invalid entry (unknown body). Since the batch must be
-  // applied atomically, the whole request should be rejected and the valid entry's target
-  // must be left untouched.
+  // The invalid second entry must reject the whole batch, leaving the first untouched.
   mujoco_ros2_control_msgs::msg::FreeJointState valid_entry;
   valid_entry.name = "free_object";
   valid_entry.pose.pose.position.x = 42.0;
