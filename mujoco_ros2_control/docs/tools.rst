@@ -16,8 +16,8 @@ They are intended to be used for assistance and getting started, but do not expe
 
 Additional cleanup, documentation, and tips and tricks are a work in progress.
 
-Usage
------
+Conversion Tool Usage
+---------------------
 
 The current tool that is available is ``make_mjcf_from_robot_description``, which is runnable with:
 
