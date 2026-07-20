@@ -92,6 +92,12 @@ The vectors are determined by the size and field of view parameters.
     * Setting an ``update_rate`` can drastically save time when calling ``mj_step``.
     * This may be removed in future versions after the `interval attribute <https://mujoco.readthedocs.io/en/stable/modeling.html#sensors>`_ is available for sensors.
 
+- ``async``: Whether or not to do raycasting synchronously or in a background thread.
+
+    * For high density sensors, background processing will help avoid blocking ``mj_step`` for long periods.
+    * Async processing requires a copy of the entirety of ``mjData``, so consumers should decide if the tradeoff is worth it.
+    * We recommend using the profiler in the simulate application to evaluate the timing differences.
+
 Note that rays that hit nothing or fall outside the min/max range return ``-1``.
 
 Example MJCF for a 2D lidar sensor:
@@ -107,6 +113,7 @@ Example MJCF for a 2D lidar sensor:
          <config key="max_range" value="10.0"/>
          <config key="min_range" value="0.0"/>
          <config key="update_rate" value="10.0"/>
+         <config key="async" value="0"/>
        </instance>
      </plugin>
    </extension>
@@ -128,6 +135,7 @@ For a 3D lidar, increase the vertical resolution and specify an elevation range.
          <config key="max_range" value="10.0"/>
          <config key="min_range" value="0.0"/>
          <config key="update_rate" value="1.0"/>
+         <config key="async" value="0"/>
        </instance>
      </plugin>
    </extension>
