@@ -309,22 +309,30 @@ Services
       ros2 service call /ros2_control_node/step_simulation mujoco_ros2_control_msgs/srv/StepSimulation "{steps: 100}"
 
 ``~/set_free_joint_state`` (``mujoco_ros2_control_msgs/srv/SetFreeJointState``)
-   Directly sets the pose and velocity of a MuJoCo free-joint object (e.g. a manipulable prop),
-   identified by the name of the body its free joint drives. Useful for teleporting or resetting
-   an object's pose, similar to Gazebo's ``set_entity_state``.
+   Directly sets the pose and velocity of one or more MuJoCo free-joint objects (e.g. manipulable
+   props) in a single call, each identified by the name of the body its free joint drives. Useful
+   for teleporting or resetting object poses.
 
-   - ``name`` (``string``): name of the MuJoCo body driven by the target free joint.
-   - ``pose`` (``geometry_msgs/Pose``): desired pose. An unset ``orientation`` defaults to
-     identity. Interpreted in the world frame unless ``reference_frame`` is set.
-   - ``twist`` (``geometry_msgs/Twist``): desired world-frame velocity. Left at its default
-     (all-zero), the object comes to rest at the new pose. Always interpreted in the world
-     frame, regardless of ``reference_frame``.
-   - ``reference_frame`` (``string``): optional name of another MuJoCo body. If empty
-     (default), ``pose`` is interpreted directly in the world frame. If set, ``pose`` is
-     composed onto that body's current world pose, letting you place an object relative to a
-     link instead of computing its world pose yourself.
-   - Returns ``success = false`` (with no data modified) if ``name`` is unknown or is not driven
-     by a free joint, or if ``reference_frame`` is set but does not name a known body.
+   - ``free_joint_states`` (``mujoco_ros2_control_msgs/FreeJointState[]``): list of free-joint
+     bodies to set. Each entry has:
+
+     - ``name`` (``string``): name of the MuJoCo body driven by the target free joint.
+     - ``pose`` (``geometry_msgs/Pose``): desired pose. An unset ``orientation`` defaults to
+       identity. Interpreted in the world frame unless ``reference_frame`` is set.
+     - ``twist`` (``geometry_msgs/Twist``): desired world-frame velocity. Left at its default
+       (all-zero), the object comes to rest at the new pose. Always interpreted in the world
+       frame, regardless of ``reference_frame``.
+     - ``reference_frame`` (``string``): optional name of another MuJoCo body. If empty
+       (default), ``pose`` is interpreted directly in the world frame. If set, ``pose`` is
+       composed onto that body's current world pose, letting you place an object relative to a
+       link instead of computing its world pose yourself.
+
+   - Application is **atomic across the whole list**: every entry is validated (body exists, is
+     driven by a free joint, and any ``reference_frame`` names a known body) before anything is
+     written. Returns ``success = false`` (with no data modified for *any* entry) if a single
+     entry is invalid; ``message`` identifies the offending entry by index and body name.
+   - If the same body name appears more than once in the list, entries are applied in order, so
+     the last one wins.
    - To *observe* the current state of every free-joint object, see the ``FreeJointPlugin`` in
      ``mujoco_ros2_control_plugins`` (published on its ``free_joint_states`` topic).
 
@@ -333,12 +341,20 @@ Services
       # Teleport "box_1" to (x=0, y=0, z=1) with identity orientation, at rest
       ros2 service call /ros2_control_node/set_free_joint_state \
         mujoco_ros2_control_msgs/srv/SetFreeJointState \
-        "{name: 'box_1', pose: {position: {x: 0.0, y: 0.0, z: 1.0}}}"
+        "{free_joint_states: [{name: 'box_1', pose: {position: {x: 0.0, y: 0.0, z: 1.0}}}]}"
 
       # Place "box_1" 10 cm above the "gripper_link" body, in that link's frame
       ros2 service call /ros2_control_node/set_free_joint_state \
         mujoco_ros2_control_msgs/srv/SetFreeJointState \
-        "{name: 'box_1', reference_frame: 'gripper_link', pose: {position: {z: 0.1}}}"
+        "{free_joint_states: [{name: 'box_1', reference_frame: 'gripper_link', pose: {position: {z: 0.1}}}]}"
+
+      # Teleport both "box_1" and "box_2" in a single, atomic call
+      ros2 service call /ros2_control_node/set_free_joint_state \
+        mujoco_ros2_control_msgs/srv/SetFreeJointState \
+        "{free_joint_states: [
+          {name: 'box_1', pose: {position: {x: 0.0, y: 0.0, z: 1.0}}},
+          {name: 'box_2', pose: {position: {x: 1.0, y: 0.0, z: 1.0}}}
+        ]}"
 
 Debugging
 =========
