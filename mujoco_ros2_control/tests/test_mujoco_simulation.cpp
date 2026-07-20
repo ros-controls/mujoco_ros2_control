@@ -525,7 +525,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
   entry.name = "free_object";
   entry.pose.header.frame_id = "pendulum";
-  entry.pose.pose.position.x = 1.0;     // rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
+  entry.pose.pose.position.x = 1.0;  // rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
   entry.pose.pose.orientation.w = 1.0;
   // twist.header.frame_id left empty: world frame, independent of pose's reference frame.
   entry.twist.twist.linear.x = 5.0;
