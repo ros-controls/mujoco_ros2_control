@@ -1,5 +1,3 @@
-.. _mujoco_ros2_control_plugins:
-
 MuJoCo ROS 2 Control Plugins
 ============================
 
@@ -110,17 +108,6 @@ This allows camera topics to be published even when running in headless mode (e.
    EGL requires proper GPU drivers and EGL libraries to be installed (e.g., libegl1-mesa on Ubuntu).
    If both GLFW and EGL fail to initialize, camera publishing will be disabled with a warning.
 
-
-.. _lidar_plugin:
-
-RangefinderLidarPlugin
-~~~~~~~~~~~~~~~~~~~~~~
-
-.. warning::
-
-   This plugin is included to support legacy implementations of rangefinder based lidar sensors.
-   We do not recommend using this, and instead would direct users to the 3d lidar plugin for improved
-   features and performance.
 
 ExternalWrenchPlugin
 ~~~~~~~~~~~~~~~~~~~~~
@@ -251,8 +238,8 @@ This applies a constant force of 10 N for 1.5 seconds and then decays linearly o
        }
      }"
 
-Visualization
-^^^^^^^^^^^^^
+ExternalWrench Visualization
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 While wrenches are active, arrow markers are published to ``~/wrench_markers`` for display in RViz:
 
@@ -266,8 +253,8 @@ as it moves.
 Add a ``MarkerArray`` display in RViz pointed at the topic and ensure the body's TF frames are
 being broadcast.
 
-Parameters
-^^^^^^^^^^
+ExternalWrench Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table::
    :widths: 25 15 15 45
@@ -298,10 +285,17 @@ Parameters
            force_arrow_scale: 0.01      # 100 N  → 1 m arrow
            torque_arrow_scale: 0.1      # 10 N·m → 1 m arrow
 
-.. _mujoco_3d_lidar_plugin:
+RangefinderLidarPlugin
+~~~~~~~~~~~~~~~~~~~~~~
 
-MuJoCo 3D Lidar
-~~~~~~~~~~~~~~~
+.. warning::
+
+   This plugin is included to support legacy implementations of rangefinder based lidar sensors.
+   We do not recommend using this, and instead would direct users to the 3d lidar plugin for improved
+   features and performance.
+
+MuJoCo 3D Lidar Plugin
+~~~~~~~~~~~~~~~~~~~~~~
 
 MuJoCo does not include native lidar support.
 This package implements lidar through a custom MuJoCo sensor extension in ``mujoco_extensions` (``mujoco.plugin.lidar``) that uses
@@ -315,8 +309,8 @@ Specicially, the data for 2D (single-row) and 3D (multi-row) will be published a
 
 When using the ``Mujoco3dLidarPlugin``, every ``mujoco.plugin.lidar`` sensor will have its data published.
 
-Parameters
-^^^^^^^^^^
+3D Lidar Parameters
+^^^^^^^^^^^^^^^^^^^
 
 Each sensor is individually configurable by name in the plugin's yaml.
 The available parameters are:
@@ -351,8 +345,8 @@ The available parameters are:
             frame_name: "3d_lidar_sensor_frame"
             topic: "/lidar_points_3d"
 
-Usage
------
+3D Lidar Usage
+--------------
 
 Plugins are loaded from ROS 2 parameters under ``mujoco_plugins``.
 Each plugin entry requires:
