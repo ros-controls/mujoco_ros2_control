@@ -29,16 +29,17 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <mujoco_ros2_control/mujoco_simulation.hpp>
+#include <mujoco_ros2_control_msgs/msg/free_joint_state.hpp>
 #include <mujoco_ros2_control_msgs/srv/set_free_joint_state.hpp>
 
 namespace
 {
 
-// Basic model for executing unit tests, has a hinge joint with an actuator, plus a
-// free-floating body ("free_object") used to exercise the free-joint reset service.
-// Most importantly:
-//    nu=1, nq=8 (1 hinge + 7 free joint), nv=7 (1 hinge + 6 free joint), nbody=3
-//    (world + pendulum + free_object)
+// Basic model for executing unit tests, has a hinge joint with an actuator, plus two
+// free-floating bodies ("free_object", "free_object_2") used to exercise the free-joint
+// reset service (including its list/batch behaviour). Most importantly:
+//    nu=1, nq=15 (1 hinge + 7 + 7 free joint), nv=13 (1 hinge + 6 + 6 free joint), nbody=4
+//    (world + pendulum + free_object + free_object_2)
 constexpr const char* kTestModel = R"(<?xml version="1.0"?>
 <mujoco model="test_simulation">
   <option timestep="0.002"/>
@@ -52,6 +53,10 @@ constexpr const char* kTestModel = R"(<?xml version="1.0"?>
       <freejoint name="free_object_joint"/>
       <geom type="box" size="0.05 0.05 0.05" mass="1"/>
     </body>
+    <body name="free_object_2" pos="2 0 1">
+      <freejoint name="free_object_2_joint"/>
+      <geom type="box" size="0.05 0.05 0.05" mass="1"/>
+    </body>
   </worldbody>
 
   <actuator>
@@ -59,7 +64,7 @@ constexpr const char* kTestModel = R"(<?xml version="1.0"?>
   </actuator>
 
   <keyframe>
-    <key name="home" qpos="0.5 1 0 1 1 0 0 0"/>
+    <key name="home" qpos="0.5 1 0 1 1 0 0 0 2 0 1 1 0 0 0"/>
   </keyframe>
 </mujoco>
 )";
@@ -187,12 +192,12 @@ TEST_F(MujocoSimulationTest, TestInitialization)
   EXPECT_NE(sim_->model(), nullptr);
   EXPECT_NE(sim_->data(), nullptr);
 
-  // nq/nv account for the "hinge" joint (1 each) plus the "free_object" free joint
-  // (7 qpos: xyz + wxyz quat; 6 qvel: linear + angular).
-  EXPECT_EQ(sim_->model()->nq, 8);
-  EXPECT_EQ(sim_->model()->nv, 7);
+  // nq/nv account for the "hinge" joint (1 each) plus the "free_object" and "free_object_2"
+  // free joints (7 qpos each: xyz + wxyz quat; 6 qvel each: linear + angular).
+  EXPECT_EQ(sim_->model()->nq, 15);
+  EXPECT_EQ(sim_->model()->nv, 13);
   EXPECT_EQ(sim_->model()->nu, 1);
-  EXPECT_EQ(sim_->model()->nbody, 3);
+  EXPECT_EQ(sim_->model()->nbody, 4);
 }
 
 TEST_F(MujocoSimulationTest, ControlUpdateTests)
@@ -400,17 +405,20 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateSetsPoseAndVelocity)
   EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 0], 0.0);
   EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr + 5], 0.0);
 
+  mujoco_ros2_control_msgs::msg::FreeJointState entry;
+  entry.name = "free_object";
+  entry.pose.position.x = 2.0;
+  entry.pose.position.y = 3.0;
+  entry.pose.position.z = 4.0;
+  entry.pose.orientation.w = std::sqrt(0.5);
+  entry.pose.orientation.x = std::sqrt(0.5);
+  entry.pose.orientation.y = 0.0;
+  entry.pose.orientation.z = 0.0;
+  entry.twist.linear.x = 0.1;
+  entry.twist.angular.z = 0.2;
+
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->name = "free_object";
-  req->pose.position.x = 2.0;
-  req->pose.position.y = 3.0;
-  req->pose.position.z = 4.0;
-  req->pose.orientation.w = std::sqrt(0.5);
-  req->pose.orientation.x = std::sqrt(0.5);
-  req->pose.orientation.y = 0.0;
-  req->pose.orientation.z = 0.0;
-  req->twist.linear.x = 0.1;
-  req->twist.angular.z = 0.2;
+  req->free_joint_states.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -440,10 +448,13 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateDefaultsToZeroVelocity)
   auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
-  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->name = "free_object";
-  req->pose.position.z = 2.0;
+  mujoco_ros2_control_msgs::msg::FreeJointState entry;
+  entry.name = "free_object";
+  entry.pose.position.z = 2.0;
   // twist left at its default (all-zero) -- object should come to rest.
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
+  req->free_joint_states.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -463,8 +474,11 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownBody)
   auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
+  mujoco_ros2_control_msgs::msg::FreeJointState entry;
+  entry.name = "nonexistent_body";
+
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->name = "nonexistent_body";
+  req->free_joint_states.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -481,8 +495,11 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsNonFreeBody)
   auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
+  mujoco_ros2_control_msgs::msg::FreeJointState entry;
+  entry.name = "pendulum";  // driven by a hinge joint, not a free joint
+
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->name = "pendulum";  // driven by a hinge joint, not a free joint
+  req->free_joint_states.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -505,11 +522,14 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
   auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
+  mujoco_ros2_control_msgs::msg::FreeJointState entry;
+  entry.name = "free_object";
+  entry.reference_frame = "pendulum";
+  entry.pose.position.x = 1.0;     // rel_pos, rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
+  entry.pose.orientation.w = 1.0;  // identity relative orientation
+
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->name = "free_object";
-  req->reference_frame = "pendulum";
-  req->pose.position.x = 1.0;     // rel_pos, rotated 90 deg about Y: (1,0,0) -> (0,0,-1)
-  req->pose.orientation.w = 1.0;  // identity relative orientation
+  req->free_joint_states.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -539,10 +559,13 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownReferenceFrame)
   const int qpos_adr = 1;
   const double original_x = sim_->data()->qpos[qpos_adr + 0];
 
+  mujoco_ros2_control_msgs::msg::FreeJointState entry;
+  entry.name = "free_object";
+  entry.reference_frame = "nonexistent_body";
+  entry.pose.position.x = 5.0;
+
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
-  req->name = "free_object";
-  req->reference_frame = "nonexistent_body";
-  req->pose.position.x = 5.0;
+  req->free_joint_states.push_back(entry);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -550,6 +573,119 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownReferenceFrame)
   EXPECT_FALSE(resp->success);
   EXPECT_FALSE(resp->message.empty());
   EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 0], original_x);
+}
+
+TEST_F(MujocoSimulationTest, SetFreeJointStateSetsMultipleBodies)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+  // Resolve addresses per body rather than hardcoding, since "free_object_2" sits after
+  // "free_object" (qpos 8 / qvel 7) in the model's qpos/qvel layout.
+  const int free_object_id = mj_name2id(sim_->model(), mjOBJ_BODY, "free_object");
+  const int free_object_2_id = mj_name2id(sim_->model(), mjOBJ_BODY, "free_object_2");
+  ASSERT_NE(free_object_id, -1);
+  ASSERT_NE(free_object_2_id, -1);
+
+  auto qpos_adr_for = [&](int body_id) {
+    for (int i = 0; i < sim_->model()->njnt; ++i)
+    {
+      if (sim_->model()->jnt_bodyid[i] == body_id && sim_->model()->jnt_type[i] == mjJNT_FREE)
+      {
+        return sim_->model()->jnt_qposadr[i];
+      }
+    }
+    return -1;
+  };
+  auto qvel_adr_for = [&](int body_id) {
+    for (int i = 0; i < sim_->model()->njnt; ++i)
+    {
+      if (sim_->model()->jnt_bodyid[i] == body_id && sim_->model()->jnt_type[i] == mjJNT_FREE)
+      {
+        return sim_->model()->jnt_dofadr[i];
+      }
+    }
+    return -1;
+  };
+
+  const int qpos_adr_1 = qpos_adr_for(free_object_id);
+  const int qvel_adr_1 = qvel_adr_for(free_object_id);
+  const int qpos_adr_2 = qpos_adr_for(free_object_2_id);
+  const int qvel_adr_2 = qvel_adr_for(free_object_2_id);
+  ASSERT_NE(qpos_adr_1, -1);
+  ASSERT_NE(qpos_adr_2, -1);
+
+  mujoco_ros2_control_msgs::msg::FreeJointState entry_1;
+  entry_1.name = "free_object";
+  entry_1.pose.position.x = 2.0;
+  entry_1.pose.position.y = 3.0;
+  entry_1.pose.position.z = 4.0;
+  entry_1.pose.orientation.w = 1.0;
+  entry_1.twist.linear.x = 0.1;
+
+  mujoco_ros2_control_msgs::msg::FreeJointState entry_2;
+  entry_2.name = "free_object_2";
+  entry_2.pose.position.x = 5.0;
+  entry_2.pose.position.y = 6.0;
+  entry_2.pose.position.z = 7.0;
+  entry_2.pose.orientation.w = 1.0;
+  entry_2.twist.linear.y = 0.2;
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
+  req->free_joint_states.push_back(entry_1);
+  req->free_joint_states.push_back(entry_2);
+
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  auto resp = future.get();
+  ASSERT_TRUE(resp->success) << resp->message;
+
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr_1 + 0], 2.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr_1 + 1], 3.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr_1 + 2], 4.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr_1 + 0], 0.1);
+
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr_2 + 0], 5.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr_2 + 1], 6.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr_2 + 2], 7.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qvel[qvel_adr_2 + 1], 0.2);
+}
+
+TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsBatchAtomically)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+  const int qpos_adr = 1;
+  const double original_x = sim_->data()->qpos[qpos_adr + 0];
+
+  // One valid entry followed by one invalid entry (unknown body). Since the batch must be
+  // applied atomically, the whole request should be rejected and the valid entry's target
+  // must be left untouched.
+  mujoco_ros2_control_msgs::msg::FreeJointState valid_entry;
+  valid_entry.name = "free_object";
+  valid_entry.pose.position.x = 42.0;
+
+  mujoco_ros2_control_msgs::msg::FreeJointState invalid_entry;
+  invalid_entry.name = "nonexistent_body";
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request>();
+  req->free_joint_states.push_back(valid_entry);
+  req->free_joint_states.push_back(invalid_entry);
+
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  auto resp = future.get();
+  EXPECT_FALSE(resp->success);
+  EXPECT_FALSE(resp->message.empty());
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[qpos_adr + 0], original_x)
+      << "Valid entry must not be applied when another entry in the same batch is invalid";
 }
 
 int main(int argc, char** argv)
