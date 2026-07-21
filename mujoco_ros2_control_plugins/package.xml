@@ -29,7 +29,7 @@
   <depend>std_srvs</depend>
   <depend>geometry_msgs</depend>
   <depend>visualization_msgs</depend>
-  <depend version_gte="0.0.3">mujoco_ros2_control_msgs</depend>
+  <depend>mujoco_ros2_control_msgs</depend>
   <depend>libglfw3-dev</depend>
   <depend>opengl</depend>
 
