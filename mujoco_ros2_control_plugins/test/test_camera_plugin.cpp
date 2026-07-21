@@ -248,6 +248,57 @@ TEST_F(CameraPluginTest, InitAndPublish)
   plugin.cleanup();
 }
 
+// Verify cameras without an explicit frame_name use the documented default frame name.
+TEST_F(CameraPluginTest, InitAndExpectedDefaultFrameName)
+{
+  load_model(R"(<?xml version="1.0"?>
+<mujoco model="with_camera">
+  <worldbody>
+    <body name="box" pos="0 0 0.1">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+      <geom type="box" size="0.05 0.05 0.05"/>
+    </body>
+    <camera name="test_cam" pos="0 -1 1" xyaxes="1 0 0 0 0.707 0.707"
+            fovy="60" resolution="320 240"/>
+  </worldbody>
+</mujoco>
+)");
+
+  ASSERT_EQ(model_->ncam, 1);
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  // GLFW is not initialized, and No OpenGL framebuffer will be available so we make the init fall back on to EGL.
+  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, []() { return 0; }));
+
+  // Wait for the rendering thread to come up
+  wait_for_rendering(plugin);
+
+  // Verify publishers were created
+  EXPECT_EQ(plugin_node_->count_publishers("/camera_plugin/test_cam/camera_info"), 1u);
+
+  // Create subscribers for the camera info
+  std::atomic<bool> received_expected_frame_id{ false };
+  auto info_sub = node_->create_subscription<sensor_msgs::msg::CameraInfo>(
+      "/camera_plugin/test_cam/camera_info", 1, [&](sensor_msgs::msg::CameraInfo::SharedPtr msg) {
+        received_expected_frame_id = msg->header.frame_id == "test_cam_frame";
+      });
+
+  // Ensure publishers are connected to subscribers
+  wait_for_subscriber_match(info_sub);
+
+  // Force a publish and verify we get results
+  const auto deadline = std::chrono::steady_clock::now() + WAIT_TIMEOUT;
+  while (!received_expected_frame_id && std::chrono::steady_clock::now() < deadline)
+  {
+    plugin.trigger_update();
+    std::this_thread::sleep_for(POLL_INTERVAL);
+  }
+
+  ASSERT_TRUE(received_expected_frame_id);
+
+  plugin.cleanup();
+}
+
 // Only polled cameras should expose a trigger service; streaming cameras should not.
 TEST_F(CameraPluginTest, OnlyPolledCamerasCreateTriggerService)
 {
