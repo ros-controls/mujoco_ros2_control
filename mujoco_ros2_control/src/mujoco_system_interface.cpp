@@ -171,7 +171,8 @@ int get_actuator_id(const std::string& actuator_name, const mjModel* mj_model)
  * @return The corresponding actuator names if found, otherwise returns the joint name.
  */
 std::vector<std::string> get_joint_actuator_names(const std::string& joint_name,
-                                    const hardware_interface::HardwareInfo& hardware_info, const mjModel* mj_model)
+                                                  const hardware_interface::HardwareInfo& hardware_info,
+                                                  const mjModel* mj_model)
 {
   for (const auto& transmission : hardware_info.transmissions)
   {
@@ -182,18 +183,20 @@ std::vector<std::string> get_joint_actuator_names(const std::string& joint_name,
         // A MuJoCo actuator/joint sharing the joint name takes precedence: this is a direct 1:1 mapping
         if (get_actuator_id(joint_name, mj_model) != -1)
         {
-          RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Found direct actuator match for joint '%s'", joint_name.c_str());
-          return {joint_name};
+          RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Found direct actuator match for joint '%s'",
+                      joint_name.c_str());
+          return { joint_name };
         }
-        // Otherwise the joint is driven through the transmission: it maps to all the transmission's actuators 
+        // Otherwise the joint is driven through the transmission: it maps to all the transmission's actuators
         std::vector<std::string> actuator_names;
         for (const auto& actuator : transmission.actuators)
         {
           actuator_names.push_back(actuator.name);
         }
         RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "%s",
-                    fmt::format("Found transmission for joint '{}', mapping to actuators : [{}]",
-                                joint_name, fmt::join(actuator_names, ",")).c_str());
+                    fmt::format("Found transmission for joint '{}', mapping to actuators : [{}]", joint_name,
+                                fmt::join(actuator_names, ","))
+                        .c_str());
         if (!actuator_names.empty())
         {
           return actuator_names;
@@ -205,7 +208,7 @@ std::vector<std::string> get_joint_actuator_names(const std::string& joint_name,
     }
   }
   // No transmission covers this joint: fall back to a direct name match (joint name == actuator name).
-  return {joint_name};
+  return { joint_name };
 }
 
 /**
@@ -783,7 +786,7 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
       return;
     }
 
-    // Only one type of control mode can be active at a time. Reset the flags on every actuator 
+    // Only one type of control mode can be active at a time. Reset the flags on every actuator
     // the joint drives before (re-)enabling the requested one.
     joint_it->is_position_control_enabled = false;
     joint_it->is_velocity_control_enabled = false;
@@ -823,8 +826,8 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
       joint_it->is_velocity_control_enabled = true;
       RCLCPP_INFO(get_logger(), "Joint %s: velocity control enabled (position, effort disabled)", joint_name.c_str());
     }
-    else if (interface_type == hardware_interface::HW_IF_EFFORT ||
-             interface_type == hardware_interface::HW_IF_TORQUE || interface_type == hardware_interface::HW_IF_FORCE)
+    else if (interface_type == hardware_interface::HW_IF_EFFORT || interface_type == hardware_interface::HW_IF_TORQUE ||
+             interface_type == hardware_interface::HW_IF_FORCE)
     {
       for (auto* actuator_it : actuators)
       {
@@ -1399,14 +1402,13 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
           });
       if (actuator_it != mujoco_actuator_data_.end())
       {
-        RCLCPP_INFO(get_logger(), "Found the actuator '%s' for joint '%s'", actuator_name.c_str(),
-                    joint.name.c_str());
+        RCLCPP_INFO(get_logger(), "Found the actuator '%s' for joint '%s'", actuator_name.c_str(), joint.name.c_str());
         joint_actuators.push_back(&(*actuator_it));
       }
       else
       {
         RCLCPP_WARN(get_logger(), "Unable to find the actuator '%s' for joint '%s'", actuator_name.c_str(),
-                  joint.name.c_str());
+                    joint.name.c_str());
       }
     }
     const bool actuator_exists = !joint_actuators.empty();
@@ -1497,102 +1499,107 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
         const std::string actuator_name = mj_id2name(simulation_->model(), mjOBJ_ACTUATOR, actuator_it->mj_actuator_id);
         // If available, always default to position control at the start
         if (command_if == hardware_interface::HW_IF_POSITION)
-      {
-        // Position command interface
-        // Direct control for position actuators; position PID required for velocity, motor, or custom actuators.
+        {
+          // Position command interface
+          // Direct control for position actuators; position PID required for velocity, motor, or custom actuators.
 
-        if (actuator_it->actuator_type == ActuatorType::POSITION)
-        {
-          RCLCPP_INFO(get_logger(), "Using MuJoCo position actuator for the joint : '%s'", actuator_name.c_str());
-          // Direct position control enabled for position actuator
-          actuator_it->is_position_control_enabled = true;
-        }
-        else if (actuator_it->actuator_type == ActuatorType::VELOCITY ||
-                 actuator_it->actuator_type == ActuatorType::MOTOR ||
-                 actuator_it->actuator_type == ActuatorType::CUSTOM)
-        {
-          if (actuator_it->has_pos_pid)
+          if (actuator_it->actuator_type == ActuatorType::POSITION)
           {
-            actuator_it->is_position_control_enabled = false;
-            actuator_it->is_position_pid_control_enabled = true;
+            RCLCPP_INFO(get_logger(), "Using MuJoCo position actuator for the joint : '%s'", actuator_name.c_str());
+            // Direct position control enabled for position actuator
+            actuator_it->is_position_control_enabled = true;
+          }
+          else if (actuator_it->actuator_type == ActuatorType::VELOCITY ||
+                   actuator_it->actuator_type == ActuatorType::MOTOR ||
+                   actuator_it->actuator_type == ActuatorType::CUSTOM)
+          {
+            if (actuator_it->has_pos_pid)
+            {
+              actuator_it->is_position_control_enabled = false;
+              actuator_it->is_position_pid_control_enabled = true;
 
 // just disabling for humble because the member variables are different. Could make a different one for humble if desired
 #if !ROS_DISTRO_HUMBLE
-            const auto gains = get_pid_gains(actuator_it->pos_pid);
-            RCLCPP_INFO(get_logger(),
-                        "Position control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
-                        "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
-                        actuator_name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_,
-                        gains.antiwindup_strat_.i_max, gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
-                        gains.antiwindup_strat_.to_string().c_str());
+              const auto gains = get_pid_gains(actuator_it->pos_pid);
+              RCLCPP_INFO(get_logger(),
+                          "Position control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
+                          "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
+                          actuator_name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_,
+                          gains.antiwindup_strat_.i_max, gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
+                          gains.antiwindup_strat_.to_string().c_str());
 #endif
-          }
-          else
-          {
-            RCLCPP_ERROR(get_logger(),
-                         "Position command interface for the joint : %s is not supported with velocity or motor "
-                         "actuator without defining the PIDs",
-                         actuator_name.c_str());
+            }
+            else
+            {
+              RCLCPP_ERROR(get_logger(),
+                           "Position command interface for the joint : %s is not supported with velocity or motor "
+                           "actuator without defining the PIDs",
+                           actuator_name.c_str());
+            }
           }
         }
-      }
-      else if (command_if == hardware_interface::HW_IF_VELOCITY)
-      {
-        // Velocity command interface:
-        // Direct control for velocity actuators; velocity PID required for motor or custom actuators.
-        RCLCPP_ERROR_EXPRESSION(get_logger(), actuator_it->actuator_type == ActuatorType::POSITION,
-                                "Velocity command interface for the joint : %s is not supported with position actuator",
-                                actuator_name.c_str());
-        if (actuator_it->actuator_type == ActuatorType::VELOCITY)
+        else if (command_if == hardware_interface::HW_IF_VELOCITY)
         {
-          RCLCPP_INFO(get_logger(), "Using MuJoCo velocity actuator for the joint : '%s'", actuator_name.c_str());
-          // Direct velocity control enabled for velocity actuator
-          actuator_it->is_velocity_control_enabled = true;
-        }
-        else if (actuator_it->actuator_type == ActuatorType::MOTOR || actuator_it->actuator_type == ActuatorType::CUSTOM)
-        {
-          if (actuator_it->has_vel_pid)
+          // Velocity command interface:
+          // Direct control for velocity actuators; velocity PID required for motor or custom actuators.
+          RCLCPP_ERROR_EXPRESSION(
+              get_logger(), actuator_it->actuator_type == ActuatorType::POSITION,
+              "Velocity command interface for the joint : %s is not supported with position actuator",
+              actuator_name.c_str());
+          if (actuator_it->actuator_type == ActuatorType::VELOCITY)
           {
-            actuator_it->is_velocity_control_enabled = false;
-            actuator_it->is_velocity_pid_control_enabled = true;
+            RCLCPP_INFO(get_logger(), "Using MuJoCo velocity actuator for the joint : '%s'", actuator_name.c_str());
+            // Direct velocity control enabled for velocity actuator
+            actuator_it->is_velocity_control_enabled = true;
+          }
+          else if (actuator_it->actuator_type == ActuatorType::MOTOR ||
+                   actuator_it->actuator_type == ActuatorType::CUSTOM)
+          {
+            if (actuator_it->has_vel_pid)
+            {
+              actuator_it->is_velocity_control_enabled = false;
+              actuator_it->is_velocity_pid_control_enabled = true;
 // just disabling for humble because the member variables are different. Could make a different one for humble if desired
 #if !ROS_DISTRO_HUMBLE
-            const auto gains = get_pid_gains(actuator_it->vel_pid);
-            RCLCPP_INFO(get_logger(),
-                        "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
-                        "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
-                        actuator_name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_,
-                        gains.antiwindup_strat_.i_max, gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
-                        gains.antiwindup_strat_.to_string().c_str());
+              const auto gains = get_pid_gains(actuator_it->vel_pid);
+              RCLCPP_INFO(get_logger(),
+                          "Velocity control PID gains for joint %s : P=%.4f, I=%.4f, D=%.4f, Imax=%.4f, Imin=%.4f, "
+                          "Umin=%.4f, Umax=%.4f, antiwindup_strategy=%s",
+                          actuator_name.c_str(), gains.p_gain_, gains.i_gain_, gains.d_gain_,
+                          gains.antiwindup_strat_.i_max, gains.antiwindup_strat_.i_min, gains.u_min_, gains.u_max_,
+                          gains.antiwindup_strat_.to_string().c_str());
 #endif
-          }
-          else
-          {
-            RCLCPP_ERROR(get_logger(),
-                         "Velocity command interface for the joint : %s is not supported with motor or custom actuator "
-                         "without defining the PIDs",
-                         actuator_name.c_str());
+            }
+            else
+            {
+              RCLCPP_ERROR(
+                  get_logger(),
+                  "Velocity command interface for the joint : %s is not supported with motor or custom actuator "
+                  "without defining the PIDs",
+                  actuator_name.c_str());
+            }
           }
         }
-      }
-      else if (command_if == hardware_interface::HW_IF_EFFORT || command_if == hardware_interface::HW_IF_TORQUE ||
-               command_if == hardware_interface::HW_IF_FORCE)
-      {
-        // Effort command interface:
-        // Direct control for effort actuators; not supported for position or velocity actuators.
-        RCLCPP_ERROR_EXPRESSION(
-            get_logger(),
-            actuator_it->actuator_type == ActuatorType::POSITION || actuator_it->actuator_type == ActuatorType::VELOCITY,
-            "Effort command interface for the joint : %s is not supported with position or velocity actuator."
-            "Skipping it.",
-            actuator_name.c_str());
-        if (actuator_it->actuator_type == ActuatorType::MOTOR || actuator_it->actuator_type == ActuatorType::CUSTOM)
+        else if (command_if == hardware_interface::HW_IF_EFFORT || command_if == hardware_interface::HW_IF_TORQUE ||
+                 command_if == hardware_interface::HW_IF_FORCE)
         {
-          RCLCPP_INFO(get_logger(), "Using MuJoCo motor or custom actuator for the joint : '%s'", actuator_name.c_str());
-          // Direct effort control enabled for MOTOR or CUSTOM actuator
-          actuator_it->is_effort_control_enabled = true;
+          // Effort command interface:
+          // Direct control for effort actuators; not supported for position or velocity actuators.
+          RCLCPP_ERROR_EXPRESSION(
+              get_logger(),
+              actuator_it->actuator_type == ActuatorType::POSITION ||
+                  actuator_it->actuator_type == ActuatorType::VELOCITY,
+              "Effort command interface for the joint : %s is not supported with position or velocity actuator."
+              "Skipping it.",
+              actuator_name.c_str());
+          if (actuator_it->actuator_type == ActuatorType::MOTOR || actuator_it->actuator_type == ActuatorType::CUSTOM)
+          {
+            RCLCPP_INFO(get_logger(), "Using MuJoCo motor or custom actuator for the joint : '%s'",
+                        actuator_name.c_str());
+            // Direct effort control enabled for MOTOR or CUSTOM actuator
+            actuator_it->is_effort_control_enabled = true;
+          }
         }
-      }
       }
     }
     // A joint that declares command interfaces must end up with at least one controllable actuator mode enabled
