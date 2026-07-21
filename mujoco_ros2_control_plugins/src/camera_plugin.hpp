@@ -113,7 +113,7 @@ struct CameraData
  *   camera_publish_rate: 6.0
  *   <camera_name>:
  *     policy: <policy>  # "disabled", "polled", or "streaming"
- *     frame_name: ""
+ *     frame_name: <camera_name>_frame
  *     info_topic: <camera_name>/camera_info
  *     image_topic: <camera_name>/color
  *     depth_topic: <camera_name>/depth
