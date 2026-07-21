@@ -223,19 +223,24 @@ TEST_F(CameraPluginTest, InitAndPublish)
   std::atomic<bool> received_image{ false };
   std::atomic<bool> received_depth{ false };
   std::atomic<bool> received_info{ false };
+  std::atomic<bool> received_expected_frame_id{ false };
   auto image_sub = node_->create_subscription<sensor_msgs::msg::Image>(
       "/camera_plugin/test_cam/color", 1, [&](sensor_msgs::msg::Image::SharedPtr) { received_image = true; });
   auto depth_sub = node_->create_subscription<sensor_msgs::msg::Image>(
       "/camera_plugin/test_cam/depth", 1, [&](sensor_msgs::msg::Image::SharedPtr) { received_depth = true; });
   auto info_sub = node_->create_subscription<sensor_msgs::msg::CameraInfo>(
-      "/camera_plugin/test_cam/camera_info", 1, [&](sensor_msgs::msg::CameraInfo::SharedPtr) { received_info = true; });
+      "/camera_plugin/test_cam/camera_info", 1, [&](sensor_msgs::msg::CameraInfo::SharedPtr msg) {
+        received_info = true;
+        received_expected_frame_id = (msg->header.frame_id == "test_cam_frame");
+      });
 
   // Ensure publishers are connected to subscribers
   wait_for_subscriber_match(image_sub, depth_sub, info_sub);
 
   // Force a publish and verify we get results
   const auto deadline = std::chrono::steady_clock::now() + WAIT_TIMEOUT;
-  while (!(received_image && received_depth && received_info) && std::chrono::steady_clock::now() < deadline)
+  while (!(received_image && received_depth && received_info && received_expected_frame_id) &&
+         std::chrono::steady_clock::now() < deadline)
   {
     plugin.trigger_update();
     std::this_thread::sleep_for(POLL_INTERVAL);
@@ -244,6 +249,7 @@ TEST_F(CameraPluginTest, InitAndPublish)
   ASSERT_TRUE(received_image);
   ASSERT_TRUE(received_depth);
   ASSERT_TRUE(received_info);
+  ASSERT_TRUE(received_expected_frame_id);
 
   plugin.cleanup();
 }
