@@ -13,6 +13,7 @@ find_package(fmt REQUIRED)
 find_package(glfw3 REQUIRED)
 
 find_package(control_toolbox REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
@@ -171,6 +172,7 @@ PUBLIC
   hardware_interface::hardware_interface
   rclcpp::rclcpp
   rclcpp_lifecycle::rclcpp_lifecycle
+  ${geometry_msgs_TARGETS}
   ${nav_msgs_TARGETS}
   ${mujoco_ros2_control_msgs_TARGETS}
   pluginlib::pluginlib
@@ -263,6 +265,7 @@ ament_export_dependencies(
   transmission_interface
   rclcpp
   rclcpp_lifecycle
+  geometry_msgs
   nav_msgs
   mujoco_ros2_control_msgs
   mujoco_ros2_control_plugins

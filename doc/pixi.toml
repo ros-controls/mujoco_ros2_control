@@ -10,6 +10,7 @@ python = ">=3.11,<3.13"
 sphinx = ">=7,<9"
 sphinx_rtd_theme = ">=3,<4"
 sphinx-copybutton = ">=0.5,<1"
+sphinx-tabs = ">=3.5.0,<4"
 
 [pypi-dependencies]
 sphinx-autobuild = ">=2024,<2026"
@@ -19,7 +20,8 @@ sphinx-autobuild = ">=2024,<2026"
 setup = """
 ln -sfn ../mujoco_ros2_control mujoco_ros2_control && \
 ln -sfn ../mujoco_ros2_control_demos mujoco_ros2_control_demos && \
-ln -sfn ../mujoco_ros2_control_plugins mujoco_ros2_control_plugins
+ln -sfn ../mujoco_ros2_control_plugins mujoco_ros2_control_plugins && \
+ln -sfn ../mujoco_extensions mujoco_extensions
 """
 build = { cmd = "sphinx-build -b html . _build/html", depends-on = ["setup"] }
 clean = "rm -rf _build mujoco_ros2_control*"

@@ -26,8 +26,8 @@ colcon mixin update default
 # Build tasks
 build = "colcon build"
 clean = "rm -rf build install log .pixi"
-test = "colcon test"
-test-result = "colcon test-result --verbose"
+test = { cmd = "bash -c 'source install/setup.bash && colcon test'" }
+test-result = { cmd = "bash -c 'source install/setup.bash && colcon test-result --verbose'" }
 
 [dev]
 # Path dependencies to local ROS packages
@@ -36,9 +36,11 @@ ros-jazzy-mujoco-ros2-control = { path = "./mujoco_ros2_control/package.xml" }
 ros-jazzy-mujoco-ros2-control-demos = { path = "./mujoco_ros2_control_demos/package.xml" }
 ros-jazzy-mujoco-ros2-control-tests = { path = "./mujoco_ros2_control_tests/package.xml" }
 ros-jazzy-mujoco-ros2-control-plugins = { path = "./mujoco_ros2_control_plugins/package.xml" }
+ros-jazzy-mujoco-3d-lidar = { path = "./mujoco_extensions/mujoco_3d_lidar/package.xml" }
 
 [dependencies]
 python = ">=3.11,<3.13"
+pytest = ">=7,<8"
 cmake = ">=4.1.2,<5"
 ninja = ">=1.13.1,<2"
 sccache = ">=0.11.0,<0.12"
