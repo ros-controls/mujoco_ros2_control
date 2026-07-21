@@ -151,12 +151,9 @@ int get_actuator_id(const std::string& actuator_name, const mjModel* mj_model)
     {
       if (mj_model->actuator_trntype[i] == mjTRN_JOINT && mj_model->actuator_trnid[2 * i] == joint_id)
       {
-        return i;  // Found the actuator attached to that joint.
+        return i;
       }
     }
-    // A MuJoCo joint of this name exists but no actuator drives it (e.g. a passive closed-loop joint whose
-    // name coincides with a ros2_control joint). Do NOT return the joint id as if it were an actuator id --
-    // fall through and try to resolve the name as an actuator instead.
   }
 
   // Otherwise interpret the name directly as an actuator name.
@@ -167,11 +164,11 @@ int get_actuator_id(const std::string& actuator_name, const mjModel* mj_model)
 }
 
 /**
- * @brief Get the corresponding actuator name for a given joint name using transmissions.
+ * @brief Get the corresponding actuator names for a given joint name used in the transmissions.
  * @param joint_name The name of the joint.
  * @param hardware_info The hardware information containing transmissions.
  * @param mj_model Pointer to the MuJoCo model.
- * @return The corresponding actuator name if found, otherwise returns the joint name.
+ * @return The corresponding actuator names if found, otherwise returns the joint name.
  */
 std::vector<std::string> get_joint_actuator_names(const std::string& joint_name,
                                     const hardware_interface::HardwareInfo& hardware_info, const mjModel* mj_model)
@@ -183,23 +180,20 @@ std::vector<std::string> get_joint_actuator_names(const std::string& joint_name,
       if (joint.name == joint_name)
       {
         // A MuJoCo actuator/joint sharing the joint name takes precedence: this is a direct 1:1 mapping
-        // and the transmission actuators (if any) are not needed to resolve it.
         if (get_actuator_id(joint_name, mj_model) != -1)
         {
           RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Found direct actuator match for joint '%s'", joint_name.c_str());
-          return {joint_name};  // Direct match found
+          return {joint_name};
         }
-        // Otherwise the joint is driven through the transmission: it maps to ALL of the transmission's
-        // actuators (e.g. a differential drive where several MuJoCo actuators move one ros2_control joint).
-        // Return ONLY those actuator names -- keeping the joint name here would make the joint resolve to a
-        // non-existent actuator and get its command interfaces cleared downstream.
+        // Otherwise the joint is driven through the transmission: it maps to all the transmission's actuators 
         std::vector<std::string> actuator_names;
-        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "Found transmission for joint '%s', mapping to actuators",
-                    joint_name.c_str());
         for (const auto& actuator : transmission.actuators)
         {
           actuator_names.push_back(actuator.name);
         }
+        RCLCPP_INFO(rclcpp::get_logger("MujocoSystemInterface"), "%s",
+                    fmt::format("Found transmission for joint '{}', mapping to actuators : [{}]",
+                                joint_name, fmt::join(actuator_names, ",")).c_str());
         if (!actuator_names.empty())
         {
           return actuator_names;
@@ -777,7 +771,7 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
       }
       if (actuator_it->actuator_type == ActuatorType::PASSIVE)
       {
-        RCLCPP_WARN(get_logger(), "Actuator %s is passive and cannot be controlled.", actuator_name.c_str());
+        RCLCPP_DEBUG(get_logger(), "Actuator %s is passive and cannot be controlled.", actuator_name.c_str());
         continue;
       }
       actuators.push_back(&(*actuator_it));
@@ -789,8 +783,8 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
       return;
     }
 
-    // Only one type of control mode can be active at a time. Reset the joint flags once, then reset the
-    // flags on every actuator the joint drives before (re-)enabling the requested one.
+    // Only one type of control mode can be active at a time. Reset the flags on every actuator 
+    // the joint drives before (re-)enabling the requested one.
     joint_it->is_position_control_enabled = false;
     joint_it->is_velocity_control_enabled = false;
     joint_it->is_effort_control_enabled = false;
@@ -805,8 +799,6 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
 
     if (!enabled)
     {
-      // Clear-only path: flags are already reset above. This ensures no stale flag can keep a write()
-      // branch active after the controller has been deactivated.
       RCLCPP_INFO(get_logger(), "Joint %s: %s control disabled", joint_name.c_str(), interface_type.c_str());
       return;
     }
@@ -1394,14 +1386,10 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
       }
     }
 
-    // Resolve every non-passive MuJoCo actuator that this ros2_control joint drives. For a direct 1:1
-    // mapping this is a single actuator; for a transmission (e.g. a hip/ankle differential) the joint maps
-    // to several actuators and the control mode must be applied to all of them.
+    // Resolve every non-passive MuJoCo actuator that this ros2_control joint drives.
     std::vector<MuJoCoActuatorData*> joint_actuators;
     for (const auto& actuator_name : actuator_names)
     {
-      RCLCPP_INFO(get_logger(), "Searching for actuator '%s' for joint '%s'", actuator_name.c_str(),
-                  joint.name.c_str());
       auto actuator_it = std::find_if(
           mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
           [&actuator_name, this](const MuJoCoActuatorData& actuator) {
@@ -1411,7 +1399,14 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
           });
       if (actuator_it != mujoco_actuator_data_.end())
       {
+        RCLCPP_INFO(get_logger(), "Found the actuator '%s' for joint '%s'", actuator_name.c_str(),
+                    joint.name.c_str());
         joint_actuators.push_back(&(*actuator_it));
+      }
+      else
+      {
+        RCLCPP_WARN(get_logger(), "Unable to find the actuator '%s' for joint '%s'", actuator_name.c_str(),
+                  joint.name.c_str());
       }
     }
     const bool actuator_exists = !joint_actuators.empty();
@@ -1486,7 +1481,7 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
 
     for (const auto& command_if : command_interface_names)
     {
-      // Unsupported interface types don't depend on the actuator; warn once and skip.
+      // Unsupported interface types warn once and skip.
       if (command_if != hardware_interface::HW_IF_POSITION && command_if != hardware_interface::HW_IF_VELOCITY &&
           command_if != hardware_interface::HW_IF_EFFORT && command_if != hardware_interface::HW_IF_TORQUE &&
           command_if != hardware_interface::HW_IF_FORCE)
@@ -1496,8 +1491,7 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
         continue;
       }
 
-      // Apply the control mode to every MuJoCo actuator driven by this joint (e.g. both sides of a
-      // differential transmission).
+      // Apply the control mode to every MuJoCo actuator
       for (auto* actuator_it : joint_actuators)
       {
         const std::string actuator_name = mj_id2name(simulation_->model(), mjOBJ_ACTUATOR, actuator_it->mj_actuator_id);
@@ -1601,8 +1595,7 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
       }
       }
     }
-    // A joint that declares command interfaces must end up with at least one controllable actuator mode
-    // enabled; otherwise the MuJoCo actuator type cannot honour any of the requested interfaces.
+    // A joint that declares command interfaces must end up with at least one controllable actuator mode enabled
     if (!command_interface_names.empty() && actuator_exists &&
         std::none_of(joint_actuators.begin(), joint_actuators.end(), [](const MuJoCoActuatorData* actuator) {
           return actuator->is_position_control_enabled || actuator->is_velocity_control_enabled ||
