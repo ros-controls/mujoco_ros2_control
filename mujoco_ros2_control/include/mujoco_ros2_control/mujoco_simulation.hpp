@@ -37,7 +37,11 @@
 
 #include <mujoco/mujoco.h>
 
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
+#include <mujoco_ros2_control_msgs/msg/free_joint_state.hpp>
 #include <mujoco_ros2_control_msgs/srv/reset_world.hpp>
+#include <mujoco_ros2_control_msgs/srv/set_free_joint_state.hpp>
 #include <mujoco_ros2_control_msgs/srv/set_pause.hpp>
 #include <mujoco_ros2_control_msgs/srv/step_simulation.hpp>
 #include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp>
@@ -180,6 +184,20 @@ public:
   void reset_world_state(bool fill_initial_state);
 
   /**
+   * @brief Sets the pose and velocity of one or more free-joint objects, identified by body name.
+   *
+   * Applied atomically: every entry is resolved before anything is written, so a single invalid
+   * entry leaves the sim state unchanged. Duplicate body names are applied in order, so the last
+   * one wins. See `FreeJointState.msg` for per-entry fields.
+   *
+   * @param error_message Set to a human-readable description (identifying the offending entry)
+   * if this returns false.
+   * @return true if every entry was applied; false otherwise, with no data modified.
+   */
+  bool set_free_joint_states(const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joints,
+                             std::string& error_message);
+
+  /**
    * @brief Copies `mj_model_` into the provided container in a thread safe way.
    *
    * This locks the sim mutex and will pause the physics loop, so should be used sparingly.
@@ -318,6 +336,43 @@ private:
    */
   void update_sim_display();
 
+  /**
+   * @brief A `FreeJointState` entry fully resolved to world-frame values, ready to write.
+   */
+  struct FreeJointWrite
+  {
+    int qpos_adr{ -1 };
+    int qvel_adr{ -1 };
+    mjtNum world_pos[3];
+    mjtNum world_quat[4];
+    mjtNum world_linvel[3];
+    mjtNum world_angvel[3];
+  };
+
+  /**
+   * @brief Resolves `frame_id` to a body id: empty means the world frame (`body_id = -1`),
+   * otherwise it must name a known MuJoCo body.
+   *
+   * @param field_label Identifies which field ("pose"/"twist") in `error_message` on failure.
+   * @return true if resolved; false otherwise, with `error_message` set.
+   */
+  bool resolve_frame_id(const std::string& frame_id, const std::string& field_label, int& body_id,
+                        std::string& error_message);
+
+  /**
+   * @brief Resolves a `FreeJointState` entry into a `FreeJointWrite`, without touching
+   * `mj_data_`.
+   *
+   * `pose` and `twist` resolve their own `header.frame_id` independently -- they may reference
+   * different bodies, or one may stay in the world frame while the other is relative.
+   *
+   * @note Caller must hold the sim mutex.
+   * @return true if the body, its free joint, and both frame_ids were resolved; false
+   * otherwise, with `error_message` set.
+   */
+  bool resolve_free_joint_write(const mujoco_ros2_control_msgs::msg::FreeJointState& state, FreeJointWrite& out,
+                                std::string& error_message);
+
   // Service callbacks
   void reset_world_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Request> request,
                             std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Response> response);
@@ -325,6 +380,9 @@ private:
                           std::shared_ptr<mujoco_ros2_control_msgs::srv::SetPause::Response> response);
   void step_simulation_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Request> request,
                                 std::shared_ptr<mujoco_ros2_control_msgs::srv::StepSimulation::Response> response);
+  void
+  set_free_joint_state_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::SetFreeJointState::Request> request,
+                                std::shared_ptr<mujoco_ros2_control_msgs::srv::SetFreeJointState::Response> response);
 
   rclcpp::Logger get_logger() const
   {
@@ -436,6 +494,10 @@ private:
   // Step simulation service
   rclcpp::CallbackGroup::SharedPtr step_simulation_cb_group_;
   rclcpp::Service<mujoco_ros2_control_msgs::srv::StepSimulation>::SharedPtr step_simulation_service_;
+
+  // Set free joint state service (teleport/reset a free-joint object's pose)
+  rclcpp::CallbackGroup::SharedPtr set_free_joint_state_cb_group_;
+  rclcpp::Service<mujoco_ros2_control_msgs::srv::SetFreeJointState>::SharedPtr set_free_joint_state_service_;
 
   // Pending steps to execute while paused, and synchronization for blocking callers
   std::atomic<uint32_t> pending_steps_{ 0 };
