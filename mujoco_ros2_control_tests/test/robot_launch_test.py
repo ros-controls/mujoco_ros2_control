@@ -30,7 +30,8 @@ import pytest
 import rclpy
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from rosgraph_msgs.msg import Clock
-from mujoco_ros2_control_msgs.srv import ResetWorld, SetPause, StepSimulation
+from mujoco_ros2_control_msgs.msg import FreeJointState
+from mujoco_ros2_control_msgs.srv import ResetWorld, SetFreeJointState, SetPause, StepSimulation
 from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState, Image, CameraInfo
 from geometry_msgs.msg import PoseStamped
@@ -45,6 +46,7 @@ def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false
     os.environ["USE_PID"] = use_pid
     os.environ["USE_MJCF_FROM_TOPIC"] = use_mjcf_from_topic
     os.environ["TEST_TRANSMISSIONS"] = test_transmissions
+    os.environ["USE_PIDS"] = use_pid
 
     if use_mjcf_from_topic == "true":
         # Setup the venv needed for the make_mjcf_from_robot_description node
@@ -494,6 +496,37 @@ class TestFixture(unittest.TestCase):
         result = step_future.result()
         self.assertIsNotNone(result, "step_simulation returned None")
         self.assertFalse(result.success, "step_simulation should fail when simulation is resumed mid-countdown")
+
+    def test_reset_free_body_poses(self):
+        """set_free_joint_state must reposition free-body objects, reported via response.success.
+
+        Both bodies are set in a single request to exercise the service's list/atomic behaviour.
+        """
+        if (
+            os.environ.get("TEST_TRANSMISSIONS") == "true"
+            or os.environ.get("USE_MJCF_FROM_TOPIC") == "true"
+            or os.environ.get("USE_PIDS") == "true"
+        ):
+            self.skipTest("cube1/cube2 free bodies are only present in the default test_robot.xml scene")
+
+        mujoco_sim_node = "/mujoco_ros2_control_node"
+
+        client = self.node.create_client(SetFreeJointState, f"{mujoco_sim_node}/set_free_joint_state")
+        self.assertTrue(client.wait_for_service(timeout_sec=10.0), "set_free_joint_state service not available")
+
+        req = SetFreeJointState.Request()
+        for body_name, target in (("cube1", (1.0, 1.0, 1.0)), ("cube2", (-1.0, 1.0, 1.0))):
+            entry = FreeJointState()
+            entry.name = body_name
+            entry.pose.pose.position.x, entry.pose.pose.position.y, entry.pose.pose.position.z = target
+            entry.pose.pose.orientation.w = 1.0
+            req.free_joints.append(entry)
+
+        future = client.call_async(req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        result = future.result()
+        self.assertIsNotNone(result, "set_free_joint_state returned None")
+        self.assertTrue(result.success, f"set_free_joint_state failed: {result.message}")
 
 
 class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
