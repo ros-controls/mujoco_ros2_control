@@ -12,6 +12,7 @@ find_package(rosidl_default_generators REQUIRED)
 set(msg_files
   msg/ExternalWrench.msg
   msg/ExternalWrenchArray.msg
+  msg/FreeJointState.msg
 )
 
 set(srv_files
@@ -19,6 +20,7 @@ set(srv_files
   srv/SetPause.srv
   srv/StepSimulation.srv
   srv/ApplyExternalWrench.srv
+  srv/SetFreeJointState.srv
 )
 
 

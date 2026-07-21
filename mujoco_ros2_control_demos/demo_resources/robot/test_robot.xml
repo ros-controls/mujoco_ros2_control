@@ -48,6 +48,16 @@
         <site name="rf" pos="0.0 0.0 0.0" quat="0.0 0.0 0.0 1.0"/>
       </replicate>
     </body>
+    <body name="cube1" pos="0.5 0.5 -2.0">
+      <freejoint name="cube1_freejoint"/>
+      <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+      <geom name="cube1_geom" size="0.05 0.05 0.05" type="box" rgba="1 0 0 1"/>
+    </body>
+    <body name="cube2" pos="-0.5 0.5 -2.0">
+      <freejoint name="cube2_freejoint"/>
+      <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+      <geom name="cube2_geom" size="0.05 0.05 0.05" type="box" rgba="0 1 0 1"/>
+    </body>
   </worldbody>
   <option integrator="implicitfast"/>
   <default>
