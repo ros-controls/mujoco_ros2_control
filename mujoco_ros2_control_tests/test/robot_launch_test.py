@@ -308,7 +308,14 @@ class TestFixture(unittest.TestCase):
         if os.environ.get("TEST_TRANSMISSIONS") != "true":
             expected_actuators = {"joint1": 0.5, "joint2": -0.5}
         else:
-            expected_actuators = {"actuator1": 0.5 * 2.0, "actuator2": -0.5 * 0.5}
+            # test_robot.urdf couples joint1/joint2 through a single DifferentialTransmission
+            # (joint reductions 2.0/0.5, actuator reductions 1.0/1.0, no offsets), so each
+            # actuator position is a sum/difference of both joint targets, not a 1:1 scaling.
+            joint1, joint2, jr1, jr2 = 0.5, -0.5, 2.0, 0.5
+            expected_actuators = {
+                "actuator1": joint1 * jr1 + joint2 * jr2,
+                "actuator2": joint1 * jr1 - joint2 * jr2,
+            }
 
         self.wait_for_joint_positions(expected_actuators, delta=0.05, timeout=15.0, topic="actuator_states")
 
