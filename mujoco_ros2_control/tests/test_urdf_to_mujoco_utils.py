@@ -869,8 +869,10 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   </worldbody>
 </mujoco>"""
         dom = minidom.parseString(xml_string)
-        modify_element_dict = {("body", "base_link"): {"pos": "1 2 3", "quat": "0 0 0 1"},
-                               ("geom", ("box_mesh", "collision")): {"friction": "1 0.005 0.0001"}}
+        modify_element_dict = {
+            ("body", "base_link"): {"pos": "1 2 3", "quat": "0 0 0 1"},
+            ("geom", ("box_mesh", "collision")): {"friction": "1 0.005 0.0001"},
+        }
         result_dom = add_modifiers(dom, modify_element_dict)
         result_xml = result_dom.toxml()
         print(result_xml)
@@ -902,7 +904,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("mesh"), "box_mesh")
         self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("class"), "collision")
         self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("friction"), "1 0.005 0.0001")
-        self.assertEqual(len(result_dom.getElementsByTagName("geom")[0].attributes), 5)  # type, size, class, mesh, friction
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("geom")[0].attributes), 5
+        )  # type, size, class, mesh, friction
 
         self.assertEqual(
             len(result_dom.getElementsByTagName("worldbody")[0].attributes), 0
@@ -932,8 +936,11 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   </worldbody>
 </mujoco>"""
         dom = minidom.parseString(xml_string)
-        modify_element_dict = {("body", "link1"): {"pos": "0 0 1"}, ("joint", "joint2"): {"damping": "0.5"},
-                               ("geom", ("sphere_mesh", "visual")): {"friction": "1 0.005 0.0001"}}
+        modify_element_dict = {
+            ("body", "link1"): {"pos": "0 0 1"},
+            ("joint", "joint2"): {"damping": "0.5"},
+            ("geom", ("sphere_mesh", "visual")): {"friction": "1 0.005 0.0001"},
+        }
         result_dom = add_modifiers(dom, modify_element_dict)
         result_xml = result_dom.toxml()
         assert 'pos="0 0 1"' in result_xml
@@ -1014,8 +1021,10 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   </worldbody>
 </mujoco>"""
         dom = minidom.parseString(xml_string)
-        modify_element_dict = {("body", "base_link"): {"pos": "1 2 3"},
-                               ("geom", ("sphere_mesh", "collision")): {"size": "0.2"}}
+        modify_element_dict = {
+            ("body", "base_link"): {"pos": "1 2 3"},
+            ("geom", ("sphere_mesh", "collision")): {"size": "0.2"},
+        }
         result_dom = add_modifiers(dom, modify_element_dict)
         result_xml = result_dom.toxml()
         assert 'pos="1 2 3"' in result_xml
