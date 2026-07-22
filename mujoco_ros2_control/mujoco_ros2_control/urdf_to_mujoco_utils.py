@@ -620,20 +620,39 @@ def get_processed_mujoco_inputs(processed_inputs_element):
 
             # get the attributes from the modify_element_tag
             attr_dict = {attr.name: attr.value for attr in modify_element_element.attributes.values()}
-            # we must have a name element
-            if "name" not in attr_dict or "type" not in attr_dict:
-                raise ValueError("'name' and 'type' must be in the attributes of a 'modify_element' tag!")
 
-            # remove the name and type entries because those will be used as the key in the returned dict
-            element_name = attr_dict["name"]
+            # we must have a type element
+            if "type" not in attr_dict:
+                raise ValueError("'type' must be in the attributes of a 'modify_element' tag!")
+
+            # remove the type entry because this will be used as the key in the returned dict
             element_type = attr_dict["type"]
-            del attr_dict["name"]
             del attr_dict["type"]
-            modify_element_dict[(element_type, element_name)] = attr_dict
 
-            print(f"Will add the following attributes to {element_type} '{element_name}':")
-            for key, value in attr_dict.items():
-                print(f"  {key}: {value}")
+            if element_type == "geom":
+                if "mesh" not in attr_dict:
+                    raise ValueError("'mesh' must be in the attributes of a 'modify_element' tag!")
+                mesh_name = attr_dict["mesh"]
+                del attr_dict["mesh"]
+                if "class" not in attr_dict:
+                    raise ValueError("'class' must be in the attributes of a 'modify_element' tag!")
+                geom_class = attr_dict["class"]
+                del attr_dict["class"]
+                key = (element_type, (mesh_name, geom_class))
+                identifier_str = f"mesh='{mesh_name}'" + (f", class='{geom_class}'" if geom_class else "")
+            else:
+                if "name" not in attr_dict:
+                    raise ValueError("'name' must be in the attributes of a 'modify_element' tag!")
+                element_name = attr_dict["name"]
+                del attr_dict["name"]
+                key = (element_type, element_name)
+                identifier_str = f"name='{element_name}'"
+
+            modify_element_dict[key] = attr_dict
+
+            print(f"Will add the following attributes to {element_type} ({identifier_str}):")
+            for key_attr, value in attr_dict.items():
+                print(f"  {key_attr}: {value}")
 
     return decompose_dict, cameras_dict, modify_element_dict, lidar_dict
 
@@ -1124,10 +1143,25 @@ def add_modifiers(dom, modify_element_dict):
         element_set = worldbody_element.getElementsByTagName(element_type)
         # check if the each element needs modification
         for element in element_set:
-            potential_key = (element.tagName, element.getAttribute("name"))
-            if potential_key in modify_element_dict:
+            attr_dict = None
+
+            # match by explicit name
+            name_key = (element.tagName, element.getAttribute("name"))
+            if name_key in modify_element_dict:
+                attr_dict = modify_element_dict[name_key]
+
+            # match by mesh and class only for geoms
+            elif element.tagName == "geom" and element.hasAttribute("mesh") and element.hasAttribute("class"):
+                raw_mesh_name = element.getAttribute("mesh")
+                geom_class = element.getAttribute("class")
+                base_mesh_name = re.sub(r"_collision_\d+$", "", raw_mesh_name)
+                mesh_key = (element.tagName, (base_mesh_name, geom_class))
+
+                if mesh_key in modify_element_dict:
+                    attr_dict = modify_element_dict[mesh_key]
+
+            if attr_dict is not None:
                 # apply attributes to the elements
-                attr_dict = modify_element_dict[potential_key]
                 for attr_name, attr_value in attr_dict.items():
                     element.setAttribute(attr_name, attr_value)
 
