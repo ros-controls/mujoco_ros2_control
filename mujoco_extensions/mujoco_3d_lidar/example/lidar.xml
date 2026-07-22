@@ -1,0 +1,28 @@
+<mujoco model="lidar_test1">
+    <include file="scene.xml" />
+
+    <extension>
+        <plugin plugin="mujoco.plugin.lidar">
+            <instance name="hokuyo">
+                <config key="resolution" value="480 20"/>
+                <config key="azimuth_range" value="-0.3 0.3"/>
+                <config key="elevation_range" value="0.0, 0.3"/>
+                <config key="max_range" value="10.0"/>
+                <config key="min_range" value="1.0"/>
+                <config key="update_rate" value="2.0"/>
+                <config key="async" value="0"/>
+            </instance>
+        </plugin>
+    </extension>
+
+    <worldbody>
+        <body name="lidar_mount" pos="0 0 0.5">
+            <inertial mass="1.0" pos="0 0 0" diaginertia="0.001 0.001 0.001"></inertial>
+            <geom type="cylinder" size="0.05 0.05" mass="1" pos="0 0 0" />
+            <site name="lidar_sensor" pos="0 0 .15"/>
+        </body>
+    </worldbody>
+  <sensor>
+    <plugin name="front_lidar" instance="hokuyo" objtype="site" objname="lidar_sensor"/>
+  </sensor>
+</mujoco>

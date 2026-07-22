@@ -1,5 +1,5 @@
 MuJoCo ROS 2 Control Plugins
-=============================
+============================
 
 The ``mujoco_ros2_control_plugins`` package provides a plugin interface for extending the
 functionality of ``mujoco_ros2_control``.
@@ -40,7 +40,6 @@ A simple demonstration plugin that publishes a heartbeat message every second to
 
    # Terminal 2: echo the heartbeat messages
    ros2 topic echo /mujoco_heartbeat
-
 
 .. _camera_plugin:
 
@@ -109,17 +108,6 @@ This allows camera topics to be published even when running in headless mode (e.
    EGL requires proper GPU drivers and EGL libraries to be installed (e.g., libegl1-mesa on Ubuntu).
    If both GLFW and EGL fail to initialize, camera publishing will be disabled with a warning.
 
-
-.. _lidar_plugin:
-
-RangefinderLidarPlugin
-~~~~~~~~~~~~~~~~~~~~~~
-
-.. warning::
-
-   This plugin is included to support legacy implementations of rangefinder based lidar sensors.
-   We do not recommend using this, and instead would direct users to the 3d lidar plugin for improved
-   features and performance.
 
 ExternalWrenchPlugin
 ~~~~~~~~~~~~~~~~~~~~~
@@ -250,8 +238,8 @@ This applies a constant force of 10 N for 1.5 seconds and then decays linearly o
        }
      }"
 
-Visualization
-^^^^^^^^^^^^^
+ExternalWrench Visualization
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 While wrenches are active, arrow markers are published to ``~/wrench_markers`` for display in RViz:
 
@@ -265,8 +253,8 @@ as it moves.
 Add a ``MarkerArray`` display in RViz pointed at the topic and ensure the body's TF frames are
 being broadcast.
 
-Parameters
-^^^^^^^^^^
+ExternalWrench Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table::
    :widths: 25 15 15 45
@@ -297,8 +285,68 @@ Parameters
            force_arrow_scale: 0.01      # 100 N  → 1 m arrow
            torque_arrow_scale: 0.1      # 10 N·m → 1 m arrow
 
-Usage
------
+RangefinderLidarPlugin
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. warning::
+
+   This plugin is included to support legacy implementations of rangefinder based lidar sensors.
+   We do not recommend using this, and instead would direct users to the 3d lidar plugin for improved
+   features and performance.
+
+MuJoCo 3D Lidar Plugin
+~~~~~~~~~~~~~~~~~~~~~~
+
+MuJoCo does not include native lidar support.
+This package implements lidar through a custom MuJoCo sensor extension in ``mujoco_extensions` (``mujoco.plugin.lidar``) that uses
+`mj_multiRay <https://mujoco.readthedocs.io/en/stable/APIreference/APIfunctions.html#mj-multiray>`_ to cast rays each simulation step.
+Refer to the extension package for more information about the computation.
+
+The ``Mujoco3dLidarPlugin`` wraps the underlying sensor to convert the raw data to relevant messages and publish them to ROS topics.
+Specicially, the data for 2D (single-row) and 3D (multi-row) will be published as
+`LaserScan <https://github.com/ros2/common_interfaces/blob/rolling/sensor_msgs/msg/LaserScan.msg>`_ or
+`PointCloud2 <https://github.com/ros2/common_interfaces/blob/rolling/sensor_msgs/msg/PointCloud2.msg>`_ messages respectively.
+
+When using the ``Mujoco3dLidarPlugin``, every ``mujoco.plugin.lidar`` sensor will have its data published.
+
+3D Lidar Parameters
+^^^^^^^^^^^^^^^^^^^
+
+Each sensor is individually configurable by name in the plugin's yaml.
+The available parameters are:
+
+.. list-table::
+   :widths: 25 15 15 45
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Default
+     - Description
+   * - ``<sensor_name>.frame_name``
+     - ``string``
+     - ``<sensor_site_name>``
+     - The frame name of the sensor in the URDF. Defaults to the site name from the MJCF.
+   * - ``<sensor_name>.topic``
+     - ``string``
+     - ``/scan`` or ``/points``
+     - Topic name to publish messages. Defaults to ``/scan`` for 2D sensors and ``/points`` for 3D sensors.
+
+.. code-block:: yaml
+
+  /**:
+    ros__parameters:
+        mujoco_3d_lidar_plugin:
+          type: "mujoco_ros2_control_plugins/Mujoco3dLidarPlugin"
+          2d_lidar:
+            frame_name: "lidar_sensor_frame"
+            topic: "/lidar_scan_2d"
+          3d_lidar:
+            frame_name: "3d_lidar_sensor_frame"
+            topic: "/lidar_points_3d"
+
+3D Lidar Usage
+--------------
 
 Plugins are loaded from ROS 2 parameters under ``mujoco_plugins``.
 Each plugin entry requires:

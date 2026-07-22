@@ -207,7 +207,7 @@ bool CameraPlugin::register_cameras()
     const std::string frame_param = param_ns + "frame_name";
     if (!node_->has_parameter(frame_param))
     {
-      node_->declare_parameter(frame_param, "");
+      node_->declare_parameter(frame_param, camera.name + "_frame");
     }
     camera.frame_name = node_->get_parameter(frame_param).as_string();
 

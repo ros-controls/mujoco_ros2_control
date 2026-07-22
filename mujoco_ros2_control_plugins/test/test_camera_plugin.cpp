@@ -30,9 +30,14 @@
 
 #include "camera_plugin.hpp"
 
+using namespace std::chrono_literals;
+
 class CameraPluginTest : public ::testing::Test
 {
 protected:
+  static constexpr auto WAIT_TIMEOUT = 2s;
+  static constexpr auto POLL_INTERVAL = 20ms;
+
   static void SetUpTestSuite()
   {
     if (!rclcpp::ok())
@@ -109,16 +114,43 @@ protected:
     ASSERT_NE(data_, nullptr);
   }
 
+  // Blocks until the rendering thread has finished initializing its GL context.
+  void wait_for_rendering(mujoco_ros2_control_plugins::CameraPlugin& plugin)
+  {
+    const auto deadline = std::chrono::steady_clock::now() + WAIT_TIMEOUT;
+    while (!plugin.is_rendering_available() && std::chrono::steady_clock::now() < deadline)
+    {
+      std::this_thread::sleep_for(POLL_INTERVAL);
+    }
+    // TODO: We could optionally skip the test in CI if this happens consistently. Though
+    // for now we hope that failures due to uninitialized contexts will be extremely rare.
+    // https://github.com/ros-controls/mujoco_ros2_control/issues/216
+    ASSERT_TRUE(plugin.is_rendering_available()) << "OpenGL rendering unavailable in this environment!!! Failing...";
+  }
+
+  // Block until every subscription in the list has matched at least one publisher.
+  template <typename... Subs>
+  void wait_for_subscriber_match(const Subs&... subs)
+  {
+    auto all_matched = [&]() { return ((subs->get_publisher_count() > 0) && ...); };
+    const auto deadline = std::chrono::steady_clock::now() + WAIT_TIMEOUT;
+    while (!all_matched() && std::chrono::steady_clock::now() < deadline)
+    {
+      std::this_thread::sleep_for(POLL_INTERVAL);
+    }
+    ASSERT_TRUE(all_matched()) << "Subscribers never matched publishers within timeout";
+  }
+
   // Calls a Trigger service and returns whether the call succeeded.
   bool call_trigger(const std::string& service_name)
   {
     auto client = node_->create_client<std_srvs::srv::Trigger>(service_name);
-    if (!client->wait_for_service(std::chrono::seconds(2)))
+    if (!client->wait_for_service(WAIT_TIMEOUT))
     {
       return false;
     }
     auto future = client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
-    if (future.wait_for(std::chrono::seconds(2)) != std::future_status::ready)
+    if (future.wait_for(WAIT_TIMEOUT) != std::future_status::ready)
     {
       return false;
     }
@@ -178,7 +210,9 @@ TEST_F(CameraPluginTest, InitAndPublish)
   mujoco_ros2_control_plugins::CameraPlugin plugin;
   // GLFW is not initialized, and No OpenGL framebuffer will be available so we make the init fall back on to EGL.
   EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, []() { return 0; }));
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  // Wait for the rendering thread to come up
+  wait_for_rendering(plugin);
 
   // Verify publishers were created
   EXPECT_EQ(plugin_node_->count_publishers("/camera_plugin/test_cam/color"), 1u);
@@ -189,27 +223,33 @@ TEST_F(CameraPluginTest, InitAndPublish)
   std::atomic<bool> received_image{ false };
   std::atomic<bool> received_depth{ false };
   std::atomic<bool> received_info{ false };
+  std::atomic<bool> received_expected_frame_id{ false };
   auto image_sub = node_->create_subscription<sensor_msgs::msg::Image>(
-      "/camera_plugin/test_cam/color", 1, [&](sensor_msgs::msg::Image::SharedPtr msg) { received_image = true; });
+      "/camera_plugin/test_cam/color", 1, [&](sensor_msgs::msg::Image::SharedPtr) { received_image = true; });
   auto depth_sub = node_->create_subscription<sensor_msgs::msg::Image>(
-      "/camera_plugin/test_cam/depth", 1, [&](sensor_msgs::msg::Image::SharedPtr msg) { received_depth = true; });
+      "/camera_plugin/test_cam/depth", 1, [&](sensor_msgs::msg::Image::SharedPtr) { received_depth = true; });
   auto info_sub = node_->create_subscription<sensor_msgs::msg::CameraInfo>(
-      "/camera_plugin/test_cam/camera_info", 1,
-      [&](sensor_msgs::msg::CameraInfo::SharedPtr msg) { received_info = true; });
+      "/camera_plugin/test_cam/camera_info", 1, [&](sensor_msgs::msg::CameraInfo::SharedPtr msg) {
+        received_info = true;
+        received_expected_frame_id = (msg->header.frame_id == "test_cam_frame");
+      });
+
+  // Ensure publishers are connected to subscribers
+  wait_for_subscriber_match(image_sub, depth_sub, info_sub);
 
   // Force a publish and verify we get results
-  plugin.trigger_update();
-  for (auto i = 0; i < 20; ++i)
+  const auto deadline = std::chrono::steady_clock::now() + WAIT_TIMEOUT;
+  while (!(received_image && received_depth && received_info && received_expected_frame_id) &&
+         std::chrono::steady_clock::now() < deadline)
   {
-    if (received_image && received_depth && received_info)
-      break;
     plugin.trigger_update();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(POLL_INTERVAL);
   }
 
   ASSERT_TRUE(received_image);
   ASSERT_TRUE(received_depth);
   ASSERT_TRUE(received_info);
+  ASSERT_TRUE(received_expected_frame_id);
 
   plugin.cleanup();
 }
@@ -241,7 +281,7 @@ TEST_F(CameraPluginTest, OnlyPolledCamerasCreateTriggerService)
 
   // The polled camera's trigger service must come up.
   auto poll_client = node_->create_client<std_srvs::srv::Trigger>("/camera_plugin/poll_cam/trigger");
-  EXPECT_TRUE(poll_client->wait_for_service(std::chrono::seconds(2)));
+  EXPECT_TRUE(poll_client->wait_for_service(WAIT_TIMEOUT));
 
   // The streaming camera must not have a trigger service registered.
   const auto services = node_->get_service_names_and_types();
@@ -282,27 +322,29 @@ TEST_F(CameraPluginTest, PolledCameraPublishesOncePerTrigger)
   auto image_sub = node_->create_subscription<sensor_msgs::msg::Image>(
       "/camera_plugin/poll_cam/color", 10, [&](sensor_msgs::msg::Image::SharedPtr) { ++image_count; });
 
-  // Wait for the rendering thread to come up (so a forced render is safe).
-  for (auto i = 0; i < 50 && !plugin.is_rendering_available(); ++i)
-  {
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
-  ASSERT_TRUE(plugin.is_rendering_available()) << "Rendering context unavailable in this environment";
+  // Wait for the rendering thread to come up
+  wait_for_rendering(plugin);
+
+  // Ensure publishers are connected to subscribers
+  wait_for_subscriber_match(image_sub);
 
   // Without a trigger, running render cycles must not publish anything for a polled camera.
   for (auto i = 0; i < 5; ++i)
   {
     plugin.trigger_update();
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    std::this_thread::sleep_for(POLL_INTERVAL);
   }
   EXPECT_EQ(image_count.load(), 0);
 
   // Trigger once; the next render cycle should publish exactly one image.
   ASSERT_TRUE(call_trigger("/camera_plugin/poll_cam/trigger"));
   plugin.trigger_update();
-  for (auto i = 0; i < 20 && image_count.load() < 1; ++i)
   {
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    const auto deadline = std::chrono::steady_clock::now() + WAIT_TIMEOUT;
+    while (image_count.load() < 1 && std::chrono::steady_clock::now() < deadline)
+    {
+      std::this_thread::sleep_for(POLL_INTERVAL);
+    }
   }
   EXPECT_EQ(image_count.load(), 1);
 
@@ -310,7 +352,7 @@ TEST_F(CameraPluginTest, PolledCameraPublishesOncePerTrigger)
   for (auto i = 0; i < 5; ++i)
   {
     plugin.trigger_update();
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    std::this_thread::sleep_for(POLL_INTERVAL);
   }
   EXPECT_EQ(image_count.load(), 1);
 

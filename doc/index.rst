@@ -1,7 +1,5 @@
 :github_url: https://github.com/ros-controls/mujoco_ros2_control/blob/{REPOS_FILE_BRANCH}/doc/index.rst
 
-.. _mujoco_ros2_control:
-
 =====================
 mujoco_ros2_control
 =====================
@@ -99,8 +97,8 @@ Due to compatibility requirements, a slightly modified ``ros2_control`` node fro
 For the full plugin parameter reference, joint control modes, gripper/mimic joint setup,
 sensors, cameras, and lidar configuration, see the `Hardware Interface` documentation linked below.
 
-URDF to MJCF Conversion
-========================
+URDF to MJCF Conversion Tool
+============================
 
 MuJoCo does not support the full feature set of xacro/URDFs. A *highly experimental* conversion
 tool is provided to assist with converting robot description files to MJCF format.
@@ -154,4 +152,5 @@ Further Documentation
    Modeling Tips <../mujoco_ros2_control/docs/modeling_tips>
    Tutorials <../mujoco_ros2_control_demos/doc/tutorials>
    Plugins <../mujoco_ros2_control_plugins/doc/plugins>
+   MuJoCo Extensions <../mujoco_extensions/doc/mujoco_extensions>
    Developers Guide <development>
