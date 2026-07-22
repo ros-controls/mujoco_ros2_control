@@ -158,8 +158,8 @@ int get_actuator_id(const std::string& actuator_name, const mjModel* mj_model)
 
   // Otherwise interpret the name directly as an actuator name.
   const int actuator_id = mj_name2id(mj_model, mjtObj::mjOBJ_ACTUATOR, actuator_name.c_str());
-  RCLCPP_DEBUG_EXPRESSION(rclcpp::get_logger("MujocoSystemInterface"), actuator_id == -1,
-                          "Failed to find the actuator : '%s' in the MuJoCo model", actuator_name.c_str());
+  RCLCPP_WARN_EXPRESSION(rclcpp::get_logger("MujocoSystemInterface"), actuator_id == -1,
+                         "Failed to find the actuator : '%s' in the MuJoCo model", actuator_name.c_str());
   return actuator_id;
 }
 
