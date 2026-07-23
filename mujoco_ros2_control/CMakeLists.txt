@@ -31,6 +31,9 @@ find_package(TinyXML2 REQUIRED)
 find_package(mujoco_vendor REQUIRED)
 set(MUJOCO_LIB mujoco::mujoco)
 
+# Needed for the bloom build
+set(FETCHCONTENT_FULLY_DISCONNECTED OFF)
+
 # The vendor package may be installed in different locations depending on if it
 # was installed with apt vs pixi. So resolve the install root and use that to
 # locate the relevant header files for this project.
