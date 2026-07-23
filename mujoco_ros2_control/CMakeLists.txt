@@ -11,7 +11,6 @@ find_package(controller_manager REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(fmt REQUIRED)
 find_package(glfw3 REQUIRED)
-find_package(OpenGL REQUIRED COMPONENTS EGL)
 
 find_package(control_toolbox REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -31,6 +30,9 @@ find_package(TinyXML2 REQUIRED)
 # Link MuJoCo via the vendor package
 find_package(mujoco_vendor REQUIRED)
 set(MUJOCO_LIB mujoco::mujoco)
+
+# Needed for the bloom build
+set(FETCHCONTENT_FULLY_DISCONNECTED OFF)
 
 # The vendor package may be installed in different locations depending on if it
 # was installed with apt vs pixi. So resolve the install root and use that to
@@ -186,8 +188,6 @@ PRIVATE
   Threads::Threads
   lodepng
   glfw
-  OpenGL::EGL
-  OpenGL::OpenGL
   ${CMAKE_DL_LIBS}
 )
 
