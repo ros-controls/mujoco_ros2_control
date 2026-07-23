@@ -118,7 +118,7 @@ protected:
   /// Sets the qpos/qvel of the free joint driving `body_name`. Fails the test if the body is
   /// not driven by a free joint.
   void setFreeJointState(const std::string& body_name, const mjtNum pos[3], const mjtNum quat[4],
-                        const mjtNum linvel[3], const mjtNum angvel[3])
+                         const mjtNum linvel[3], const mjtNum angvel[3])
   {
     const int body_id = mj_name2id(model_, mjOBJ_BODY, body_name.c_str());
     ASSERT_GE(body_id, 0) << body_name;
@@ -166,8 +166,8 @@ protected:
   {
     std::atomic<bool> received{ false };
     FreeJointStateArray::SharedPtr last_msg;
-    auto sub = plugin_node_->create_subscription<FreeJointStateArray>(
-        topic, 10, [&](FreeJointStateArray::SharedPtr msg) {
+    auto sub =
+        plugin_node_->create_subscription<FreeJointStateArray>(topic, 10, [&](FreeJointStateArray::SharedPtr msg) {
           last_msg = msg;
           received = true;
         });
@@ -291,10 +291,9 @@ TEST_F(FreeJointStatePublisherPluginTest, NonWorldFrameTransformsPoseAndTwistRou
   // Round trip test
   const int ref_id = mj_name2id(model_, mjOBJ_BODY, "ref_frame");
   ASSERT_GE(ref_id, 0);
-  const mjtNum rel_pos[3] = { entry.pose.pose.position.x, entry.pose.pose.position.y,
-                             entry.pose.pose.position.z };
+  const mjtNum rel_pos[3] = { entry.pose.pose.position.x, entry.pose.pose.position.y, entry.pose.pose.position.z };
   const mjtNum rel_quat[4] = { entry.pose.pose.orientation.w, entry.pose.pose.orientation.x,
-                              entry.pose.pose.orientation.y, entry.pose.pose.orientation.z };
+                               entry.pose.pose.orientation.y, entry.pose.pose.orientation.z };
   mjtNum recomposed_pos[3];
   mjtNum recomposed_quat[4];
   mju_mulPose(recomposed_pos, recomposed_quat, data_->xpos + 3 * ref_id, data_->xquat + 4 * ref_id, rel_pos, rel_quat);
@@ -308,8 +307,7 @@ TEST_F(FreeJointStatePublisherPluginTest, NonWorldFrameTransformsPoseAndTwistRou
 
   // Same round trip for twist
   const mjtNum rel_linvel[3] = { entry.twist.twist.linear.x, entry.twist.twist.linear.y, entry.twist.twist.linear.z };
-  const mjtNum rel_angvel[3] = { entry.twist.twist.angular.x, entry.twist.twist.angular.y,
-                                entry.twist.twist.angular.z };
+  const mjtNum rel_angvel[3] = { entry.twist.twist.angular.x, entry.twist.twist.angular.y, entry.twist.twist.angular.z };
   mjtNum recomposed_linvel[3];
   mjtNum recomposed_angvel[3];
   mju_rotVecQuat(recomposed_linvel, rel_linvel, data_->xquat + 4 * ref_id);
