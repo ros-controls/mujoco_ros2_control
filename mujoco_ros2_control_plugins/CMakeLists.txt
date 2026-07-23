@@ -110,6 +110,22 @@ if(BUILD_TESTING)
     "LINKER:--pop-state"
   )
 
+  ament_add_gtest(test_free_joint_state_publisher_plugin
+    test/test_free_joint_state_publisher_plugin.cpp
+  )
+  target_include_directories(test_free_joint_state_publisher_plugin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(test_free_joint_state_publisher_plugin
+    mujoco_ros2_control_plugins_impl
+    ${mujoco_ros2_control_msgs_TARGETS}
+  )
+  target_link_options(test_free_joint_state_publisher_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
+
   ament_add_gtest(test_camera_plugin
     test/test_camera_plugin.cpp
   )
