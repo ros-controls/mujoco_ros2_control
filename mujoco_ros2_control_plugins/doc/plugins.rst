@@ -285,6 +285,90 @@ ExternalWrench Parameters
            force_arrow_scale: 0.01      # 100 N  → 1 m arrow
            torque_arrow_scale: 0.1      # 10 N·m → 1 m arrow
 
+FreeJointStatePublisherPlugin
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Publishes the pose and velocity of every MuJoCo free-joint body (loose objects, unattached
+links, etc.) or a user-selected subset to a single topic, in a user-selectable reference
+frame.
+
+.. list-table::
+   :widths: 25 75
+   :header-rows: 0
+
+   * - **Topic**
+     - ``free_joint_states`` (``mujoco_ros2_control_msgs/msg/FreeJointStateArray``), configurable
+       via the ``topic`` parameter
+
+Each published entry uses the same ``FreeJointState`` layout as the ``~/set_free_joint_state``
+service (see :ref:`simulation_topics_and_services`), so a received message's ``free_joints``
+field can be fed straight into a ``SetFreeJointState`` request to reproduce the snapshotted
+state.
+
+Frame semantics
+^^^^^^^^^^^^^^^
+
+When ``frame_id`` is empty (the default), poses and twists are expressed in the **world** frame.
+When it names another MuJoCo body, poses are expressed relative to that body's current world
+pose, and twists are rotated into that body's current world orientation — the reference body's
+own velocity is **not** subtracted, exactly mirroring how ``~/set_free_joint_state`` interprets a
+non-empty ``frame_id``. This means a message published in frame ``X`` can be sent straight back
+to ``~/set_free_joint_state`` with the same ``frame_id`` to recover the identical world-frame
+state.
+
+If ``frame_id`` names an unknown body, the plugin logs an error and falls back to the world frame
+(published entries then carry an empty ``frame_id``, reflecting the frame actually used).
+
+FreeJointStatePublisher Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :widths: 25 15 15 45
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Default
+     - Description
+   * - ``frame_id``
+     - ``string``
+     - ``""``
+     - Name of the MuJoCo body every published pose/twist is expressed relative to. Empty means
+       the world frame.
+   * - ``body_names``
+     - ``string[]``
+     - ``[]``
+     - Names of the free-joint bodies to publish. Empty means every free-joint body in the model.
+       An unknown or non-free-joint name here fails plugin initialization.
+   * - ``topic``
+     - ``string``
+     - ``free_joint_states``
+     - Output topic name.
+   * - ``publish_rate``
+     - ``double``
+     - ``50.0``
+     - Publish frequency in Hz.
+
+**Example configuration**
+
+.. code-block:: yaml
+
+   /**:
+     ros__parameters:
+       mujoco_plugins:
+         free_joint_state_publisher:
+           type: "mujoco_ros2_control_plugins/FreeJointStatePublisherPlugin"
+           frame_id: ""              # world frame; set to a body name to publish relative poses
+           body_names: []            # empty = all free-joint bodies
+           topic: "free_joint_states"
+           publish_rate: 50.0
+
+**Example: monitoring free-joint bodies**
+
+.. code-block:: bash
+
+   ros2 topic echo /mujoco_ros2_control_node/free_joint_state_publisher/free_joint_states
+
 RangefinderLidarPlugin
 ~~~~~~~~~~~~~~~~~~~~~~
 

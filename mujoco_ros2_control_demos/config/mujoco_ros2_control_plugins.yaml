@@ -4,6 +4,10 @@
       heart_beat_plugin:
         type: "mujoco_ros2_control_plugins/HeartbeatPublisherPlugin"
         update_rate: 1.0
+      free_joint_state_publisher:
+        type: "mujoco_ros2_control_plugins/FreeJointStatePublisherPlugin"
+        frame_id: ""
+        publish_rate: 50.0
       mujoco_camera_plugin:
         type: "mujoco_ros2_control_plugins/CameraPlugin"
         camera_publish_rate: 6.0
