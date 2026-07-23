@@ -47,6 +47,7 @@ target_link_libraries(mujoco_ros2_control_plugins INTERFACE
 add_library(mujoco_ros2_control_plugins_impl SHARED
   src/heartbeat_publisher_plugin.cpp
   src/external_wrench_plugin.cpp
+  src/free_joint_state_publisher_plugin.cpp
   src/camera_plugin.cpp
   src/mujoco_3d_lidar_plugin.cpp
   # TODO: Remove once this has been fully deprecated
