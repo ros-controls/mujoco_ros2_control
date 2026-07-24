@@ -18,21 +18,10 @@ Tutorial 5: Base Velocity Plugin
 This tutorial demonstrates driving a mobile/floating-base robot with BaseVelocityPlugin.
 The mobile base is a free-floating, wheeled chassis (MJCF <freejoint>) carrying a
 1-DOF arm mounted on top. Propulsion is driven entirely by the plugin's velocity servo
-wrench -- the base itself has no ros2_control joints, only the arm does. The ground and
-wheels have zero friction (see mobile_base.xml / scene_mobile_base.xml), so the ground
-itself can never exert any tangential force on the base: the *only* thing that can
-change its velocity is BaseVelocityPlugin's servo.
-
-Swinging the arm creates a reaction force/torque on the base through the joint,
-unrelated to ground friction, since it acts directly between the two bodies, yet
-BaseVelocityPlugin measures the base's own velocity regardless of what disturbs it, so
-it corrects this the same way it would correct an external push: the base stays close
-to put while the arm moves, and only actually travels once a nonzero velocity is
-commanded on cmd_vel. The arm's joint is range-limited to a back-and-forth sweep rather
-than a continuous spin, since a real arm reaches to poses rather than windmilling, and a
-bounded sweep's disturbance is largely self-cancelling over a full swing. Collisions
-with obstacles (e.g. the wall in the scene) are still handled by the physics engine as
-normal.
+wrench -- the base itself has no ros2_control joints, only the arm does. Ground/wheel
+friction is zero, so the *only* thing that can change the base's velocity is the servo,
+whether the disturbance is an external push or the mounted arm's own reaction forces as
+it swings. See doc/tutorials.rst (Tutorial 5) and mobile_base.xml for the full rationale.
 
 Key concepts:
 - BaseVelocityPlugin: proportional velocity servo applied via data->xfrc_applied

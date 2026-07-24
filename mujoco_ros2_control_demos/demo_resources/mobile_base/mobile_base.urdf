@@ -10,7 +10,7 @@
        odometry by mujoco_ros2_control (odom_free_joint_name, defaulting to
        "floating_base_joint", which matches the MJCF freejoint name), not from this joint. -->
   <link name="base_link"/>
-  <joint name="base_footprint_joint" type="fixed">
+  <joint name="world_to_base_joint" type="fixed">
     <parent link="world"/>
     <child link="base_link"/>
   </joint>
