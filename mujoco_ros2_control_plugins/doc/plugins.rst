@@ -371,6 +371,26 @@ BaseVelocity Parameters
      - ``0.5``
      - Seconds since the last received command after which it is treated as zero.
 
+.. note::
+
+   The plugin's own parameters (``body``, ``cmd_vel_topic``, etc.) are declared directly on the
+   underlying ``ros2_control_node`` node, not namespaced under the plugin's instance name --
+   ``rclcpp::Node::create_sub_node()`` only extends the namespace of topics/services/actions, not
+   parameters. Only ``type`` is read from under ``mujoco_plugins.<instance_name>``. Avoid loading
+   two plugin instances that declare the same parameter name at the same time.
+
+.. note::
+
+   ``kv_linear``/``kv_yaw`` are proportional-only gains with no damping term, so each is only
+   stable up to roughly ``2 * I / control_period`` for the body's mass (linear) or rotational
+   inertia about the relevant axis (yaw), where ``control_period`` is ``1 / update_rate`` from
+   ``controller_manager``. Push a gain past that ceiling and the axis diverges into a growing
+   oscillation instead of converging -- this is highly sensitive to the body's actual inertia, so
+   a gain that's stable for one robot can be unstable for another (e.g. adding a rigidly-coupled
+   mounted joint that effectively stiffens the body can lower the ceiling for an axis that was
+   previously stable at the same gain). If a commanded velocity looks shaky or runs away rather
+   than settling, lower the corresponding gain first before assuming it's a modelling bug.
+
 **Example configuration**
 
 .. code-block:: yaml
@@ -380,10 +400,12 @@ BaseVelocity Parameters
        mujoco_plugins:
          base_velocity:
            type: "mujoco_ros2_control_plugins/BaseVelocityPlugin"
-           body: base_link
-           cmd_vel_topic: /cmd_vel
-           kv_linear: 200.0
-           kv_yaw: 50.0
+       # BaseVelocityPlugin's own parameters are node-level (see note above), not nested
+       # under the "base_velocity" key.
+       body: base_link
+       cmd_vel_topic: /cmd_vel
+       kv_linear: 200.0
+       kv_yaw: 50.0
 
 **Example: teleop from the command line**
 
