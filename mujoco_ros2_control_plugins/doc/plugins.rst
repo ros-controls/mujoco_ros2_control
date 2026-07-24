@@ -373,11 +373,12 @@ BaseVelocity Parameters
 
 .. note::
 
-   The plugin's own parameters (``body``, ``cmd_vel_topic``, etc.) are declared directly on the
-   underlying ``ros2_control_node`` node, not namespaced under the plugin's instance name --
-   ``rclcpp::Node::create_sub_node()`` only extends the namespace of topics/services/actions, not
-   parameters. Only ``type`` is read from under ``mujoco_plugins.<instance_name>``. Avoid loading
-   two plugin instances that declare the same parameter name at the same time.
+   ``rclcpp::Node::create_sub_node()`` (used to give this plugin its own topic/service
+   namespace) does not namespace *parameters* -- they're always node-level. So the plugin's own
+   parameters are declared under an explicitly-built ``mujoco_plugins.<instance_name>.`` prefix
+   (matching the plugin's actual instance key in your YAML), rather than relying on the
+   sub-node's namespace the way topics/services do. This mirrors the pattern used by
+   ``CameraPlugin``/``RangefinderLidarPlugin``/``Mujoco3dLidarPlugin``.
 
 .. note::
 
@@ -400,12 +401,10 @@ BaseVelocity Parameters
        mujoco_plugins:
          base_velocity:
            type: "mujoco_ros2_control_plugins/BaseVelocityPlugin"
-       # BaseVelocityPlugin's own parameters are node-level (see note above), not nested
-       # under the "base_velocity" key.
-       body: base_link
-       cmd_vel_topic: /cmd_vel
-       kv_linear: 200.0
-       kv_yaw: 50.0
+           body: base_link
+           cmd_vel_topic: /cmd_vel
+           kv_linear: 200.0
+           kv_yaw: 50.0
 
 **Example: teleop from the command line**
 

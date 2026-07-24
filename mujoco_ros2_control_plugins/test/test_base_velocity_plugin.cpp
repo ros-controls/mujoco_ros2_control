@@ -111,13 +111,18 @@ protected:
     model_ = nullptr;
   }
 
+  std::string paramName(const std::string& name)
+  {
+    return "mujoco_plugins." + plugin_node_->get_sub_namespace() + "." + name;
+  }
+
   /// Declares "body" (defaulting to "base_link") and initializes a plugin instance with it.
   std::unique_ptr<mujoco_ros2_control_plugins::BaseVelocityPlugin>
   makeInitializedPlugin(const std::string& body_name = "base_link")
   {
-    if (!plugin_node_->has_parameter("body"))
+    if (!plugin_node_->has_parameter(paramName("body")))
     {
-      plugin_node_->declare_parameter("body", body_name);
+      plugin_node_->declare_parameter(paramName("body"), body_name);
     }
     auto plugin = std::make_unique<mujoco_ros2_control_plugins::BaseVelocityPlugin>();
     EXPECT_TRUE(plugin->init(plugin_node_, model_, data_));
@@ -150,7 +155,7 @@ private:
 
 TEST_F(BaseVelocityPluginTest, InitFailsForUnknownBody)
 {
-  plugin_node_->declare_parameter("body", std::string("does_not_exist"));
+  plugin_node_->declare_parameter(paramName("body"), std::string("does_not_exist"));
 
   mujoco_ros2_control_plugins::BaseVelocityPlugin plugin;
   EXPECT_FALSE(plugin.init(plugin_node_, model_, data_));
@@ -202,7 +207,7 @@ TEST_F(BaseVelocityPluginTest, CommandAppliesForceTowardTarget)
 
 TEST_F(BaseVelocityPluginTest, ServoConvergesLinearVelocityToCommand)
 {
-  plugin_node_->declare_parameter("kv_linear", 50.0);
+  plugin_node_->declare_parameter(paramName("kv_linear"), 50.0);
   auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/0.5, /*vy=*/0.0, /*wz=*/0.0);
@@ -227,7 +232,7 @@ TEST_F(BaseVelocityPluginTest, ServoConvergesLinearVelocityToCommand)
 
 TEST_F(BaseVelocityPluginTest, ServoConvergesYawRateToCommand)
 {
-  plugin_node_->declare_parameter("kv_yaw", 10.0);
+  plugin_node_->declare_parameter(paramName("kv_yaw"), 10.0);
   auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/0.0, /*vy=*/0.0, /*wz=*/1.0);
@@ -248,7 +253,7 @@ TEST_F(BaseVelocityPluginTest, ServoConvergesYawRateToCommand)
 
 TEST_F(BaseVelocityPluginTest, StaleCommandDecaysToZeroForce)
 {
-  plugin_node_->declare_parameter("cmd_timeout", 0.2);
+  plugin_node_->declare_parameter(paramName("cmd_timeout"), 0.2);
   auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/1.0, /*vy=*/0.0, /*wz=*/0.0);

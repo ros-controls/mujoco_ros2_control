@@ -43,8 +43,8 @@ namespace mujoco_ros2_control_plugins
  * Vertical motion and roll/pitch are left entirely to gravity and contacts, so the
  * base settles onto the ground normally.
  *
- * Configuration parameters (declared on the plugin's sub-node)
- * -------------------------------------------------------------
+ * Configuration parameters (declared under "mujoco_plugins.<instance_name>.")
+ * -------------------------------------------------------------------------------
  *   body              (string, required) - MJCF body name of the base. Must have a
  *                      <freejoint/> for the servo to have any effect.
  *   cmd_vel_topic      (string, default "cmd_vel")   - command topic name.

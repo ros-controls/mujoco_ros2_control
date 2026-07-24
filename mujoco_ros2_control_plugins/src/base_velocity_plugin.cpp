@@ -24,16 +24,23 @@ namespace mujoco_ros2_control_plugins
 
 namespace
 {
+std::string namespacedParamName(const rclcpp::Node::SharedPtr& node, const std::string& name)
+{
+  const std::string sub_ns = node->get_sub_namespace();
+  return sub_ns.empty() ? name : ("mujoco_plugins." + sub_ns + "." + name);
+}
+
 // Declares `name` with `default_value` only if it hasn't already been declared
 // (e.g. by a test fixture), matching the pattern used by ExternalWrenchPlugin.
 template <typename T>
 T declareOrGetParameter(const rclcpp::Node::SharedPtr& node, const std::string& name, const T& default_value)
 {
-  if (!node->has_parameter(name))
+  const std::string full_name = namespacedParamName(node, name);
+  if (!node->has_parameter(full_name))
   {
-    node->declare_parameter(name, default_value);
+    node->declare_parameter(full_name, default_value);
   }
-  return node->get_parameter(name).get_value<T>();
+  return node->get_parameter(full_name).get_value<T>();
 }
 }  // namespace
 
