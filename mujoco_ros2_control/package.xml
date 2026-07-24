@@ -23,6 +23,7 @@
   <depend>backward_ros</depend>
   <depend>control_toolbox</depend>
   <depend>controller_manager</depend>
+  <depend>eigen</depend>
   <depend>hardware_interface</depend>
   <depend>fmt</depend>
   <depend>ros2pkg</depend>
@@ -33,6 +34,11 @@
   <depend>pluginlib</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>rclcpp</depend>
+  <depend>realtime_tools</depend>
+  <depend>rosgraph_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tinyxml2_vendor</depend>
   <depend>mujoco_ros2_control_msgs</depend>
   <depend>mujoco_ros2_control_plugins</depend>
   <depend>transmission_interface</depend>
