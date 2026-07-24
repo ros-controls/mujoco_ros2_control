@@ -163,6 +163,22 @@ if(BUILD_TESTING)
     "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
     "LINKER:--pop-state"
   )
+
+  ament_add_gtest(test_base_velocity_plugin
+    test/test_base_velocity_plugin.cpp
+  )
+  target_include_directories(test_base_velocity_plugin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(test_base_velocity_plugin
+    mujoco_ros2_control_plugins_impl
+    ${geometry_msgs_TARGETS}
+  )
+  target_link_options(test_base_velocity_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
 endif()
 
 # Install include directory
