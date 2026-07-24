@@ -13,8 +13,11 @@ Full documentation is maintained in RST format:
 | Plugin | Description |
 |---|---|
 | `HeartbeatPublisherPlugin` | Publishes a heartbeat string to `/mujoco_heartbeat` at 1 Hz |
+| `CameraPlugin` | Publishes MuJoCo RGB-D camera color/depth/info to ROS 2 topics |
 | `ExternalWrenchPlugin` | Applies external wrenches to MuJoCo bodies via a ROS 2 service |
 | `FreeJointStatePublisherPlugin` | Publishes the pose/velocity of free-joint bodies to a topic, in a selectable reference frame |
+| `Mujoco3dLidarPlugin` | Republishes MuJoCo lidar-extension sensor data as `LaserScan`/`PointCloud2` messages |
+| `RangefinderLidarPlugin` | **[Deprecated]** Wraps MuJoCo rangefinder sensors as `LaserScan` publishers |
 
 ## Quick Start
 

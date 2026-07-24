@@ -38,6 +38,13 @@
 namespace mujoco_ros2_control_plugins
 {
 
+/**
+ * @brief Per-lidar bookkeeping for a single named group of MuJoCo rangefinder sensors.
+ *
+ * One instance is created per distinct lidar name (see RangefinderLidarPlugin::parse_lidar_name),
+ * grouping together every mjSENS_RANGEFINDER sensor that shares that name prefix into a single
+ * LaserScan publisher.
+ */
 struct RangefinderLidarData
 {
   std::string name;
@@ -80,9 +87,31 @@ public:
   void cleanup() override;
 
 private:
+  /**
+   * @brief Reads parameters for one lidar group and registers its LaserScan publisher.
+   * @param lidar_name Name of the lidar group (the parameter namespace under
+   * `mujoco_plugins.rangefinder_lidar_plugin.<lidar_name>`).
+   * @param model Pointer to the MuJoCo model.
+   * @return true if the required parameters were found and the lidar was registered, false otherwise.
+   */
   bool register_sensor(const std::string& lidar_name, const mjModel* model);
+
+  /**
+   * @brief Publishes the buffered LaserScan message for every registered lidar group.
+   */
   void publish_loop();
 
+  /**
+   * @brief Splits a MuJoCo rangefinder sensor name into its lidar group name and ray index.
+   *
+   * Expects the legacy naming convention `<lidar_name>-<index>` (e.g. `lidar-034` maps to
+   * group name `lidar` and index `34`). If the name has no `-`, the whole string is the group
+   * name and the index is -1. If it has a `-` but the suffix is not a plain integer, the index
+   * is still -1 but the group name is only the part before the last `-`.
+   *
+   * @param sensor_name Name of the MuJoCo sensor, as declared in the MJCF.
+   * @return A pair of (lidar group name, ray index), with index -1 on a parse failure.
+   */
   static std::pair<std::string, int> parse_lidar_name(const std::string& sensor_name);
 
   rclcpp::Node::SharedPtr node_;

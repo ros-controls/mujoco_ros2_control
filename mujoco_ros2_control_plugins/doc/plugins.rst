@@ -382,12 +382,12 @@ MuJoCo 3D Lidar Plugin
 ~~~~~~~~~~~~~~~~~~~~~~
 
 MuJoCo does not include native lidar support.
-This package implements lidar through a custom MuJoCo sensor extension in ``mujoco_extensions` (``mujoco.plugin.lidar``) that uses
+This package implements lidar through a custom MuJoCo sensor extension in ``mujoco_extensions`` (``mujoco.plugin.lidar``) that uses
 `mj_multiRay <https://mujoco.readthedocs.io/en/stable/APIreference/APIfunctions.html#mj-multiray>`_ to cast rays each simulation step.
 Refer to the extension package for more information about the computation.
 
 The ``Mujoco3dLidarPlugin`` wraps the underlying sensor to convert the raw data to relevant messages and publish them to ROS topics.
-Specicially, the data for 2D (single-row) and 3D (multi-row) will be published as
+Specifically, the data for 2D (single-row) and 3D (multi-row) will be published as
 `LaserScan <https://github.com/ros2/common_interfaces/blob/rolling/sensor_msgs/msg/LaserScan.msg>`_ or
 `PointCloud2 <https://github.com/ros2/common_interfaces/blob/rolling/sensor_msgs/msg/PointCloud2.msg>`_ messages respectively.
 
