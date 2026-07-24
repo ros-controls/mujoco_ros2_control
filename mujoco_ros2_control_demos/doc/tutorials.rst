@@ -78,7 +78,7 @@ Demonstrates ``ros2_control`` transmissions with mechanical reduction ratios.
 
    ros2 launch mujoco_ros2_control_demos 04_transmissions.launch.py
 
-**Key concepts:** ``SimpleTransmission`` interface, mechanical reduction, actuator-to-joint mapping.
+**Key concepts:** ``DifferentialTransmission`` interface, mechanical reduction, actuator-to-joint mapping.
 
 **Resources:** ``demo_resources/robot/test_robot.urdf`` with ``use_transmissions:=true``
 
