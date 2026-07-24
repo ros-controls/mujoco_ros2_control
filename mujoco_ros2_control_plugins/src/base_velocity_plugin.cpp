@@ -119,29 +119,11 @@ void BaseVelocityPlugin::twistStampedCallback(const geometry_msgs::msg::TwistSta
 void BaseVelocityPlugin::storeCommand(double vx, double vy, double wz)
 {
   std::lock_guard<std::mutex> lock(cmd_mutex_);
-  cmd_vx_ = vx;
-  cmd_vy_ = vy;
-  cmd_wz_ = wz;
-  last_cmd_time_ = node_->get_clock()->now();
-  has_cmd_ = true;
+  latest_cmd_ = { vx, vy, wz, node_->get_clock()->now(), true };
 }
 
 void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 {
-  // Step 0 - undo the xfrc_applied contribution written in the previous cycle, so a
-  // stale servo force is never left behind (mirrors ExternalWrenchPlugin's pattern).
-  // When the system interface also zeroes xfrc_applied before calling update(), this
-  // is a harmless no-op on already-zero values.
-  if (prev_written_)
-  {
-    mjtNum* base = data->xfrc_applied + body_id_ * 6;
-    for (int j = 0; j < 6; ++j)
-    {
-      base[j] = 0.0;
-    }
-    prev_written_ = false;
-  }
-
   if (body_id_ < 0)
   {
     return;
@@ -152,11 +134,7 @@ void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
   // successfully cached values.
   if (cmd_mutex_.try_lock())
   {
-    cached_cmd_vx_ = cmd_vx_;
-    cached_cmd_vy_ = cmd_vy_;
-    cached_cmd_wz_ = cmd_wz_;
-    cached_cmd_time_ = last_cmd_time_;
-    cached_has_cmd_ = has_cmd_;
+    cached_cmd_ = latest_cmd_;
     cmd_mutex_.unlock();
   }
 
@@ -164,14 +142,14 @@ void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
   // command, i.e. the base is commanded to stop rather than coast under whatever
   // wrench was last computed.
   double vx_cmd = 0.0, vy_cmd = 0.0, wz_cmd = 0.0;
-  if (cached_has_cmd_)
+  if (cached_cmd_.valid)
   {
-    const rclcpp::Duration age = node_->get_clock()->now() - cached_cmd_time_;
+    const rclcpp::Duration age = node_->get_clock()->now() - cached_cmd_.time;
     if (age <= cmd_timeout_)
     {
-      vx_cmd = cached_cmd_vx_;
-      vy_cmd = cached_cmd_vy_;
-      wz_cmd = cached_cmd_wz_;
+      vx_cmd = cached_cmd_.vx;
+      vy_cmd = cached_cmd_.vy;
+      wz_cmd = cached_cmd_.wz;
     }
   }
 
@@ -202,7 +180,6 @@ void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
     base[j] = force_world[j];
     base[3 + j] = torque_world[j];
   }
-  prev_written_ = true;
 }
 
 void BaseVelocityPlugin::cleanup()

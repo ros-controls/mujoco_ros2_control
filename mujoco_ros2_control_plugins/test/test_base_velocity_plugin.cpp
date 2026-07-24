@@ -111,6 +111,19 @@ protected:
     model_ = nullptr;
   }
 
+  /// Declares "body" (defaulting to "base_link") and initializes a plugin instance with it.
+  std::unique_ptr<mujoco_ros2_control_plugins::BaseVelocityPlugin>
+  makeInitializedPlugin(const std::string& body_name = "base_link")
+  {
+    if (!plugin_node_->has_parameter("body"))
+    {
+      plugin_node_->declare_parameter("body", body_name);
+    }
+    auto plugin = std::make_unique<mujoco_ros2_control_plugins::BaseVelocityPlugin>();
+    EXPECT_TRUE(plugin->init(plugin_node_, model_, data_));
+    return plugin;
+  }
+
   /// Publishes a Twist on the plugin's cmd_vel topic and waits briefly for delivery.
   void publishTwist(const std::string& topic, double vx, double vy, double wz)
   {
@@ -146,41 +159,31 @@ TEST_F(BaseVelocityPluginTest, InitFailsForUnknownBody)
 
 TEST_F(BaseVelocityPluginTest, InitSucceedsForFreeJointBody)
 {
-  plugin_node_->declare_parameter("body", std::string("base_link"));
-
-  mujoco_ros2_control_plugins::BaseVelocityPlugin plugin;
-  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
-  plugin.cleanup();
+  auto plugin = makeInitializedPlugin();
+  plugin->cleanup();
 }
 
 TEST_F(BaseVelocityPluginTest, ZeroCommandProducesNoForce)
 {
-  plugin_node_->declare_parameter("body", std::string("base_link"));
+  auto plugin = makeInitializedPlugin();
 
-  mujoco_ros2_control_plugins::BaseVelocityPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
-
-  plugin.update(model_, data_);
+  plugin->update(model_, data_);
 
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
     EXPECT_DOUBLE_EQ(data_->xfrc_applied[i], 0.0);
   }
 
-  plugin.cleanup();
+  plugin->cleanup();
 }
 
 TEST_F(BaseVelocityPluginTest, CommandAppliesForceTowardTarget)
 {
-  plugin_node_->declare_parameter("body", std::string("base_link"));
-  plugin_node_->declare_parameter("cmd_vel_topic", std::string("cmd_vel"));
-
-  mujoco_ros2_control_plugins::BaseVelocityPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/1.0, /*vy=*/0.0, /*wz=*/0.0);
 
-  plugin.update(model_, data_);
+  plugin->update(model_, data_);
 
   const int base_id = mj_name2id(model_, mjOBJ_BODY, "base_link");
   ASSERT_GE(base_id, 0);
@@ -194,17 +197,13 @@ TEST_F(BaseVelocityPluginTest, CommandAppliesForceTowardTarget)
   EXPECT_NEAR(data_->xfrc_applied[base_id * 6 + 4], 0.0, 1e-9);
   EXPECT_NEAR(data_->xfrc_applied[base_id * 6 + 5], 0.0, 1e-9);
 
-  plugin.cleanup();
+  plugin->cleanup();
 }
 
 TEST_F(BaseVelocityPluginTest, ServoConvergesLinearVelocityToCommand)
 {
-  plugin_node_->declare_parameter("body", std::string("base_link"));
-  plugin_node_->declare_parameter("cmd_vel_topic", std::string("cmd_vel"));
   plugin_node_->declare_parameter("kv_linear", 50.0);
-
-  mujoco_ros2_control_plugins::BaseVelocityPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/0.5, /*vy=*/0.0, /*wz=*/0.0);
 
@@ -215,7 +214,7 @@ TEST_F(BaseVelocityPluginTest, ServoConvergesLinearVelocityToCommand)
   // measured body-frame x velocity converges to the 0.5 m/s command.
   for (int i = 0; i < 500; ++i)
   {
-    plugin.update(model_, data_);
+    plugin->update(model_, data_);
     mj_step(model_, data_);
   }
 
@@ -228,12 +227,8 @@ TEST_F(BaseVelocityPluginTest, ServoConvergesLinearVelocityToCommand)
 
 TEST_F(BaseVelocityPluginTest, ServoConvergesYawRateToCommand)
 {
-  plugin_node_->declare_parameter("body", std::string("base_link"));
-  plugin_node_->declare_parameter("cmd_vel_topic", std::string("cmd_vel"));
   plugin_node_->declare_parameter("kv_yaw", 10.0);
-
-  mujoco_ros2_control_plugins::BaseVelocityPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/0.0, /*vy=*/0.0, /*wz=*/1.0);
 
@@ -242,7 +237,7 @@ TEST_F(BaseVelocityPluginTest, ServoConvergesYawRateToCommand)
 
   for (int i = 0; i < 500; ++i)
   {
-    plugin.update(model_, data_);
+    plugin->update(model_, data_);
     mj_step(model_, data_);
   }
 
@@ -253,26 +248,22 @@ TEST_F(BaseVelocityPluginTest, ServoConvergesYawRateToCommand)
 
 TEST_F(BaseVelocityPluginTest, StaleCommandDecaysToZeroForce)
 {
-  plugin_node_->declare_parameter("body", std::string("base_link"));
-  plugin_node_->declare_parameter("cmd_vel_topic", std::string("cmd_vel"));
   plugin_node_->declare_parameter("cmd_timeout", 0.2);
-
-  mujoco_ros2_control_plugins::BaseVelocityPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/1.0, /*vy=*/0.0, /*wz=*/0.0);
 
-  plugin.update(model_, data_);
+  plugin->update(model_, data_);
   const int base_id = mj_name2id(model_, mjOBJ_BODY, "base_link");
   ASSERT_GE(base_id, 0);
   ASSERT_GT(data_->xfrc_applied[base_id * 6 + 0], 0.0) << "sanity: force applied while command is fresh";
 
   // Wait past the timeout without publishing again.
   std::this_thread::sleep_for(std::chrono::milliseconds(400));
-  plugin.update(model_, data_);
+  plugin->update(model_, data_);
 
   EXPECT_NEAR(data_->xfrc_applied[base_id * 6 + 0], 0.0, 1e-9)
       << "stale command should be treated as zero, producing no force";
 
-  plugin.cleanup();
+  plugin->cleanup();
 }

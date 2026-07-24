@@ -71,11 +71,8 @@ namespace mujoco_ros2_control_plugins
  * body's centre of mass (no offset application point), no wrench-transport term is
  * needed, unlike ExternalWrenchPlugin's arbitrary application point.
  *
- * At the start of every update() the plugin undoes the xfrc_applied contribution it
- * wrote in the previous cycle before writing the new one, mirroring
- * ExternalWrenchPlugin's self-cleanup so the plugin is correct even when called
- * outside of MujocoSystemInterface (which already zeroes xfrc_applied before invoking
- * plugins).
+ * update() unconditionally overwrites all 6 xfrc_applied entries for the body every
+ * cycle, so no stale contribution from a previous cycle is ever left behind.
  */
 class BaseVelocityPlugin : public MuJoCoROS2ControlPluginBase
 {
@@ -109,27 +106,23 @@ private:
   double max_torque_{ 500.0 };
   rclcpp::Duration cmd_timeout_{ 0, 0 };
 
-  // Latest command, written by the subscription callback (ROS executor thread) and
-  // read by update() (real-time thread) under cmd_mutex_.
+  struct CommandState
+  {
+    double vx{ 0.0 };
+    double vy{ 0.0 };
+    double wz{ 0.0 };
+    rclcpp::Time time{ 0, 0, RCL_ROS_TIME };
+    bool valid{ false };
+  };
+
+  // Latest command, written by the subscription callback (ROS executor thread) under
+  // cmd_mutex_. update() (real-time thread) copies it into cached_cmd_ via try_lock, so
+  // it never blocks on the subscription callback.
   std::mutex cmd_mutex_;
-  double cmd_vx_{ 0.0 };
-  double cmd_vy_{ 0.0 };
-  double cmd_wz_{ 0.0 };
-  rclcpp::Time last_cmd_time_{ 0, 0, RCL_ROS_TIME };
-  bool has_cmd_{ false };
+  CommandState latest_cmd_;
 
-  // Local cache of the command, only ever touched from update() (single real-time
-  // thread), so no lock needed here. Used when a try_lock on cmd_mutex_ fails, so
-  // update() never blocks on the subscription callback.
-  double cached_cmd_vx_{ 0.0 };
-  double cached_cmd_vy_{ 0.0 };
-  double cached_cmd_wz_{ 0.0 };
-  rclcpp::Time cached_cmd_time_{ 0, 0, RCL_ROS_TIME };
-  bool cached_has_cmd_{ false };
-
-  // Whether update() wrote a (possibly zero) contribution to xfrc_applied for
-  // body_id_ in the previous cycle, so it can be undone before the next write.
-  bool prev_written_{ false };
+  // Local copy of the command, only ever touched from update() (single real-time thread).
+  CommandState cached_cmd_;
 };
 
 }  // namespace mujoco_ros2_control_plugins
