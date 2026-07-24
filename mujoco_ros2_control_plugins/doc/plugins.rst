@@ -285,6 +285,119 @@ ExternalWrench Parameters
            force_arrow_scale: 0.01      # 100 N  → 1 m arrow
            torque_arrow_scale: 0.1      # 10 N·m → 1 m arrow
 
+BaseVelocityPlugin
+~~~~~~~~~~~~~~~~~~
+
+Drives a mobile or floating-base robot from a commanded planar body velocity (``vx``, ``vy``,
+yaw-rate) received on a ``cmd_vel``-style topic, without relying on wheel-ground contact.
+
+Wheel-terrain friction/slip is often unreliable enough to make it a poor foundation for testing
+navigation stacks. This plugin instead runs a proportional velocity servo directly on the base
+body's free joint and applies the result as a world-frame wrench via ``data->xfrc_applied``.
+Because the servo is force-based rather than a kinematic override, the base still collides
+realistically with walls and obstacles — only the *propulsion* bypasses wheel-ground contact, not
+collision response.
+
+Only the planar degrees of freedom are driven: body-frame linear x/y and yaw-rate (about body z).
+Vertical motion and roll/pitch are left entirely to gravity and contacts, so the base settles onto
+the ground normally.
+
+.. list-table::
+   :widths: 25 75
+   :header-rows: 0
+
+   * - **Topic**
+     - ``cmd_vel`` (``geometry_msgs/msg/Twist``, or ``TwistStamped`` if ``use_stamped_twist`` is
+       set)
+
+Servo Behavior
+^^^^^^^^^^^^^^
+
+The servo error is computed in the body frame from the commanded velocity ``v_cmd``/``w_cmd`` and
+the body's measured velocity ``v_meas``/``w_meas`` (via ``mj_objectVelocity`` in local-frame mode):
+
+.. code-block:: text
+
+   F_body = clamp(kv_linear * (v_cmd - v_meas), ±max_force)   (x, y)
+   T_body = clamp(kv_yaw    * (w_cmd - w_meas), ±max_torque)  (about z)
+
+``F_body``/``T_body`` are then rotated into the world frame using the body's current orientation
+and written into ``data->xfrc_applied`` at the body's slot, applied at its centre of mass.
+A command that hasn't been refreshed within ``cmd_timeout`` seconds is treated as zero (safety
+stop) rather than left to coast on the last known wrench.
+
+BaseVelocity Parameters
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :widths: 25 15 15 45
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Default
+     - Description
+   * - ``body``
+     - ``string``
+     - *(required)*
+     - MJCF body name of the base. Must carry a ``<freejoint/>`` for the servo to have any effect.
+   * - ``cmd_vel_topic``
+     - ``string``
+     - ``cmd_vel``
+     - Command topic name.
+   * - ``use_stamped_twist``
+     - ``bool``
+     - ``false``
+     - Subscribe to ``geometry_msgs/TwistStamped`` instead of ``geometry_msgs/Twist`` (e.g. for
+       Nav2, which publishes stamped twists by default in some configurations).
+   * - ``kv_linear``
+     - ``double``
+     - ``200.0``
+     - Linear servo gain [N per m/s].
+   * - ``kv_yaw``
+     - ``double``
+     - ``50.0``
+     - Yaw servo gain [N·m per rad/s].
+   * - ``max_force``
+     - ``double``
+     - ``1000.0``
+     - Per-axis linear force saturation [N].
+   * - ``max_torque``
+     - ``double``
+     - ``500.0``
+     - Yaw torque saturation [N·m].
+   * - ``cmd_timeout``
+     - ``double``
+     - ``0.5``
+     - Seconds since the last received command after which it is treated as zero.
+
+**Example configuration**
+
+.. code-block:: yaml
+
+   /**:
+     ros__parameters:
+       mujoco_plugins:
+         base_velocity:
+           type: "mujoco_ros2_control_plugins/BaseVelocityPlugin"
+           body: base_link
+           cmd_vel_topic: /cmd_vel
+           kv_linear: 200.0
+           kv_yaw: 50.0
+
+**Example: teleop from the command line**
+
+.. code-block:: bash
+
+   ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+     "{linear: {x: 0.5}, angular: {z: 0.2}}" --rate 10
+
+.. note::
+
+   Odometry for the floating base is published independently by ``mujoco_ros2_control`` itself
+   (parameter ``odom_free_joint_name``, default topic ``/simulator/floating_base_state``) — this
+   plugin only drives the base, it does not publish odometry.
+
 FreeJointStatePublisherPlugin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
