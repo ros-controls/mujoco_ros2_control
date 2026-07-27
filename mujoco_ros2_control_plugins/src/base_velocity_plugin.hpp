@@ -15,6 +15,7 @@
 #ifndef MUJOCO_ROS2_CONTROL_PLUGINS__BASE_VELOCITY_PLUGIN_HPP_
 #define MUJOCO_ROS2_CONTROL_PLUGINS__BASE_VELOCITY_PLUGIN_HPP_
 
+#include <limits>
 #include <mutex>
 #include <string>
 
@@ -29,50 +30,41 @@ namespace mujoco_ros2_control_plugins
 
 /**
  * @brief Drives a mobile/floating-base robot from a commanded planar body velocity
- *        (vx, vy, yaw-rate), independent of wheel-ground contact.
+ *        (vx, vy, yaw-rate) by writing a hard kinematic override of the base's free-joint
+ *        velocity directly into data->qvel every cycle (see
+ *        MuJoCoROS2ControlPluginBase::update()'s doc comment for the NaN convention this
+ *        relies on).
  *
  * Wheel-terrain friction/slip modelling is often unreliable enough to make it a poor
  * foundation for testing navigation stacks. This plugin instead subscribes to a
- * cmd_vel-style topic and runs a proportional velocity servo directly on the base
- * body's free joint, applying the result as a world-frame wrench via
- * data->xfrc_applied. Because the servo is force-based (not a kinematic override),
- * the base still collides realistically with walls/obstacles -- only the *propulsion*
- * bypasses wheel-ground contact, not collision response.
+ * cmd_vel-style topic and, every cycle, writes the (optionally clamped) commanded planar
+ * velocity directly into the base body's free-joint qvel entries in data. There is no
+ * gain to tune and no convergence delay: the measured body velocity on the driven DOFs is
+ * exactly the commanded velocity on the very next simulation step.
  *
- * Only the planar DOFs are driven: body-frame linear x/y and yaw-rate (about body z).
- * Vertical motion and roll/pitch are left entirely to gravity and contacts, so the
- * base settles onto the ground normally.
+ * The trade-off is that the driven DOFs cannot be influenced by anything else -- not
+ * contacts, not forces from other bodies rigidly mounted on the base (e.g. a swinging
+ * arm). They are simply reasserted every cycle regardless of what the physics engine
+ * computed in between.
+ *
+ * Only the planar DOFs are driven: world-frame linear x/y (converted from the commanded
+ * body-frame vx/vy via the body's current orientation) and body-local yaw-rate about z.
+ * Vertical linear velocity and local roll/pitch are left untouched every cycle, so gravity
+ * and contacts continue to settle the base onto the ground normally.
  *
  * Configuration parameters (declared under "mujoco_plugins.<instance_name>.")
  * -------------------------------------------------------------------------------
- *   body              (string, required) - MJCF body name of the base. Must have a
- *                      <freejoint/> for the servo to have any effect.
- *   cmd_vel_topic      (string, default "cmd_vel")   - command topic name.
- *   use_stamped_twist  (bool,   default false)       - subscribe to
- *                      geometry_msgs/TwistStamped instead of geometry_msgs/Twist.
- *   kv_linear          (double, default 200.0)       - linear servo gain [N per m/s].
- *   kv_yaw             (double, default 50.0)        - yaw servo gain [N.m per rad/s].
- *   max_force          (double, default 1000.0)      - per-axis linear force cap [N].
- *   max_torque         (double, default 500.0)       - yaw torque cap [N.m].
- *   cmd_timeout        (double, default 0.5)         - seconds since the last command
- *                      after which it is treated as zero (safety stop).
- *
- * Implementation notes
- * ---------------------
- * The servo error is computed in the body frame:
- *
- *   F_body = clamp(kv_linear * (v_cmd - v_meas), +-max_force)   (x, y)
- *   T_body = clamp(kv_yaw    * (w_cmd - w_meas), +-max_torque)  (about z)
- *
- * where v_meas/w_meas come from mj_objectVelocity(..., flg_local=1), i.e. the body's
- * own 6D velocity expressed in its own frame. F_body/T_body are then rotated into the
- * world frame via data->xmat (body -> world rotation) before being written into
- * data->xfrc_applied at the body's slot. Because the force/torque are applied at the
- * body's centre of mass (no offset application point), no wrench-transport term is
- * needed, unlike ExternalWrenchPlugin's arbitrary application point.
- *
- * update() unconditionally overwrites all 6 xfrc_applied entries for the body every
- * cycle, so no stale contribution from a previous cycle is ever left behind.
+ *   body                (string, required) - MJCF body name of the base. Must have a
+ *                        <freejoint/>; init() fails otherwise, since there is no qvel to
+ *                        override without one.
+ *   cmd_vel_topic       (string, default "cmd_vel")   - command topic name.
+ *   use_stamped_twist   (bool,   default false)       - subscribe to
+ *                        geometry_msgs/TwistStamped instead of geometry_msgs/Twist.
+ *   max_linear_velocity (double, default +inf) - clamps the commanded planar speed
+ *                        sqrt(vx^2+vy^2) [m/s]; direction is preserved when scaled down.
+ *   max_yaw_rate        (double, default +inf) - clamps the commanded yaw-rate [rad/s].
+ *   cmd_timeout         (double, default 0.5)  - seconds since the last command after
+ *                        which it is treated as zero (safety stop).
  */
 class BaseVelocityPlugin : public MuJoCoROS2ControlPluginBase
 {
@@ -95,15 +87,14 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr twist_sub_;
   rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr twist_stamped_sub_;
 
-  // Model/body lookup
+  // Model/body/joint lookup
   const mjModel* model_{ nullptr };
   int body_id_{ -1 };
+  int qvel_adr_{ -1 };
 
-  // Servo parameters
-  double kv_linear_{ 200.0 };
-  double kv_yaw_{ 50.0 };
-  double max_force_{ 1000.0 };
-  double max_torque_{ 500.0 };
+  // Clamp parameters
+  double max_linear_velocity_{ std::numeric_limits<double>::infinity() };
+  double max_yaw_rate_{ std::numeric_limits<double>::infinity() };
   rclcpp::Duration cmd_timeout_{ 0, 0 };
 
   struct CommandState

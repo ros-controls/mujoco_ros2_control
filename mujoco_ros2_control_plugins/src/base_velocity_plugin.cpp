@@ -14,6 +14,7 @@
 
 #include "base_velocity_plugin.hpp"
 
+#include <cmath>
 #include <mutex>
 #include <string>
 
@@ -65,30 +66,26 @@ bool BaseVelocityPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model
     return false;
   }
 
-  // A free joint is what lets the servo actually move the body; warn (but don't
-  // fail) if the body is welded/fixed, since the wrench would then have no effect.
-  bool has_free_joint = false;
+  // A free joint's qvel is what the velocity override writes into -- without one, there is
+  // nothing for this plugin to drive, so this is a hard failure rather than a warning.
   for (int j = 0; j < model_->njnt; ++j)
   {
     if (model_->jnt_bodyid[j] == body_id_ && model_->jnt_type[j] == mjJNT_FREE)
     {
-      has_free_joint = true;
+      qvel_adr_ = model_->jnt_dofadr[j];
       break;
     }
   }
-  if (!has_free_joint)
+  if (qvel_adr_ < 0)
   {
-    RCLCPP_WARN(logger_,
-                "Body '%s' has no free joint; BaseVelocityPlugin's servo wrench will have no effect on it.",
-                body_name.c_str());
+    RCLCPP_ERROR(logger_, "Body '%s' has no free joint; BaseVelocityPlugin cannot drive it.", body_name.c_str());
+    return false;
   }
 
   const std::string cmd_vel_topic = declareOrGetParameter<std::string>(node_, "cmd_vel_topic", "cmd_vel");
   const bool use_stamped_twist = declareOrGetParameter<bool>(node_, "use_stamped_twist", false);
-  kv_linear_ = declareOrGetParameter<double>(node_, "kv_linear", kv_linear_);
-  kv_yaw_ = declareOrGetParameter<double>(node_, "kv_yaw", kv_yaw_);
-  max_force_ = declareOrGetParameter<double>(node_, "max_force", max_force_);
-  max_torque_ = declareOrGetParameter<double>(node_, "max_torque", max_torque_);
+  max_linear_velocity_ = declareOrGetParameter<double>(node_, "max_linear_velocity", max_linear_velocity_);
+  max_yaw_rate_ = declareOrGetParameter<double>(node_, "max_yaw_rate", max_yaw_rate_);
   const double cmd_timeout_sec = declareOrGetParameter<double>(node_, "cmd_timeout", 0.5);
   cmd_timeout_ = rclcpp::Duration::from_seconds(cmd_timeout_sec);
 
@@ -106,9 +103,9 @@ bool BaseVelocityPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model
 
   RCLCPP_INFO(logger_,
               "BaseVelocityPlugin initialised for body '%s'. Listening for %s on '%s'. "
-              "kv_linear=%.2f kv_yaw=%.2f cmd_timeout=%.2fs",
-              body_name.c_str(), use_stamped_twist ? "TwistStamped" : "Twist", cmd_vel_topic.c_str(), kv_linear_,
-              kv_yaw_, cmd_timeout_sec);
+              "max_linear_velocity=%.2f max_yaw_rate=%.2f cmd_timeout=%.2fs",
+              body_name.c_str(), use_stamped_twist ? "TwistStamped" : "Twist", cmd_vel_topic.c_str(),
+              max_linear_velocity_, max_yaw_rate_, cmd_timeout_sec);
 
   return true;
 }
@@ -131,7 +128,7 @@ void BaseVelocityPlugin::storeCommand(double vx, double vy, double wz)
 
 void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 {
-  if (body_id_ < 0)
+  if (body_id_ < 0 || qvel_adr_ < 0)
   {
     return;
   }
@@ -146,8 +143,7 @@ void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
   }
 
   // Step 2 - a stale (or never-received) command is treated as a zero-velocity
-  // command, i.e. the base is commanded to stop rather than coast under whatever
-  // wrench was last computed.
+  // command, i.e. the base is commanded to stop rather than coast on the last override.
   double vx_cmd = 0.0, vy_cmd = 0.0, wz_cmd = 0.0;
   if (cached_cmd_.valid)
   {
@@ -160,33 +156,22 @@ void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
     }
   }
 
-  // Step 3 - measure the body's current velocity in its own (body) frame.
-  mjtNum vel6[6];  // (rot:lin) = [wx, wy, wz, vx, vy, vz]
-  mj_objectVelocity(model_, data, mjOBJ_BODY, body_id_, vel6, /*flg_local=*/1);
-  const double vx_meas = vel6[3];
-  const double vy_meas = vel6[4];
-  const double wz_meas = vel6[2];
-
-  // Step 4 - proportional velocity servo, body frame, saturated.
-  const double f_body_x = mju_clip(kv_linear_ * (vx_cmd - vx_meas), -max_force_, max_force_);
-  const double f_body_y = mju_clip(kv_linear_ * (vy_cmd - vy_meas), -max_force_, max_force_);
-  const double t_body_z = mju_clip(kv_yaw_ * (wz_cmd - wz_meas), -max_torque_, max_torque_);
-
-  // Step 5 - rotate the body-frame force/torque into the world frame. xmat is the
-  // row-major 3x3 body->world rotation. Applying the force at the body's centre of
-  // mass (i.e. no offset application point) means the torque needs no additional
-  // wrench-transport term, unlike ExternalWrenchPlugin's arbitrary application point.
-  const mjtNum* xmat = data->xmat + body_id_ * 9;
-  const mjtNum force_world[3] = { xmat[0] * f_body_x + xmat[1] * f_body_y, xmat[3] * f_body_x + xmat[4] * f_body_y,
-                                  xmat[6] * f_body_x + xmat[7] * f_body_y };
-  const mjtNum torque_world[3] = { xmat[2] * t_body_z, xmat[5] * t_body_z, xmat[8] * t_body_z };
-
-  mjtNum* base = data->xfrc_applied + body_id_ * 6;
-  for (int j = 0; j < 3; ++j)
+  // Step 3 - clamp to the configured limits, preserving direction for the planar speed.
+  const double linear_speed = std::hypot(vx_cmd, vy_cmd);
+  if (linear_speed > max_linear_velocity_)
   {
-    base[j] = force_world[j];
-    base[3 + j] = torque_world[j];
+    const double scale = max_linear_velocity_ / linear_speed;
+    vx_cmd *= scale;
+    vy_cmd *= scale;
   }
+  wz_cmd = mju_clip(wz_cmd, -max_yaw_rate_, max_yaw_rate_);
+
+  // Step 4 - rotate the commanded body-frame linear velocity into the world frame (a free
+  // joint's linear qvel is world-frame)
+  const mjtNum* xmat = data->xmat + body_id_ * 9;
+  data->qvel[qvel_adr_ + 0] = xmat[0] * vx_cmd + xmat[1] * vy_cmd;
+  data->qvel[qvel_adr_ + 1] = xmat[3] * vx_cmd + xmat[4] * vy_cmd;
+  data->qvel[qvel_adr_ + 5] = wz_cmd;
 }
 
 void BaseVelocityPlugin::cleanup()
