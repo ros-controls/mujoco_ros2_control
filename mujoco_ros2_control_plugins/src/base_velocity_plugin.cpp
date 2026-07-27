@@ -97,8 +97,10 @@ bool BaseVelocityPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model
   }
   else
   {
-    twist_sub_ = node_->create_subscription<geometry_msgs::msg::Twist>(
-        cmd_vel_topic, rclcpp::SystemDefaultsQoS(), [this](const geometry_msgs::msg::Twist& msg) { twistCallback(msg); });
+    twist_sub_ = node_->create_subscription<geometry_msgs::msg::Twist>(cmd_vel_topic, rclcpp::SystemDefaultsQoS(),
+                                                                       [this](const geometry_msgs::msg::Twist& msg) {
+                                                                         twistCallback(msg);
+                                                                       });
   }
 
   RCLCPP_INFO(logger_,

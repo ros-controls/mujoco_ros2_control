@@ -1034,8 +1034,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   // out xfrc_applied so plugins can update as needed. qvel is NaN-filled rather than zeroed: a plugin
   // requests a hard velocity override on a DOF by writing a finite value into it.
   mju_zero(control_data->xfrc_applied, 6 * static_cast<int>(simulation_->model()->nbody));
-  std::fill(control_data->qvel, control_data->qvel + simulation_->model()->nv,
-            std::numeric_limits<mjtNum>::quiet_NaN());
+  std::fill(control_data->qvel, control_data->qvel + simulation_->model()->nv, std::numeric_limits<mjtNum>::quiet_NaN());
   for (auto& plugin : plugin_instances_)
   {
     plugin->update(simulation_->model(), control_data);

@@ -17,9 +17,9 @@ Tutorial 5: Base Velocity Plugin
 
 This tutorial demonstrates driving a mobile/floating-base robot with BaseVelocityPlugin.
 The mobile base is a free-floating, wheeled chassis (MJCF <freejoint>) carrying a
-Because the override is kinematic, it outranks the physics engine: the mounted arm's 
-reaction forces as it swings have no effect on the base's velocity, but neither does 
-colliding with the wall in the scene -- see doc/tutorials.rst (Tutorial 5) and 
+Because the override is kinematic, it outranks the physics engine: the mounted arm's
+reaction forces as it swings have no effect on the base's velocity, but neither does
+colliding with the wall in the scene -- see doc/tutorials.rst (Tutorial 5) and
 mobile_base.xml for the full rationale.
 
 Key concepts:

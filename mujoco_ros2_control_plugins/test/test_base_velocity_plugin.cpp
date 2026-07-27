@@ -21,9 +21,9 @@
 #include <string>
 #include <thread>
 
+#include <mujoco/mujoco.h>
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
-#include <mujoco/mujoco.h>
 #include <rclcpp/rclcpp.hpp>
 
 #include "base_velocity_plugin.hpp"
@@ -140,8 +140,14 @@ protected:
   }
 
   /// Index of the (only) joint's first qvel/qpos entry in this single-free-joint test model.
-  int dofAdr() const { return model_->jnt_dofadr[0]; }
-  int qposAdr() const { return model_->jnt_qposadr[0]; }
+  int dofAdr() const
+  {
+    return model_->jnt_dofadr[0];
+  }
+  int qposAdr() const
+  {
+    return model_->jnt_qposadr[0];
+  }
 
   /// NaN-fills this body's 6 qvel entries, mirroring the real system's per-cycle pre-fill
   /// (MujocoSystemInterface::write()) so tests can verify which entries the plugin leaves
