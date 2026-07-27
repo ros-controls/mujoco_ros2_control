@@ -299,10 +299,21 @@ Services
       ros2 service call /ros2_control_node/set_pause mujoco_ros2_control_msgs/srv/SetPause "{paused: false}"
 
 ``~/reset_world`` (``mujoco_ros2_control_msgs/srv/ResetWorld``)
-   Resets the simulation state.
+   Resets the simulation state, optionally applying per-joint state overrides on top of the restored state.
 
    - If the optional ``keyframe`` string field is empty, the simulation is restored to the state captured at startup (initial joint positions, velocities, and control values).
    - If a ``keyframe`` name is provided, that named keyframe from the MJCF is applied instead.
+   - ``joint_state_overrides`` (``sensor_msgs/JointState``): optional overrides for single-DOF
+     (hinge/slide) joints, keyed by MuJoCo joint name — e.g. opening a door or posing an
+     uncontrolled mechanism as part of the reset. ``position`` and ``velocity`` must each be
+     empty or the same length as ``name``; an empty array leaves that field at its reset value.
+     ``effort`` is not supported and must be empty.
+   - ``free_joint_state_overrides`` (``mujoco_ros2_control_msgs/FreeJointState[]``): optional
+     overrides for free-joint objects, keyed by the name of the body each free joint drives.
+     Entries behave exactly like the ``~/set_free_joint_state`` service (see below), except that
+     any ``pose``/``twist`` ``frame_id`` is resolved against body poses *after* the reset is
+     applied — so an object can be placed relative to where another body ends up, not where it
+     was before the reset.
    - Returns ``success`` and a human-readable ``message``.
 
    .. code-block:: bash
@@ -313,10 +324,21 @@ Services
       # Reset to a named MJCF keyframe
       ros2 service call /ros2_control_node/reset_world mujoco_ros2_control_msgs/srv/ResetWorld "{keyframe: 'home'}"
 
+      # Reset to a keyframe, but with the cabinet door open and "box_1" placed on the table
+      ros2 service call /ros2_control_node/reset_world mujoco_ros2_control_msgs/srv/ResetWorld \
+        "{keyframe: 'home',
+          joint_state_overrides: {name: ['door_hinge'], position: [1.57]},
+          free_joint_state_overrides: [
+            {name: 'box_1', pose: {header: {frame_id: 'table'}, pose: {position: {z: 0.4}}}}
+          ]}"
+
    .. important::
 
       If controllers are active during the service call, the robot may reset to the initial state and then immediately
       snap back to its previous commanded position. Deactivate any active joint controllers before calling this service.
+      This applies equally to ``joint_state_overrides`` targeting controlled joints: the hardware interface re-syncs its
+      command interfaces to the overridden positions as part of the reset, but an active controller may still command
+      the joints elsewhere on its next update.
 
 ``~/step_simulation`` (``mujoco_ros2_control_msgs/srv/StepSimulation``)
    Advances the paused simulation by an exact number of physics steps and blocks until all steps have completed.

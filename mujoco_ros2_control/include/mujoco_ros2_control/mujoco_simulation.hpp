@@ -45,6 +45,7 @@
 #include <mujoco_ros2_control_msgs/srv/set_pause.hpp>
 #include <mujoco_ros2_control_msgs/srv/step_simulation.hpp>
 #include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 
 namespace mujoco_ros2_control
 {
@@ -178,10 +179,17 @@ public:
   }
 
   /**
-   * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state.
+   * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state,
+   * optionally applying joint state overrides on top of the restored state.
+   *
+   * Overrides are assumed to have been validated by the caller, so they cannot fail here
+   * (see `resolve_joint_state_writes` / `resolve_free_joint_writes`).
+   *
    * @note Caller must hold the sim mutex.
    */
-  void reset_world_state(bool fill_initial_state);
+  void
+  reset_world_state(bool fill_initial_state, const sensor_msgs::msg::JointState& joint_state_overrides = {},
+                    const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joint_state_overrides = {});
 
   /**
    * @brief Sets the pose and velocity of one or more free-joint objects, identified by body name.
@@ -360,18 +368,61 @@ private:
                         std::string& error_message);
 
   /**
-   * @brief Resolves a `FreeJointState` entry into a `FreeJointWrite`, without touching
+   * @brief Resolves a list of `FreeJointState` entries into `FreeJointWrite`s, without touching
    * `mj_data_`.
    *
-   * `pose` and `twist` resolve their own `header.frame_id` independently -- they may reference
-   * different bodies, or one may stay in the world frame while the other is relative.
+   * Each entry's `pose` and `twist` resolve their own `header.frame_id` independently -- they
+   * may reference different bodies, or vary between world vs. relative frame to another body.
    *
    * @note Caller must hold the sim mutex.
-   * @return true if the body, its free joint, and both frame_ids were resolved; false
+   * @return true if every entry's body, free joint, and both frame_ids were resolved; false
    * otherwise, with `error_message` set.
    */
-  bool resolve_free_joint_write(const mujoco_ros2_control_msgs::msg::FreeJointState& state, FreeJointWrite& out,
-                                std::string& error_message);
+  bool resolve_free_joint_writes(const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joints,
+                                 std::vector<FreeJointWrite>& writes, std::string& error_message);
+
+  /**
+   * @brief Writes resolved free-joint states into `mj_data_->qpos`/`qvel`.
+   * Does not refresh snapshots or run forward dynamics; the caller is responsible for both.
+   *
+   * @note Caller must hold the sim mutex.
+   */
+  void apply_free_joint_writes(const std::vector<FreeJointWrite>& writes);
+
+  /**
+   * @brief A single-DOF joint state override resolved to qpos/qvel addresses, ready to write.
+   */
+  struct SingleDofJointWrite
+  {
+    int qpos_adr{ -1 };
+    int qvel_adr{ -1 };
+    bool has_position{ false };
+    bool has_velocity{ false };
+    mjtNum position{ 0.0 };
+    mjtNum velocity{ 0.0 };
+  };
+
+  /**
+   * @brief Resolves a `JointState` message into `SingleDofJointWrite`s, without touching
+   * `mj_data_`.
+   *
+   * Every named joint must be a single-DOF (hinge or slide) MuJoCo joint, and `position` /
+   * `velocity` must each be empty or the same length as `name`. `effort` is not supported and
+   * must be empty.
+   *
+   * @note Caller must hold the sim mutex.
+   * @return true if every entry was resolved; false otherwise, with `error_message` set.
+   */
+  bool resolve_joint_state_writes(const sensor_msgs::msg::JointState& joint_state,
+                                  std::vector<SingleDofJointWrite>& writes, std::string& error_message);
+
+  /**
+   * @brief Writes resolved single-DOF joint states into `mj_data_->qpos`/`qvel`.
+   * Does not refresh snapshots or run forward dynamics; the caller is responsible for both.
+   *
+   * @note Caller must hold the sim mutex.
+   */
+  void apply_joint_state_writes(const std::vector<SingleDofJointWrite>& writes);
 
   // Service callbacks
   void reset_world_callback(const std::shared_ptr<mujoco_ros2_control_msgs::srv::ResetWorld::Request> request,
