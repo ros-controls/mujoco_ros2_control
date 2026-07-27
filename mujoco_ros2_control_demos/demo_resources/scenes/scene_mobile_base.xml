@@ -18,16 +18,16 @@
 
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
-    <!-- Zero friction matching the wheel geoms (see mobile_base.xml): both need it set,
-         since MuJoCo combines contact friction as the max of the two. The ground can't exert
-         any tangential force on the base at all; only BaseVelocityPlugin's servo can change
-         its velocity. -->
+    <!-- Zero friction matching the wheel geoms (see mobile_base.xml). No longer functionally
+         required for propulsion (BaseVelocityPlugin overrides the base's qvel directly), kept
+         so the ground can never exert any tangential force on the base either. -->
     <geom conaffinity="1" contype="1" material="groundplane" name="floor" pos="0 0 0" size="0 0 0.01" type="plane"
           friction="0 0 0"/>
-    <!-- Obstacle: BaseVelocityPlugin only replaces wheel-ground propulsion, so driving
-         into this wall still stops the base like a normal collision would. Placed a few
-         metres out to give room to brake (release/re-publish cmd_vel) before reaching it
-         rather than colliding at full commanded speed. -->
+    <!-- Obstacle: BaseVelocityPlugin's velocity override outranks the contact solver, so
+         driving into this wall will NOT stop the base the way a normal collision would;
+         it pushes through/climbs it instead. Placed a few metres out to give room to
+         observe this (or to release/re-publish cmd_vel before reaching it) rather than
+         colliding at full commanded speed immediately after launch. -->
     <geom name="wall" type="box" pos="4.0 0 0.25" size="0.05 1.0 0.25" rgba="0.6 0.2 0.2 1"/>
   </worldbody>
 </mujoco>

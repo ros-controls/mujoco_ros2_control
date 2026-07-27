@@ -5,15 +5,3 @@
         type: "mujoco_ros2_control_plugins/BaseVelocityPlugin"
         body: base_link
         cmd_vel_topic: /cmd_vel
-        # Higher than the default (200.0): a proportional-only velocity servo has an inherent
-        # steady-state droop under a sustained disturbance (creep velocity = disturbance force /
-        # kv_linear), so a higher gain holds the base tighter against the mounted arm's reaction
-        # forces while swinging, without sacrificing responsiveness to commanded velocities.
-        kv_linear: 2000.0
-        # Lower than the default (50.0): kv_yaw is a proportional-only gain with no damping term,
-        # so it's only stable up to roughly 2*Izz/control_period for the body it's driving. The
-        # mounted arm's own (stiff, position-controlled) joint reduces the base's *effective*
-        # rotational inertia as seen by the yaw loop within a single control cycle, which lowered
-        # that stability ceiling below the default -- at kv_yaw=50 a commanded yaw rate diverged
-        # into a runaway oscillation instead of converging.
-        kv_yaw: 10.0

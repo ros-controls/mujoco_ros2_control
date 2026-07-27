@@ -88,9 +88,17 @@ Tutorial 5: Base Velocity Plugin
 
 Demonstrates driving a mobile/floating-base robot with ``BaseVelocityPlugin``: a free-floating,
 wheeled chassis (MJCF ``<freejoint>``) carrying a 1-DOF arm, driven from a ``cmd_vel`` topic via a
-velocity servo. The wheels and ground have zero friction, so the ground can never exert any
-tangential force on the base -- only the servo can change its velocity. Collisions with the wall
-in the scene are still handled by the physics engine as normal.
+hard velocity override applied directly to the chassis's free-joint ``qvel`` every cycle. The
+wheels and ground have zero friction, which is now largely cosmetic -- propulsion no longer goes
+through wheel-ground contact at all, so it does not depend on friction either way.
+
+.. warning::
+
+   Because the override is kinematic, it outranks the contact solver: the wall in the scene will
+   **not** stop the base -- it will push through or climb it rather than being stopped by contact,
+   since the commanded velocity is reasserted every cycle regardless of collisions. This is the
+   trade-off for exact, disturbance-immune velocity tracking; see the ``BaseVelocityPlugin``
+   documentation for details.
 
 .. code-block:: bash
 
@@ -99,10 +107,11 @@ in the scene are still handled by the physics engine as normal.
    # In another terminal, drive the base:
    ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}, angular: {z: 0.2}}" --rate 10
 
-**Disturbance rejection**: swinging the mounted arm creates a reaction force/torque on the base
+**Disturbance immunity**: swinging the mounted arm creates a reaction force/torque on the base
 through the joint, unrelated to ground friction, since it acts directly between the two bodies.
-``BaseVelocityPlugin`` measures the base's own velocity regardless of what disturbs it, so with no
-``cmd_vel`` active the base should stay close to put while the arm moves, rather than drifting off.
+Because ``BaseVelocityPlugin`` overrides the base's driven DOFs directly rather than servoing
+against them, this reaction has *no* effect on the base's velocity at all -- not approximately,
+exactly none -- so with no ``cmd_vel`` active the base stays exactly in place while the arm moves.
 The arm's joint is range-limited to a back-and-forth sweep rather than a continuous spin:
 
 .. code-block:: bash
@@ -110,9 +119,9 @@ The arm's joint is range-limited to a back-and-forth sweep rather than a continu
    ros2 topic pub /arm_position_controller/commands std_msgs/msg/Float64MultiArray "data: [0.7]"
    ros2 topic pub /arm_position_controller/commands std_msgs/msg/Float64MultiArray "data: [-0.7]"
 
-**Key concepts:** ``BaseVelocityPlugin`` velocity servo, driving a MJCF ``<freejoint>`` body,
-disturbance rejection against reaction forces from a moving mounted joint, floating-base odometry
-(``odom_free_joint_name``).
+**Key concepts:** ``BaseVelocityPlugin`` free-joint velocity override, driving a MJCF
+``<freejoint>`` body, immunity to reaction forces from a moving mounted joint, floating-base
+odometry (``odom_free_joint_name``).
 
 **Resources:** ``demo_resources/scenes/scene_mobile_base.xml``, ``demo_resources/mobile_base/mobile_base.xml``,
 ``demo_resources/mobile_base/mobile_base.urdf``, ``config/mujoco_ros2_control_plugins_base_velocity.yaml``

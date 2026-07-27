@@ -17,18 +17,16 @@ Tutorial 5: Base Velocity Plugin
 
 This tutorial demonstrates driving a mobile/floating-base robot with BaseVelocityPlugin.
 The mobile base is a free-floating, wheeled chassis (MJCF <freejoint>) carrying a
-1-DOF arm mounted on top. Propulsion is driven entirely by the plugin's velocity servo
-wrench -- the base itself has no ros2_control joints, only the arm does. Ground/wheel
-friction is zero, so the *only* thing that can change the base's velocity is the servo,
-whether the disturbance is an external push or the mounted arm's own reaction forces as
-it swings. See doc/tutorials.rst (Tutorial 5) and mobile_base.xml for the full rationale.
+Because the override is kinematic, it outranks the physics engine: the mounted arm's 
+reaction forces as it swings have no effect on the base's velocity, but neither does 
+colliding with the wall in the scene -- see doc/tutorials.rst (Tutorial 5) and 
+mobile_base.xml for the full rationale.
 
 Key concepts:
-- BaseVelocityPlugin: proportional velocity servo applied via data->xfrc_applied
+- BaseVelocityPlugin: hard free-joint velocity override, applied by writing directly into
+  data->qvel during update()
 - Driving a MJCF <freejoint> body from a cmd_vel-style topic
-- Disturbance rejection: the servo actively holds the commanded velocity (zero, by
-  default) against internal reaction forces from a moving mounted joint, rather than
-  relying on friction to damp them out
+- Disturbance immunity: the override holds the commanded velocity (zero, by default)
 - Floating-base odometry publishing (mujoco_ros2_control's odom_free_joint_name)
 
 Resources used:
