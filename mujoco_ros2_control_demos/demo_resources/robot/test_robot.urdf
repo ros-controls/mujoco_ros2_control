@@ -353,20 +353,6 @@
       <state_interface name="torque"/>
     </joint>
 
-    <xacro:if value="$(eval use_transmissions)">
-      <!-- When the transmissions is added to the ros2_control tag, the simulation tries to look
-      for the actuators in the parsed MJCF description. Inorder, to test this setup, we do it by
-      modifying the robot description contents in the test_robot.launch.py-->
-      <transmission name="joint1_trans">
-        <plugin>transmission_interface/SimpleTransmission</plugin>
-        <actuator name="actuator1" role="actuator1"/>
-        <joint name="joint1" role="joint1">
-          <mechanical_reduction>2.0</mechanical_reduction>
-          <offset>0.0</offset>
-        </joint>
-      </transmission>
-    </xacro:if>
-
     <joint name="joint2">
       <command_interface name="position"/>
       <xacro:if value="$(arg use_pid)">
@@ -402,16 +388,21 @@
     </joint>
 
     <xacro:if value="$(eval use_transmissions)">
-      <!-- When the transmissions is added to the ros2_control tag, the simulation tries to look
-      for the actuators in the parsed MJCF description. Inorder, to test this setup, we do it by
-      modifying the robot description contents in the test_robot.launch.py-->
-      <transmission name="joint2_trans">
-        <plugin>transmission_interface/SimpleTransmission</plugin>
-        <actuator name="actuator2" role="actuator1"/>
-        <joint name="joint2" role="joint1">
+      <!-- When the transmission is added to the ros2_control tag, the simulation tries to look
+      for the actuators in the parsed MJCF description. In order to test this setup, we do it by
+      modifying the robot description contents in 04_transmissions.launch.py -->
+      <transmission name="arm_trans">
+        <plugin>transmission_interface/DifferentialTransmission</plugin>
+        <joint name="joint1" role="joint1">
+          <mechanical_reduction>2.0</mechanical_reduction>
+          <offset>0.0</offset>
+        </joint>
+        <joint name="joint2" role="joint2">
           <mechanical_reduction>0.5</mechanical_reduction>
           <offset>0.0</offset>
         </joint>
+        <actuator name="actuator1" role="actuator1"/>
+        <actuator name="actuator2" role="actuator2"/>
       </transmission>
     </xacro:if>
 

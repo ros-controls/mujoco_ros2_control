@@ -29,6 +29,17 @@
       Multiple concurrent wrenches on different or the same bodies are supported.
     </description>
   </class>
+  <class name="mujoco_ros2_control_plugins/FreeJointStatePublisherPlugin"
+         type="mujoco_ros2_control_plugins::FreeJointStatePublisherPlugin"
+         base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
+    <description>
+      Publishes the pose and velocity of every MuJoCo free-joint body (or a user-selected subset,
+      via the body_names parameter) to a single topic, as
+      mujoco_ros2_control_msgs/msg/FreeJointStateArray. The reference frame the poses/twists are
+      expressed in is chosen with the frame_id parameter; it defaults to the world frame when
+      unset.
+    </description>
+  </class>
   <class name="mujoco_ros2_control_plugins/Mujoco3dLidarPlugin"
          type="mujoco_ros2_control_plugins::Mujoco3dLidarPlugin"
          base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
