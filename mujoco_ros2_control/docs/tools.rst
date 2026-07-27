@@ -188,10 +188,14 @@ Main sub-elements
      ``min_angle`` and ``max_angle`` at the step size ``angle_increment``. The generated
      rangefinders will be named by the ``sensor_name`` base (e.g. ``rf-01``, ``rf-02``, ...); ROS-facing
      ``sensor`` entries in the ``ros2_control`` section should use the same base name.
-   - ``modify_element`` (attributes: ``type``, ``name``, ...any MJCF attributes...) — finds the
-     generated MJCF element by ``type`` (for example ``joint`` or ``body``) and ``name`` and sets or
-     overwrites the provided attributes. Useful to tweak physics properties like ``frictionloss``,
-     ``stiffness``, ``damping``, ``gravcomp``, etc.
+   - ``modify_element`` (attributes: ``type``, ``name`` or ``mesh`` + ``class`` for geom,
+     ...any MJCF attributes...) — finds the generated MJCF element by ``type``
+     (for example ``joint``, ``body`` or ``geom``) and sets or overwrites the provided attributes.
+     For ``geom`` type, elements are identified by ``mesh`` and ``class`` instead of ``name``.
+     Useful to tweak physics properties like ``frictionloss``, ``stiffness``, ``damping``,
+     ``gravcomp``, etc.
+
+
 
 ``scene``
    Scene-level MJCF fragments such as ``asset``, ``worldbody``, ``visual``, and small scene
@@ -334,7 +338,9 @@ attributes the demo converter recognizes; converters may extend this list.
 
 ``modify_element``
 
-- Required: ``type`` (string) — MJCF element type to target (e.g. ``joint``, ``body``).
-- Required: ``name`` (string) — name attribute of the MJCF element to modify.
+- Required: ``type`` (string) — MJCF element type to target (e.g. ``joint``, ``body``, ``geom``).
+- Required for non-geom elements: ``name`` (string) — name attribute of the MJCF element to modify.
+- Required for ``geom`` elements: ``mesh`` (string) and ``class`` (string) — used together to uniquely identify the geom element.
 - Additional attributes: any MJCF attributes you want to set or overwrite (for example ``frictionloss``, ``damping``, ``gravcomp``, ``solimp``, ``solref``, ...).
 - Example: ``<modify_element type="joint" name="joint1" frictionloss="1.0" damping="2.0"/>``.
+- Example: ``<modify_element type="geom" mesh="link1_mesh" class="collision" friction = "0.1 0.005 0.0001"/>``
