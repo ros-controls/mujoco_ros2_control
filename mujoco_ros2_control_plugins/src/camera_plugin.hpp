@@ -51,6 +51,9 @@
 namespace mujoco_ros2_control_plugins
 {
 
+/**
+ * @brief Selects when a camera's images are rendered and published.
+ */
 enum class CameraPolicy
 {
   DISABLED = 0,  // Publishing is disabled.
@@ -58,6 +61,13 @@ enum class CameraPolicy
   POLLED         // Publishing happens only when triggered by a service.
 };
 
+/**
+ * @brief Per-camera bookkeeping: configuration, buffers, and ROS publishers/service for one
+ * MuJoCo camera.
+ *
+ * One instance exists per camera registered by CameraPlugin::register_cameras(). Buffers and
+ * messages are reused across renders to avoid reallocating on every publish.
+ */
 struct CameraData
 {
   CameraPolicy policy = CameraPolicy::STREAMING;
@@ -137,6 +147,17 @@ public:
   ~CameraPlugin() override = default;
 
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
+
+  /**
+   * @brief Overload of init() that takes an injectable GLFW initializer.
+   *
+   * Exists so tests can substitute a fake @p glfw_init_fn (e.g. one that always fails) to
+   * exercise the EGL fallback / rendering-disabled paths without requiring a real display or
+   * GL context. The public init() override simply forwards to this overload using the real
+   * `glfwInit`.
+   *
+   * @param glfw_init_fn Function used to attempt GLFW initialization; same signature as `glfwInit`.
+   */
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data, GlfwInitFn glfw_init_fn);
   void update(const mjModel* model, mjData* data) override;
   void cleanup() override;

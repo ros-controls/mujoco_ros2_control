@@ -28,6 +28,7 @@ jobs:
   build_and_test:
     timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
         ros_distro: [humble, jazzy, kilted, lyrical, rolling]
     runs-on: ubuntu-latest

@@ -19,6 +19,10 @@ find_package(nav_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
+find_package(realtime_tools REQUIRED)
+find_package(rosgraph_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(mujoco_ros2_control_msgs REQUIRED)
 find_package(mujoco_ros2_control_plugins REQUIRED)
 find_package(Threads REQUIRED)
@@ -183,12 +187,16 @@ PUBLIC
   ${MUJOCO_LIB}
   control_toolbox::control_toolbox
   Eigen3::Eigen
+  realtime_tools::realtime_tools
+  ${rosgraph_msgs_TARGETS}
+  ${sensor_msgs_TARGETS}
 PRIVATE
   mujoco_simulate
   Threads::Threads
   lodepng
   glfw
   ${CMAKE_DL_LIBS}
+  ${std_msgs_TARGETS}
 )
 
 # Note: the transmissions_interface must NOT be statically linked against the library, only headers
@@ -268,6 +276,9 @@ ament_export_dependencies(
   transmission_interface
   rclcpp
   rclcpp_lifecycle
+  realtime_tools
+  rosgraph_msgs
+  sensor_msgs
   geometry_msgs
   nav_msgs
   mujoco_ros2_control_msgs
