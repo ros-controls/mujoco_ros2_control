@@ -526,9 +526,9 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   // Add state interfaces for fts sensors
   for (auto& sensor : ft_sensor_data_)
   {
-    if (auto it = sensors_hw_info_.find(sensor.name); it != sensors_hw_info_.end())
+    for (const hardware_interface::ComponentInfo& ci : sensors_hw_info_[sensor.name])
     {
-      for (const auto& state_if : it->second.state_interfaces)
+      for (const auto& state_if : ci.state_interfaces)
       {
         if (state_if.name == "force.x")
         {
@@ -561,9 +561,9 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   // Add state interfaces for IMU sensors
   for (auto& sensor : imu_sensor_data_)
   {
-    if (auto it = sensors_hw_info_.find(sensor.name); it != sensors_hw_info_.end())
+    for (const hardware_interface::ComponentInfo& ci : sensors_hw_info_[sensor.name])
     {
-      for (const auto& state_if : it->second.state_interfaces)
+      for (const auto& state_if : ci.state_interfaces)
       {
         if (state_if.name == "orientation.x")
         {
@@ -641,9 +641,9 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   // Add state interfaces for pose sensors
   for (auto& sensor : pose_sensor_data_)
   {
-    if (auto it = sensors_hw_info_.find(sensor.name); it != sensors_hw_info_.end())
+    for (const hardware_interface::ComponentInfo& ci : sensors_hw_info_[sensor.name])
     {
-      for (const auto& state_if : it->second.state_interfaces)
+      for (const auto& state_if : ci.state_interfaces)
       {
         if (state_if.name == "position.x")
         {
@@ -1871,7 +1871,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
                 sensor_name.c_str(), mujoco_type.c_str(), mujoco_sensor_name.c_str());
 
     // Add to the sensor hw information map
-    sensors_hw_info_.insert(std::make_pair(sensor_name, sensor));
+    sensors_hw_info_[sensor_name].push_back(sensor);
 
     if (mujoco_type == "fts")
     {
