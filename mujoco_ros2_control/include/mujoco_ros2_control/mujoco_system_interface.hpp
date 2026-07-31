@@ -22,6 +22,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 #include <hardware_interface/version.h>
@@ -331,6 +332,9 @@ private:
   // Transmission instances
   std::unique_ptr<pluginlib::ClassLoader<transmission_interface::TransmissionLoader>> transmission_loader_ = nullptr;
   std::vector<std::shared_ptr<transmission_interface::Transmission>> transmission_instances_;
+  // Names of the URDF joints whose state/command is produced by a transmission. Those joints must never be
+  // overwritten by the name-matching direct-copy fallback, even if a MuJoCo joint happens to share their name.
+  std::unordered_set<std::string> transmission_joint_names_;
 
   // Plugin loader and instances
   std::unique_ptr<pluginlib::ClassLoader<mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase>> plugin_loader_ =
