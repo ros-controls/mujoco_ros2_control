@@ -20,6 +20,7 @@
 #include <string>
 #include <utility>
 
+#include <rmw/types.h>
 #include <pluginlib/class_list_macros.hpp>
 
 namespace mujoco_ros2_control_plugins
@@ -104,19 +105,19 @@ bool ContactServicePlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
   }
 
   const auto callback_gate = callback_gate_;
-  service_ = node_->create_service<GetContacts>("get_contacts",
-                                                [this, callback_gate](const GetContacts::Request::SharedPtr request,
-                                                                      GetContacts::Response::SharedPtr response) {
-                                                  CallbackLease lease(callback_gate);
-                                                  if (!lease)
-                                                  {
-                                                    response->success = false;
-                                                    response->message = "Contact service is shutting down.";
-                                                    return;
-                                                  }
-
-                                                  handleGetContacts(request, response);
-                                                });
+  service_ = node_->create_service<GetContacts>(
+      "get_contacts",
+      [this, callback_gate](const std::shared_ptr<rmw_request_id_t> /*request_header*/,
+                            const GetContacts::Request::SharedPtr request, GetContacts::Response::SharedPtr response) {
+        CallbackLease lease(callback_gate);
+        if (!lease)
+        {
+          response->success = false;
+          response->message = "Contact service is shutting down.";
+          return;
+        }
+        handleGetContacts(request, response);
+      });
 
   RCLCPP_INFO(node_->get_logger(), "ContactServicePlugin initialised. Service available at '%s'.",
               service_->get_service_name());
