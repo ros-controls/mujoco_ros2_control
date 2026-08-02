@@ -285,6 +285,64 @@ ExternalWrench Parameters
            force_arrow_scale: 0.01      # 100 N  → 1 m arrow
            torque_arrow_scale: 0.1      # 10 N·m → 1 m arrow
 
+ContactServicePlugin
+~~~~~~~~~~~~~~~~~~~~
+
+Returns the latest MuJoCo contact snapshot on demand. This interface is intended for inspection,
+debugging, logging, and test assertions. Controllers requiring continuous or real-time contact
+feedback should use a topic or hardware state interface instead.
+
+.. list-table::
+   :widths: 25 75
+   :header-rows: 0
+
+   * - **Service**
+     - ``get_contacts`` (``mujoco_ros2_control_msgs/srv/GetContacts``)
+
+The empty request asks the simulation thread for a fresh ``ContactArray`` snapshot. Contacts
+remain in the same order as ``mjData.contact``. An empty array is a successful snapshot with no
+detected contacts. Contact positions and contact-frame axes are expressed in MuJoCo world
+coordinates.
+
+``success`` is false if the simulation thread does not process the capture request before the
+one-second timeout. Failed responses never return an older cached snapshot; ``message`` describes
+the failure.
+
+Each ``Contact`` response entry contains:
+
+* geom, owning body, flex, element, and vertex identifiers for both contact participants;
+* geom and owning body names when the participant is a geom;
+* world-frame contact position, normal, and tangent axes;
+* distance, dimension, exclusion state, inclusion margin, friction, and solver parameters;
+
+The ``solref``, ``solref_friction``, and ``solimp`` arrays use the ``mjNREF`` and ``mjNIMP``
+lengths provided by the linked MuJoCo build, including non-standard vendor builds.
+For flex participants, geom and body identifiers are ``-1`` and their names are empty.
+
+The plugin checks for capture requests in ``update()`` and otherwise returns immediately. Contact
+data is copied from the synchronized ``mjData`` snapshot only when requested. Service callbacks
+wait for the matching capture generation and never access physics-owned data. A paused simulation
+can still succeed when the control loop continues processing ``update()``; it captures the latest
+stable snapshot without advancing simulation time.
+
+**Example configuration**
+
+.. code-block:: yaml
+
+   /**:
+     ros__parameters:
+       mujoco_plugins:
+         contact_service:
+           type: "mujoco_ros2_control_plugins/ContactServicePlugin"
+
+**Example request**
+
+.. code-block:: bash
+
+   ros2 service call \
+     /contact_service/get_contacts \
+     mujoco_ros2_control_msgs/srv/GetContacts
+
 FreeJointStatePublisherPlugin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
