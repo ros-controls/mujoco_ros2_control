@@ -369,6 +369,8 @@ FreeJointStatePublisher Parameters
 
    ros2 topic echo /mujoco_ros2_control_node/free_joint_state_publisher/free_joint_states
 
+.. _rangefinder_lidar_plugin:
+
 RangefinderLidarPlugin
 ~~~~~~~~~~~~~~~~~~~~~~
 
