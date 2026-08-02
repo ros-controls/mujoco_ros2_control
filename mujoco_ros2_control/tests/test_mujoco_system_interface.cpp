@@ -38,10 +38,10 @@
 namespace
 {
 
-// Pendulum model with framepos/framequat sensors on a site at the pendulum body origin.
+// Pendulum model with framepos/framequat and magnetometer sensors on a site at the pendulum body origin.
 constexpr const char* kTestModel = R"(<?xml version="1.0"?>
 <mujoco model="test_system_interface">
-  <option timestep="0.002"/>
+  <option timestep="0.002" magnetic="0.1 0.2 0.3"/>
 
   <worldbody>
     <body name="pendulum" pos="0 0 1">
@@ -54,6 +54,7 @@ constexpr const char* kTestModel = R"(<?xml version="1.0"?>
   <sensor>
     <framepos name="pose_sensor_pos" objtype="site" objname="pendulum_site"/>
     <framequat name="pose_sensor_quat" objtype="site" objname="pendulum_site"/>
+    <magnetometer name="magnetometer_sensor" site="pendulum_site"/>
   </sensor>
 </mujoco>
 )";
@@ -216,6 +217,58 @@ TEST_F(MujocoSystemInterfaceTest, PoseSensorStateInterfacesRead)
   const double quat_norm = std::sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
   EXPECT_NEAR(quat_norm, 1.0, tol);
   EXPECT_NEAR(position_z, 1.0, tol);
+}
+
+TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorStateInterfacesRead)
+{
+  auto hardware_info = create_hardware_info();
+  hardware_interface::ComponentInfo sensor_info;
+  sensor_info.name = "magnetometer_sensor";
+  sensor_info.parameters["mujoco_type"] = "magnetometer";
+  for (const auto* interface_name : { "magnetic_field.x", "magnetic_field.y", "magnetic_field.z" })
+  {
+    hardware_interface::InterfaceInfo interface_info;
+    interface_info.name = interface_name;
+    sensor_info.state_interfaces.push_back(interface_info);
+  }
+  hardware_info.sensors.push_back(sensor_info);
+
+  ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
+
+  mjModel* model = nullptr;
+  mjData* data = nullptr;
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_model(model);
+    interface_->get_data(data);
+    return model != nullptr && data != nullptr && data->time > 0.0;
+  })) << "Simulation did not start stepping";
+
+  interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+
+  const auto state_interfaces = interface_->export_state_interfaces();
+  ASSERT_EQ(state_interfaces.size(), 3u);
+  ASSERT_EQ(state_interfaces[0].get_name(), "magnetometer_sensor/magnetic_field.x");
+  ASSERT_EQ(state_interfaces[1].get_name(), "magnetometer_sensor/magnetic_field.y");
+  ASSERT_EQ(state_interfaces[2].get_name(), "magnetometer_sensor/magnetic_field.z");
+
+  const int magnetometer_id = mj_name2id(model, mjOBJ_SENSOR, "magnetometer_sensor");
+  ASSERT_NE(magnetometer_id, -1);
+  const int magnetometer_data_index = model->sensor_adr[magnetometer_id];
+
+#if ROS_DISTRO_HUMBLE
+  const double magnetic_field_x = state_interfaces[0].get_value();
+  const double magnetic_field_y = state_interfaces[1].get_value();
+  const double magnetic_field_z = state_interfaces[2].get_value();
+#else
+  const double magnetic_field_x = state_interfaces[0].get_optional().value();
+  const double magnetic_field_y = state_interfaces[1].get_optional().value();
+  const double magnetic_field_z = state_interfaces[2].get_optional().value();
+#endif
+
+  const double tol = 1e-9;
+  EXPECT_NEAR(magnetic_field_x, data->sensordata[magnetometer_data_index], tol);
+  EXPECT_NEAR(magnetic_field_y, data->sensordata[magnetometer_data_index + 1], tol);
+  EXPECT_NEAR(magnetic_field_z, data->sensordata[magnetometer_data_index + 2], tol);
 }
 
 int main(int argc, char** argv)

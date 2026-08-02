@@ -677,6 +677,29 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
     }
   }
 
+  // Add state interfaces for magnetometer sensors
+  for (auto& sensor : magnetometer_sensor_data_)
+  {
+    if (sensors_hw_info_.count(sensor.name) > 0)
+    {
+      for (const auto& state_if : sensors_hw_info_.at(sensor.name).state_interfaces)
+      {
+        if (state_if.name == "magnetic_field.x")
+        {
+          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.magnetic_field.data.x());
+        }
+        else if (state_if.name == "magnetic_field.y")
+        {
+          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.magnetic_field.data.y());
+        }
+        else if (state_if.name == "magnetic_field.z")
+        {
+          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.magnetic_field.data.z());
+        }
+      }
+    }
+  }
+
   return new_state_interfaces;
 }
 
@@ -925,6 +948,14 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.orientation.data.x() = control_state_.sensordata[data.orientation.mj_sensor_index + 1];
     data.orientation.data.y() = control_state_.sensordata[data.orientation.mj_sensor_index + 2];
     data.orientation.data.z() = control_state_.sensordata[data.orientation.mj_sensor_index + 3];
+  }
+
+  // Magnetometer sensor data
+  for (auto& data : magnetometer_sensor_data_)
+  {
+    data.magnetic_field.data.x() = control_state_.sensordata[data.magnetic_field.mj_sensor_index];
+    data.magnetic_field.data.y() = control_state_.sensordata[data.magnetic_field.mj_sensor_index + 1];
+    data.magnetic_field.data.z() = control_state_.sensordata[data.magnetic_field.mj_sensor_index + 2];
   }
 
   // Publish Odometry
@@ -1968,6 +1999,26 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.orientation.mj_sensor_index = simulation_->model()->sensor_adr[quat_id];
 
       pose_sensor_data_.push_back(sensor_data);
+    }
+    else if (mujoco_type == "magnetometer")
+    {
+      MagnetometerSensorData sensor_data;
+      sensor_data.name = sensor_name;
+      sensor_data.magnetic_field.name = mujoco_sensor_name;
+
+      const int magnetometer_id =
+          mj_name2id(simulation_->model(), mjOBJ_SENSOR, sensor_data.magnetic_field.name.c_str());
+
+      if ((magnetometer_id == -1) || (simulation_->model()->sensor_type[magnetometer_id] != mjSENS_MAGNETOMETER))
+      {
+        RCLCPP_ERROR(get_logger(), "Failed to find 'magnetometer' sensor '%s' in MuJoCo model",
+                     sensor_data.magnetic_field.name.c_str());
+        continue;
+      }
+
+      sensor_data.magnetic_field.mj_sensor_index = simulation_->model()->sensor_adr[magnetometer_id];
+
+      magnetometer_sensor_data_.push_back(sensor_data);
     }
     else
     {

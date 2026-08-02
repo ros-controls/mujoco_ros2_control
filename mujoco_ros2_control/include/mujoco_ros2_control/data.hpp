@@ -223,4 +223,10 @@ struct SitePoseData
   SensorData<Eigen::Quaterniond> orientation;
 };
 
+struct MagnetometerSensorData
+{
+  std::string name;
+  SensorData<Eigen::Vector3d> magnetic_field;
+};
+
 }  // namespace mujoco_ros2_control
