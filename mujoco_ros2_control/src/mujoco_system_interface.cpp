@@ -680,7 +680,7 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   // Add state interfaces for magnetometer sensors
   for (auto& sensor : magnetometer_sensor_data_)
   {
-    if (sensors_hw_info_.contains(sensor.name))
+    if (sensors_hw_info_.count(sensor.name) > 0)
     {
       for (const auto& state_if : sensors_hw_info_.at(sensor.name).state_interfaces)
       {
