@@ -29,6 +29,14 @@
       Multiple concurrent wrenches on different or the same bodies are supported.
     </description>
   </class>
+  <class name="mujoco_ros2_control_plugins/ContactServicePlugin"
+         type="mujoco_ros2_control_plugins::ContactServicePlugin"
+         base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
+    <description>
+      Provides snapshots of the current MuJoCo contact information through the ROS 2 service
+      get_contacts (mujoco_ros2_control_msgs/srv/GetContacts).
+    </description>
+  </class>
   <class name="mujoco_ros2_control_plugins/FreeJointStatePublisherPlugin"
          type="mujoco_ros2_control_plugins::FreeJointStatePublisherPlugin"
          base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
