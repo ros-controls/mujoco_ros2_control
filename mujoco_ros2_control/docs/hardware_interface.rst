@@ -164,7 +164,7 @@ The drivers expose control and state for that single joint, while the simulation
 Sensors
 -------
 
-The hardware interface supports force-torque sensors (FTS) and inertial measurement units (IMUs).
+The hardware interface supports force-torque sensors (FTS), inertial measurement units (IMUs), pose sensors, and magnetometers.
 MuJoCo does not model complete FTS and IMUs natively, so we combine supported MJCF sensor constructs to map to a single ``ros2_control`` sensor.
 
 Force-Torque Sensors
@@ -236,6 +236,30 @@ Map to the corresponding ``ros2_control`` sensor:
    </sensor>
 
 These sensor state interfaces work out of the box with the standard ROS 2 broadcasters.
+
+Magnetometer
+~~~~~~~~~~~~
+
+Model a MuJoCo ``magnetometer`` sensor in the MJCF:
+
+.. code-block:: xml
+
+   <sensor>
+     <magnetometer name="magnetometer_sensor" site="imu_sensor"/>
+   </sensor>
+
+Map it to the corresponding ``ros2_control`` sensor:
+
+.. code-block:: xml
+
+   <sensor name="magnetometer_sensor">
+     <param name="mujoco_type">magnetometer</param>
+     <!-- mujoco_sensor_name does not need to match the ros2_control sensor name -->
+     <param name="mujoco_sensor_name">magnetometer_sensor</param>
+     <state_interface name="magnetic_field.x"/>
+     <state_interface name="magnetic_field.y"/>
+     <state_interface name="magnetic_field.z"/>
+   </sensor>
 
 .. warning::
 

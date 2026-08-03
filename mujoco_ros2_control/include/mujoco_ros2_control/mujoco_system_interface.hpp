@@ -179,7 +179,7 @@ private:
   /**
    * @brief Constructs all sensor data containers for the interface
    *
-   * Pulls sensors (FTS and IMUs) out of the HardwareInfo and uses it to map relevant data containers
+   * Pulls sensors (FTS, IMUs, poses, and magnetometers) out of the HardwareInfo and uses it to map relevant data containers
    * in the ros2_control interface. There are expectations on the naming of sensors in both the MJCF and
    * the ros2_control xacro, as MuJoCo does not have direct support for either of these sensors.
    *
@@ -340,6 +340,7 @@ private:
   std::vector<FTSensorData> ft_sensor_data_;
   std::vector<IMUSensorData> imu_sensor_data_;
   std::vector<SitePoseData> pose_sensor_data_;
+  std::vector<MagnetometerSensorData> magnetometer_sensor_data_;
 
   bool override_mujoco_actuator_positions_{ false };
   bool override_urdf_joint_positions_{ false };
