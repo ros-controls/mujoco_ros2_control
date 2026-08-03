@@ -251,6 +251,7 @@
             <rangefinder name="lidar" site="rf" />
             <framequat name="body_quat" objtype="site" objname="base"/>
             <framepos name="body_pos" objtype="site" objname="base"/>
+            <magnetometer name="body_magnetometer" site="base"/>
           </sensor>
         </raw_inputs>
 
@@ -438,6 +439,15 @@
       <state_interface name="orientation.y" />
       <state_interface name="orientation.z" />
       <state_interface name="orientation.w" />
+    </sensor>
+
+    <sensor name="magnetometer">
+      <param name="mujoco_type">magnetometer</param>
+      <param name="mujoco_sensor_name">body_magnetometer</param>
+
+      <state_interface name="magnetic_field.x" />
+      <state_interface name="magnetic_field.y" />
+      <state_interface name="magnetic_field.z" />
     </sensor>
 
   </ros2_control>

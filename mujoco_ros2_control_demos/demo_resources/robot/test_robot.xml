@@ -86,6 +86,7 @@
     <rangefinder name="lidar" site="rf"/>
     <framequat name="body_quat" objtype="site" objname="ee_link"/>
     <framepos name="body_pos" objtype="site" objname="ee_link"/>
+    <magnetometer name="body_magnetometer" site="ee_link"/>
   </sensor>
   <keyframe>
     <key name="start_90" time="422.274" qpos="1.57 -1.57 -0.02 0.02" qvel="0 0 0 0" ctrl="1.57 -1.57 -0.02"/>
