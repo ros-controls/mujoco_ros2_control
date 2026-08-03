@@ -1098,10 +1098,6 @@ void MujocoSystemInterface::joint_command_to_actuator_command()
   // the command from joint to actuator here as there is no transmission instance to do that.
   for (auto& joint : urdf_joint_data_)
   {
-    if (transmission_joint_names_.count(joint.name) != 0)
-    {
-      continue;
-    }
     std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
       if (actuator_interface.joint_name == joint.name && actuator_interface.actuator_type != ActuatorType::PASSIVE)
       {
