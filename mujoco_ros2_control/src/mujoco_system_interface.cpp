@@ -1091,15 +1091,8 @@ void MujocoSystemInterface::actuator_state_to_joint_state()
 
   // If the actuator name and joint name is same (which is the case for non transmission joints), we need to copy
   // the state from actuator to joint here as there is no transmission instance to do that.
-  // Joints that are driven by a transmission are skipped: their state was just produced by actuator_to_joint() and
-  // must not be clobbered by a same-named MuJoCo joint (which is registered as a PASSIVE actuator when it has no
-  // MuJoCo actuator of its own, and whose raw qpos is in the MuJoCo convention, not the transmission's).
   for (auto& joint : urdf_joint_data_)
   {
-    if (transmission_joint_names_.count(joint.name) != 0)
-    {
-      continue;
-    }
     std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
       if (actuator_interface.joint_name == joint.name)
       {
@@ -1657,7 +1650,6 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
 bool MujocoSystemInterface::register_transmissions(const hardware_interface::HardwareInfo& hardware_info)
 {
   transmission_instances_.clear();
-  transmission_joint_names_.clear();
   auto hardware_transmissions = hardware_info.transmissions;
   transmission_loader_ = std::make_unique<pluginlib::ClassLoader<transmission_interface::TransmissionLoader>>(
       "transmission_interface", "transmission_interface::TransmissionLoader");
@@ -1834,10 +1826,6 @@ bool MujocoSystemInterface::register_transmissions(const hardware_interface::Har
     }
 
     transmission_instances_.push_back(transmission);
-    for (const auto& joint_info : t_info.joints)
-    {
-      transmission_joint_names_.insert(joint_info.name);
-    }
   }
   RCLCPP_INFO_EXPRESSION(get_logger(), !transmission_instances_.empty(), "Registered %zu transmissions",
                          transmission_instances_.size());
