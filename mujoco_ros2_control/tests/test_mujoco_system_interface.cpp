@@ -160,7 +160,7 @@ TEST_F(MujocoSystemInterfaceTest, PoseSensorStateInterfacesRead)
   auto hardware_info = create_hardware_info();
   hardware_interface::ComponentInfo sensor_info;
   sensor_info.name = "pose_sensor";
-  sensor_info.parameters["mujoco_type"] = "pose";
+  sensor_info.parameters[mujoco_ros2_control::MUJOCO_TYPE_PARAM] = mujoco_ros2_control::MUJOCO_TYPE_POSE;
   for (const auto* interface_name :
        { "position.x", "position.y", "position.z", "orientation.x", "orientation.y", "orientation.z", "orientation.w" })
   {
@@ -224,7 +224,7 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorStateInterfacesRead)
   auto hardware_info = create_hardware_info();
   hardware_interface::ComponentInfo sensor_info;
   sensor_info.name = "magnetometer_sensor";
-  sensor_info.parameters["mujoco_type"] = "magnetometer";
+  sensor_info.parameters[mujoco_ros2_control::MUJOCO_TYPE_PARAM] = mujoco_ros2_control::MUJOCO_TYPE_MAGNETOMETER;
   for (const auto* interface_name : { "magnetic_field.x", "magnetic_field.y", "magnetic_field.z" })
   {
     hardware_interface::InterfaceInfo interface_info;

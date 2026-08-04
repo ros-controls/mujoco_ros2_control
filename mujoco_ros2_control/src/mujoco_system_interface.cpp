@@ -528,7 +528,7 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   {
     for (const auto& ci : sensors_hw_info_[sensor.name])
     {
-      if (ci.parameters.count("mujoco_type") > 0 && ci.parameters["mujoco_type"] != "fts")
+      if (ci.parameters.count(MUJOCO_TYPE_PARAM) > 0 && ci.parameters.at(MUJOCO_TYPE_PARAM) != MUJOCO_TYPE_FTS)
       {
         continue;
       }
@@ -567,7 +567,7 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   {
     for (const auto& ci : sensors_hw_info_[sensor.name])
     {
-      if (ci.parameters.count("mujoco_type") > 0 && ci.parameters["mujoco_type"] != "imu")
+      if (ci.parameters.count(MUJOCO_TYPE_PARAM) > 0 && ci.parameters.at(MUJOCO_TYPE_PARAM) != MUJOCO_TYPE_IMU)
       {
         continue;
       }
@@ -651,7 +651,7 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   {
     for (const auto& ci : sensors_hw_info_[sensor.name])
     {
-      if (ci.parameters.count("mujoco_type") > 0 && ci.parameters["mujoco_type"] != "pose")
+      if (ci.parameters.count(MUJOCO_TYPE_PARAM) > 0 && ci.parameters.at(MUJOCO_TYPE_PARAM) != MUJOCO_TYPE_POSE)
       {
         continue;
       }
@@ -694,7 +694,7 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   {
     for (const auto& ci : sensors_hw_info_[sensor.name])
     {
-      if (ci.parameters.count("mujoco_type") > 0 && ci.parameters["mujoco_type"] != "magnetometer")
+      if (ci.parameters.count(MUJOCO_TYPE_PARAM) > 0 && ci.parameters.at(MUJOCO_TYPE_PARAM) != MUJOCO_TYPE_MAGNETOMETER)
       {
         continue;
       }
@@ -1894,24 +1894,24 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     auto sensor = hardware_info.sensors.at(sensor_index);
     const std::string sensor_name = sensor.name;
 
-    if (sensor.parameters.count("mujoco_type") == 0)
+    if (sensor.parameters.count(MUJOCO_TYPE_PARAM) == 0)
     {
       RCLCPP_INFO(get_logger(), "Not adding hardware interface for sensor in ros2_control xacro: '%s'",
                   sensor_name.c_str());
       continue;
     }
-    const auto mujoco_type = sensor.parameters.at("mujoco_type");
+    const auto mujoco_type = sensor.parameters.at(MUJOCO_TYPE_PARAM);
 
     // If there is a specific sensor name provided we use that, otherwise we assume the MuJoCo model's
     // sensor is named identically to the ros2_control hardware interface's.
     std::string mujoco_sensor_name;
-    if (sensor.parameters.count("mujoco_sensor_name") == 0)
+    if (sensor.parameters.count(MUJOCO_SENSOR_NAME_PARAM) == 0)
     {
       mujoco_sensor_name = sensor_name;
     }
     else
     {
-      mujoco_sensor_name = sensor.parameters.at("mujoco_sensor_name");
+      mujoco_sensor_name = sensor.parameters.at(MUJOCO_SENSOR_NAME_PARAM);
     }
 
     RCLCPP_INFO(get_logger(), "Adding sensor named: '%s', of type: '%s', mapping to the MJCF sensor: '%s'",
@@ -1920,7 +1920,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     // Add to the sensor hw information map
     sensors_hw_info_[sensor_name].push_back(sensor);
 
-    if (mujoco_type == "fts")
+    if (mujoco_type == MUJOCO_TYPE_FTS)
     {
       FTSensorData sensor_data;
       sensor_data.name = sensor_name;
@@ -1944,7 +1944,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
       ft_sensor_data_.push_back(sensor_data);
     }
-    else if (mujoco_type == "imu")
+    else if (mujoco_type == MUJOCO_TYPE_IMU)
     {
       IMUSensorData sensor_data;
       sensor_data.name = sensor_name;
@@ -1985,7 +1985,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
       imu_sensor_data_.push_back(sensor_data);
     }
-    else if (mujoco_type == "pose")
+    else if (mujoco_type == MUJOCO_TYPE_POSE)
     {
       SitePoseData sensor_data;
       sensor_data.name = sensor_name;
@@ -2016,7 +2016,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
       pose_sensor_data_.push_back(sensor_data);
     }
-    else if (mujoco_type == "magnetometer")
+    else if (mujoco_type == MUJOCO_TYPE_MAGNETOMETER)
     {
       MagnetometerSensorData sensor_data;
       sensor_data.name = sensor_name;
