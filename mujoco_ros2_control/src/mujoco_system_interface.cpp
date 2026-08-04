@@ -1077,7 +1077,6 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 
 void MujocoSystemInterface::actuator_state_to_joint_state()
 {
-  
   // Copy state for every joint that does not have a transmission
   for (auto& joint : urdf_joint_data_)
   {
