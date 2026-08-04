@@ -528,6 +528,10 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   {
     for (const auto& ci : sensors_hw_info_[sensor.name])
     {
+      if (ci.parameters.count("mujoco_type") > 0 && ci.parameters["mujoco_type"] != "fts")
+      {
+        continue;
+      }
       for (const auto& state_if : ci.state_interfaces)
       {
         if (state_if.name == "force.x")
@@ -563,6 +567,10 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   {
     for (const auto& ci : sensors_hw_info_[sensor.name])
     {
+      if (ci.parameters.count("mujoco_type") > 0 && ci.parameters["mujoco_type"] != "imu")
+      {
+        continue;
+      }
       for (const auto& state_if : ci.state_interfaces)
       {
         if (state_if.name == "orientation.x")
@@ -643,6 +651,10 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   {
     for (const auto& ci : sensors_hw_info_[sensor.name])
     {
+      if (ci.parameters.count("mujoco_type") > 0 && ci.parameters["mujoco_type"] != "pose")
+      {
+        continue;
+      }
       for (const auto& state_if : ci.state_interfaces)
       {
         if (state_if.name == "position.x")
@@ -682,6 +694,10 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
   {
     for (const auto& ci : sensors_hw_info_[sensor.name])
     {
+      if (ci.parameters.count("mujoco_type") > 0 && ci.parameters["mujoco_type"] != "magnetometer")
+      {
+        continue;
+      }
       for (const auto& state_if : ci.state_interfaces)
       {
         if (state_if.name == "magnetic_field.x")
