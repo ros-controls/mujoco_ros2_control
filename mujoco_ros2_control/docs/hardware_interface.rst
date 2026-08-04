@@ -264,7 +264,7 @@ Map it to the corresponding ``ros2_control`` sensor:
 .. warning::
 
    Cameras and lidar sensors are no longer supported in the base interface, they are now provided as ``mujoco_ros2_control_plugins``.
-   Refer to the :ref:`CameraPlugin` and :ref:`RangefinderLidarPlugin` for more information.
+   Refer to the :ref:`CameraPlugin <camera_plugin>` and :ref:`RangefinderLidarPlugin <rangefinder_lidar_plugin>` for more information.
 
 .. _simulation_topics_and_services:
 
