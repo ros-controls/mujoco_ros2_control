@@ -64,6 +64,20 @@ constexpr char HW_IF_FORCE[] = "force";
 
 namespace mujoco_ros2_control
 {
+/// ros2_control `<sensor>` parameter key selecting which MuJoCo sensor mapping to build.
+constexpr char MUJOCO_TYPE_PARAM[] = "mujoco_type";
+/// Optional `<sensor>` parameter key overriding the MJCF sensor name; defaults to the sensor's own name.
+constexpr char MUJOCO_SENSOR_NAME_PARAM[] = "mujoco_sensor_name";
+
+/// Force/torque sensor: reads a paired MJCF `force` + `torque` sensor.
+constexpr char MUJOCO_TYPE_FTS[] = "fts";
+/// IMU: reads a paired MJCF `framequat` + `gyro` + `accelerometer` sensor.
+constexpr char MUJOCO_TYPE_IMU[] = "imu";
+/// Site pose: reads a paired MJCF `framepos` + `framequat` sensor.
+constexpr char MUJOCO_TYPE_POSE[] = "pose";
+/// Magnetometer: reads a single MJCF `magnetometer` sensor.
+constexpr char MUJOCO_TYPE_MAGNETOMETER[] = "magnetometer";
+
 class MujocoSystemInterface : public hardware_interface::SystemInterface
 {
 public:
@@ -312,7 +326,7 @@ private:
 
   // Data containers for the HW interface
   std::unordered_map<std::string, hardware_interface::ComponentInfo> joint_hw_info_;
-  std::unordered_map<std::string, hardware_interface::ComponentInfo> sensors_hw_info_;
+  std::unordered_map<std::string, std::vector<hardware_interface::ComponentInfo>> sensors_hw_info_;
 
   // Container for interacting with the underlying physics sim's data.
   // Handed to plugins during `write` and used to stage control inputs.
