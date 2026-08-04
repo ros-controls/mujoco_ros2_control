@@ -821,9 +821,8 @@ void MujocoSimulation::shutdown()
   }
 }
 
-void MujocoSimulation::reset_world_state(
-    bool fill_initial_state, const sensor_msgs::msg::JointState& joint_state_overrides,
-    const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joint_state_overrides)
+void MujocoSimulation::reset_world_state(bool fill_initial_state,
+                                         const mujoco_ros2_control_msgs::msg::SimulationState& state_overrides)
 {
   /// @note This method assumes sim_mutex_ is already held by the caller
 
@@ -871,10 +870,10 @@ void MujocoSimulation::reset_world_state(
 
   // Apply single-DOF joint overrides on top of the restored state.
   std::string error_message;
-  if (!joint_state_overrides.name.empty())
+  if (!state_overrides.joint_states.name.empty())
   {
     std::vector<SingleDofJointWrite> joint_writes;
-    if (resolve_joint_state_writes(joint_state_overrides, joint_writes, error_message))
+    if (resolve_joint_state_writes(state_overrides.joint_states, joint_writes, error_message))
     {
       apply_joint_state_writes(joint_writes);
     }
@@ -886,11 +885,11 @@ void MujocoSimulation::reset_world_state(
 
   // Apply free-joint overrides. Their frame_ids resolve against post-reset body poses
   // (including the single-DOF overrides above), so refresh kinematics before resolving.
-  if (!free_joint_state_overrides.empty())
+  if (!state_overrides.free_joint_states.empty())
   {
     mj_kinematics(mj_model_, mj_data_);
     std::vector<FreeJointWrite> free_joint_writes;
-    if (resolve_free_joint_writes(free_joint_state_overrides, free_joint_writes, error_message))
+    if (resolve_free_joint_writes(state_overrides.free_joint_states, free_joint_writes, error_message))
     {
       apply_free_joint_writes(free_joint_writes);
     }
@@ -931,8 +930,8 @@ void MujocoSimulation::reset_world_callback(
     std::vector<SingleDofJointWrite> joint_writes;
     std::vector<FreeJointWrite> free_joint_writes;
     std::string error_message;
-    if (!resolve_joint_state_writes(request->joint_state_overrides, joint_writes, error_message) ||
-        !resolve_free_joint_writes(request->free_joint_state_overrides, free_joint_writes, error_message))
+    if (!resolve_joint_state_writes(request->state_overrides.joint_states, joint_writes, error_message) ||
+        !resolve_free_joint_writes(request->state_overrides.free_joint_states, free_joint_writes, error_message))
     {
       response->message = error_message + " Not resetting world.";
       RCLCPP_ERROR(get_logger(), "%s", response->message.c_str());
@@ -953,11 +952,12 @@ void MujocoSimulation::reset_world_callback(
     }
   }
 
-  reset_world_state(fill_initial_state, request->joint_state_overrides, request->free_joint_state_overrides);
+  reset_world_state(fill_initial_state, request->state_overrides);
   response->success = true;
   const std::string keyframe_str = fill_initial_state ? "initial" : ("'" + request->keyframe + "'");
   response->message = "Successfully reset the MuJoCo world to the " + keyframe_str + " state.";
-  const size_t num_overrides = request->joint_state_overrides.name.size() + request->free_joint_state_overrides.size();
+  const size_t num_overrides =
+      request->state_overrides.joint_states.name.size() + request->state_overrides.free_joint_states.size();
   if (num_overrides > 0)
   {
     response->message +=
@@ -1234,7 +1234,7 @@ bool MujocoSimulation::resolve_joint_state_writes(const sensor_msgs::msg::JointS
       error_message = entry_prefix + "Not a single-DOF (hinge or slide) joint.";
       if (joint_type == mjJNT_FREE)
       {
-        error_message += " Free joints are set through 'free_joint_state_overrides' by body name.";
+        error_message += " Free joints are set through 'state_overrides.free_joint_states' by body name.";
       }
       return false;
     }
@@ -1468,8 +1468,8 @@ void MujocoSimulation::physics_loop()
         // Restore simulation time before reset_world_state saves it
         mj_data_->time = prevSimTime;
 
-        // Apply initial state using common method
-        reset_world_state(true);
+        // Apply initial state with no joint state overrides.
+        reset_world_state(true, mujoco_ros2_control_msgs::msg::SimulationState{});
 
         // Force speed_changed to re-sync timing
         sim_->speed_changed = true;

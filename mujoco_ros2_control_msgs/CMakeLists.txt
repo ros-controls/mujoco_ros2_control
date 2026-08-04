@@ -15,6 +15,7 @@ set(msg_files
   msg/ExternalWrenchArray.msg
   msg/FreeJointState.msg
   msg/FreeJointStateArray.msg
+  msg/SimulationState.msg
 )
 
 set(srv_files

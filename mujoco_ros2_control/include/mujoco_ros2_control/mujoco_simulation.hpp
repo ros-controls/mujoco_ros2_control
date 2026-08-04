@@ -40,6 +40,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <mujoco_ros2_control_msgs/msg/free_joint_state.hpp>
+#include <mujoco_ros2_control_msgs/msg/simulation_state.hpp>
 #include <mujoco_ros2_control_msgs/srv/reset_world.hpp>
 #include <mujoco_ros2_control_msgs/srv/set_free_joint_state.hpp>
 #include <mujoco_ros2_control_msgs/srv/set_pause.hpp>
@@ -187,9 +188,7 @@ public:
    *
    * @note Caller must hold the sim mutex.
    */
-  void
-  reset_world_state(bool fill_initial_state, const sensor_msgs::msg::JointState& joint_state_overrides = {},
-                    const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joint_state_overrides = {});
+  void reset_world_state(bool fill_initial_state, const mujoco_ros2_control_msgs::msg::SimulationState& state_overrides);
 
   /**
    * @brief Sets the pose and velocity of one or more free-joint objects, identified by body name.
