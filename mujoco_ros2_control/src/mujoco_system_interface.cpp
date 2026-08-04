@@ -1077,6 +1077,21 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 
 void MujocoSystemInterface::actuator_state_to_joint_state()
 {
+  
+  // Copy state for every joint that does not have a transmission
+  for (auto& joint : urdf_joint_data_)
+  {
+    std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
+      if (actuator_interface.joint_name == joint.name)
+      {
+        joint.position_interface.transmission_passthrough_ = actuator_interface.position_interface.state_;
+        joint.velocity_interface.transmission_passthrough_ = actuator_interface.velocity_interface.state_;
+        joint.effort_interface.transmission_passthrough_ = actuator_interface.effort_interface.state_;
+      }
+    });
+  }
+
+  // Use transmission to get joint state from actuator
   // actuator: MuJoCo -> transmission
   std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
                 [](auto& actuator_interface) { actuator_interface.copy_state_to_transmission(); });
@@ -1088,20 +1103,6 @@ void MujocoSystemInterface::actuator_state_to_joint_state()
   // joint: transmission -> state
   std::for_each(urdf_joint_data_.begin(), urdf_joint_data_.end(),
                 [](auto& joint_interface) { joint_interface.copy_state_from_transmission(); });
-
-  // If the actuator name and joint name is same (which is the case for non transmission joints), we need to copy
-  // the state from actuator to joint here as there is no transmission instance to do that.
-  for (auto& joint : urdf_joint_data_)
-  {
-    std::for_each(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(), [&](auto& actuator_interface) {
-      if (actuator_interface.joint_name == joint.name)
-      {
-        joint.position_interface.state_ = actuator_interface.position_interface.state_;
-        joint.velocity_interface.state_ = actuator_interface.velocity_interface.state_;
-        joint.effort_interface.state_ = actuator_interface.effort_interface.state_;
-      }
-    });
-  }
 }
 
 void MujocoSystemInterface::joint_command_to_actuator_command()
