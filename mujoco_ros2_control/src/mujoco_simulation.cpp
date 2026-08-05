@@ -1088,27 +1088,28 @@ bool MujocoSimulation::validate_free_joint_states(
   for (size_t i = 0; i < free_joints.size(); ++i)
   {
     const mujoco_ros2_control_msgs::msg::FreeJointState& state = free_joints[i];
-    const std::string entry_prefix = "Entry " + std::to_string(i) + " ('" + state.name + "'): ";
+    // Only built when an entry is rejected, which is why this is a lambda and not a string.
+    const auto fail = [&](const std::string& reason) {
+      error_message = "Entry " + std::to_string(i) + " ('" + state.name + "'): " + reason;
+      return false;
+    };
 
     const int body_id = mj_name2id(mj_model_, mjOBJ_BODY, state.name.c_str());
     if (body_id == -1)
     {
-      error_message = entry_prefix + "Unknown body name.";
-      return false;
+      return fail("Unknown body name.");
     }
 
     if (find_free_joint_id(body_id) == -1)
     {
-      error_message = entry_prefix + "Body is not driven by a free joint.";
-      return false;
+      return fail("Body is not driven by a free joint.");
     }
 
     std::string frame_error;
     if (!validate_frame_id(state.pose.header.frame_id, "pose", frame_error) ||
         !validate_frame_id(state.twist.header.frame_id, "twist", frame_error))
     {
-      error_message = entry_prefix + frame_error;
-      return false;
+      return fail(frame_error);
     }
   }
   return true;
@@ -1172,34 +1173,41 @@ bool MujocoSimulation::validate_joint_state_overrides(const sensor_msgs::msg::Jo
     error_message = "Joint state effort is not supported; leave 'effort' empty.";
     return false;
   }
-  if (!joint_state.position.empty() && joint_state.position.size() != num_joints)
-  {
-    error_message = "Joint state 'position' has " + std::to_string(joint_state.position.size()) +
+  // Both value arrays are optional, but a non-empty one must line up with 'name'.
+  const auto check_length = [&](const char* field, size_t size) {
+    if (size == 0 || size == num_joints)
+    {
+      return true;
+    }
+    error_message = std::string("Joint state '") + field + "' has " + std::to_string(size) +
                     " entries but 'name' has " + std::to_string(num_joints) + "; it must be empty or the same length.";
     return false;
-  }
-  if (!joint_state.velocity.empty() && joint_state.velocity.size() != num_joints)
+  };
+  if (!check_length("position", joint_state.position.size()) || !check_length("velocity", joint_state.velocity.size()))
   {
-    error_message = "Joint state 'velocity' has " + std::to_string(joint_state.velocity.size()) +
-                    " entries but 'name' has " + std::to_string(num_joints) + "; it must be empty or the same length.";
     return false;
   }
 
   for (size_t i = 0; i < num_joints; ++i)
   {
     const std::string& name = joint_state.name[i];
-    const std::string entry_prefix = "Entry " + std::to_string(i) + " ('" + name + "'): ";
+    // Only built when an entry is rejected, which is why this is a lambda and not a string.
+    const auto fail = [&](const std::string& reason) {
+      error_message = "Entry " + std::to_string(i) + " ('" + name + "'): " + reason;
+      return false;
+    };
 
     const int joint_id = mj_name2id(mj_model_, mjOBJ_JOINT, name.c_str());
     if (joint_id == -1)
     {
-      error_message = entry_prefix + "Unknown joint name.";
-      return false;
+      return fail("Unknown joint name.");
     }
     const int joint_type = mj_model_->jnt_type[joint_id];
     if (joint_type != mjJNT_HINGE && joint_type != mjJNT_SLIDE)
     {
-      error_message = entry_prefix + "Not a single-DOF (hinge or slide) joint.";
+      // Ball and other multi-DOF joints have no home in either field: one scalar per name cannot
+      // express them, and they are not free-joint bodies either.
+      fail("Not a single-DOF (hinge or slide) joint.");
       if (joint_type == mjJNT_FREE)
       {
         error_message += " Free joints are set through 'state_overrides.free_joint_states' by body name.";
