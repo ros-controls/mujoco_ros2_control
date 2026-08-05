@@ -821,6 +821,11 @@ void MujocoSimulation::shutdown()
   }
 }
 
+void MujocoSimulation::reset_world_state(bool fill_initial_state)
+{
+  reset_world_state(fill_initial_state, mujoco_ros2_control_msgs::msg::SimulationState{});
+}
+
 void MujocoSimulation::reset_world_state(bool fill_initial_state,
                                          const mujoco_ros2_control_msgs::msg::SimulationState& state_overrides)
 {
@@ -1415,8 +1420,8 @@ void MujocoSimulation::physics_loop()
         // Restore simulation time before reset_world_state saves it
         mj_data_->time = prevSimTime;
 
-        // Apply initial state with no joint state overrides.
-        reset_world_state(true, mujoco_ros2_control_msgs::msg::SimulationState{});
+        // Apply initial state using common method
+        reset_world_state(true);
 
         // Force speed_changed to re-sync timing
         sim_->speed_changed = true;

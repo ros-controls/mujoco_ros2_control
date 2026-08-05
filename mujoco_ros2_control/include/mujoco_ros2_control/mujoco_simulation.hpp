@@ -180,15 +180,11 @@ public:
   }
 
   /**
-   * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state,
-   * optionally applying joint state overrides on top of the restored state.
-   *
-   * Overrides are assumed to have been validated by the caller, so they cannot fail here
-   * (see `validate_joint_state_overrides` / `validate_free_joint_states`).
+   * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state.
    *
    * @note Caller must hold the sim mutex.
    */
-  void reset_world_state(bool fill_initial_state, const mujoco_ros2_control_msgs::msg::SimulationState& state_overrides);
+  void reset_world_state(bool fill_initial_state);
 
   /**
    * @brief Sets the pose and velocity of one or more free-joint objects, identified by body name.
@@ -342,6 +338,18 @@ private:
    * @brief Progresses the simulate windows display if not running headless.
    */
   void update_sim_display();
+
+  /**
+   * @brief Reset simulation state, applying joint state overrides on top of the restored state.
+   *
+   * Private because the overrides are assumed to have already been validated (see
+   * `validate_joint_state_overrides` / `validate_free_joint_states`) -- a precondition only
+   * in-class callers can satisfy, since the validators are private too. Applying unvalidated
+   * overrides writes through unresolved (-1) addresses.
+   *
+   * @note Caller must hold the sim mutex.
+   */
+  void reset_world_state(bool fill_initial_state, const mujoco_ros2_control_msgs::msg::SimulationState& state_overrides);
 
   /**
    * @brief Resolves `frame_id` to a body id: empty means the world frame (`body_id = -1`),
