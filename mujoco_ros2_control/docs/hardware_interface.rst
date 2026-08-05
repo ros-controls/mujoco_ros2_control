@@ -303,14 +303,26 @@ Services
 
    - If the optional ``keyframe`` string field is empty, the simulation is restored to the state captured at startup (initial joint positions, velocities, and control values).
    - If a ``keyframe`` name is provided, that named keyframe from the MJCF is applied instead.
-   - ``state_overrides`` (``mujoco_ros2_control_msgs/SimulationState``): optional overrides for single-DOF
-     (hinge/slide) and free joint names, keyed by MuJoCo joint name.
-   - For single-DOF joint states: ``position`` and ``velocity`` must each be empty or the same length as ``name``; an empty array leaves that field at its reset value.
+   - ``state_overrides`` (``mujoco_ros2_control_msgs/SimulationState``): optional overrides applied on top of the
+     restored state — ``joint_states`` for single-DOF (hinge/slide) joints keyed by MuJoCo joint name, and
+     ``free_joints`` for free joints keyed by the name of the body each one drives.
+     The split follows the representation: ``joint_states`` carries raw scalar joint coordinates, while
+     ``free_joints`` carries a frame-relative Cartesian pose and twist. Ball and other multi-DOF joints fit
+     neither and are not supported.
+   - In ``joint_states``, ``position`` and ``velocity`` must each be empty or the same length as ``name``, so a given
+     field is set for every listed joint or for none of them; an empty array leaves that field at its reset value.
      ``effort`` is not supported and must be empty.
-   - For free joint states, entries behave exactly like the ``~/set_free_joint_state`` service (see below).
-     However, except that any ``pose``/``twist`` ``frame_id`` is resolved against body poses *after* the reset is applied.
-     As such, an object can be placed relative to where another body ends up, not where it was before the reset.
+   - In ``free_joints``, entries behave exactly like the ``~/set_free_joint_state`` service (see below), except that any
+     ``pose``/``twist`` ``frame_id`` is resolved against body poses *after* the reset and *after* any ``joint_states``
+     overrides have been written. An object can therefore be placed relative to where another body ends up, rather than
+     where it was before the reset.
    - Returns ``success`` and a human-readable ``message``.
+
+   .. note::
+
+      There is no standalone service for setting a single-DOF joint; unlike free-joint bodies, articulated joints are
+      usually actuated, so writing one has to re-sync the hardware interface's command interfaces and reset its PIDs.
+      That reconciliation only happens as part of a reset, which is why the capability lives here.
 
    .. code-block:: bash
 
@@ -325,7 +337,7 @@ Services
         "{keyframe: 'home',
           state_overrides: {
             joint_states: {name: ['door_hinge'], position: [1.57]},
-            free_joint_states: [
+            free_joints: [
               {name: 'box_1', pose: {header: {frame_id: 'table'}, pose: {position: {z: 0.4}}}}
             ]
           }
@@ -335,7 +347,7 @@ Services
 
       If controllers are active during the service call, the robot may reset to the initial state and then immediately
       snap back to its previous commanded position. Deactivate any active joint controllers before calling this service.
-      This applies equally to ``overrides.joint_states`` targeting controlled joints: the hardware interface re-syncs
+      This applies equally to ``state_overrides.joint_states`` targeting controlled joints: the hardware interface re-syncs
       its command interfaces to the overridden positions as part of the reset, but an active controller may still
       command the joints elsewhere on its next update.
 
