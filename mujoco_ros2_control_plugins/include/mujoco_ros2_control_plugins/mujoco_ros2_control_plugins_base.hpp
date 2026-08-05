@@ -33,6 +33,13 @@ class MuJoCoROS2ControlPluginBase
 public:
   virtual ~MuJoCoROS2ControlPluginBase() = default;
 
+  bool initialize(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data)
+  {
+    model_ = model;
+    sim_data_ = data;
+    return init(node, model_, sim_data_);
+  }
+
   /**
    * @brief Initialize the plugin
    * @param node Shared pointer to the ROS 2 node for accessing parameters
@@ -48,7 +55,7 @@ public:
   /**
    * @brief Update the plugin (called every simulation step)
    * @param model Pointer to the MuJoCo model
-   * @param data Pointer to the MuJoCo data
+   * @param control_data Pointer to the MuJoCo data
    * @note This method will be called at the end of the mujoco_ros2_control read loop, before the update loop of
    * controllers and the write loop. This means that changes to the data here will be visible to controllers and will
    * affect the next simulation step.
@@ -61,12 +68,32 @@ public:
    * ctrl/qfrc_applied/xfrc_applied, data->qvel here cannot be read for the body's actual velocity, since it is not
    * restored to a real value until after every plugin's update() has run this cycle.
    */
-  virtual void update(const mjModel* model, mjData* data) = 0;
+  virtual void update(const mjModel* model, mjData* control_data) = 0;
+
+  virtual void update(mjData* control_data) override
+  {
+    update(model_, control_data);
+  }
 
   /**
    * @brief Cleanup the plugin
    */
   virtual void cleanup() = 0;
+
+  const mjModel* get_mujoco_model() const
+  {
+    return model_;
+  }
+
+  const mjData* get_sim_data() const
+  {
+    return sim_data_;
+  }
+
+private:
+  const mjModel* model_ = nullptr;
+  mjData* sim_data_ = nullptr;
+
 };
 
 }  // namespace mujoco_ros2_control_plugins
