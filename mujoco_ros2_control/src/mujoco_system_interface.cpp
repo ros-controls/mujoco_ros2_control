@@ -22,6 +22,7 @@
 #include <fmt/compile.h>
 #include <fmt/ranges.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -242,6 +243,13 @@ MujocoSystemInterface::MujocoSystemInterface() = default;
 
 MujocoSystemInterface::~MujocoSystemInterface()
 {
+  // Detach the plugins from the physics loop first. register_plugins takes the sim mutex, so once
+  // it returns the loop cannot be in the middle of a plugin update while we clean them up.
+  if (simulation_)
+  {
+    simulation_->register_plugins({});
+  }
+
   // Stop plugins
   for (auto& plugin : plugin_instances_)
   {
@@ -261,10 +269,6 @@ MujocoSystemInterface::~MujocoSystemInterface()
   if (executor_thread_.joinable())
   {
     executor_thread_.join();
-  }
-  if (mj_data_control_)
-  {
-    mj_deleteData(mj_data_control_);
   }
 
   // Tear down the actual simulation
@@ -471,6 +475,9 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       static_cast<unsigned long>(1.0 / simulation_->model()->opt.timestep), simulation_->model()->opt.timestep,
       static_cast<unsigned long>(get_hardware_info().rw_rate));
 #endif
+
+  // Allocate the command buffer once, so write() never allocates in the control loop.
+  actuator_commands_.assign(simulation_->model()->nu, std::numeric_limits<mjtNum>::quiet_NaN());
 
   // Start the physics thread.
   simulation_->start_physics_thread();
@@ -1038,13 +1045,11 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 #endif
   };
 
-  mjData* control_data = plugin_instances_.empty() ? mj_data_control_ : simulation_->acquire_data_snapshot();
+  // Start from "nothing commanded": actuators we skip below (e.g. passive ones) are left NaN, so
+  // the simulation keeps their current value instead of us having to mirror it here first.
+  std::fill(actuator_commands_.begin(), actuator_commands_.end(), std::numeric_limits<mjtNum>::quiet_NaN());
 
-  // Mirror the sim's actual ctrl so entries we do not command below (e.g., passive actuators)
-  // are staged with their current values rather than a possibly stale snapshot.
-  mju_copy(control_data->ctrl, control_state_.ctrl.data(), static_cast<int>(control_state_.ctrl.size()));
-
-  // Update control data based on the latest readings
+  // Compose actuator commands based on the latest readings
   for (auto& actuator : mujoco_actuator_data_)
   {
     if (actuator.actuator_type == ActuatorType::PASSIVE)
@@ -1053,42 +1058,31 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     }
     if (actuator.is_position_control_enabled)
     {
-      control_data->ctrl[actuator.mj_actuator_id] = actuator.position_interface.command_;
+      actuator_commands_[actuator.mj_actuator_id] = actuator.position_interface.command_;
     }
     else if (actuator.is_position_pid_control_enabled)
     {
       const double error = actuator.position_interface.command_ - control_state_.qpos[actuator.mj_pos_adr];
-      control_data->ctrl[actuator.mj_actuator_id] = pid_compute_command(actuator.pos_pid, error, period);
+      actuator_commands_[actuator.mj_actuator_id] = pid_compute_command(actuator.pos_pid, error, period);
     }
     else if (actuator.is_velocity_control_enabled)
     {
-      control_data->ctrl[actuator.mj_actuator_id] = actuator.velocity_interface.command_;
+      actuator_commands_[actuator.mj_actuator_id] = actuator.velocity_interface.command_;
     }
     else if (actuator.is_velocity_pid_control_enabled)
     {
       const double error = actuator.velocity_interface.command_ - control_state_.qvel[actuator.mj_vel_adr];
-      control_data->ctrl[actuator.mj_actuator_id] = pid_compute_command(actuator.vel_pid, error, period);
+      actuator_commands_[actuator.mj_actuator_id] = pid_compute_command(actuator.vel_pid, error, period);
     }
     else if (actuator.is_effort_control_enabled)
     {
-      control_data->ctrl[actuator.mj_actuator_id] = actuator.effort_interface.command_;
+      actuator_commands_[actuator.mj_actuator_id] = actuator.effort_interface.command_;
     }
   }
 
-  // Update plugins.
-  // Clear plugin data, then let each plugin update as needed, in order. This enables plugins to read and
-  // rewrite control inputs immediately before they are sent to the simulation. Namely, we have to zero
-  // out xfrc_applied so plugins can update as needed. qvel is NaN-filled rather than zeroed: a plugin
-  // requests a hard velocity override on a DOF by writing a finite value into it.
-  mju_zero(control_data->xfrc_applied, 6 * static_cast<int>(simulation_->model()->nbody));
-  std::fill(control_data->qvel, control_data->qvel + simulation_->model()->nv, std::numeric_limits<mjtNum>::quiet_NaN());
-  for (auto& plugin : plugin_instances_)
-  {
-    plugin->update(simulation_->model(), control_data);
-  }
-
-  // Trigger to simulation to update its control inputs (this locks)
-  simulation_->apply_control_data(control_data);
+  // Hand the commands to the simulation, which merges them into mj_data_->ctrl immediately before
+  // the next step. Plugins are driven by the physics loop itself, not from here.
+  simulation_->stage_actuator_commands(actuator_commands_);
 
   return hardware_interface::return_type::OK;
 }
@@ -2148,16 +2142,14 @@ void MujocoSystemInterface::set_initial_pose()
     }
   }
 
-  // Copy into the control data for reads
-  simulation_->copy_physics_data(mj_data_control_);
+  // We wrote qpos / ctrl directly above, so republish the control state. Otherwise the seed in
+  // on_init would read a pre-initial-pose state until the physics loop happened to step.
+  simulation_->refresh_control_state();
 }
 
 void MujocoSystemInterface::reset_simulation_state(bool /*fill_initial_state*/)
 {
   /// @note This method assumes sim_mutex_ is already held by the caller
-
-  // Copy to control data for reads - this ensures the physics loop uses the reset state
-  simulation_->copy_physics_data(mj_data_control_);
 
   // Reset command interfaces to initial position commands
   for (auto& actuator : mujoco_actuator_data_)
@@ -2191,11 +2183,9 @@ void MujocoSystemInterface::reset_simulation_state(bool /*fill_initial_state*/)
       actuator.velocity_interface.command_ = 0.0;
       actuator.effort_interface.command_ = 0.0;
 
-      // Also update the ctrl buffer in mj_data_control_ which is used by the physics loop
-      if (actuator.is_position_control_enabled && actuator.mj_actuator_id >= 0)
-      {
-        mj_data_control_->ctrl[actuator.mj_actuator_id] = actuator.position_interface.state_;
-      }
+      // No need to poke a staging buffer here: reset_world_state() has already discarded the
+      // staged commands (leaving them NaN), so the reset ctrl in mj_data_ stands until the next
+      // write() stages the commands set above.
     }
   }
 
@@ -2276,7 +2266,7 @@ void MujocoSystemInterface::load_mujoco_plugins()
         }
         const std::string plugin_type = get_node()->get_parameter(plugin_type_param).as_string();
         auto plugin = plugin_loader_->createSharedInstance(plugin_type);
-        if (plugin->init(get_node()->create_sub_node(plugin_name), simulation_->model(), simulation_->data()))
+        if (plugin->initialize(get_node()->create_sub_node(plugin_name), simulation_->model(), simulation_->data()))
         {
           plugin_instances_.push_back(plugin);
           RCLCPP_INFO(get_logger(), "Successfully loaded and initialized plugin: %s", plugin_name.c_str());
@@ -2304,6 +2294,10 @@ void MujocoSystemInterface::load_mujoco_plugins()
   {
     RCLCPP_ERROR(get_logger(), "Failed to create plugin loader: %s", ex.what());
   }
+
+  // Hand the fully loaded set to the physics loop, which drives their update() from here on.
+  // Done after the legacy camera/lidar auto-registration above so those instances are included.
+  simulation_->register_plugins(plugin_instances_);
 }
 
 ///
@@ -2329,7 +2323,7 @@ bool MujocoSystemInterface::auto_register_plugin_if_needed(const std::string& pl
   try
   {
     auto plugin = plugin_loader_->createSharedInstance(plugin_type);
-    if (plugin->init(get_node()->create_sub_node(plugin_ns), simulation_->model(), simulation_->data()))
+    if (plugin->initialize(get_node()->create_sub_node(plugin_ns), simulation_->model(), simulation_->data()))
     {
       plugin_instances_.push_back(plugin);
       RCLCPP_INFO(get_logger(), "Auto-registered plugin: %s", plugin_type.c_str());

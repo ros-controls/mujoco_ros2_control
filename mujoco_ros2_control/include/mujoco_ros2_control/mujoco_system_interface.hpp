@@ -328,10 +328,10 @@ private:
   std::unordered_map<std::string, hardware_interface::ComponentInfo> joint_hw_info_;
   std::unordered_map<std::string, std::vector<hardware_interface::ComponentInfo>> sensors_hw_info_;
 
-  // Container for interacting with the underlying physics sim's data.
-  // Handed to plugins during `write` and used to stage control inputs.
-  // Its full-data refresh is skipped when no plugins are loaded.
-  mjData* mj_data_control_{ nullptr };
+  // Per-actuator commands composed in `write` and handed to the simulation for staging.
+  // Sized `nu`; entries left NaN mean "not commanded", so passive and uncommanded actuators keep
+  // whatever the simulation last had.
+  std::vector<mjtNum> actuator_commands_;
 
   // Per-step robot state snapshot used by `read` and `write`.
   MujocoSimulation::ControlState control_state_;
