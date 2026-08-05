@@ -32,6 +32,10 @@
 
 using namespace std::chrono_literals;
 
+// These plugins are read-only: they publish simulation state and never command anything, so the
+// write-only control_data buffer handed to update() is unused.
+static mjData* const kNoCommands = nullptr;
+
 class CameraPluginTest : public ::testing::Test
 {
 protected:
@@ -184,8 +188,8 @@ TEST_F(CameraPluginTest, InitSucceedsWithNoCameras)
   ASSERT_EQ(model_->ncam, 0);
 
   mujoco_ros2_control_plugins::CameraPlugin plugin;
-  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
-  plugin.update(model_, data_);
+  EXPECT_TRUE(plugin.initialize(plugin_node_, model_, data_));
+  plugin.update(kNoCommands);
   plugin.cleanup();
 }
 

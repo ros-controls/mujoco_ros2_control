@@ -57,7 +57,7 @@ public:
   ~FreeJointStatePublisherPlugin() override = default;
 
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
-  void update(const mjModel* model, mjData* data) override;
+  void update(mjData* control_data) override;
   void cleanup() override;
 
 private:

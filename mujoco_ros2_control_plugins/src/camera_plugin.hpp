@@ -159,7 +159,7 @@ public:
    * @param glfw_init_fn Function used to attempt GLFW initialization; same signature as `glfwInit`.
    */
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data, GlfwInitFn glfw_init_fn);
-  void update(const mjModel* model, mjData* data) override;
+  void update(mjData* control_data) override;
   void cleanup() override;
 
   /**

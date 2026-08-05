@@ -31,6 +31,10 @@
 
 #include "mujoco_3d_lidar_plugin.hpp"
 
+// These plugins are read-only: they publish simulation state and never command anything, so the
+// write-only control_data buffer handed to update() is unused.
+static mjData* const kNoCommands = nullptr;
+
 class Mujoco3dLidarPluginTest : public ::testing::Test
 {
 protected:
@@ -151,8 +155,8 @@ TEST_F(Mujoco3dLidarPluginTest, InitSucceedsWithNoLidar)
 </mujoco>
 )");
   mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
-  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
-  plugin.update(model_, data_);
+  EXPECT_TRUE(plugin.initialize(plugin_node_, model_, data_));
+  plugin.update(kNoCommands);
   plugin.cleanup();
 }
 
@@ -189,7 +193,7 @@ TEST_F(Mujoco3dLidarPluginTest, Test2dLidar)
 )");
 
   mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
-  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
+  EXPECT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   // Create subscriber to default topic
   std::atomic<bool> got_scan{ false };
@@ -204,7 +208,7 @@ TEST_F(Mujoco3dLidarPluginTest, Test2dLidar)
   for (int i = 0; i < 20; ++i)
   {
     mj_step(model_, data_);
-    plugin.update(model_, data_);
+    plugin.update(kNoCommands);
     if (got_scan)
       break;
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -261,7 +265,7 @@ TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSyncAsync)
 )");
 
     mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
-    EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
+    EXPECT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
     // Create subscriber to default topic
     std::atomic<bool> got_cloud{ false };
@@ -276,7 +280,7 @@ TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSyncAsync)
     for (int i = 0; i < 60; ++i)
     {
       mj_step(model_, data_);
-      plugin.update(model_, data_);
+      plugin.update(kNoCommands);
       if (got_cloud)
         break;
       std::this_thread::sleep_for(std::chrono::milliseconds(100));

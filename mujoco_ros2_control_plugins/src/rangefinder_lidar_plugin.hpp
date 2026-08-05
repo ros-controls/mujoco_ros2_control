@@ -83,7 +83,7 @@ class [[deprecated("We recommend using the 3d Lidar plugin instead."
 {
 public:
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
-  void update(const mjModel* model, mjData* data) override;
+  void update(mjData* control_data) override;
   void cleanup() override;
 
 private:

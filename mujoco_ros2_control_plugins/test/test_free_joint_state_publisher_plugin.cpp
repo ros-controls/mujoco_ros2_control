@@ -51,6 +51,10 @@ constexpr const char* kMjcf = R"(
 )";
 }  // namespace
 
+// These plugins are read-only: they publish simulation state and never command anything, so the
+// write-only control_data buffer handed to update() is unused.
+static mjData* const kNoCommands = nullptr;
+
 class FreeJointStatePublisherPluginTest : public ::testing::Test
 {
 protected:
@@ -175,7 +179,7 @@ protected:
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!received && std::chrono::steady_clock::now() < deadline)
     {
-      plugin.update(model_, data_);
+      plugin.update(kNoCommands);
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     return last_msg;
@@ -194,7 +198,7 @@ private:
 TEST_F(FreeJointStatePublisherPluginTest, InitSucceeds)
 {
   mujoco_ros2_control_plugins::FreeJointStatePublisherPlugin plugin;
-  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
+  EXPECT_TRUE(plugin.initialize(plugin_node_, model_, data_));
   plugin.cleanup();
 }
 
@@ -213,7 +217,7 @@ TEST_F(FreeJointStatePublisherPluginTest, WorldFrameDefaultsPublishAllFreeBodies
   mj_forward(model_, data_);
 
   mujoco_ros2_control_plugins::FreeJointStatePublisherPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   auto msg = waitForMessage("free_joint_states", plugin);
   ASSERT_NE(msg, nullptr) << "No FreeJointStateArray received";
@@ -253,7 +257,7 @@ TEST_F(FreeJointStatePublisherPluginTest, BodyNamesFilterRestrictsPublishedBodie
   setParam("body_names", std::vector<std::string>{ "free_b" });
 
   mujoco_ros2_control_plugins::FreeJointStatePublisherPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   auto msg = waitForMessage("free_joint_states", plugin);
   ASSERT_NE(msg, nullptr);
@@ -279,7 +283,7 @@ TEST_F(FreeJointStatePublisherPluginTest, NonWorldFrameTransformsPoseAndTwistRou
   setParam("body_names", std::vector<std::string>{ "free_a" });
 
   mujoco_ros2_control_plugins::FreeJointStatePublisherPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   auto msg = waitForMessage("free_joint_states", plugin);
   ASSERT_NE(msg, nullptr);
@@ -333,7 +337,7 @@ TEST_F(FreeJointStatePublisherPluginTest, UnknownFrameIdFallsBackToWorld)
   setParam("body_names", std::vector<std::string>{ "free_a" });
 
   mujoco_ros2_control_plugins::FreeJointStatePublisherPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_)) << "init() must not fail on an unknown frame_id";
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_)) << "init() must not fail on an unknown frame_id";
 
   auto msg = waitForMessage("free_joint_states", plugin);
   ASSERT_NE(msg, nullptr);
@@ -352,5 +356,5 @@ TEST_F(FreeJointStatePublisherPluginTest, InitRejectsUnknownBodyNameInFilter)
   setParam("body_names", std::vector<std::string>{ "nonexistent_body" });
 
   mujoco_ros2_control_plugins::FreeJointStatePublisherPlugin plugin;
-  EXPECT_FALSE(plugin.init(plugin_node_, model_, data_));
+  EXPECT_FALSE(plugin.initialize(plugin_node_, model_, data_));
 }

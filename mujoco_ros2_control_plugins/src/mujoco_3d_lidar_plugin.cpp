@@ -301,8 +301,9 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   return true;
 }
 
-void Mujoco3dLidarPlugin::update(const mjModel* /* model */, mjData* data)
+void Mujoco3dLidarPlugin::update(mjData* /*control_data*/)
 {
+  const mjData* data = get_sim_data();
   for (Lidar3dConfig& lidar : lidar_sensors_)
   {
     // Check for new sensor data, and skip if not yet computed, stale, or otherwise
