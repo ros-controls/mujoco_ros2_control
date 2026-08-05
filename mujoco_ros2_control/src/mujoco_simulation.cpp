@@ -1239,17 +1239,18 @@ bool MujocoSimulation::set_free_joint_states(
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
 
+  // Nothing to write, and nothing worth republishing a snapshot for.
+  if (free_joints.empty())
+  {
+    return true;
+  }
+
   // Validate everything before writing anything, so a single invalid entry leaves mj_data_
   // untouched.
   if (!validate_free_joint_states(free_joints, error_message))
   {
     RCLCPP_WARN(get_logger(), "%s", error_message.c_str());
     return false;
-  }
-
-  if (free_joints.empty())
-  {
-    return true;
   }
 
   apply_free_joint_states(free_joints);
