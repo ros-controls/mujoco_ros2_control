@@ -639,7 +639,7 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
      const mjData* data = get_sim_data();
 
      // ...and command the simulation by writing into control_data.
-     // Entries you do not write stay NaN, which means "leave unchanged".
+     // Entries you do not write stay unset, which means "leave unchanged".
      control_data->ctrl[0] = 0.5;
    }
 
@@ -706,8 +706,10 @@ Reads and writes are deliberately separated:
 * **Writing** commands uses the ``control_data`` buffer passed to ``update()``. This buffer is
   *write-only*: do not read simulation state out of it.
 
-``control_data`` uses a NaN sentinel. Every commandable field arrives filled with NaN, and only
-the entries a plugin actually writes are merged into the simulation. The commandable fields are:
+``control_data`` uses a sentinel: every commandable field arrives filled with
+``mujoco_ros2_control_plugins::kUnsetCommand``, and only the entries a plugin actually writes are
+merged into the simulation. Use that constant and the ``is_commanded()`` helper from the plugin base
+header rather than spelling out NaN yourself. The commandable fields are:
 
 .. list-table::
    :widths: 30 70
@@ -730,9 +732,9 @@ Every other field of ``control_data`` is unspecified and must not be read.
 
 .. warning::
 
-   NaN means "leave unchanged", so a command **persists** in the simulation until something
-   overwrites it. To *release* a command, write an explicit value (usually ``0.0``) rather than
-   simply stopping writing to that entry. The ``ExternalWrenchPlugin`` does exactly this when a
+   An unset entry means "leave unchanged", so a command **persists** in the simulation until
+   something overwrites it. To *release* a command, write an explicit value (usually ``0.0``) rather
+   than simply stopping writing to that entry. The ``ExternalWrenchPlugin`` does exactly this when a
    wrench expires.
 
 Because the merge is per entry rather than a whole-array overwrite, values a plugin does not

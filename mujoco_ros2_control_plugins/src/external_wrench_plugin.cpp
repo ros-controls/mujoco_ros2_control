@@ -58,22 +58,17 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
 void ExternalWrenchPlugin::update(mjData* control_data)
 {
   const mjData* sim_data = get_sim_data();
-  if (sim_data == nullptr)
-  {
-    RCLCPP_ERROR_ONCE(logger_, "ExternalWrenchPlugin has no simulation data; skipping wrench application.");
-    return;
-  }
 
-  // Step 0 - release the contributions commanded in the previous cycle. control_data arrives
-  // NaN-filled ("leave unchanged"), so an expired wrench has to be cleared with an explicit zero
-  // or the previously applied force would persist in the simulation indefinitely.
+  // Claims a body's slot for this cycle by commanding an explicit zero. Needed in two places:
+  // control_data arrives unset ("leave unchanged"), so an expired wrench must be released with a
+  // real zero rather than by simply not writing it, and a slot we are about to accumulate into has
+  // to start from zero rather than from the unset sentinel.
+  const auto claim_slot = [control_data](int body_id) { mju_zero(control_data->xfrc_applied + body_id * 6, 6); };
+
+  // Step 0 - release the contributions commanded in the previous cycle.
   for (const int body_id : prev_written_body_ids_)
   {
-    mjtNum* base = control_data->xfrc_applied + body_id * 6;
-    for (int j = 0; j < 6; ++j)
-    {
-      base[j] = 0.0;
-    }
+    claim_slot(body_id);
   }
   prev_written_body_ids_.clear();
 
@@ -100,7 +95,17 @@ void ExternalWrenchPlugin::update(mjData* control_data)
     return;
   }
 
-  // Step 2 - accumulate each active wrench into control_data->xfrc_applied.
+  // Step 2 - claim every slot we are about to command, and record it so Step 0 releases it next
+  // cycle. Doing this as a pre-pass keeps one meaning per variable and avoids searching
+  // prev_written_body_ids_ inside the accumulation loop; zeroing twice for two wrenches on the same
+  // body is harmless.
+  for (const ActiveWrench& wrench : active_wrenches_)
+  {
+    claim_slot(wrench.body_id);
+    prev_written_body_ids_.push_back(wrench.body_id);
+  }
+
+  // Step 3 - accumulate each active wrench into control_data->xfrc_applied.
   //
   // xfrc_applied[body*6 .. body*6+5] = (force_world[3], torque_world_at_xipos[3])
   const rclcpp::Time now_apply = node_->get_clock()->now();
@@ -151,29 +156,11 @@ void ExternalWrenchPlugin::update(mjData* control_data)
                                         torque_world[2] + r[0] * force_world[1] - r[1] * force_world[0] };
 
     const int base = w.body_id * 6;
-
-    // Seed the slot the first time this cycle touches this body. Step 0 only zeroed the bodies
-    // commanded in the *previous* cycle, so a newly commanded body still holds the NaN sentinel
-    // and accumulating into it would produce NaN. Doubles as the record of which slots we
-    // commanded, so Step 0 can release them next cycle.
-    if (std::find(prev_written_body_ids_.begin(), prev_written_body_ids_.end(), w.body_id) ==
-        prev_written_body_ids_.end())
-    {
-      prev_written_body_ids_.push_back(w.body_id);
-      for (int j = 0; j < 6; ++j)
-      {
-        control_data->xfrc_applied[base + j] = 0.0;
-      }
-    }
-
-    for (int j = 0; j < 3; ++j)
-    {
-      control_data->xfrc_applied[base + j] += force_world[j];
-      control_data->xfrc_applied[base + 3 + j] += torque_at_xipos[j];
-    }
+    mju_addTo3(control_data->xfrc_applied + base, force_world);
+    mju_addTo3(control_data->xfrc_applied + base + 3, torque_at_xipos);
   }
 
-  // Step 3 - remove expired wrenches.  Expiry is checked AFTER applying so
+  // Step 4 - remove expired wrenches.  Expiry is checked AFTER applying so
   //          that zero-duration wrenches are applied for exactly one simulation
   //          step before being discarded (as documented in the header).
   const rclcpp::Time now = node_->get_clock()->now();
@@ -183,7 +170,7 @@ void ExternalWrenchPlugin::update(mjData* control_data)
 
   service_requested_.store(!active_wrenches_.empty(), std::memory_order_release);
 
-  // Step 4 - publish RViz markers for all currently active (non-expired) wrenches.
+  // Step 5 - publish RViz markers for all currently active (non-expired) wrenches.
   publish_markers();
 }
 

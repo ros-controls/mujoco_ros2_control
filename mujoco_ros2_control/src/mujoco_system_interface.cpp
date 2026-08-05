@@ -243,11 +243,11 @@ MujocoSystemInterface::MujocoSystemInterface() = default;
 
 MujocoSystemInterface::~MujocoSystemInterface()
 {
-  // Detach the plugins from the physics loop first. register_plugins takes the sim mutex, so once
-  // it returns the loop cannot be in the middle of a plugin update while we clean them up.
+  // Plugins cache the live model and data pointers, so they must stop being driven before we clean
+  // them up, and be cleaned up before the simulation frees that data.
   if (simulation_)
   {
-    simulation_->register_plugins({});
+    simulation_->detach_plugins();
   }
 
   // Stop plugins
@@ -477,7 +477,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
 #endif
 
   // Allocate the command buffer once, so write() never allocates in the control loop.
-  actuator_commands_.assign(simulation_->model()->nu, std::numeric_limits<mjtNum>::quiet_NaN());
+  actuator_commands_.assign(simulation_->model()->nu, mujoco_ros2_control_plugins::kUnsetCommand);
 
   // Start the physics thread.
   simulation_->start_physics_thread();
@@ -1045,9 +1045,15 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
 #endif
   };
 
-  // Start from "nothing commanded": actuators we skip below (e.g. passive ones) are left NaN, so
-  // the simulation keeps their current value instead of us having to mirror it here first.
-  std::fill(actuator_commands_.begin(), actuator_commands_.end(), std::numeric_limits<mjtNum>::quiet_NaN());
+  // Start from "nothing commanded": actuators we skip below (e.g. passive ones) stay unset, so the
+  // simulation keeps their current value instead of us having to mirror it here first. Refilling
+  // every cycle matters because a command mode can be switched off at runtime, and the actuator
+  // must then revert to uncommanded rather than keep its last value.
+  //
+  // Note this composes with a second, pre-existing use of NaN: an InterfaceData command_ that no
+  // controller has written is also NaN (see data.hpp), and copying it through here leaves that
+  // actuator alone. That is intended -- do not "fix" it with an isfinite guard.
+  std::fill(actuator_commands_.begin(), actuator_commands_.end(), mujoco_ros2_control_plugins::kUnsetCommand);
 
   // Compose actuator commands based on the latest readings
   for (auto& actuator : mujoco_actuator_data_)

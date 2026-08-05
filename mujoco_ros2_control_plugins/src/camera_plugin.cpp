@@ -28,11 +28,10 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
   return this->init(node, model, data, glfwInit);
 }
 
-bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data, GlfwInitFn glfw_init_fn)
+bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* /*data*/, GlfwInitFn glfw_init_fn)
 {
   node_ = node;
   mj_model_ = model;
-  mj_data_ = data;
 
   // Ensure the logger has a name
   logger_ = node_->get_logger().get_child(node->get_sub_namespace());

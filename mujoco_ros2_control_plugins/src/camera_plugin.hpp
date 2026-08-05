@@ -228,7 +228,6 @@ private:
   // Ensures locked access to simulation data for rendering.
   std::recursive_mutex* sim_mutex_{ nullptr };
 
-  mjData* mj_data_;
   const mjModel* mj_model_;
   mjData* mj_camera_data_;
 

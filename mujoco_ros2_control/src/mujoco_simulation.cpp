@@ -706,18 +706,17 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
   {
     std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
     mj_data_ = mj_makeData(mj_model_);
-    control_data_ = mj_makeData(mj_model_);
 
-    // Nothing is commanded yet: NaN means "leave unchanged", so the simulation keeps whatever
+    // Nothing is commanded yet, and unset means "leave unchanged", so the simulation keeps whatever
     // initial ctrl the model / keyframe provided until a caller stages real commands.
-    ctrl_staged_.assign(mj_model_->nu, std::numeric_limits<mjtNum>::quiet_NaN());
+    ctrl_staged_.assign(mj_model_->nu, mujoco_ros2_control_plugins::kUnsetCommand);
 
     if (mj_data_)
     {
       publish_control_state();
     }
   }
-  if (!mj_data_ || !control_data_)
+  if (!mj_data_)
   {
     RCLCPP_FATAL(get_logger(), "Could not allocate mjData for '%s'", model_path_.c_str());
     return false;
@@ -852,10 +851,10 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state,
 
   {
     // Discard staged actuator commands so stale pre-reset commands are not re-applied on the next
-    // step. NaN means "leave unchanged", so the reset ctrl values above survive until the
+    // step. Unset means "leave unchanged", so the reset ctrl values above survive until the
     // hardware interface stages fresh commands.
     const std::lock_guard<std::mutex> staging_lock(control_staging_mutex_);
-    std::fill(ctrl_staged_.begin(), ctrl_staged_.end(), std::numeric_limits<mjtNum>::quiet_NaN());
+    std::fill(ctrl_staged_.begin(), ctrl_staged_.end(), mujoco_ros2_control_plugins::kUnsetCommand);
   }
 
   // Restore simulation time to preserve ROS clock continuity
@@ -1314,8 +1313,51 @@ void MujocoSimulation::register_plugins(
   // Plugins are typically registered after the physics thread is already running, so the loop
   // could otherwise be iterating plugins_ while we assign to it.
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  plugins_ = std::move(plugins);
+
+  // Drop nulls here so the physics loop can iterate unconditionally.
+  plugins_.clear();
+  for (auto& plugin : plugins)
+  {
+    if (plugin)
+    {
+      plugins_.push_back(std::move(plugin));
+    }
+  }
+
+  // A full mjData is a large allocation (it carries contact, Jacobian and constraint arenas), so
+  // only pay for the command buffer once something is actually going to command the simulation.
+  if (!plugins_.empty() && control_data_ == nullptr)
+  {
+    control_data_ = mj_makeData(mj_model_);
+    if (control_data_ == nullptr)
+    {
+      RCLCPP_FATAL(get_logger(), "Could not allocate the plugin command buffer; plugins will not be updated.");
+      plugins_.clear();
+      return;
+    }
+  }
+
   RCLCPP_INFO(get_logger(), "Registered %zu MuJoCo plugin(s) with the physics loop.", plugins_.size());
+}
+
+void MujocoSimulation::detach_plugins()
+{
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  plugins_.clear();
+}
+
+std::vector<MujocoSimulation::CommandableField> MujocoSimulation::commandable_fields()
+{
+  // One list, used both to present the fields as unset and to merge them back. Keeping it single
+  // is what stops a field from being filled but never merged (plugin writes silently dropped) or
+  // merged but never filled (unset entries leaking into the simulation).
+  return {
+    { control_data_->ctrl, mj_data_->ctrl, static_cast<int>(mj_model_->nu) },
+    { control_data_->qfrc_applied, mj_data_->qfrc_applied, static_cast<int>(mj_model_->nv) },
+    { control_data_->xfrc_applied, mj_data_->xfrc_applied, 6 * static_cast<int>(mj_model_->nbody) },
+    { control_data_->qpos, mj_data_->qpos, static_cast<int>(mj_model_->nq) },
+    { control_data_->qvel, mj_data_->qvel, static_cast<int>(mj_model_->nv) },
+  };
 }
 
 void MujocoSimulation::run_plugin_updates()
@@ -1327,43 +1369,27 @@ void MujocoSimulation::run_plugin_updates()
     return;
   }
 
-  const int nbody6 = 6 * static_cast<int>(mj_model_->nbody);
-  constexpr mjtNum kUnset = std::numeric_limits<mjtNum>::quiet_NaN();
+  const auto fields = commandable_fields();
 
-  // Present every commandable field as "unset", so a plugin only has to write what it commands
-  // and nothing leaks across iterations.
-  mju_fill(control_data_->ctrl, kUnset, mj_model_->nu);
-  mju_fill(control_data_->qfrc_applied, kUnset, mj_model_->nv);
-  mju_fill(control_data_->xfrc_applied, kUnset, nbody6);
-  mju_fill(control_data_->qpos, kUnset, mj_model_->nq);
-  mju_fill(control_data_->qvel, kUnset, mj_model_->nv);
+  // Present every commandable field as unset, so a plugin only has to write what it commands and
+  // nothing leaks across iterations.
+  for (const CommandableField& field : fields)
+  {
+    mujoco_ros2_control_plugins::mark_unset(field.commanded, field.count);
+  }
 
   for (auto& plugin : plugins_)
   {
-    if (plugin)
-    {
-      plugin->update(control_data_);
-    }
+    plugin->update(control_data_);
   }
 
-  // Merge back only what the plugins actually set. Leaving an entry untouched preserves whatever
-  // is already in mj_data_, which is what lets the viewer's interactive drag forces survive on
-  // bodies no plugin commands.
-  auto merge = [](const mjtNum* commanded, mjtNum* destination, int count) {
-    for (int i = 0; i < count; ++i)
-    {
-      if (!std::isnan(commanded[i]))
-      {
-        destination[i] = commanded[i];
-      }
-    }
-  };
-
-  merge(control_data_->ctrl, mj_data_->ctrl, mj_model_->nu);
-  merge(control_data_->qfrc_applied, mj_data_->qfrc_applied, mj_model_->nv);
-  merge(control_data_->xfrc_applied, mj_data_->xfrc_applied, nbody6);
-  merge(control_data_->qpos, mj_data_->qpos, mj_model_->nq);
-  merge(control_data_->qvel, mj_data_->qvel, mj_model_->nv);
+  // Merge back only what the plugins actually set. Leaving an entry unset preserves whatever is
+  // already in mj_data_, which is what lets the viewer's interactive drag forces survive on bodies
+  // no plugin commands.
+  for (const CommandableField& field : fields)
+  {
+    mujoco_ros2_control_plugins::merge_commands(field.commanded, field.live, field.count);
+  }
 }
 
 void MujocoSimulation::publish_control_state()
@@ -1387,6 +1413,11 @@ void MujocoSimulation::copy_control_state(ControlState& destination)
 void MujocoSimulation::refresh_control_state()
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  // Recompute derived quantities first. A caller that edited qpos / ctrl directly has left
+  // sensordata and qfrc_actuator describing the previous configuration, and publishing that
+  // mixture would hand readers a state that never existed. Every other mutator in this class
+  // pairs its edit with a forward for the same reason.
+  mj_forward(mj_model_, mj_data_);
   publish_control_state();
 }
 
@@ -1394,15 +1425,9 @@ void MujocoSimulation::apply_staged_control_inputs()
 {
   const std::lock_guard<std::mutex> lock(control_staging_mutex_);
 
-  // NaN means "not commanded", so initial, reset and plugin-set ctrl values survive for any
+  // Unset means "not commanded", so initial, reset and plugin-set ctrl values survive for any
   // actuator the hardware interface is not driving (e.g. passive actuators).
-  for (int i = 0; i < mj_model_->nu; ++i)
-  {
-    if (!std::isnan(ctrl_staged_[i]))
-    {
-      mj_data_->ctrl[i] = ctrl_staged_[i];
-    }
-  }
+  mujoco_ros2_control_plugins::merge_commands(ctrl_staged_.data(), mj_data_->ctrl, static_cast<int>(mj_model_->nu));
 }
 
 // simulate in background thread (while rendering in main thread)
@@ -1456,13 +1481,8 @@ void MujocoSimulation::physics_loop()
       // run only if model is present
       if (mj_model_)
       {
-        // Drive the plugins once per outer iteration, before any stepping. Plugins read the live
-        // data directly and write into the NaN-filled control_data_, of which only the entries
-        // they set are merged into mj_data_.
-        //
-        // Because the merge is per-entry rather than a whole-array overwrite, forces applied
-        // interactively in the native viewer survive on any body no plugin commands: the render
-        // thread's writes to mj_data_->xfrc_applied are simply left alone.
+        // Drive the plugins once per outer iteration, before any stepping (see
+        // run_plugin_updates()).
         run_plugin_updates();
 
         // running (ie, not paused)

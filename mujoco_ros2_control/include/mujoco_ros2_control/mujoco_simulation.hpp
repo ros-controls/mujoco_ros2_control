@@ -297,6 +297,16 @@ public:
   void register_plugins(std::vector<std::shared_ptr<mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase>> plugins);
 
   /**
+   * @brief Stops driving the registered plugins.
+   *
+   * Once this returns, no plugin `update()` is in flight and none will be started, so the owner can
+   * safely tear the plugins down. Plugins cache the live model and data pointers, so the required
+   * teardown order is: `detach_plugins()`, then each plugin's `cleanup()`, then destroying this
+   * simulation. Idempotent.
+   */
+  void detach_plugins();
+
+  /**
    * @brief Accessor for the mutex which locks access to the data and model.
    */
   std::recursive_mutex& mutex() const
@@ -325,10 +335,25 @@ private:
    */
   void apply_staged_control_inputs();
 
+  /// One commandable field: where plugins write it, where it lands, and how many entries it has.
+  struct CommandableField
+  {
+    mjtNum* commanded;
+    mjtNum* live;
+    int count;
+  };
+
+  /**
+   * @brief The fields plugins may command, as the single list used to both unset and merge them.
+   *
+   * @note Assumes the sim mutex is held and `control_data_` is allocated.
+   */
+  std::vector<CommandableField> commandable_fields();
+
   /**
    * @brief Runs every registered plugin's `update()` and merges what they commanded.
    *
-   * Fills the commandable fields of `control_data_` with NaN, calls each plugin in registration
+   * Presents the commandable fields of `control_data_` as unset, calls each plugin in registration
    * order, then copies back only the entries the plugins actually wrote. Plugins read live state
    * directly, so no scene-sized copy is involved.
    *
@@ -471,9 +496,10 @@ private:
   // directly unless you are sure of what you are doing.
   mjData* mj_data_{ nullptr };
 
-  // Write-only command buffer handed to plugins in run_plugin_updates(). Its commandable fields
-  // are NaN-filled before every plugin pass, and only the non-NaN entries are merged back into
+  // Write-only command buffer handed to plugins in run_plugin_updates(). Its commandable fields are
+  // marked unset before every plugin pass, and only the commanded entries are merged back into
   // mj_data_. Nothing else in this container is meaningful.
+  // Allocated lazily by register_plugins(), so a run without plugins does not pay for a full mjData.
   mjData* control_data_{ nullptr };
 
   // MuJoCo plugins driven by the physics loop. Borrowed; owned by the hardware interface.
