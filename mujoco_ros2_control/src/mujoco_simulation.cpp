@@ -937,12 +937,13 @@ void MujocoSimulation::reset_world_callback(
   response->success = true;
   const std::string keyframe_str = fill_initial_state ? "initial" : ("'" + request->keyframe + "'");
   response->message = "Successfully reset the MuJoCo world to the " + keyframe_str + " state.";
-  const size_t num_overrides =
-      request->state_overrides.joint_states.name.size() + request->state_overrides.free_joints.size();
-  if (num_overrides > 0)
+  // Reported separately: the two fields are keyed differently (joint name vs. body name).
+  const size_t num_joint_overrides = request->state_overrides.joint_states.name.size();
+  const size_t num_free_joint_overrides = request->state_overrides.free_joints.size();
+  if (num_joint_overrides > 0 || num_free_joint_overrides > 0)
   {
-    response->message +=
-        " Applied " + std::to_string(num_overrides) + " joint state override" + (num_overrides == 1 ? "" : "s") + ".";
+    response->message += " Applied " + std::to_string(num_joint_overrides) + " joint and " +
+                         std::to_string(num_free_joint_overrides) + " free-joint override(s).";
   }
 
   RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
