@@ -1067,10 +1067,13 @@ bool MujocoSimulation::resolve_frame_id(const std::string& frame_id, const std::
 
 int MujocoSimulation::find_free_joint_id(int body_id) const
 {
-  // A body has at most one free joint.
-  for (int j = 0; j < mj_model_->njnt; ++j)
+  // A body's joints are contiguous from body_jntadr, and a free joint is the only joint its body
+  // can carry, so this inspects one entry rather than scanning all njnt joints.
+  const int first_joint = mj_model_->body_jntadr[body_id];
+  const int num_joints = mj_model_->body_jntnum[body_id];
+  for (int j = first_joint; j >= 0 && j < first_joint + num_joints; ++j)
   {
-    if (mj_model_->jnt_bodyid[j] == body_id && mj_model_->jnt_type[j] == mjJNT_FREE)
+    if (mj_model_->jnt_type[j] == mjJNT_FREE)
     {
       return j;
     }
