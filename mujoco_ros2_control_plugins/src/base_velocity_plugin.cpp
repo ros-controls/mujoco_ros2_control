@@ -125,16 +125,11 @@ void BaseVelocityPlugin::twistStampedCallback(const geometry_msgs::msg::TwistSta
 void BaseVelocityPlugin::storeCommand(double vx, double vy, double wz)
 {
   std::lock_guard<std::mutex> lock(cmd_mutex_);
-  latest_cmd_ = { vx, vy, wz, node_->get_clock()->now(), true };
+  latest_cmd_ = { vx, vy, wz, node_->get_clock()->now() };
 }
 
 void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 {
-  if (body_id_ < 0 || qvel_adr_ < 0)
-  {
-    return;
-  }
-
   // Step 1 - refresh the cached command from the subscription callback without
   // blocking the real-time thread; if the lock is contended, keep using the last
   // successfully cached values.
@@ -147,15 +142,12 @@ void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
   // Step 2 - a stale (or never-received) command is treated as a zero-velocity
   // command, i.e. the base is commanded to stop rather than coast on the last override.
   double vx_cmd = 0.0, vy_cmd = 0.0, wz_cmd = 0.0;
-  if (cached_cmd_.valid)
+  const rclcpp::Duration age = node_->get_clock()->now() - cached_cmd_.time;
+  if (age <= cmd_timeout_)
   {
-    const rclcpp::Duration age = node_->get_clock()->now() - cached_cmd_.time;
-    if (age <= cmd_timeout_)
-    {
-      vx_cmd = cached_cmd_.vx;
-      vy_cmd = cached_cmd_.vy;
-      wz_cmd = cached_cmd_.wz;
-    }
+    vx_cmd = cached_cmd_.vx;
+    vy_cmd = cached_cmd_.vy;
+    wz_cmd = cached_cmd_.wz;
   }
 
   // Step 3 - clamp to the configured limits, preserving direction for the planar speed.

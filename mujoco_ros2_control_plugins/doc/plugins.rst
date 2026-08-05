@@ -359,7 +359,9 @@ BaseVelocity Parameters
      - ``bool``
      - ``false``
      - Subscribe to ``geometry_msgs/TwistStamped`` instead of ``geometry_msgs/Twist`` (e.g. for
-       Nav2, which publishes stamped twists by default in some configurations).
+       Nav2, which publishes stamped twists by default in some configurations). Even when the param
+       is set to ``true``, the header info is internally not used and only the time at which the
+       message received internal to the plugin takes precedence.
    * - ``max_linear_velocity``
      - ``double``
      - ``+inf``

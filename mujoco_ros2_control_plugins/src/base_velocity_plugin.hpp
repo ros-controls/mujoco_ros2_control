@@ -103,7 +103,6 @@ private:
     double vy{ 0.0 };
     double wz{ 0.0 };
     rclcpp::Time time{ 0, 0, RCL_ROS_TIME };
-    bool valid{ false };
   };
 
   // Latest command, written by the subscription callback (ROS executor thread) under
