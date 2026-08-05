@@ -878,10 +878,10 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state,
 
   // Apply free-joint overrides. Their frame_ids resolve against post-reset body poses
   // (including the single-DOF overrides above), so refresh kinematics before applying.
-  if (!state_overrides.free_joint_states.empty())
+  if (!state_overrides.free_joints.empty())
   {
     mj_kinematics(mj_model_, mj_data_);
-    apply_free_joint_states(state_overrides.free_joint_states);
+    apply_free_joint_states(state_overrides.free_joints);
   }
 
   // Run forward dynamics to update derived quantities
@@ -913,7 +913,7 @@ void MujocoSimulation::reset_world_callback(
   // resolve against post-reset body poses when reset_world_state applies the overrides.
   std::string error_message;
   if (!validate_joint_state_overrides(request->state_overrides.joint_states, error_message) ||
-      !validate_free_joint_states(request->state_overrides.free_joint_states, error_message))
+      !validate_free_joint_states(request->state_overrides.free_joints, error_message))
   {
     response->message = error_message + " Not resetting world.";
     RCLCPP_ERROR(get_logger(), "%s", response->message.c_str());
@@ -938,7 +938,7 @@ void MujocoSimulation::reset_world_callback(
   const std::string keyframe_str = fill_initial_state ? "initial" : ("'" + request->keyframe + "'");
   response->message = "Successfully reset the MuJoCo world to the " + keyframe_str + " state.";
   const size_t num_overrides =
-      request->state_overrides.joint_states.name.size() + request->state_overrides.free_joint_states.size();
+      request->state_overrides.joint_states.name.size() + request->state_overrides.free_joints.size();
   if (num_overrides > 0)
   {
     response->message +=
@@ -1210,7 +1210,7 @@ bool MujocoSimulation::validate_joint_state_overrides(const sensor_msgs::msg::Jo
       fail("Not a single-DOF (hinge or slide) joint.");
       if (joint_type == mjJNT_FREE)
       {
-        error_message += " Free joints are set through 'state_overrides.free_joint_states' by body name.";
+        error_message += " Free joints are set through 'state_overrides.free_joints' by body name.";
       }
       return false;
     }

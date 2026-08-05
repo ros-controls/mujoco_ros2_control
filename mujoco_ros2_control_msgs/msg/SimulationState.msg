@@ -4,4 +4,4 @@
 sensor_msgs/JointState joint_states
 
 # List of free joint states.
-FreeJointState[] free_joint_states
+FreeJointState[] free_joints
