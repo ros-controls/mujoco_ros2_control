@@ -64,10 +64,11 @@ namespace mujoco_ros2_control_plugins
  *
  * Implementation notes
  * --------------------
- * Forces are written into data->xfrc_applied (Cartesian 6D force/torque per
- * body, world frame, applied at the body's inertial CoM xipos).  MuJoCo reads
- * this array during mj_step and both applies the force AND renders it as an
- * arrow in the native viewer when "Perturb forces" is enabled.
+ * Forces are commanded through control_data->xfrc_applied (Cartesian 6D
+ * force/torque per body, world frame, applied at the body's inertial CoM
+ * xipos).  MuJoCo reads this array during mj_step and both applies the force
+ * AND renders it as an arrow in the native viewer when "Perturb forces" is
+ * enabled.
  *
  * The service input is expressed in the body's local frame at an arbitrary
  * application point.  The plugin converts this to the world-frame wrench at
@@ -77,16 +78,17 @@ namespace mujoco_ros2_control_plugins
  *   τ_world      = R * τ_body
  *   τ_at_xipos   = τ_world + (p_world − xipos) × F_world
  *
- * where R = data->xmat (body → world rotation) and
- *       p_world = data->xpos + R * application_point_body.
+ * where R = get_sim_data()->xmat (body → world rotation) and
+ *       p_world = get_sim_data()->xpos + R * application_point_body.
  *
- * At the start of every update() call the plugin zeroes the xfrc_applied slots
- * it wrote during the previous cycle before re-accumulating the current active
- * wrenches.  This self-cleanup ensures the plugin leaves no stale contributions
- * in xfrc_applied when all wrenches have expired.  When the surrounding system
- * interface also zeroes xfrc_applied before calling update() (as
- * MujocoSystemInterface::read() does), the plugin's undo step is a harmless
- * no-op on already-zero values.
+ * Releasing a force requires an explicit write.  Entries left untouched in
+ * control_data are NaN, meaning "leave unchanged", so a force that is simply
+ * no longer written would persist in the simulation indefinitely.  The plugin
+ * therefore tracks the bodies it commanded in the previous cycle and writes an
+ * explicit 0.0 into their slots at the start of the next update(), before
+ * re-accumulating the currently active wrenches.  For the same reason, a body
+ * touched for the first time in a cycle has its slot zeroed before the
+ * per-wrench contributions are accumulated into it.
  */
 class ExternalWrenchPlugin : public MuJoCoROS2ControlPluginBase
 {
@@ -95,7 +97,7 @@ public:
   ~ExternalWrenchPlugin() override = default;
 
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
-  void update(const mjModel* model, mjData* data) override;
+  void update(mjData* control_data) override;
   void cleanup() override;
 
   /**
@@ -156,8 +158,10 @@ private:
   // Active wrenches — only modified inside update()
   std::vector<ActiveWrench> active_wrenches_;
 
-  // Body IDs whose xfrc_applied slots were written in the previous update() call.
-  // Zeroed at the start of the next update() before re-accumulating.
+  // Body IDs whose xfrc_applied slots were commanded in the previous update() call. Explicitly
+  // zeroed at the start of the next update() before re-accumulating, so an expired wrench is
+  // actually released rather than left in place by the NaN ("leave unchanged") sentinel. Also
+  // rebuilt during accumulation to track which slots have been zeroed this cycle.
   std::vector<int> prev_written_body_ids_;
 
   // Marker visualization scaling

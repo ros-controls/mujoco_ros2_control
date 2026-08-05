@@ -55,15 +55,21 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
   return true;
 }
 
-void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
+void ExternalWrenchPlugin::update(mjData* control_data)
 {
-  // Step 0 - undo the xfrc_applied contributions written in the previous cycle
-  // so stale forces are never left in the array when all wrenches have expired.
-  // When the system interface also zeroes xfrc_applied before calling update(),
-  // this loop is a harmless no-op on already-zero values.
+  const mjData* sim_data = get_sim_data();
+  if (sim_data == nullptr)
+  {
+    RCLCPP_ERROR_ONCE(logger_, "ExternalWrenchPlugin has no simulation data; skipping wrench application.");
+    return;
+  }
+
+  // Step 0 - release the contributions commanded in the previous cycle. control_data arrives
+  // NaN-filled ("leave unchanged"), so an expired wrench has to be cleared with an explicit zero
+  // or the previously applied force would persist in the simulation indefinitely.
   for (const int body_id : prev_written_body_ids_)
   {
-    mjtNum* base = data->xfrc_applied + body_id * 6;
+    mjtNum* base = control_data->xfrc_applied + body_id * 6;
     for (int j = 0; j < 6; ++j)
     {
       base[j] = 0.0;
@@ -94,8 +100,7 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
     return;
   }
 
-  // Step 2 - accumulate each active wrench into xfrc_applied.
-  // Step 0 already cleared our previous contributions, so += is equivalent to a fresh write.
+  // Step 2 - accumulate each active wrench into control_data->xfrc_applied.
   //
   // xfrc_applied[body*6 .. body*6+5] = (force_world[3], torque_world_at_xipos[3])
   const rclcpp::Time now_apply = node_->get_clock()->now();
@@ -114,10 +119,11 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
       }
     }
 
-    // Body pose in world frame. xmat is row-major 3×3 (body → world).
-    const mjtNum* xpos = data->xpos + w.body_id * 3;
-    const mjtNum* xmat = data->xmat + w.body_id * 9;
-    const mjtNum* xipos = data->xipos + w.body_id * 3;  // inertial CoM in world frame
+    // Body pose in world frame, read from the live simulation data. xmat is row-major 3×3
+    // (body → world).
+    const mjtNum* xpos = sim_data->xpos + w.body_id * 3;
+    const mjtNum* xmat = sim_data->xmat + w.body_id * 9;
+    const mjtNum* xipos = sim_data->xipos + w.body_id * 3;  // inertial CoM in world frame
 
     // Transform application_point from body-local to world frame.
     const mjtNum point_world[3] = {
@@ -145,17 +151,25 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
                                         torque_world[2] + r[0] * force_world[1] - r[1] * force_world[0] };
 
     const int base = w.body_id * 6;
-    for (int j = 0; j < 3; ++j)
-    {
-      data->xfrc_applied[base + j] += force_world[j];
-      data->xfrc_applied[base + 3 + j] += torque_at_xipos[j];
-    }
 
-    // Track which body slots we touched so Step 0 can undo them next cycle.
+    // Seed the slot the first time this cycle touches this body. Step 0 only zeroed the bodies
+    // commanded in the *previous* cycle, so a newly commanded body still holds the NaN sentinel
+    // and accumulating into it would produce NaN. Doubles as the record of which slots we
+    // commanded, so Step 0 can release them next cycle.
     if (std::find(prev_written_body_ids_.begin(), prev_written_body_ids_.end(), w.body_id) ==
         prev_written_body_ids_.end())
     {
       prev_written_body_ids_.push_back(w.body_id);
+      for (int j = 0; j < 6; ++j)
+      {
+        control_data->xfrc_applied[base + j] = 0.0;
+      }
+    }
+
+    for (int j = 0; j < 3; ++j)
+    {
+      control_data->xfrc_applied[base + j] += force_world[j];
+      control_data->xfrc_applied[base + 3 + j] += torque_at_xipos[j];
     }
   }
 
