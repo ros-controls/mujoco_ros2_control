@@ -1046,22 +1046,23 @@ void MujocoSimulation::step_simulation_callback(
   }
 }
 
-bool MujocoSimulation::resolve_frame_id(const std::string& frame_id, const std::string& field_label, int& body_id,
-                                        std::string& error_message)
+int MujocoSimulation::frame_body_id(const std::string& frame_id) const
 {
   if (frame_id.empty())
   {
-    body_id = -1;
-    return true;
+    return -1;
   }
+  return mj_name2id(mj_model_, mjOBJ_BODY, frame_id.c_str());
+}
 
-  body_id = mj_name2id(mj_model_, mjOBJ_BODY, frame_id.c_str());
-  if (body_id == -1)
+bool MujocoSimulation::validate_frame_id(const std::string& frame_id, const std::string& field_label,
+                                         std::string& error_message) const
+{
+  if (!frame_id.empty() && frame_body_id(frame_id) == -1)
   {
     error_message = "Unknown " + field_label + " frame_id body name: '" + frame_id + "'.";
     return false;
   }
-
   return true;
 }
 
@@ -1103,9 +1104,8 @@ bool MujocoSimulation::validate_free_joint_states(
     }
 
     std::string frame_error;
-    int frame_body_id = -1;
-    if (!resolve_frame_id(state.pose.header.frame_id, "pose", frame_body_id, frame_error) ||
-        !resolve_frame_id(state.twist.header.frame_id, "twist", frame_body_id, frame_error))
+    if (!validate_frame_id(state.pose.header.frame_id, "pose", frame_error) ||
+        !validate_frame_id(state.twist.header.frame_id, "twist", frame_error))
     {
       error_message = entry_prefix + frame_error;
       return false;
@@ -1135,8 +1135,7 @@ void MujocoSimulation::apply_free_joint_states(
 
     // Frame poses come from xpos/xquat, which only change when kinematics runs, so earlier
     // entries' qpos/qvel writes cannot affect later entries' frame resolution.
-    const std::string& pose_frame = state.pose.header.frame_id;
-    const int pose_frame_body_id = pose_frame.empty() ? -1 : mj_name2id(mj_model_, mjOBJ_BODY, pose_frame.c_str());
+    const int pose_frame_body_id = frame_body_id(state.pose.header.frame_id);
     if (pose_frame_body_id == -1)
     {
       mju_copy3(qpos, rel_pos);
@@ -1148,8 +1147,7 @@ void MujocoSimulation::apply_free_joint_states(
                   rel_pos, rel_quat);
     }
 
-    const std::string& twist_frame = state.twist.header.frame_id;
-    const int twist_frame_body_id = twist_frame.empty() ? -1 : mj_name2id(mj_model_, mjOBJ_BODY, twist_frame.c_str());
+    const int twist_frame_body_id = frame_body_id(state.twist.header.frame_id);
     if (twist_frame_body_id == -1)
     {
       mju_copy3(qvel, rel_linvel);

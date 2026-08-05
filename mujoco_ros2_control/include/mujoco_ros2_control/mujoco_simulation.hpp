@@ -352,14 +352,21 @@ private:
   void reset_world_state(bool fill_initial_state, const mujoco_ros2_control_msgs::msg::SimulationState& state_overrides);
 
   /**
-   * @brief Resolves `frame_id` to a body id: empty means the world frame (`body_id = -1`),
-   * otherwise it must name a known MuJoCo body.
+   * @brief Resolves a `header.frame_id` to the body it names: -1 for the world frame (empty
+   * string) or for an unknown body.
+   *
+   * This is the single definition of the frame_id convention; `validate_frame_id` wraps it to
+   * turn the unknown-body case into an error message.
+   */
+  int frame_body_id(const std::string& frame_id) const;
+
+  /**
+   * @brief Checks that `frame_id` is empty (world frame) or names a known MuJoCo body.
    *
    * @param field_label Identifies which field ("pose"/"twist") in `error_message` on failure.
-   * @return true if resolved; false otherwise, with `error_message` set.
+   * @return true if valid; false otherwise, with `error_message` set.
    */
-  bool resolve_frame_id(const std::string& frame_id, const std::string& field_label, int& body_id,
-                        std::string& error_message);
+  bool validate_frame_id(const std::string& frame_id, const std::string& field_label, std::string& error_message) const;
 
   /**
    * @brief Returns the id of the free joint driving `body_id`, or -1 if there is none.
