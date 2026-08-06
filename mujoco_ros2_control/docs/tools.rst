@@ -148,6 +148,18 @@ Rough outline of the automated conversion process
     correct per link even when MuJoCo fuses fixed-jointed bodies together. A mesh shared by a visual
     and a collision is converted once and reused for both (and, if that link requests decomposition,
     the whole mesh renders while its decomposed pieces collide).
+  - Both kinds of geom get explicit attributes written directly onto them, so visual/collision
+    separation does not depend on a user-supplied ``<default class="...">`` block:
+
+    - **Visual** geoms: ``class="visual"`` with ``contype="0" conaffinity="0" group="2"
+      density="0"`` (render-only, never collide) and keep their ``rgba``.
+    - **Collision** geoms: ``class="collision"`` with ``group="3" contype="1" conaffinity="1"``.
+      Whole-mesh/primitive collisions are tinted ``material="bright_orange"`` so they are easy to
+      spot in the viewer (toggle group 3); the material is added to the ``<asset>`` automatically
+      when not already defined (an existing definition, e.g. from ``mujoco_inputs``, is left
+      untouched). **Decomposed** collision pieces are the exception: they get the same group 3 /
+      contype / conaffinity attributes but keep obj2mjcf's own per-decomposition materials/colors
+      instead of being recolored, so the individual convex hulls stay distinguishable.
 
 - Publishes the new formatted robot description XML file that can be used for conversion.
 - Converts the new robot description URDF file.
