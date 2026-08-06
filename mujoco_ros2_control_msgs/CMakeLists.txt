@@ -11,6 +11,8 @@ find_package(rosidl_default_generators REQUIRED)
 
 
 set(msg_files
+  msg/ContactArray.msg
+  msg/Contact.msg
   msg/ExternalWrench.msg
   msg/ExternalWrenchArray.msg
   msg/FreeJointState.msg
@@ -19,6 +21,7 @@ set(msg_files
 )
 
 set(srv_files
+  srv/GetContacts.srv
   srv/ResetWorld.srv
   srv/SetPause.srv
   srv/StepSimulation.srv

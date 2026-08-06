@@ -1,0 +1,18 @@
+# Retrieve a fresh snapshot of the MuJoCo contacts in mjData.contact.
+#
+# The request is empty. The service asks the simulation thread to capture the
+# current contact array, then waits for that capture to complete. Contacts are
+# returned in mjData.contact order; see Contact.msg for the exposed fields and
+# their MuJoCo semantics.
+
+---
+
+# True when the requested contact snapshot was captured successfully.
+bool    success
+
+# Human-readable status or error description. Empty on success; on failure,
+# explains why the capture timed out or could not be completed.
+string  message
+
+# Fresh contact snapshot when success is true; empty on failure.
+ContactArray snapshot
