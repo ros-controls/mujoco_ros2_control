@@ -1289,20 +1289,14 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       return std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
     };
 
-    if (actuator_data.actuator_type == ActuatorType::POSITION)
-    {
-      actuator_data.is_position_control_enabled = true;
-    }
-    else if (actuator_data.actuator_type == ActuatorType::VELOCITY)
+    if (actuator_data.actuator_type == ActuatorType::VELOCITY)
     {
       actuator_data.has_pos_pid = initialize_position_pids();
-      actuator_data.is_velocity_control_enabled = true;
     }
     else if (actuator_data.actuator_type == ActuatorType::MOTOR || actuator_data.actuator_type == ActuatorType::CUSTOM)
     {
       actuator_data.has_pos_pid = initialize_position_pids();
       actuator_data.has_vel_pid = initialize_velocity_pids();
-      actuator_data.is_effort_control_enabled = true;
     }
     RCLCPP_DEBUG(get_logger(), "Successfully registered actuator '%s'", act_name);
   }
