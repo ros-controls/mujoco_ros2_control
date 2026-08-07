@@ -826,6 +826,12 @@ void MujocoSimulation::shutdown()
 
 void MujocoSimulation::reset_world_state(bool fill_initial_state)
 {
+  reset_world_state(fill_initial_state, mujoco_ros2_control_msgs::msg::SimulationState{});
+}
+
+void MujocoSimulation::reset_world_state(bool fill_initial_state,
+                                         const mujoco_ros2_control_msgs::msg::SimulationState& state_overrides)
+{
   /// @note This method assumes sim_mutex_ is already held by the caller
 
   // Save the simulation time to preserve ROS clock continuity
@@ -871,6 +877,17 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state)
   // Restore simulation time to preserve ROS clock continuity
   mj_data_->time = saved_time;
 
+  // Apply single-DOF joint overrides on top of the restored state.
+  apply_joint_state_overrides(state_overrides.joint_states);
+
+  // Apply free-joint overrides. Their frame_ids resolve against post-reset body poses
+  // (including the single-DOF overrides above), so refresh kinematics before applying.
+  if (!state_overrides.free_joints.empty())
+  {
+    mj_kinematics(mj_model_, mj_data_);
+    apply_free_joint_states(state_overrides.free_joints);
+  }
+
   // Run forward dynamics to update derived quantities
   mj_forward(mj_model_, mj_data_);
 
@@ -895,6 +912,19 @@ void MujocoSimulation::reset_world_callback(
                          "Reset world service called. Resetting to initial keyframe...");
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
 
+  // Validate every override before touching any state, so an invalid entry leaves the world
+  // un-reset. Validation only checks names and shapes against the model; free-joint frame_ids
+  // resolve against post-reset body poses when reset_world_state applies the overrides.
+  std::string error_message;
+  if (!validate_joint_state_overrides(request->state_overrides.joint_states, error_message) ||
+      !validate_free_joint_states(request->state_overrides.free_joints, error_message))
+  {
+    response->message = error_message + " Not resetting world.";
+    RCLCPP_ERROR(get_logger(), "%s", response->message.c_str());
+    response->success = false;
+    return;
+  }
+
   bool fill_initial_state = request->keyframe.empty();
   if (!fill_initial_state)
   {
@@ -907,10 +937,18 @@ void MujocoSimulation::reset_world_callback(
     }
   }
 
-  reset_world_state(fill_initial_state);
+  reset_world_state(fill_initial_state, request->state_overrides);
   response->success = true;
   const std::string keyframe_str = fill_initial_state ? "initial" : ("'" + request->keyframe + "'");
   response->message = "Successfully reset the MuJoCo world to the " + keyframe_str + " state.";
+  // Reported separately: the two fields are keyed differently (joint name vs. body name).
+  const size_t num_joint_overrides = request->state_overrides.joint_states.name.size();
+  const size_t num_free_joint_overrides = request->state_overrides.free_joints.size();
+  if (num_joint_overrides > 0 || num_free_joint_overrides > 0)
+  {
+    response->message += " Applied " + std::to_string(num_joint_overrides) + " joint and " +
+                         std::to_string(num_free_joint_overrides) + " free-joint override(s).";
+  }
 
   RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
 }
@@ -1013,110 +1051,192 @@ void MujocoSimulation::step_simulation_callback(
   }
 }
 
-bool MujocoSimulation::resolve_frame_id(const std::string& frame_id, const std::string& field_label, int& body_id,
-                                        std::string& error_message)
+int MujocoSimulation::frame_body_id(const std::string& frame_id) const
 {
   if (frame_id.empty())
   {
-    body_id = -1;
-    return true;
+    return -1;
   }
+  return mj_name2id(mj_model_, mjOBJ_BODY, frame_id.c_str());
+}
 
-  body_id = mj_name2id(mj_model_, mjOBJ_BODY, frame_id.c_str());
-  if (body_id == -1)
+bool MujocoSimulation::validate_frame_id(const std::string& frame_id, const std::string& field_label,
+                                         std::string& error_message) const
+{
+  if (!frame_id.empty() && frame_body_id(frame_id) == -1)
   {
     error_message = "Unknown " + field_label + " frame_id body name: '" + frame_id + "'.";
     return false;
   }
-
   return true;
 }
 
-bool MujocoSimulation::resolve_free_joint_write(const mujoco_ros2_control_msgs::msg::FreeJointState& state,
-                                                FreeJointWrite& out, std::string& error_message)
+int MujocoSimulation::find_free_joint_id(int body_id) const
 {
-  const int body_id = mj_name2id(mj_model_, mjOBJ_BODY, state.name.c_str());
-  if (body_id == -1)
+  // A body's joints are contiguous from body_jntadr, and a free joint is the only joint its body
+  // can carry, so this inspects one entry rather than scanning all njnt joints.
+  const int first_joint = mj_model_->body_jntadr[body_id];
+  const int num_joints = mj_model_->body_jntnum[body_id];
+  for (int j = first_joint; j >= 0 && j < first_joint + num_joints; ++j)
   {
-    error_message = "Unknown body name: '" + state.name + "'.";
-    return false;
-  }
-
-  // A body has at most one free joint.
-  int qpos_adr = -1;
-  int qvel_adr = -1;
-  for (int i = 0; i < mj_model_->njnt; ++i)
-  {
-    if (mj_model_->jnt_bodyid[i] == body_id && mj_model_->jnt_type[i] == mjJNT_FREE)
+    if (mj_model_->jnt_type[j] == mjJNT_FREE)
     {
-      qpos_adr = mj_model_->jnt_qposadr[i];
-      qvel_adr = mj_model_->jnt_dofadr[i];
-      break;
+      return j;
     }
   }
+  return -1;
+}
 
-  if (qpos_adr == -1)
+bool MujocoSimulation::validate_free_joint_states(
+    const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joints, std::string& error_message)
+{
+  for (size_t i = 0; i < free_joints.size(); ++i)
   {
-    error_message = "Body '" + state.name + "' is not driven by a free joint.";
-    return false;
+    const mujoco_ros2_control_msgs::msg::FreeJointState& state = free_joints[i];
+    // Only built when an entry is rejected, which is why this is a lambda and not a string.
+    const auto fail = [&](const std::string& reason) {
+      error_message = "Entry " + std::to_string(i) + " ('" + state.name + "'): " + reason;
+      return false;
+    };
+
+    const int body_id = mj_name2id(mj_model_, mjOBJ_BODY, state.name.c_str());
+    if (body_id == -1)
+    {
+      return fail("Unknown body name.");
+    }
+
+    if (find_free_joint_id(body_id) == -1)
+    {
+      return fail("Body is not driven by a free joint.");
+    }
+
+    std::string frame_error;
+    if (!validate_frame_id(state.pose.header.frame_id, "pose", frame_error) ||
+        !validate_frame_id(state.twist.header.frame_id, "twist", frame_error))
+    {
+      return fail(frame_error);
+    }
   }
-
-  const mjtNum rel_pos[3] = { state.pose.pose.position.x, state.pose.pose.position.y, state.pose.pose.position.z };
-  const mjtNum rel_quat[4] = { state.pose.pose.orientation.w, state.pose.pose.orientation.x,
-                               state.pose.pose.orientation.y, state.pose.pose.orientation.z };
-  const mjtNum rel_linvel[3] = { state.twist.twist.linear.x, state.twist.twist.linear.y, state.twist.twist.linear.z };
-  const mjtNum rel_angvel[3] = { state.twist.twist.angular.x, state.twist.twist.angular.y, state.twist.twist.angular.z };
-
-  mjtNum world_pos[3];
-  mjtNum world_quat[4];
-
-  int pose_frame_body_id = -1;
-  if (!resolve_frame_id(state.pose.header.frame_id, "pose", pose_frame_body_id, error_message))
-  {
-    return false;
-  }
-
-  if (pose_frame_body_id == -1)
-  {
-    mju_copy3(world_pos, rel_pos);
-    mju_copy4(world_quat, rel_quat);
-  }
-  else
-  {
-    mju_mulPose(world_pos, world_quat, mj_data_->xpos + 3 * pose_frame_body_id,
-                mj_data_->xquat + 4 * pose_frame_body_id, rel_pos, rel_quat);
-  }
-
-  mjtNum world_linvel[3];
-  mjtNum world_angvel[3];
-
-  int twist_frame_body_id = -1;
-  if (!resolve_frame_id(state.twist.header.frame_id, "twist", twist_frame_body_id, error_message))
-  {
-    return false;
-  }
-
-  if (twist_frame_body_id == -1)
-  {
-    mju_copy3(world_linvel, rel_linvel);
-    mju_copy3(world_angvel, rel_angvel);
-  }
-  else
-  {
-    // The reference body's own velocity is not added, only its orientation.
-    const mjtNum* twist_frame_quat = mj_data_->xquat + 4 * twist_frame_body_id;
-    mju_rotVecQuat(world_linvel, rel_linvel, twist_frame_quat);
-    mju_rotVecQuat(world_angvel, rel_angvel, twist_frame_quat);
-  }
-
-  out.qpos_adr = qpos_adr;
-  out.qvel_adr = qvel_adr;
-  mju_copy3(out.world_pos, world_pos);
-  mju_copy4(out.world_quat, world_quat);
-  mju_copy3(out.world_linvel, world_linvel);
-  mju_copy3(out.world_angvel, world_angvel);
-
   return true;
+}
+
+void MujocoSimulation::apply_free_joint_states(
+    const std::vector<mujoco_ros2_control_msgs::msg::FreeJointState>& free_joints)
+{
+  for (const mujoco_ros2_control_msgs::msg::FreeJointState& state : free_joints)
+  {
+    const int body_id = mj_name2id(mj_model_, mjOBJ_BODY, state.name.c_str());
+    const int joint_id = find_free_joint_id(body_id);
+    // qpos layout is position then orientation in (w, x, y, z), MuJoCo's convention; qvel is
+    // linear then angular velocity.
+    mjtNum* qpos = mj_data_->qpos + mj_model_->jnt_qposadr[joint_id];
+    mjtNum* qvel = mj_data_->qvel + mj_model_->jnt_dofadr[joint_id];
+
+    const mjtNum rel_pos[3] = { state.pose.pose.position.x, state.pose.pose.position.y, state.pose.pose.position.z };
+    const mjtNum rel_quat[4] = { state.pose.pose.orientation.w, state.pose.pose.orientation.x,
+                                 state.pose.pose.orientation.y, state.pose.pose.orientation.z };
+    const mjtNum rel_linvel[3] = { state.twist.twist.linear.x, state.twist.twist.linear.y, state.twist.twist.linear.z };
+    const mjtNum rel_angvel[3] = { state.twist.twist.angular.x, state.twist.twist.angular.y,
+                                   state.twist.twist.angular.z };
+
+    // Frame poses come from xpos/xquat, which only change when kinematics runs, so earlier
+    // entries' qpos/qvel writes cannot affect later entries' frame resolution.
+    const int pose_frame_body_id = frame_body_id(state.pose.header.frame_id);
+    if (pose_frame_body_id == -1)
+    {
+      mju_copy3(qpos, rel_pos);
+      mju_copy4(qpos + 3, rel_quat);
+    }
+    else
+    {
+      mju_mulPose(qpos, qpos + 3, mj_data_->xpos + 3 * pose_frame_body_id, mj_data_->xquat + 4 * pose_frame_body_id,
+                  rel_pos, rel_quat);
+    }
+
+    const int twist_frame_body_id = frame_body_id(state.twist.header.frame_id);
+    if (twist_frame_body_id == -1)
+    {
+      mju_copy3(qvel, rel_linvel);
+      mju_copy3(qvel + 3, rel_angvel);
+    }
+    else
+    {
+      // The reference body's own velocity is not added, only its orientation.
+      const mjtNum* twist_frame_quat = mj_data_->xquat + 4 * twist_frame_body_id;
+      mju_rotVecQuat(qvel, rel_linvel, twist_frame_quat);
+      mju_rotVecQuat(qvel + 3, rel_angvel, twist_frame_quat);
+    }
+  }
+}
+
+bool MujocoSimulation::validate_joint_state_overrides(const sensor_msgs::msg::JointState& joint_state,
+                                                      std::string& error_message)
+{
+  const size_t num_joints = joint_state.name.size();
+  if (!joint_state.effort.empty())
+  {
+    error_message = "Joint state effort is not supported; leave 'effort' empty.";
+    return false;
+  }
+  // Both value arrays are optional, but a non-empty one must line up with 'name'.
+  const auto check_length = [&](const char* field, size_t size) {
+    if (size == 0 || size == num_joints)
+    {
+      return true;
+    }
+    error_message = std::string("Joint state '") + field + "' has " + std::to_string(size) +
+                    " entries but 'name' has " + std::to_string(num_joints) + "; it must be empty or the same length.";
+    return false;
+  };
+  if (!check_length("position", joint_state.position.size()) || !check_length("velocity", joint_state.velocity.size()))
+  {
+    return false;
+  }
+
+  for (size_t i = 0; i < num_joints; ++i)
+  {
+    const std::string& name = joint_state.name[i];
+    // Only built when an entry is rejected, which is why this is a lambda and not a string.
+    const auto fail = [&](const std::string& reason) {
+      error_message = "Entry " + std::to_string(i) + " ('" + name + "'): " + reason;
+      return false;
+    };
+
+    const int joint_id = mj_name2id(mj_model_, mjOBJ_JOINT, name.c_str());
+    if (joint_id == -1)
+    {
+      return fail("Unknown joint name.");
+    }
+    const int joint_type = mj_model_->jnt_type[joint_id];
+    if (joint_type != mjJNT_HINGE && joint_type != mjJNT_SLIDE)
+    {
+      // Ball and other multi-DOF joints have no home in either field: one scalar per name cannot
+      // express them, and they are not free-joint bodies either.
+      fail("Not a single-DOF (hinge or slide) joint.");
+      if (joint_type == mjJNT_FREE)
+      {
+        error_message += " Free joints are set through 'state_overrides.free_joints' by body name.";
+      }
+      return false;
+    }
+  }
+  return true;
+}
+
+void MujocoSimulation::apply_joint_state_overrides(const sensor_msgs::msg::JointState& joint_state)
+{
+  for (size_t i = 0; i < joint_state.name.size(); ++i)
+  {
+    const int joint_id = mj_name2id(mj_model_, mjOBJ_JOINT, joint_state.name[i].c_str());
+    if (!joint_state.position.empty())
+    {
+      mj_data_->qpos[mj_model_->jnt_qposadr[joint_id]] = joint_state.position[i];
+    }
+    if (!joint_state.velocity.empty())
+    {
+      mj_data_->qvel[mj_model_->jnt_dofadr[joint_id]] = joint_state.velocity[i];
+    }
+  }
 }
 
 bool MujocoSimulation::set_free_joint_states(
@@ -1124,48 +1244,21 @@ bool MujocoSimulation::set_free_joint_states(
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
 
-  // Resolve everything before writing anything, so a single invalid entry leaves mj_data_
-  // untouched.
-  std::vector<FreeJointWrite> writes;
-  writes.reserve(free_joints.size());
-  for (size_t i = 0; i < free_joints.size(); ++i)
-  {
-    FreeJointWrite write;
-    std::string entry_error;
-    if (!resolve_free_joint_write(free_joints[i], write, entry_error))
-    {
-      error_message = "Entry " + std::to_string(i) + " ('" + free_joints[i].name + "'): " + entry_error;
-      RCLCPP_WARN(get_logger(), "%s", error_message.c_str());
-      return false;
-    }
-    writes.push_back(write);
-  }
-
-  if (writes.empty())
+  // Nothing to write, and nothing worth republishing a snapshot for.
+  if (free_joints.empty())
   {
     return true;
   }
 
-  for (const FreeJointWrite& write : writes)
+  // Validate everything before writing anything, so a single invalid entry leaves mj_data_
+  // untouched.
+  if (!validate_free_joint_states(free_joints, error_message))
   {
-    mj_data_->qpos[write.qpos_adr + 0] = write.world_pos[0];
-    mj_data_->qpos[write.qpos_adr + 1] = write.world_pos[1];
-    mj_data_->qpos[write.qpos_adr + 2] = write.world_pos[2];
-
-    // qpos orientation is (w, x, y, z), MuJoCo's convention.
-    mj_data_->qpos[write.qpos_adr + 3] = write.world_quat[0];
-    mj_data_->qpos[write.qpos_adr + 4] = write.world_quat[1];
-    mj_data_->qpos[write.qpos_adr + 5] = write.world_quat[2];
-    mj_data_->qpos[write.qpos_adr + 6] = write.world_quat[3];
-
-    mj_data_->qvel[write.qvel_adr + 0] = write.world_linvel[0];
-    mj_data_->qvel[write.qvel_adr + 1] = write.world_linvel[1];
-    mj_data_->qvel[write.qvel_adr + 2] = write.world_linvel[2];
-
-    mj_data_->qvel[write.qvel_adr + 3] = write.world_angvel[0];
-    mj_data_->qvel[write.qvel_adr + 4] = write.world_angvel[1];
-    mj_data_->qvel[write.qvel_adr + 5] = write.world_angvel[2];
+    RCLCPP_WARN(get_logger(), "%s", error_message.c_str());
+    return false;
   }
+
+  apply_free_joint_states(free_joints);
 
   refresh_data_snapshot();
   publish_control_state();

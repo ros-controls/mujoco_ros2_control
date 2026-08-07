@@ -30,6 +30,7 @@
 
 #include <mujoco_ros2_control/mujoco_simulation.hpp>
 #include <mujoco_ros2_control_msgs/msg/free_joint_state.hpp>
+#include <mujoco_ros2_control_msgs/srv/reset_world.hpp>
 #include <mujoco_ros2_control_msgs/srv/set_free_joint_state.hpp>
 
 namespace
@@ -382,6 +383,183 @@ TEST_F(MujocoSimulationTest, ResetWorldTest)
   const double time_after_reset = sim_->data()->time;
   ASSERT_TRUE(wait_until([&]() { return sim_->data()->time > time_after_reset; }))
       << "Time should advance after unpausing post-reset";
+}
+
+TEST_F(MujocoSimulationTest, ResetWorldJointStateOverrides)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  // Capture a known initial state, then drift away from it.
+  sim_->data()->qpos[0] = 0.0;
+  sim_->data()->qvel[0] = 0.0;
+  sim_->capture_initial_state();
+  sim_->data()->qpos[0] = 0.3;
+  sim_->data()->qvel[0] = 2.0;
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
+  req->state_overrides.joint_states.name = { "hinge" };
+  req->state_overrides.joint_states.position = { 0.7 };
+  req->state_overrides.joint_states.velocity = { 0.25 };
+
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  auto resp = future.get();
+  ASSERT_TRUE(resp->success) << resp->message;
+
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[0], 0.7) << "Override should win over the restored initial position";
+  EXPECT_DOUBLE_EQ(sim_->data()->qvel[0], 0.25) << "Override should win over the restored initial velocity";
+}
+
+TEST_F(MujocoSimulationTest, ResetWorldKeyframeAndOverrides)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+  mujoco_ros2_control_msgs::msg::FreeJointState free_override;
+  free_override.name = "free_object_2";
+  free_override.pose.pose.position.x = 5.0;
+  free_override.pose.pose.position.y = 6.0;
+  free_override.pose.pose.position.z = 7.0;
+  free_override.pose.pose.orientation.w = 1.0;
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
+  req->keyframe = "home";  // hinge=0.5, free_object at (1,0,1), free_object_2 at (2,0,1)
+  req->state_overrides.joint_states.name = { "hinge" };
+  req->state_overrides.joint_states.position = { 0.25 };
+  req->state_overrides.free_joints.push_back(free_override);
+
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  auto resp = future.get();
+  ASSERT_TRUE(resp->success) << resp->message;
+
+  // Overridden entries take their override values, everything else keeps the keyframe values.
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[0], 0.25);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[1], 1.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[2], 0.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[3], 1.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[8], 5.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[9], 6.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[10], 7.0);
+  // Unset twist in the free-joint override comes to rest, like set_free_joint_state.
+  for (int i = 7; i < 13; ++i)
+  {
+    EXPECT_DOUBLE_EQ(sim_->data()->qvel[i], 0.0) << "qvel[" << i << "] should be zero";
+  }
+}
+
+TEST_F(MujocoSimulationTest, ResetWorldOverridesResolveFramesAfterReset)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  // Move "free_object" away from its keyframe pose so pre-reset and post-reset frame
+  // resolution give different answers.
+  sim_->data()->qpos[1] = 10.0;
+  mj_forward(sim_->model(), sim_->data());
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+  mujoco_ros2_control_msgs::msg::FreeJointState free_override;
+  free_override.name = "free_object_2";
+  free_override.pose.header.frame_id = "free_object";
+  free_override.pose.pose.position.x = 0.5;
+  free_override.pose.pose.orientation.w = 1.0;
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
+  req->keyframe = "home";  // puts free_object at (1,0,1)
+  req->state_overrides.free_joints.push_back(free_override);
+
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  auto resp = future.get();
+  ASSERT_TRUE(resp->success) << resp->message;
+
+  // Resolved against free_object's post-reset pose (1,0,1), not its pre-reset pose (10,0,1).
+  EXPECT_NEAR(sim_->data()->qpos[8], 1.5, TEST_TOLERANCE);
+  EXPECT_NEAR(sim_->data()->qpos[9], 0.0, TEST_TOLERANCE);
+  EXPECT_NEAR(sim_->data()->qpos[10], 1.0, TEST_TOLERANCE);
+}
+
+TEST_F(MujocoSimulationTest, ResetWorldInvalidOverrides)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  sim_->data()->qpos[0] = 0.0;
+  sim_->capture_initial_state();
+  sim_->data()->qpos[0] = 0.3;
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
+  req->state_overrides.joint_states.name = { "hinge", "nonexistent_joint" };
+  req->state_overrides.joint_states.position = { 0.7, 0.1 };
+
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  auto resp = future.get();
+  EXPECT_FALSE(resp->success);
+  EXPECT_FALSE(resp->message.empty());
+  EXPECT_DOUBLE_EQ(sim_->data()->qpos[0], 0.3) << "An invalid override must leave the world un-reset";
+}
+
+TEST_F(MujocoSimulationTest, ResetWorldMalformedOverrides)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+  // Mismatched position length.
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
+  req->state_overrides.joint_states.name = { "hinge" };
+  req->state_overrides.joint_states.position = { 0.1, 0.2 };
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  auto resp = future.get();
+  EXPECT_FALSE(resp->success);
+  EXPECT_FALSE(resp->message.empty());
+
+  // Effort overrides are not supported.
+  req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
+  req->state_overrides.joint_states.name = { "hinge" };
+  req->state_overrides.joint_states.effort = { 1.0 };
+  future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  resp = future.get();
+  EXPECT_FALSE(resp->success);
+  EXPECT_FALSE(resp->message.empty());
+}
+
+TEST_F(MujocoSimulationTest, ResetWorldFreeJointInJointState)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+  auto req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
+  req->state_overrides.joint_states.name = { "free_object_joint" };
+  req->state_overrides.joint_states.position = { 1.0 };
+
+  auto future = client->async_send_request(req);
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  auto resp = future.get();
+  EXPECT_FALSE(resp->success);
+  EXPECT_NE(resp->message.find("state_overrides.free_joints"), std::string::npos)
+      << "Message should point free joints at the state_overrides.free_joints field, got: " << resp->message;
 }
 
 TEST_F(MujocoSimulationTest, SetFreeJointStateSetsPoseAndVelocity)

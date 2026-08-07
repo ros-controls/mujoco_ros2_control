@@ -164,7 +164,7 @@ The drivers expose control and state for that single joint, while the simulation
 Sensors
 -------
 
-The hardware interface supports force-torque sensors (FTS) and inertial measurement units (IMUs).
+The hardware interface supports force-torque sensors (FTS), inertial measurement units (IMUs), pose sensors, and magnetometers.
 MuJoCo does not model complete FTS and IMUs natively, so we combine supported MJCF sensor constructs to map to a single ``ros2_control`` sensor.
 
 Force-Torque Sensors
@@ -237,10 +237,34 @@ Map to the corresponding ``ros2_control`` sensor:
 
 These sensor state interfaces work out of the box with the standard ROS 2 broadcasters.
 
+Magnetometer
+~~~~~~~~~~~~
+
+Model a MuJoCo ``magnetometer`` sensor in the MJCF:
+
+.. code-block:: xml
+
+   <sensor>
+     <magnetometer name="magnetometer_sensor" site="imu_sensor"/>
+   </sensor>
+
+Map it to the corresponding ``ros2_control`` sensor:
+
+.. code-block:: xml
+
+   <sensor name="magnetometer_sensor">
+     <param name="mujoco_type">magnetometer</param>
+     <!-- mujoco_sensor_name does not need to match the ros2_control sensor name -->
+     <param name="mujoco_sensor_name">magnetometer_sensor</param>
+     <state_interface name="magnetic_field.x"/>
+     <state_interface name="magnetic_field.y"/>
+     <state_interface name="magnetic_field.z"/>
+   </sensor>
+
 .. warning::
 
    Cameras and lidar sensors are no longer supported in the base interface, they are now provided as ``mujoco_ros2_control_plugins``.
-   Refer to the :ref:`CameraPlugin` and :ref:`RangefinderLidarPlugin` for more information.
+   Refer to the :ref:`CameraPlugin <camera_plugin>` and :ref:`RangefinderLidarPlugin <rangefinder_lidar_plugin>` for more information.
 
 .. _simulation_topics_and_services:
 
@@ -275,11 +299,30 @@ Services
       ros2 service call /ros2_control_node/set_pause mujoco_ros2_control_msgs/srv/SetPause "{paused: false}"
 
 ``~/reset_world`` (``mujoco_ros2_control_msgs/srv/ResetWorld``)
-   Resets the simulation state.
+   Resets the simulation state, optionally applying per-joint state overrides on top of the restored state.
 
    - If the optional ``keyframe`` string field is empty, the simulation is restored to the state captured at startup (initial joint positions, velocities, and control values).
    - If a ``keyframe`` name is provided, that named keyframe from the MJCF is applied instead.
+   - ``state_overrides`` (``mujoco_ros2_control_msgs/SimulationState``): optional overrides applied on top of the
+     restored state — ``joint_states`` for single-DOF (hinge/slide) joints keyed by MuJoCo joint name, and
+     ``free_joints`` for free joints keyed by the name of the body each one drives.
+     The split follows the representation: ``joint_states`` carries raw scalar joint coordinates, while
+     ``free_joints`` carries a frame-relative Cartesian pose and twist. Ball and other multi-DOF joints fit
+     neither and are not supported.
+   - In ``joint_states``, ``position`` and ``velocity`` must each be empty or the same length as ``name``, so a given
+     field is set for every listed joint or for none of them; an empty array leaves that field at its reset value.
+     ``effort`` is not supported and must be empty.
+   - In ``free_joints``, entries behave exactly like the ``~/set_free_joint_state`` service (see below), except that any
+     ``pose``/``twist`` ``frame_id`` is resolved against body poses *after* the reset and *after* any ``joint_states``
+     overrides have been written. An object can therefore be placed relative to where another body ends up, rather than
+     where it was before the reset.
    - Returns ``success`` and a human-readable ``message``.
+
+   .. note::
+
+      There is no standalone service for setting a single-DOF joint; unlike free-joint bodies, articulated joints are
+      usually actuated, so writing one has to re-sync the hardware interface's command interfaces and reset its PIDs.
+      That reconciliation only happens as part of a reset, which is why the capability lives here.
 
    .. code-block:: bash
 
@@ -289,10 +332,24 @@ Services
       # Reset to a named MJCF keyframe
       ros2 service call /ros2_control_node/reset_world mujoco_ros2_control_msgs/srv/ResetWorld "{keyframe: 'home'}"
 
+      # Reset to a keyframe, but with the cabinet door open and "box_1" placed on the table
+      ros2 service call /ros2_control_node/reset_world mujoco_ros2_control_msgs/srv/ResetWorld \
+        "{keyframe: 'home',
+          state_overrides: {
+            joint_states: {name: ['door_hinge'], position: [1.57]},
+            free_joints: [
+              {name: 'box_1', pose: {header: {frame_id: 'table'}, pose: {position: {z: 0.4}}}}
+            ]
+          }
+        }"
+
    .. important::
 
       If controllers are active during the service call, the robot may reset to the initial state and then immediately
       snap back to its previous commanded position. Deactivate any active joint controllers before calling this service.
+      This applies equally to ``state_overrides.joint_states`` targeting controlled joints: the hardware interface re-syncs
+      its command interfaces to the overridden positions as part of the reset, but an active controller may still
+      command the joints elsewhere on its next update.
 
 ``~/step_simulation`` (``mujoco_ros2_control_msgs/srv/StepSimulation``)
    Advances the paused simulation by an exact number of physics steps and blocks until all steps have completed.
