@@ -324,14 +324,14 @@ Velocity Override Behavior
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Each cycle, the commanded body-frame ``vx``/``vy`` is clamped to ``max_linear_velocity`` (preserving
-direction) and rotated into the world frame using the body's current orientation, since a free
-joint's linear ``qvel`` is expressed in the world frame. The commanded yaw-rate is clamped to
-``max_yaw_rate`` and used as-is, since a free joint's rotational ``qvel`` is already expressed in
-the body-local frame. The result is written directly into ``data->qvel`` during ``update()``:
-the core NaN-fills ``qvel`` before every plugin's ``update()`` runs, so writing a finite value
-into an entry requests a hard velocity override there, applied by the core simulation as a direct
-``qvel`` write immediately before the next physics step (see "Creating Your Own Plugin" below for
-the full mechanism, which is not available through ``xfrc_applied`` alone).
+direction) and rotated into the world frame using the body's current orientation (read via
+``get_sim_data()``), since a free joint's linear ``qvel`` is expressed in the world frame. The
+commanded yaw-rate is clamped to ``max_yaw_rate`` and used as-is, since a free joint's rotational
+``qvel`` is already expressed in the body-local frame. The result is written into
+``control_data->qvel`` during ``update()``, one of the commandable fields listed in `Reading State
+and Commanding the Simulation`_: writing a finite value into an entry requests a hard velocity
+override there, merged into the live simulation as a direct ``qvel`` write immediately before the
+next physics step.
 
 A command that hasn't been refreshed within ``cmd_timeout`` seconds is treated as zero (safety
 stop) rather than left to coast on the last commanded velocity.

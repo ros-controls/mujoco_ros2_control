@@ -128,8 +128,15 @@ void BaseVelocityPlugin::storeCommand(double vx, double vy, double wz)
   latest_cmd_ = { vx, vy, wz, node_->get_clock()->now() };
 }
 
-void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
+void BaseVelocityPlugin::update(mjData* control_data)
 {
+  const mjData* sim_data = get_sim_data();
+  if (sim_data == nullptr)
+  {
+    RCLCPP_ERROR_ONCE(logger_, "BaseVelocityPlugin has no simulation data; skipping velocity override.");
+    return;
+  }
+
   // Step 1 - refresh the cached command from the subscription callback without
   // blocking the real-time thread; if the lock is contended, keep using the last
   // successfully cached values.
@@ -161,11 +168,12 @@ void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
   wz_cmd = mju_clip(wz_cmd, -max_yaw_rate_, max_yaw_rate_);
 
   // Step 4 - rotate the commanded body-frame linear velocity into the world frame (a free
-  // joint's linear qvel is world-frame)
-  const mjtNum* xmat = data->xmat + body_id_ * 9;
-  data->qvel[qvel_adr_ + 0] = xmat[0] * vx_cmd + xmat[1] * vy_cmd;
-  data->qvel[qvel_adr_ + 1] = xmat[3] * vx_cmd + xmat[4] * vy_cmd;
-  data->qvel[qvel_adr_ + 5] = wz_cmd;
+  // joint's linear qvel is world-frame), reading the body's current orientation from the live
+  // simulation data.
+  const mjtNum* xmat = sim_data->xmat + body_id_ * 9;
+  control_data->qvel[qvel_adr_ + 0] = xmat[0] * vx_cmd + xmat[1] * vy_cmd;
+  control_data->qvel[qvel_adr_ + 1] = xmat[3] * vx_cmd + xmat[4] * vy_cmd;
+  control_data->qvel[qvel_adr_ + 5] = wz_cmd;
 }
 
 void BaseVelocityPlugin::cleanup()

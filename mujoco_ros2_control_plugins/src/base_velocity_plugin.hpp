@@ -31,14 +31,14 @@ namespace mujoco_ros2_control_plugins
 /**
  * @brief Drives a mobile/floating-base robot from a commanded planar body velocity
  *        (vx, vy, yaw-rate) by writing a hard kinematic override of the base's free-joint
- *        velocity directly into data->qvel every cycle (see
+ *        velocity into control_data->qvel every cycle (see
  *        MuJoCoROS2ControlPluginBase::update()'s doc comment for the NaN convention this
  *        relies on).
  *
  * Wheel-terrain friction/slip modelling is often unreliable enough to make it a poor
  * foundation for testing navigation stacks. This plugin instead subscribes to a
  * cmd_vel-style topic and, every cycle, writes the (optionally clamped) commanded planar
- * velocity directly into the base body's free-joint qvel entries in data. There is no
+ * velocity into the base body's free-joint qvel entries of control_data. There is no
  * gain to tune and no convergence delay: the measured body velocity on the driven DOFs is
  * exactly the commanded velocity on the very next simulation step.
  *
@@ -73,7 +73,7 @@ public:
   ~BaseVelocityPlugin() override = default;
 
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
-  void update(const mjModel* model, mjData* data) override;
+  void update(mjData* control_data) override;
   void cleanup() override;
 
 private:

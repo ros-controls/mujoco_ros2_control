@@ -116,6 +116,10 @@ protected:
     data_ = mj_makeData(model_);
     ASSERT_NE(data_, nullptr);
     mj_forward(model_, data_);
+
+    // Separate write-only command buffer, mirroring what the physics loop hands to plugins.
+    control_data_ = mj_makeData(model_);
+    ASSERT_NE(control_data_, nullptr);
   }
 
   void TearDown() override
@@ -128,6 +132,8 @@ protected:
     executor_.reset();
     plugin_node_.reset();
     node_.reset();
+    mj_deleteData(control_data_);
+    control_data_ = nullptr;
     mj_deleteData(data_);
     data_ = nullptr;
     mj_deleteModel(model_);
@@ -149,16 +155,18 @@ protected:
     return model_->jnt_qposadr[0];
   }
 
-  /// NaN-fills this body's 6 qvel entries, mirroring the real system's per-cycle pre-fill
-  /// (MujocoSystemInterface::write()) so tests can verify which entries the plugin leaves
-  /// untouched versus which it overrides.
-  void fillQvelNaN()
+  /// Presents the command buffer's qvel the way the physics loop does: every entry unset
+  /// (NaN), which means "leave unchanged". Mirrors MujocoSimulation::run_plugin_updates().
+  void resetControlData()
   {
-    const int adr = dofAdr();
-    for (int i = 0; i < 6; ++i)
-    {
-      data_->qvel[adr + i] = std::numeric_limits<double>::quiet_NaN();
-    }
+    mju_fill(control_data_->qvel, std::numeric_limits<mjtNum>::quiet_NaN(), model_->nv);
+  }
+
+  /// Runs one plugin update cycle against a freshly unset command buffer.
+  void updatePlugin(mujoco_ros2_control_plugins::BaseVelocityPlugin& plugin)
+  {
+    resetControlData();
+    plugin.update(control_data_);
   }
 
   /// Declares "body" (defaulting to "base_link") and initializes a plugin instance with it.
@@ -170,7 +178,7 @@ protected:
       plugin_node_->declare_parameter(paramName("body"), body_name);
     }
     auto plugin = std::make_unique<mujoco_ros2_control_plugins::BaseVelocityPlugin>();
-    EXPECT_TRUE(plugin->init(plugin_node_, model_, data_));
+    EXPECT_TRUE(plugin->initialize(plugin_node_, model_, data_));
     return plugin;
   }
 
@@ -190,6 +198,7 @@ protected:
 
   mjModel* model_{ nullptr };
   mjData* data_{ nullptr };
+  mjData* control_data_{ nullptr };
   rclcpp::Node::SharedPtr node_;
   rclcpp::Node::SharedPtr plugin_node_;
 
@@ -203,7 +212,7 @@ TEST_F(BaseVelocityPluginTest, InitFailsForUnknownBody)
   plugin_node_->declare_parameter(paramName("body"), std::string("does_not_exist"));
 
   mujoco_ros2_control_plugins::BaseVelocityPlugin plugin;
-  EXPECT_FALSE(plugin.init(plugin_node_, model_, data_));
+  EXPECT_FALSE(plugin.initialize(plugin_node_, model_, data_));
   plugin.cleanup();
 }
 
@@ -225,7 +234,7 @@ TEST_F(BaseVelocityPluginTest, InitFailsForBodyWithoutFreeJoint)
   mujoco_ros2_control_plugins::BaseVelocityPlugin plugin;
   // A velocity override has nowhere to write without a free joint, so init() must fail
   // outright rather than merely warn as the old force-servo design did.
-  EXPECT_FALSE(plugin.init(plugin_node_, welded_model, welded_data));
+  EXPECT_FALSE(plugin.initialize(plugin_node_, welded_model, welded_data));
   plugin.cleanup();
 
   mj_deleteData(welded_data);
@@ -235,11 +244,10 @@ TEST_F(BaseVelocityPluginTest, InitFailsForBodyWithoutFreeJoint)
 TEST_F(BaseVelocityPluginTest, NoCommandRequestsZeroVelocity)
 {
   auto plugin = makeInitializedPlugin();
-  fillQvelNaN();
 
-  plugin->update(model_, data_);
+  updatePlugin(*plugin);
 
-  const mjtNum* qvel = data_->qvel + dofAdr();
+  const mjtNum* qvel = control_data_->qvel + dofAdr();
   EXPECT_DOUBLE_EQ(qvel[0], 0.0);
   EXPECT_DOUBLE_EQ(qvel[1], 0.0);
   EXPECT_DOUBLE_EQ(qvel[5], 0.0);
@@ -256,12 +264,11 @@ TEST_F(BaseVelocityPluginTest, NoCommandRequestsZeroVelocity)
 TEST_F(BaseVelocityPluginTest, CommandIsReportedAsOverride)
 {
   auto plugin = makeInitializedPlugin();
-  fillQvelNaN();
 
   publishTwist("cmd_vel", /*vx=*/1.0, /*vy=*/0.0, /*wz=*/0.3);
-  plugin->update(model_, data_);
+  updatePlugin(*plugin);
 
-  const mjtNum* qvel = data_->qvel + dofAdr();
+  const mjtNum* qvel = control_data_->qvel + dofAdr();
   // Identity orientation => body-x == world-x. This is a direct assignment, not a servo,
   // so the commanded value is reached immediately -- no convergence tolerance needed.
   EXPECT_NEAR(qvel[0], 1.0, 1e-9);
@@ -282,13 +289,13 @@ TEST_F(BaseVelocityPluginTest, StaleCommandRequestsZeroVelocity)
 
   publishTwist("cmd_vel", /*vx=*/1.0, /*vy=*/0.0, /*wz=*/0.0);
 
-  plugin->update(model_, data_);
-  const mjtNum* qvel = data_->qvel + dofAdr();
+  updatePlugin(*plugin);
+  const mjtNum* qvel = control_data_->qvel + dofAdr();
   ASSERT_GT(qvel[0], 0.0) << "sanity: velocity requested while command is fresh";
 
   // Wait past the timeout without publishing again.
   std::this_thread::sleep_for(std::chrono::milliseconds(400));
-  plugin->update(model_, data_);
+  updatePlugin(*plugin);
 
   EXPECT_NEAR(qvel[0], 0.0, 1e-9) << "stale command should be treated as zero";
 
@@ -301,9 +308,9 @@ TEST_F(BaseVelocityPluginTest, LinearCommandIsClampedToMaxLinearVelocity)
   auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/5.0, /*vy=*/0.0, /*wz=*/0.0);
-  plugin->update(model_, data_);
+  updatePlugin(*plugin);
 
-  const mjtNum* qvel = data_->qvel + dofAdr();
+  const mjtNum* qvel = control_data_->qvel + dofAdr();
   EXPECT_NEAR(qvel[0], 0.2, 1e-9);
 
   plugin->cleanup();
@@ -315,9 +322,9 @@ TEST_F(BaseVelocityPluginTest, YawCommandIsClampedToMaxYawRate)
   auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/0.0, /*vy=*/0.0, /*wz=*/5.0);
-  plugin->update(model_, data_);
+  updatePlugin(*plugin);
 
-  const mjtNum* qvel = data_->qvel + dofAdr();
+  const mjtNum* qvel = control_data_->qvel + dofAdr();
   EXPECT_NEAR(qvel[5], 0.3, 1e-9);
 
   plugin->cleanup();
@@ -330,9 +337,9 @@ TEST_F(BaseVelocityPluginTest, UnsetLimitsDoNotClamp)
   auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/1000.0, /*vy=*/0.0, /*wz=*/1000.0);
-  plugin->update(model_, data_);
+  updatePlugin(*plugin);
 
-  const mjtNum* qvel = data_->qvel + dofAdr();
+  const mjtNum* qvel = control_data_->qvel + dofAdr();
   EXPECT_NEAR(qvel[0], 1000.0, 1e-6);
   EXPECT_NEAR(qvel[5], 1000.0, 1e-6);
 
@@ -355,9 +362,9 @@ TEST_F(BaseVelocityPluginTest, BodyFrameCommandIsRotatedIntoFreeJointFrame)
   mj_forward(model_, data_);
 
   publishTwist("cmd_vel", /*vx=*/1.0, /*vy=*/0.0, /*wz=*/0.0);
-  plugin->update(model_, data_);
+  updatePlugin(*plugin);
 
-  const mjtNum* qvel = data_->qvel + dofAdr();
+  const mjtNum* qvel = control_data_->qvel + dofAdr();
   EXPECT_NEAR(qvel[0], 0.0, 1e-6) << "world-x should be ~0 after a 90 deg yaw";
   EXPECT_NEAR(qvel[1], 1.0, 1e-6) << "commanded body-x should land on world-y";
 
