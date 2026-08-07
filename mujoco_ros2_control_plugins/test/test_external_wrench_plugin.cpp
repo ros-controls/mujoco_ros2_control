@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -98,6 +99,10 @@ protected:
     data_ = mj_makeData(model_);
     ASSERT_NE(data_, nullptr);
     mj_forward(model_, data_);
+
+    // Separate write-only command buffer, mirroring what the physics loop hands to plugins.
+    control_data_ = mj_makeData(model_);
+    ASSERT_NE(control_data_, nullptr);
   }
 
   void TearDown() override
@@ -110,10 +115,41 @@ protected:
     executor_.reset();
     plugin_node_.reset();
     node_.reset();
+    mj_deleteData(control_data_);
+    control_data_ = nullptr;
     mj_deleteData(data_);
     data_ = nullptr;
     mj_deleteModel(model_);
     model_ = nullptr;
+  }
+
+  /// Presents the command buffer the way the physics loop does: every entry unset (NaN), which
+  /// means "leave unchanged".
+  void resetControlData()
+  {
+    mju_fill(control_data_->xfrc_applied, std::numeric_limits<mjtNum>::quiet_NaN(), model_->nbody * 6);
+  }
+
+  /// Runs one plugin update cycle against a freshly unset command buffer.
+  void updatePlugin(mujoco_ros2_control_plugins::ExternalWrenchPlugin& plugin)
+  {
+    resetControlData();
+    plugin.update(control_data_);
+  }
+
+  /// Total magnitude the plugin actually commanded this cycle. Entries left unset (NaN) are
+  /// skipped, since they command nothing.
+  double commandedMagnitude() const
+  {
+    double total = 0.0;
+    for (int i = 0; i < model_->nbody * 6; ++i)
+    {
+      if (!std::isnan(control_data_->xfrc_applied[i]))
+      {
+        total += std::abs(control_data_->xfrc_applied[i]);
+      }
+    }
+    return total;
   }
 
   /// Sends a zero-duration wrench service request (no blocking sleep in the
@@ -141,6 +177,7 @@ protected:
 
   mjModel* model_{ nullptr };
   mjData* data_{ nullptr };
+  mjData* control_data_{ nullptr };
   rclcpp::Node::SharedPtr node_;
   rclcpp::Node::SharedPtr plugin_node_;
 
@@ -195,14 +232,14 @@ private:
 TEST_F(ExternalWrenchPluginTest, InitSucceeds)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
+  EXPECT_TRUE(plugin.initialize(plugin_node_, model_, data_));
   plugin.cleanup();
 }
 
 TEST_F(ExternalWrenchPluginTest, ServiceRejectsUnknownBodyName)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   auto resp = callServiceZeroDuration("nonexistent_body", /*fx=*/1.0);
   ASSERT_NE(resp, nullptr);
@@ -215,7 +252,7 @@ TEST_F(ExternalWrenchPluginTest, ServiceRejectsUnknownBodyName)
 TEST_F(ExternalWrenchPluginTest, ServiceAcceptsValidBodyName)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   auto resp = callServiceZeroDuration("test_body", /*fx=*/1.0);
   ASSERT_NE(resp, nullptr);
@@ -228,12 +265,13 @@ TEST_F(ExternalWrenchPluginTest, ServiceAcceptsValidBodyName)
 TEST_F(ExternalWrenchPluginTest, UpdateAppliesForceToXfrcApplied)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
-  // All xfrc_applied entries must start at zero.
+  // The command buffer starts fully unset: the plugin commands nothing until it writes.
+  resetControlData();
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    EXPECT_DOUBLE_EQ(data_->xfrc_applied[i], 0.0);
+    EXPECT_TRUE(std::isnan(control_data_->xfrc_applied[i])) << "xfrc_applied[" << i << "] did not start unset";
   }
 
   // Apply 10 N in body-frame X (≡ world-frame X at identity orientation).
@@ -241,15 +279,9 @@ TEST_F(ExternalWrenchPluginTest, UpdateAppliesForceToXfrcApplied)
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
-  plugin.update(model_, data_);
+  updatePlugin(plugin);
 
-  // At least one xfrc_applied entry must carry a non-zero value.
-  double total = 0.0;
-  for (int i = 0; i < model_->nbody * 6; ++i)
-  {
-    total += std::abs(data_->xfrc_applied[i]);
-  }
-  EXPECT_GT(total, 0.0) << "xfrc_applied should be non-zero after applying a force";
+  EXPECT_GT(commandedMagnitude(), 0.0) << "xfrc_applied should be non-zero after applying a force";
 
   plugin.cleanup();
 }
@@ -257,22 +289,31 @@ TEST_F(ExternalWrenchPluginTest, UpdateAppliesForceToXfrcApplied)
 TEST_F(ExternalWrenchPluginTest, UpdateUndoesPreviousContributionOnNextCall)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   auto resp = callServiceZeroDuration("test_body", /*fx=*/10.0);
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
   // First update: wrench applied, then immediately expired (zero duration).
-  plugin.update(model_, data_);
+  updatePlugin(plugin);
 
-  // Second update: plugin subtracts its saved contribution; no active wrenches remain.
-  plugin.update(model_, data_);
+  // Second update: no active wrenches remain, so the plugin must release the force it applied.
+  updatePlugin(plugin);
 
-  for (int i = 0; i < model_->nbody * 6; ++i)
+  // The release has to be an *explicit* zero. Leaving the slot unset (NaN) would mean "leave
+  // unchanged", and the expired force would stay applied in the simulation indefinitely.
+  const int body_id = mj_name2id(model_, mjOBJ_BODY, "test_body");
+  ASSERT_GE(body_id, 0);
+  for (int j = 0; j < 6; ++j)
   {
-    EXPECT_DOUBLE_EQ(data_->xfrc_applied[i], 0.0) << "xfrc_applied[" << i << "] not zeroed after wrench expiry";
+    const mjtNum released = control_data_->xfrc_applied[body_id * 6 + j];
+    EXPECT_FALSE(std::isnan(released)) << "xfrc_applied slot " << j
+                                       << " was left unset, so the expired wrench "
+                                          "would remain applied";
+    EXPECT_DOUBLE_EQ(released, 0.0) << "xfrc_applied slot " << j << " not zeroed after wrench expiry";
   }
+  EXPECT_DOUBLE_EQ(commandedMagnitude(), 0.0) << "No force should be commanded after the wrench expired";
 
   plugin.cleanup();
 }
@@ -280,7 +321,7 @@ TEST_F(ExternalWrenchPluginTest, UpdateUndoesPreviousContributionOnNextCall)
 TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   // Queue two equal wrenches simultaneously.
   {
@@ -295,16 +336,12 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
   }
 
   // First update: both wrenches active, both expire (zero duration).
-  plugin.update(model_, data_);
+  updatePlugin(plugin);
 
-  double total_both = 0.0;
-  for (int i = 0; i < model_->nbody * 6; ++i)
-  {
-    total_both += std::abs(data_->xfrc_applied[i]);
-  }
+  const double total_both = commandedMagnitude();
 
   // Second update clears state.
-  plugin.update(model_, data_);
+  updatePlugin(plugin);
 
   // Queue a single wrench of the same magnitude.
   {
@@ -313,13 +350,9 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
     ASSERT_TRUE(r->success);
   }
 
-  plugin.update(model_, data_);
+  updatePlugin(plugin);
 
-  double total_one = 0.0;
-  for (int i = 0; i < model_->nbody * 6; ++i)
-  {
-    total_one += std::abs(data_->xfrc_applied[i]);
-  }
+  const double total_one = commandedMagnitude();
 
   ASSERT_GT(total_one, 0.0) << "Single wrench should produce non-zero xfrc_applied";
   // Two equal wrenches must contribute exactly twice as much as one.
@@ -331,7 +364,7 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
 TEST_F(ExternalWrenchPluginTest, TorqueOnlyWrenchAppliesRotationalForce)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   // Apply only a torque (no force) about body-frame Z.
   auto resp = callServiceZeroDuration("test_body", /*fx=*/0.0, /*fy=*/0.0, /*fz=*/0.0,
@@ -339,14 +372,9 @@ TEST_F(ExternalWrenchPluginTest, TorqueOnlyWrenchAppliesRotationalForce)
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
-  plugin.update(model_, data_);
+  updatePlugin(plugin);
 
-  double total = 0.0;
-  for (int i = 0; i < model_->nbody * 6; ++i)
-  {
-    total += std::abs(data_->xfrc_applied[i]);
-  }
-  EXPECT_GT(total, 0.0) << "xfrc_applied should be non-zero after applying a torque";
+  EXPECT_GT(commandedMagnitude(), 0.0) << "xfrc_applied should be non-zero after applying a torque";
 
   plugin.cleanup();
 }
@@ -354,7 +382,7 @@ TEST_F(ExternalWrenchPluginTest, TorqueOnlyWrenchAppliesRotationalForce)
 TEST_F(ExternalWrenchPluginTest, SingleCallWithMultipleWrenchesAppliesAll)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   // Send two wrenches in a single service call: 5 N in X and 5 N in Y.
   auto client = plugin_node_->create_client<ApplyExternalWrench>("apply_wrench");
@@ -382,14 +410,9 @@ TEST_F(ExternalWrenchPluginTest, SingleCallWithMultipleWrenchesAppliesAll)
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
-  plugin.update(model_, data_);
+  updatePlugin(plugin);
 
-  double total = 0.0;
-  for (int i = 0; i < model_->nbody * 6; ++i)
-  {
-    total += std::abs(data_->xfrc_applied[i]);
-  }
-  EXPECT_GT(total, 0.0) << "Both wrenches in the batch should produce non-zero xfrc_applied";
+  EXPECT_GT(commandedMagnitude(), 0.0) << "Both wrenches in the batch should produce non-zero xfrc_applied";
 
   plugin.cleanup();
 }
@@ -397,7 +420,7 @@ TEST_F(ExternalWrenchPluginTest, SingleCallWithMultipleWrenchesAppliesAll)
 TEST_F(ExternalWrenchPluginTest, SingleCallRejectsIfAnyBodyNameInvalid)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   auto client = plugin_node_->create_client<ApplyExternalWrench>("apply_wrench");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
@@ -426,11 +449,13 @@ TEST_F(ExternalWrenchPluginTest, SingleCallRejectsIfAnyBodyNameInvalid)
   EXPECT_FALSE(resp->success) << "Request with one invalid body name must be rejected entirely";
   EXPECT_FALSE(resp->message.empty());
 
-  // No wrench should have been applied — xfrc_applied must remain zero.
-  plugin.update(model_, data_);
+  // No wrench should have been applied — the plugin must command nothing at all, leaving every
+  // entry unset so the simulation is untouched.
+  updatePlugin(plugin);
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
-    EXPECT_DOUBLE_EQ(data_->xfrc_applied[i], 0.0) << "xfrc_applied[" << i << "] must be zero after rejected batch";
+    EXPECT_TRUE(std::isnan(control_data_->xfrc_applied[i]))
+        << "xfrc_applied[" << i << "] was commanded after a rejected batch";
   }
 
   plugin.cleanup();
@@ -439,7 +464,7 @@ TEST_F(ExternalWrenchPluginTest, SingleCallRejectsIfAnyBodyNameInvalid)
 TEST_F(ExternalWrenchPluginTest, PublishMarkersForActiveForceWrench)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   // Send a wrench with a 200 ms duration from a background thread so the
   // sleeping service callback does not block update() in the main thread.
@@ -449,7 +474,7 @@ TEST_F(ExternalWrenchPluginTest, PublishMarkersForActiveForceWrench)
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   // Run update() while the wrench is still active.
-  plugin.update(model_, data_);
+  updatePlugin(plugin);
 
   // Collect markers via the new aggregation API.
   MarkerArray markers;
@@ -481,10 +506,10 @@ TEST_F(ExternalWrenchPluginTest, PublishMarkersForActiveForceWrench)
 TEST_F(ExternalWrenchPluginTest, PublishMarkersContributesNothingWhenNoWrenchesActive)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   // No service calls — no active wrenches.
-  plugin.update(model_, data_);
+  updatePlugin(plugin);
 
   // publish_markers() must not append anything when there are no active wrenches.
   // Marker lifetime-based expiry (managed by the system interface) handles cleanup
@@ -500,11 +525,11 @@ TEST_F(ExternalWrenchPluginTest, PublishMarkersContributesNothingWhenNoWrenchesA
 TEST_F(ExternalWrenchPluginTest, PublishMarkersAppendsToExistingArray)
 {
   mujoco_ros2_control_plugins::ExternalWrenchPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  ASSERT_TRUE(plugin.initialize(plugin_node_, model_, data_));
 
   std::thread svc_thread([this]() { callServiceWithDuration("test_body", 0.2, /*fx=*/5.0, /*fy=*/0.0, /*fz=*/0.0); });
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  plugin.update(model_, data_);
+  updatePlugin(plugin);
 
   // Pre-populate the array with a sentinel marker (simulates another plugin's contribution).
   MarkerArray markers;

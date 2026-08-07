@@ -8,7 +8,8 @@ This separation allows for modular, optional features without adding complexity 
 .. note::
 
    This interface provides flexibility for accessing information from the MuJoCo model and data.
-   Users are responsible for handling that data correctly and avoiding changes to critical information.
+   Users are responsible for handling that data correctly and avoiding changes to critical
+   information. See `Reading State and Commanding the Simulation`_ for the read/write contract.
 
 
 Available Plugins
@@ -323,14 +324,14 @@ Velocity Override Behavior
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Each cycle, the commanded body-frame ``vx``/``vy`` is clamped to ``max_linear_velocity`` (preserving
-direction) and rotated into the world frame using the body's current orientation, since a free
-joint's linear ``qvel`` is expressed in the world frame. The commanded yaw-rate is clamped to
-``max_yaw_rate`` and used as-is, since a free joint's rotational ``qvel`` is already expressed in
-the body-local frame. The result is written directly into ``data->qvel`` during ``update()``:
-the core NaN-fills ``qvel`` before every plugin's ``update()`` runs, so writing a finite value
-into an entry requests a hard velocity override there, applied by the core simulation as a direct
-``qvel`` write immediately before the next physics step (see "Creating Your Own Plugin" below for
-the full mechanism, which is not available through ``xfrc_applied`` alone).
+direction) and rotated into the world frame using the body's current orientation (read via
+``get_sim_data()``), since a free joint's linear ``qvel`` is expressed in the world frame. The
+commanded yaw-rate is clamped to ``max_yaw_rate`` and used as-is, since a free joint's rotational
+``qvel`` is already expressed in the body-local frame. The result is written into
+``control_data->qvel`` during ``update()``, one of the commandable fields listed in `Reading State
+and Commanding the Simulation`_: writing a finite value into an entry requests a hard velocity
+override there, merged into the live simulation as a direct ``qvel`` write immediately before the
+next physics step.
 
 A command that hasn't been refreshed within ``cmd_timeout`` seconds is treated as zero (safety
 stop) rather than left to coast on the last commanded velocity.
@@ -602,7 +603,7 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
    {
    public:
      bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
-     void update(const mjModel* model, mjData* data) override;
+     void update(mjData* control_data) override;
      void cleanup() override;
 
    private:
@@ -631,9 +632,15 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
      return true;
    }
 
-   void MyCustomPlugin::update(const mjModel* model, mjData* data)
+   void MyCustomPlugin::update(mjData* control_data)
    {
-     // Called every control loop iteration
+     // Read simulation state through the const accessors...
+     const mjModel* model = get_mujoco_model();
+     const mjData* data = get_sim_data();
+
+     // ...and command the simulation by writing into control_data.
+     // Entries you do not write stay unset, which means "leave unchanged".
+     control_data->ctrl[0] = 0.5;
    }
 
    void MyCustomPlugin::cleanup()
@@ -688,32 +695,86 @@ Create ``my_plugins.xml``:
    )
 
 
+Reading State and Commanding the Simulation
+-------------------------------------------
+
+Reads and writes are deliberately separated:
+
+* **Reading** simulation state uses ``get_sim_data()`` and ``get_mujoco_model()``, which return
+  the live MuJoCo containers as ``const`` pointers. They are populated before ``init()`` is called
+  and remain valid for the lifetime of the plugin.
+* **Writing** commands uses the ``control_data`` buffer passed to ``update()``. This buffer is
+  *write-only*: do not read simulation state out of it.
+
+``control_data`` uses a sentinel: every commandable field arrives filled with
+``mujoco_ros2_control_plugins::kUnsetCommand``, and only the entries a plugin actually writes are
+merged into the simulation. Use that constant and the ``is_commanded()`` helper from the plugin base
+header rather than spelling out NaN yourself. The commandable fields are:
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Field
+     - Meaning
+   * - ``ctrl[nu]``
+     - Actuator controls
+   * - ``qfrc_applied[nv]``
+     - Applied generalized forces
+   * - ``xfrc_applied[6*nbody]``
+     - Applied Cartesian force/torque per body
+   * - ``qpos[nq]``
+     - Generalized positions
+   * - ``qvel[nv]``
+     - Generalized velocities
+
+Every other field of ``control_data`` is unspecified and must not be read.
+
+.. warning::
+
+   An unset entry means "leave unchanged", so a command **persists** in the simulation until
+   something overwrites it. To *release* a command, write an explicit value (usually ``0.0``) rather
+   than simply stopping writing to that entry. The ``ExternalWrenchPlugin`` does exactly this when a
+   wrench expires.
+
+Because the merge is per entry rather than a whole-array overwrite, values a plugin does not
+command are left alone. In particular, forces applied interactively by dragging a body in the
+native viewer survive on any body no plugin is commanding.
+
+.. note::
+
+   Writing ``qpos`` / ``qvel`` moves the simulation directly and bypasses the validation performed
+   by the ``~/reset_world`` and ``~/set_free_joint_state`` services. Invalid values will diverge
+   the simulation. Prefer those services where they fit.
+
+
 Plugin Lifecycle
 ----------------
 
 1. **Initialization** (``init``): Called once when the plugin is loaded. Use this to read
    parameters and set up publishers, subscribers, and services.
-2. **Update** (``update``): Called every simulation step at the **end of the** ``read`` **loop**,
-   before the controller update and ``write`` loops. Changes to ``mjData`` here are visible to
-   controllers and affect the next simulation step. This runs in a real-time thread — avoid
-   blocking operations.
+2. **Update** (``update``): Called once per physics-loop iteration, on the MuJoCo physics thread,
+   with the simulation mutex held, immediately before the simulation is stepped. Commands written
+   into ``control_data`` therefore affect the very next step.
 
-   ``data->qvel`` here has one special property: it is **NaN-filled before every plugin's**
-   ``update()`` **runs this cycle**. Most plugins never touch it and can ignore this entirely.
-   A plugin that needs to *dictate* a free joint's velocity exactly (``BaseVelocityPlugin`` is
-   the example in this package) can write a finite value into any ``qvel`` entry to request a
-   hard velocity override there — the core simulation applies every non-NaN entry as a direct
-   ``qvel`` write immediately before the next ``mj_step``, bypassing the normal mass/contact
-   dynamics for that DOF. This exists because plugins only ever see a throwaway copy of
-   ``mjData`` — only ``ctrl``, ``qfrc_applied``, and ``xfrc_applied`` are otherwise copied back
-   into the real simulation state, so this NaN convention is the only way a plugin can
-   influence ``qvel`` at all. Leaving an entry ``NaN`` keeps its normal physics-driven value;
-   because of this, ``data->qvel`` cannot be read here for the body's actual velocity either,
-   since it isn't restored to a real value until after every plugin's ``update()`` has run.
-   See ``MuJoCoROS2ControlPluginBase::update()``'s doc comment in
-   ``mujoco_ros2_control_plugins_base.hpp`` for the authoritative reference.
+   ``BaseVelocityPlugin`` is the example in this package of a plugin that dictates a free joint's
+   velocity exactly, by writing a finite value into ``control_data->qvel`` (see the commandable
+   fields table above).
 3. **Cleanup** (``cleanup``): Called when shutting down. Release any resources acquired in
    ``init``.
+
+.. warning::
+
+   ``update()`` runs on the physics thread while it holds the simulation mutex, which the native
+   viewer's render thread also needs. Blocking in ``update()`` stalls both the physics loop and
+   the viewer. Rate-limit expensive work and use non-blocking (realtime) publishers.
+
+.. note::
+
+   **Deprecated:** the older ``update(const mjModel* model, mjData* data)`` overload still
+   compiles and still receives the live, readable ``mjData``, so existing plugins keep working
+   unchanged. It logs a deprecation warning on its first call. Port to
+   ``update(mjData* control_data)`` with ``get_sim_data()`` / ``get_mujoco_model()``.
 
 
 Building

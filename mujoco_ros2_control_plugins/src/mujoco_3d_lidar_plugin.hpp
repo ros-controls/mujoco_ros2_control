@@ -99,7 +99,7 @@ public:
    * nothing. If so, this will copy the sensor data into a relevant message type and
    * publish it.
    */
-  void update(const mjModel* model, mjData* data) override;
+  void update(mjData* control_data) override;
 
   /**
    * @brief Destructs the plugin and all relevant data.

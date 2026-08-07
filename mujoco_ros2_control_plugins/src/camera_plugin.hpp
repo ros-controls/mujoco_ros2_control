@@ -159,7 +159,7 @@ public:
    * @param glfw_init_fn Function used to attempt GLFW initialization; same signature as `glfwInit`.
    */
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data, GlfwInitFn glfw_init_fn);
-  void update(const mjModel* model, mjData* data) override;
+  void update(mjData* control_data) override;
   void cleanup() override;
 
   /**
@@ -228,7 +228,6 @@ private:
   // Ensures locked access to simulation data for rendering.
   std::recursive_mutex* sim_mutex_{ nullptr };
 
-  mjData* mj_data_;
   const mjModel* mj_model_;
   mjData* mj_camera_data_;
 

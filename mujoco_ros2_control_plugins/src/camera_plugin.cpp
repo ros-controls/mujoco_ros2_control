@@ -28,11 +28,10 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
   return this->init(node, model, data, glfwInit);
 }
 
-bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data, GlfwInitFn glfw_init_fn)
+bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* /*data*/, GlfwInitFn glfw_init_fn)
 {
   node_ = node;
   mj_model_ = model;
-  mj_data_ = data;
 
   // Ensure the logger has a name
   logger_ = node_->get_logger().get_child(node->get_sub_namespace());
@@ -64,16 +63,20 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
   return true;
 }
 
-void CameraPlugin::update(const mjModel* model_arg, mjData* data)
+void CameraPlugin::update(mjData* /*control_data*/)
 {
   if (!publish_images_)
   {
     return;
   }
 
+  const mjModel* model_arg = get_mujoco_model();
+  const mjData* data = get_sim_data();
+
   // Streaming cameras render on a fixed-rate clock; polled cameras render as soon as a
-  // trigger has been received. Both are serviced here, on the sim thread, because this is
-  // the only place we can safely snapshot the live mjData without racing the simulation.
+  // trigger has been received. Both are serviced here, on the physics thread with the sim mutex
+  // held, because this is the only place we can safely snapshot the live mjData without racing
+  // the simulation.
   // TODO: Support per-camera publish rates?
   const auto now = node_->get_clock()->now();
   const bool stream_due =

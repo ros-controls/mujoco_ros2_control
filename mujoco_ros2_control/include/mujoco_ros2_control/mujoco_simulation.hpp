@@ -76,22 +76,20 @@ namespace mujoco_ros2_control
  * loop can hold the sim mutex for a large fraction of a display refresh while it batches
  * steps, this can block the caller and should not be used from latency-sensitive threads.
  *
- * `acquire_data_snapshot()` instead borrows the most recent completed post-step snapshot of
- * `mj_data_`, produced by the physics loop into a separate buffer. Acquiring is a pointer
- * swap under a mutex that is never held for longer than a swap, so the caller performs no
- * scene-sized copy and never waits on physics stepping or refresh. The returned data may
- * lag `mj_data_` by a few timesteps. This is what the hardware interface uses in `write()`.
+ * `copy_control_state(...)` copies the small per-step `ControlState` (positions, velocities,
+ * sensor data, ...) that the hardware interface needs every cycle. It is far cheaper than a
+ * full mjData copy regardless of scene complexity, and is what the hardware interface uses in
+ * `read()`.
  *
- * `apply_control_data(...)` will copy control inputs from the provided mjData into staging
- * buffers that the physics loop applies to `mj_data_` immediately before each step.
- * Specifically, it stages `ctrl`, `qfrc_applied`, and `xfrc_applied`. Cartesian forces from
- * `xfrc_applied` compete with inputs from Simulate's drag function, so they are resolved
- * separately. This only takes the control staging mutex and never blocks on physics stepping.
- * It also stages `qvel`: the system interface NaN-fills `qvel` before every plugin's
- * `update()` runs, so any DOF a plugin leaves untouched is NaN here and any DOF it writes a
- * finite value into is a requested hard velocity override (see
- * `MuJoCoROS2ControlPluginBase::update()`'s doc comment). Non-NaN entries are applied as a
- * direct `qvel` write, bypassing the normal dynamics for that DOF.
+ * `stage_actuator_commands(...)` copies actuator commands into a staging buffer that the physics
+ * loop merges into `mj_data_->ctrl` immediately before each step. Entries that are NaN mean
+ * "leave unchanged", so the caller only has to fill the actuators it actually commands. This
+ * only takes the control staging mutex and never blocks on physics stepping.
+ *
+ * `register_plugins(...)` hands over the MuJoCo plugins to be driven by the physics loop. Each
+ * plugin is updated once per loop iteration, with the sim mutex held, immediately before the
+ * step batch: it reads live state directly and writes commands into a NaN-filled `control_data`
+ * buffer, of which only the non-NaN entries are merged into `mj_data_`.
  *
  * `overwrite_physics_data(...)` will completely replace the data for the sim. Should be used
  * with extreme caution.
@@ -177,7 +175,8 @@ public:
    *
    * Users should generally not interact with the physics sim data excepting during setup and
    * other special circumstances. For "normal" processing it is recommended to use
-   * `control_data` or other containers populated by `copy_mj_data`.
+   * `copy_control_state` (reads) and `stage_actuator_commands` (writes), both of which are safe
+   * to call from a control loop.
    */
   mjData* data()
   {
@@ -223,29 +222,10 @@ public:
    * @brief Copies `mj_data_` into the provided container in a thread safe way.
    *
    * This locks the sim mutex and will pause the physics loop, so should be used sparingly.
-   * Latency-sensitive callers should use `acquire_data_snapshot` or `copy_control_state` instead.
+   * Latency-sensitive callers should use `copy_control_state` instead.
    * @note: If the destination is null it will be created.
    */
   void copy_physics_data(mjData*& destination);
-
-  /**
-   * @brief Borrows the latest completed post-step snapshot of `mj_data_` (producer-pays copying).
-   *
-   * The physics loop fills snapshot buffers on its own thread; this call only swaps pointers
-   * to take ownership of the most recent completed one, so the caller never performs a scene-sized
-   * copy and never waits for a stepping batch,or in-process refresh. If no new snapshot has
-   * completed since the last call, the same buffer is returned again.
-   * Also requests a fresh snapshot for the next call.
-   *
-   * Ownership contract: there is a single borrower slot. The returned buffer remains valid and
-   * is never touched by the physics loop until the next `acquire_data_snapshot()` call, at
-   * which point the previous buffer is recycled back to the producer. The borrower may freely
-   * write to the buffer (e.g., plugins composing control inputs); all such writes are discarded
-   * when the buffer is recycled and refilled. Only one consumer may use this API — concurrent
-   * callers would swap each other's buffer out from underneath them.
-   * Cold-path consumers that need their own copy should use `copy_physics_data` instead.
-   */
-  mjData* acquire_data_snapshot();
 
   /**
    * @brief Small snapshot of the state the hardware interface needs every control cycle.
@@ -276,18 +256,55 @@ public:
   void copy_control_state(ControlState& destination);
 
   /**
-   * @brief Stages control fields from `control_data` for the physics loop in a thread safe way.
+   * @brief Republishes the per-step control state from the current `mj_data_`.
    *
-   * Specifically, copies `control_data->ctrl` and `control_data->qfrc_applied` into staging
-   * buffers which the physics loop copies into `mj_data_` immediately before each step.
-   * `control_data->xfrc_applied` is copied into `xfrc_plugin_desired_` to avoid conflicts
-   * from the simulate app. `control_data->qvel` is copied into `qvel_override_staged_`;
-   * entries that are not NaN are plugin-requested velocity overrides (see
-   * `MuJoCoROS2ControlPluginBase::update()`'s doc comment for the NaN convention this
-   * relies on) and are applied as direct `qvel` writes before the next `mj_step`. This does
-   * not lock the sim mutex and never waits on stepping.
+   * The physics loop does this after every step, so this is only needed when a caller has
+   * manipulated `mj_data_` directly (e.g. applying initial positions during setup) and wants the
+   * next `copy_control_state` to reflect it without waiting for a step to happen.
+   *
+   * Takes the sim mutex, so it should not be called from a latency-sensitive thread.
    */
-  void apply_control_data(mjData* control_data);
+  void refresh_control_state();
+
+  /**
+   * @brief Stages actuator commands for the physics loop in a thread safe way.
+   *
+   * The physics loop merges these into `mj_data_->ctrl` immediately before each step. Entries
+   * that are NaN are skipped, meaning "leave this actuator unchanged" -- so a caller only fills
+   * the actuators it commands, and passive or uncommanded actuators keep whatever the simulation
+   * (or a plugin, or a reset) last set. This does not lock the sim mutex and never waits on
+   * stepping.
+   *
+   * @param ctrl_commands Per-actuator commands, sized `model()->nu`. Shorter or longer vectors
+   * are rejected with a warning rather than staged partially.
+   */
+  void stage_actuator_commands(const std::vector<mjtNum>& ctrl_commands);
+
+  /**
+   * @brief Hands the MuJoCo plugins to the physics loop, which drives their `update()`.
+   *
+   * Each registered plugin is updated once per physics-loop iteration, with the sim mutex held,
+   * immediately before the step batch. Plugins read live state through
+   * `MuJoCoROS2ControlPluginBase::get_sim_data()` and write commands into a NaN-filled
+   * `control_data` buffer; only the non-NaN entries are merged into `mj_data_`.
+   *
+   * Ownership stays with the caller; this class only borrows the shared pointers. Replaces any
+   * previously registered plugins.
+   *
+   * @note Takes the sim mutex, since plugins may be registered after the physics loop has
+   * already started.
+   */
+  void register_plugins(std::vector<std::shared_ptr<mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase>> plugins);
+
+  /**
+   * @brief Stops driving the registered plugins.
+   *
+   * Once this returns, no plugin `update()` is in flight and none will be started, so the owner can
+   * safely tear the plugins down. Plugins cache the live model and data pointers, so the required
+   * teardown order is: `detach_plugins()`, then each plugin's `cleanup()`, then destroying this
+   * simulation. Idempotent.
+   */
+  void detach_plugins();
 
   /**
    * @brief Accessor for the mutex which locks access to the data and model.
@@ -310,11 +327,42 @@ public:
 
 private:
   /**
-   * @brief Helper function to compose hw interface and simulation provided Cartesian forces.
+   * @brief Merges the actuator commands staged by `stage_actuator_commands` into `mj_data_->ctrl`.
    *
-   * This should be called before stepping the simulation. Assumes the sim mutex is held.
+   * NaN entries are skipped, so uncommanded actuators keep their current value. This should be
+   * called before stepping the simulation. Assumes the sim mutex is held; takes the control
+   * staging mutex.
    */
   void apply_staged_control_inputs();
+
+  /// One commandable field: where plugins write it, where it lands, and how many entries it has.
+  struct CommandableField
+  {
+    mjtNum* commanded;
+    mjtNum* live;
+    int count;
+  };
+
+  /**
+   * @brief The fields plugins may command, as the single list used to both unset and merge them.
+   *
+   * @note Assumes the sim mutex is held and `control_data_` is allocated.
+   */
+  std::vector<CommandableField> commandable_fields();
+
+  /**
+   * @brief Runs every registered plugin's `update()` and merges what they commanded.
+   *
+   * Presents the commandable fields of `control_data_` as unset, calls each plugin in registration
+   * order, then copies back only the entries the plugins actually wrote. Plugins read live state
+   * directly, so no scene-sized copy is involved.
+   *
+   * Called once per physics-loop iteration -- not once per `mj_step` -- so that plugins keep
+   * running at roughly the outer loop rate even when a single iteration batches many steps.
+   *
+   * @note Assumes the sim mutex is held. Plugin code therefore runs under that mutex.
+   */
+  void run_plugin_updates();
 
   /**
    * @brief Publishes the per-step control state from `mj_data_`.
@@ -323,15 +371,6 @@ private:
    * Assumes the sim mutex is held; takes the control state mutex.
    */
   void publish_control_state();
-
-  /**
-   * @brief Refreshes the consumer-facing snapshot from `mj_data_`.
-   *
-   * Reclaims the producer-side buffer (clearing snapshot_ready_ if a previous fill was never
-   * consumed), fills it outside any shared lock (the sim mutex serializes writers), then
-   * raises snapshot_ready_ for the consumer. Assumes the sim mutex is held.
-   */
-  void refresh_data_snapshot();
 
   /**
    * @brief Loops the physics simulation until asked to terminate.
@@ -397,7 +436,7 @@ private:
    * @brief Writes free-joint states into `mj_data_->qpos`/`qvel`, resolving each entry's `pose`
    * and `twist` against their own `header.frame_id` -- they may reference different bodies, or
    * vary between world vs. relative frame to another body.
-   * Does not refresh snapshots or run forward dynamics; the caller is responsible for both.
+   * Does not republish the control state or run forward dynamics; the caller is responsible for both.
    *
    * @note Caller must hold the sim mutex and have validated `free_joints` first.
    */
@@ -417,7 +456,7 @@ private:
 
   /**
    * @brief Writes single-DOF joint states into `mj_data_->qpos`/`qvel`.
-   * Does not refresh snapshots or run forward dynamics; the caller is responsible for both.
+   * Does not republish the control state or run forward dynamics; the caller is responsible for both.
    *
    * @note Caller must hold the sim mutex and have validated `joint_state` first.
    */
@@ -457,55 +496,29 @@ private:
   // directly unless you are sure of what you are doing.
   mjData* mj_data_{ nullptr };
 
-  // Double-buffered snapshot of mj_data_: the physics loop pays for all scene-sized copies,
-  // the consumer borrows the result via acquire_data_snapshot() and performs no copy at all.
-  // The producer (any writer holding the sim mutex) fills snapshot_write_ outside any shared
-  // lock and raises snapshot_ready_; the consumer, when the flag is up, swaps the two pointers
-  // under data_exchange_mutex_ and reads snapshot_read_ in place.
-  mjData* snapshot_write_{ nullptr };
-  mjData* snapshot_read_{ nullptr };
-  bool snapshot_ready_{ false };
+  // Write-only command buffer handed to plugins in run_plugin_updates(). Its commandable fields are
+  // marked unset before every plugin pass, and only the commanded entries are merged back into
+  // mj_data_. Nothing else in this container is meaningful.
+  // Allocated lazily by register_plugins(), so a run without plugins does not pay for a full mjData.
+  mjData* control_data_{ nullptr };
 
-  // Control inputs staged by apply_control_data, applied to mj_data_ before each step.
+  // MuJoCo plugins driven by the physics loop. Borrowed; owned by the hardware interface.
+  std::vector<std::shared_ptr<mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase>> plugins_;
+
+  // Actuator commands staged by stage_actuator_commands, merged into mj_data_->ctrl before each
+  // step. NaN entries mean "leave unchanged", which is what keeps initial / reset / plugin-set
+  // ctrl values from being clobbered by actuators the hardware interface does not command.
   std::vector<mjtNum> ctrl_staged_;
-  std::vector<mjtNum> qfrc_applied_staged_;
 
-  // False until apply_control_data is first called (and cleared on reset), so that initial /
-  // reset ctrl values in mj_data_ are not clobbered by stale staging buffers.
-  bool control_inputs_staged_{ false };
-
-  // Buffers to track actively applied Cartesian forces from both the plugins and the Simulate /
-  // viewer-only drag forces.
-  std::vector<mjtNum> xfrc_plugin_desired_;  // Tracks forces from plugins
-  std::vector<mjtNum> xfrc_viewer_capture_;  // Tracks forces from the viewer
-  std::vector<mjtNum> xfrc_last_written_;    // tracks the last value written to xfrc_applied
-
-  // qvel as staged by apply_control_data: sized nv, NaN by default. A plugin requests a
-  // velocity override on a DOF by writing a finite value into control_data->qvel during its
-  // update()
-  std::vector<mjtNum> qvel_override_staged_;
-
-  // Guards only the snapshot pointer swap and snapshot_ready_ flag.
-  // Lock order: sim_mutex_ (if needed) is always taken before this one.
-  std::mutex data_exchange_mutex_;
-
-  // Set by acquire_data_snapshot when a consumer takes the snapshot; the physics loop only
-  // runs the expensive full refresh when this is set, so refresh bandwidth tracks consumer
-  // demand instead of the batch rate. Starts true so the first refresh happens.
-  std::atomic<bool> snapshot_refresh_requested_{ true };
-
-  // Guards the staged control inputs (ctrl_staged_, qfrc_applied_staged_, xfrc_plugin_desired_,
-  // control_inputs_staged_, qvel_override_staged_). Separate from data_exchange_mutex_ so
-  // that staging commands in write() and applying them before each physics step never queue
-  // behind a full mjData copy.
-  // Critical sections are all small buffer copies.
-  // Lock order: sim_mutex_ (if needed) before this one; never held with data_exchange_mutex_.
+  // Guards the staged actuator commands (ctrl_staged_). Separate from the sim mutex so that
+  // staging commands in write() and merging them before each physics step never queue behind
+  // physics stepping. Critical sections are all small buffer copies.
+  // Lock order: sim_mutex_ (if needed) before this one.
   std::mutex control_staging_mutex_;
 
-  // Per-step control state served by copy_control_state. Guarded by its own mutex, separate
-  // from data_exchange_mutex_, so the reduced control-state copies never queue behind a full
-  // mjData snapshot copy.
-  // Lock order: sim_mutex_ (if needed) before this one; never held with data_exchange_mutex_.
+  // Per-step control state served by copy_control_state. Guarded by its own mutex so the reduced
+  // control-state copies never queue behind physics stepping.
+  // Lock order: sim_mutex_ (if needed) before this one.
   ControlState control_state_;
   std::mutex control_state_mutex_;
 

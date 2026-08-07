@@ -142,8 +142,9 @@ bool FreeJointStatePublisherPlugin::init(rclcpp::Node::SharedPtr node, const mjM
   return true;
 }
 
-void FreeJointStatePublisherPlugin::update(const mjModel* /*model*/, mjData* data)
+void FreeJointStatePublisherPlugin::update(mjData* /*control_data*/)
 {
+  const mjData* data = get_sim_data();
   const rclcpp::Time now = node_->get_clock()->now();
   if (now - last_publish_time_ < publish_period_)
   {

@@ -55,19 +55,20 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
   return true;
 }
 
-void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
+void ExternalWrenchPlugin::update(mjData* control_data)
 {
-  // Step 0 - undo the xfrc_applied contributions written in the previous cycle
-  // so stale forces are never left in the array when all wrenches have expired.
-  // When the system interface also zeroes xfrc_applied before calling update(),
-  // this loop is a harmless no-op on already-zero values.
+  const mjData* sim_data = get_sim_data();
+
+  // Claims a body's slot for this cycle by commanding an explicit zero. Needed in two places:
+  // control_data arrives unset ("leave unchanged"), so an expired wrench must be released with a
+  // real zero rather than by simply not writing it, and a slot we are about to accumulate into has
+  // to start from zero rather than from the unset sentinel.
+  const auto claim_slot = [control_data](int body_id) { mju_zero(control_data->xfrc_applied + body_id * 6, 6); };
+
+  // Step 0 - release the contributions commanded in the previous cycle.
   for (const int body_id : prev_written_body_ids_)
   {
-    mjtNum* base = data->xfrc_applied + body_id * 6;
-    for (int j = 0; j < 6; ++j)
-    {
-      base[j] = 0.0;
-    }
+    claim_slot(body_id);
   }
   prev_written_body_ids_.clear();
 
@@ -94,8 +95,17 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
     return;
   }
 
-  // Step 2 - accumulate each active wrench into xfrc_applied.
-  // Step 0 already cleared our previous contributions, so += is equivalent to a fresh write.
+  // Step 2 - claim every slot we are about to command, and record it so Step 0 releases it next
+  // cycle. Doing this as a pre-pass keeps one meaning per variable and avoids searching
+  // prev_written_body_ids_ inside the accumulation loop; zeroing twice for two wrenches on the same
+  // body is harmless.
+  for (const ActiveWrench& wrench : active_wrenches_)
+  {
+    claim_slot(wrench.body_id);
+    prev_written_body_ids_.push_back(wrench.body_id);
+  }
+
+  // Step 3 - accumulate each active wrench into control_data->xfrc_applied.
   //
   // xfrc_applied[body*6 .. body*6+5] = (force_world[3], torque_world_at_xipos[3])
   const rclcpp::Time now_apply = node_->get_clock()->now();
@@ -114,10 +124,11 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
       }
     }
 
-    // Body pose in world frame. xmat is row-major 3×3 (body → world).
-    const mjtNum* xpos = data->xpos + w.body_id * 3;
-    const mjtNum* xmat = data->xmat + w.body_id * 9;
-    const mjtNum* xipos = data->xipos + w.body_id * 3;  // inertial CoM in world frame
+    // Body pose in world frame, read from the live simulation data. xmat is row-major 3×3
+    // (body → world).
+    const mjtNum* xpos = sim_data->xpos + w.body_id * 3;
+    const mjtNum* xmat = sim_data->xmat + w.body_id * 9;
+    const mjtNum* xipos = sim_data->xipos + w.body_id * 3;  // inertial CoM in world frame
 
     // Transform application_point from body-local to world frame.
     const mjtNum point_world[3] = {
@@ -145,21 +156,11 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
                                         torque_world[2] + r[0] * force_world[1] - r[1] * force_world[0] };
 
     const int base = w.body_id * 6;
-    for (int j = 0; j < 3; ++j)
-    {
-      data->xfrc_applied[base + j] += force_world[j];
-      data->xfrc_applied[base + 3 + j] += torque_at_xipos[j];
-    }
-
-    // Track which body slots we touched so Step 0 can undo them next cycle.
-    if (std::find(prev_written_body_ids_.begin(), prev_written_body_ids_.end(), w.body_id) ==
-        prev_written_body_ids_.end())
-    {
-      prev_written_body_ids_.push_back(w.body_id);
-    }
+    mju_addTo3(control_data->xfrc_applied + base, force_world);
+    mju_addTo3(control_data->xfrc_applied + base + 3, torque_at_xipos);
   }
 
-  // Step 3 - remove expired wrenches.  Expiry is checked AFTER applying so
+  // Step 4 - remove expired wrenches.  Expiry is checked AFTER applying so
   //          that zero-duration wrenches are applied for exactly one simulation
   //          step before being discarded (as documented in the header).
   const rclcpp::Time now = node_->get_clock()->now();
@@ -169,7 +170,7 @@ void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
 
   service_requested_.store(!active_wrenches_.empty(), std::memory_order_release);
 
-  // Step 4 - publish RViz markers for all currently active (non-expired) wrenches.
+  // Step 5 - publish RViz markers for all currently active (non-expired) wrenches.
   publish_markers();
 }
 

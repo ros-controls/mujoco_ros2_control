@@ -19,11 +19,16 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <memory>
 #include <thread>
+#include <vector>
 
 #include <mujoco/mujoco.h>
 #include <rclcpp/rclcpp.hpp>
@@ -79,6 +84,114 @@ void write_test_model()
 }
 
 constexpr double TEST_TOLERANCE = 1e-9;
+
+constexpr mjtNum kUnset = mujoco_ros2_control_plugins::kUnsetCommand;
+
+/**
+ * @brief Plugin implementing the current API, driving an injected callback on every update.
+ *
+ * The callback runs on the physics thread with the sim mutex held, so anything it records for the
+ * test thread to inspect must be atomic.
+ */
+class TestControlPlugin : public mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase
+{
+public:
+  bool init(rclcpp::Node::SharedPtr, const mjModel*, mjData*) override
+  {
+    return true;
+  }
+
+  void update(mjData* control_data) override
+  {
+    if (on_update)
+    {
+      on_update(control_data, get_sim_data(), get_mujoco_model());
+    }
+    update_count.fetch_add(1);
+  }
+
+  void cleanup() override
+  {
+  }
+
+  std::function<void(mjData*, const mjData*, const mjModel*)> on_update;
+  std::atomic<uint64_t> update_count{ 0 };
+};
+
+/**
+ * @brief Plugin implementing *only* the deprecated two-argument update(), to pin the compatibility
+ * contract: it must keep receiving live, readable mjData rather than the command buffer.
+ */
+class LegacyTestPlugin : public mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase
+{
+public:
+  bool init(rclcpp::Node::SharedPtr, const mjModel*, mjData*) override
+  {
+    return true;
+  }
+
+  void update(const mjModel* model, mjData* data) override
+  {
+    if (on_update)
+    {
+      on_update(model, data);
+    }
+    update_count.fetch_add(1);
+  }
+
+  void cleanup() override
+  {
+  }
+
+  std::function<void(const mjModel*, mjData*)> on_update;
+  std::atomic<uint64_t> update_count{ 0 };
+};
+
+/**
+ * @brief Plugin implementing *neither* update() overload -- the shape a mis-typed signature takes.
+ *
+ * Both overloads have default bodies, so this compiles; the base class is expected to notice and
+ * complain rather than silently do nothing, and the mutual dispatch between the two defaults must
+ * not recurse.
+ */
+class NoUpdateTestPlugin : public mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase
+{
+public:
+  bool init(rclcpp::Node::SharedPtr, const mjModel*, mjData*) override
+  {
+    return true;
+  }
+
+  void cleanup() override
+  {
+  }
+};
+
+/**
+ * @brief Shared-ownership slot for values a plugin callback records for the test to assert on.
+ *
+ * The physics loop keeps calling registered plugins until the simulation is shut down in
+ * TearDown, which is *after* the test body's locals have been destroyed. Capturing a stack local
+ * by reference would therefore leave the callback writing through a dangling reference. Giving the
+ * slot shared ownership keeps it alive for as long as the callback that writes it.
+ */
+template <typename T>
+std::shared_ptr<std::atomic<T>> make_recorder(T initial)
+{
+  return std::make_shared<std::atomic<T>>(initial);
+}
+
+// True if any entry is unset. Used to prove the sentinel never leaks into the sim.
+bool contains_unset(const mjtNum* values, int count)
+{
+  return !std::all_of(values, values + count, mujoco_ros2_control_plugins::is_commanded);
+}
+
+// True if every entry is unset, i.e. the buffer arrived commanding nothing.
+bool all_unset(const mjtNum* values, int count)
+{
+  return std::none_of(values, values + count, mujoco_ros2_control_plugins::is_commanded);
+}
 }  // namespace
 
 class MujocoSimulationTest : public ::testing::Test
@@ -146,6 +259,23 @@ protected:
     return sim_->initialize(node_, kTestModelPath, "/mujoco_robot_description", -1.0, true);
   }
 
+  // Construct, initialize and register a plugin, mirroring what the hardware interface does in
+  // load_mujoco_plugins(). Replaces any previously registered plugins.
+  template <typename PluginT>
+  std::shared_ptr<PluginT> add_plugin()
+  {
+    auto plugin = std::make_shared<PluginT>();
+    EXPECT_TRUE(plugin->initialize(node_, sim_->model(), sim_->data()));
+    sim_->register_plugins({ plugin });
+    return plugin;
+  }
+
+  // Returns an all-NaN command vector sized for the model's actuators, i.e. "command nothing".
+  std::vector<mjtNum> unset_actuator_commands() const
+  {
+    return std::vector<mjtNum>(sim_->model()->nu, kUnset);
+  }
+
   // Helper function to poll a condition until it returns true or the timeout expires.
   bool wait_until(std::function<bool()> condition, std::chrono::milliseconds timeout = std::chrono::seconds(5),
                   std::chrono::milliseconds poll_interval = std::chrono::milliseconds(10))
@@ -205,56 +335,214 @@ TEST_F(MujocoSimulationTest, ControlUpdateTests)
 {
   ASSERT_TRUE(initialize_sim());
 
-  // Simulate the read/write cycle in the ros2_control loop, making sure data
-  // is updated where expected
-  mjData* control = nullptr;
-  sim_->copy_physics_data(control);
-  ASSERT_NE(control, nullptr);
+  // Seed a known control value so we can prove an unset (NaN) command leaves it alone.
+  sim_->data()->ctrl[0] = 0.25;
 
-  // Update control inputs
-  control->ctrl[0] = 0.75;
-  control->qfrc_applied[0] = 1.5;
+  // Staging an all-NaN command means "command nothing", so ctrl must survive untouched. This is
+  // what lets the hardware interface skip passive / uncommanded actuators without first mirroring
+  // the simulation's current ctrl into the buffer.
+  auto commands = unset_actuator_commands();
+  sim_->stage_actuator_commands(commands);
 
-  // Apply to sim. Inputs are staged and copied into the sim data by the physics loop
-  // immediately before each step, so they must not appear until stepping occurs.
-  sim_->apply_control_data(control);
-  EXPECT_DOUBLE_EQ(sim_->data()->ctrl[0], 0.0);
-  EXPECT_DOUBLE_EQ(sim_->data()->qfrc_applied[0], 0.0);
-
-  // Once the physics loop starts stepping, the staged inputs should land in the sim data
   sim_->start_physics_thread();
-  EXPECT_TRUE(wait_until([this]() { return sim_->data()->ctrl[0] == 0.75 && sim_->data()->qfrc_applied[0] == 1.5; }))
-      << "Staged control inputs were not applied by the physics loop";
+  const uint64_t start_steps = sim_->step_count();
+  ASSERT_TRUE(wait_until([&]() { return sim_->step_count() > start_steps + 5; }));
+  EXPECT_DOUBLE_EQ(sim_->data()->ctrl[0], 0.25) << "An unset (NaN) command overwrote the existing ctrl value";
 
-  mj_deleteData(control);
+  // A finite command is merged into the sim data by the physics loop before the next step.
+  commands[0] = 0.75;
+  sim_->stage_actuator_commands(commands);
+  EXPECT_TRUE(wait_until([this]() { return sim_->data()->ctrl[0] == 0.75; }))
+      << "Staged actuator command was not applied by the physics loop";
 }
 
 TEST_F(MujocoSimulationTest, XfrcAppliedTests)
 {
   ASSERT_TRUE(initialize_sim());
 
-  // Simulate the read/write cycle in the ros2_control loop, making sure data
-  // is updated where expected
-  mjData* control = nullptr;
-  sim_->copy_physics_data(control);
-  ASSERT_NE(control, nullptr);
+  // A plugin commands a Cartesian force by writing it into control_data; the physics loop merges
+  // it into the sim data immediately before stepping.
+  constexpr int body_id = 1;
+  auto plugin = add_plugin<TestControlPlugin>();
+  plugin->on_update = [](mjData* control_data, const mjData*, const mjModel*) {
+    control_data->xfrc_applied[body_id * 6 + 0] = 1.0;
+    control_data->xfrc_applied[body_id * 6 + 1] = 2.0;
+    control_data->xfrc_applied[body_id * 6 + 2] = 3.0;
+  };
 
-  // Zero xfrc_applied (like for plugins), and apply a force
-  const size_t body_id = 1;
-  mju_zero(control->xfrc_applied, 6 * sim_->model()->nbody);
-  control->xfrc_applied[body_id * 6 + 0] = 1.0;
-  control->xfrc_applied[body_id * 6 + 1] = 2.0;
-  control->xfrc_applied[body_id * 6 + 2] = 3.0;
+  sim_->start_physics_thread();
+  EXPECT_TRUE(wait_until([this]() {
+    return sim_->data()->xfrc_applied[body_id * 6 + 0] == 1.0 && sim_->data()->xfrc_applied[body_id * 6 + 1] == 2.0 &&
+           sim_->data()->xfrc_applied[body_id * 6 + 2] == 3.0;
+  })) << "Plugin Cartesian force never reached the simulation data";
+}
 
-  sim_->apply_control_data(control);
+TEST_F(MujocoSimulationTest, PluginControlDataIsNanFilled)
+{
+  ASSERT_TRUE(initialize_sim());
 
-  // xfrc_applied should NOT be in mj_data_ directly, it goes through the triple
-  // plugin buffer and gets composed in the physics loop
-  EXPECT_DOUBLE_EQ(sim_->data()->xfrc_applied[body_id * 6 + 0], 0.0);
-  EXPECT_DOUBLE_EQ(sim_->data()->xfrc_applied[body_id * 6 + 1], 0.0);
-  EXPECT_DOUBLE_EQ(sim_->data()->xfrc_applied[body_id * 6 + 2], 0.0);
+  auto arrived_unset = make_recorder<bool>(true);
+  auto plugin = add_plugin<TestControlPlugin>();
+  plugin->on_update = [arrived_unset](mjData* control_data, const mjData*, const mjModel* model) {
+    // Every commandable field must arrive fully unset, so nothing a plugin wrote on a previous
+    // iteration is silently re-applied on this one.
+    const bool unset = all_unset(control_data->ctrl, model->nu) && all_unset(control_data->qfrc_applied, model->nv) &&
+                       all_unset(control_data->xfrc_applied, 6 * model->nbody) &&
+                       all_unset(control_data->qpos, model->nq) && all_unset(control_data->qvel, model->nv);
+    if (!unset)
+    {
+      arrived_unset->store(false);
+    }
+    // Write something, so the next iteration proves the buffer really is refilled.
+    control_data->ctrl[0] = 0.5;
+  };
 
-  mj_deleteData(control);
+  sim_->start_physics_thread();
+  ASSERT_TRUE(wait_until([&plugin]() { return plugin->update_count.load() >= 3; }))
+      << "Plugin update was never called from the physics loop";
+  EXPECT_TRUE(arrived_unset->load()) << "control_data was not NaN-filled before a plugin update";
+}
+
+TEST_F(MujocoSimulationTest, PluginPartialWriteLeavesRestUntouched)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  auto plugin = add_plugin<TestControlPlugin>();
+  plugin->on_update = [](mjData* control_data, const mjData*, const mjModel*) {
+    // Command a single actuator and nothing else.
+    control_data->ctrl[0] = 0.4;
+  };
+
+  sim_->start_physics_thread();
+  ASSERT_TRUE(wait_until([&plugin]() { return plugin->update_count.load() >= 3; }));
+
+  const mjModel* model = sim_->model();
+  const mjData* data = sim_->data();
+
+  // Fields the plugin left unset must never receive the NaN sentinel itself.
+  EXPECT_FALSE(contains_unset(data->ctrl, model->nu));
+  EXPECT_FALSE(contains_unset(data->qpos, model->nq));
+  EXPECT_FALSE(contains_unset(data->qvel, model->nv));
+  EXPECT_FALSE(contains_unset(data->qfrc_applied, model->nv));
+  EXPECT_FALSE(contains_unset(data->xfrc_applied, 6 * model->nbody));
+
+  // Nothing writes qfrc_applied in this test, so it must remain at its reset value.
+  for (int i = 0; i < model->nv; ++i)
+  {
+    EXPECT_DOUBLE_EQ(data->qfrc_applied[i], 0.0) << "qfrc_applied[" << i << "] was disturbed";
+  }
+}
+
+TEST_F(MujocoSimulationTest, PluginCanCommandQposAndQvel)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  // Pin the hinge by commanding its position and velocity every iteration. The merge happens
+  // immediately before the step, so the joint should stay within one timestep of the command.
+  constexpr mjtNum kPinnedPosition = 0.4;
+  auto plugin = add_plugin<TestControlPlugin>();
+  plugin->on_update = [](mjData* control_data, const mjData*, const mjModel*) {
+    control_data->qpos[0] = kPinnedPosition;
+    control_data->qvel[0] = 0.0;
+  };
+
+  sim_->start_physics_thread();
+  ASSERT_TRUE(wait_until([&plugin]() { return plugin->update_count.load() >= 5; }));
+  EXPECT_NEAR(sim_->data()->qpos[0], kPinnedPosition, 1e-2) << "Plugin qpos command did not reach the simulation";
+}
+
+TEST_F(MujocoSimulationTest, PluginSeesLiveSimState)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  auto observed_time = make_recorder<double>(-1.0);
+  auto saw_valid_state = make_recorder<bool>(false);
+  auto plugin = add_plugin<TestControlPlugin>();
+  plugin->on_update = [observed_time, saw_valid_state](mjData*, const mjData* sim_data, const mjModel* model) {
+    if (sim_data != nullptr && model != nullptr && !contains_unset(sim_data->qpos, model->nq))
+    {
+      saw_valid_state->store(true);
+      observed_time->store(sim_data->time);
+    }
+  };
+
+  sim_->start_physics_thread();
+  // The observed sim time must advance, proving get_sim_data() tracks the live data rather than a
+  // stale copy captured at init.
+  EXPECT_TRUE(wait_until([observed_time]() { return observed_time->load() > 0.0; }))
+      << "get_sim_data() never reported advancing simulation time";
+  EXPECT_TRUE(saw_valid_state->load()) << "get_sim_data() did not expose readable state";
+}
+
+TEST_F(MujocoSimulationTest, LegacyPluginReceivesLiveData)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  // A plugin that only implements the deprecated two-argument update() must still be handed live,
+  // readable mjData -- not the NaN command buffer -- and its direct writes must take effect.
+  constexpr int body_id = 2;
+  auto saw_readable_data = make_recorder<bool>(false);
+  auto observed_time = make_recorder<double>(-1.0);
+  auto plugin = add_plugin<LegacyTestPlugin>();
+  plugin->on_update = [saw_readable_data, observed_time](const mjModel* model, mjData* data) {
+    if (model != nullptr && data != nullptr && !contains_unset(data->qpos, model->nq) && !std::isnan(data->time))
+    {
+      saw_readable_data->store(true);
+      observed_time->store(data->time);
+    }
+    data->xfrc_applied[body_id * 6 + 0] = 5.0;
+  };
+
+  sim_->start_physics_thread();
+  ASSERT_TRUE(wait_until([&plugin]() { return plugin->update_count.load() >= 3; }))
+      << "Deprecated update() overload was never called";
+  EXPECT_TRUE(saw_readable_data->load()) << "Legacy plugin received a NaN buffer instead of live sim data";
+  EXPECT_TRUE(wait_until([observed_time]() { return observed_time->load() > 0.0; }));
+  EXPECT_DOUBLE_EQ(sim_->data()->xfrc_applied[body_id * 6 + 0], 5.0)
+      << "Legacy plugin's direct write to the live data did not survive the merge";
+}
+
+TEST_F(MujocoSimulationTest, PluginImplementingNeitherOverloadIsHarmless)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  // A plugin that overrides neither update() overload still compiles, because both have default
+  // bodies. The two defaults dispatch to each other, so the thing to pin down is that this neither
+  // recurses nor disturbs the simulation -- the base class reports it instead.
+  add_plugin<NoUpdateTestPlugin>();
+
+  sim_->start_physics_thread();
+  const uint64_t start_steps = sim_->step_count();
+  ASSERT_TRUE(wait_until([&]() { return sim_->step_count() > start_steps + 5; }))
+      << "Physics loop stopped stepping with a plugin that implements no update()";
+
+  const mjModel* model = sim_->model();
+  const mjData* data = sim_->data();
+  EXPECT_FALSE(contains_unset(data->ctrl, model->nu));
+  EXPECT_FALSE(contains_unset(data->qpos, model->nq));
+  EXPECT_FALSE(contains_unset(data->xfrc_applied, 6 * model->nbody));
+}
+
+TEST_F(MujocoSimulationTest, ExistingXfrcSurvivesPluginMerge)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  // Forces already present in the sim data (e.g. the viewer's interactive drag) must survive on
+  // bodies the plugin does not command, because the merge no longer overwrites the whole array.
+  constexpr int untouched_body = 2;
+  constexpr int commanded_body = 3;
+  sim_->data()->xfrc_applied[untouched_body * 6 + 0] = 7.0;
+
+  auto plugin = add_plugin<TestControlPlugin>();
+  plugin->on_update = [](mjData* control_data, const mjData*, const mjModel*) {
+    control_data->xfrc_applied[commanded_body * 6 + 0] = 9.0;
+  };
+
+  sim_->start_physics_thread();
+  ASSERT_TRUE(wait_until([this]() { return sim_->data()->xfrc_applied[commanded_body * 6 + 0] == 9.0; }))
+      << "Plugin force never reached the commanded body";
+  EXPECT_DOUBLE_EQ(sim_->data()->xfrc_applied[untouched_body * 6 + 0], 7.0)
+      << "Pre-existing force on an uncommanded body was clobbered by the merge";
 }
 
 TEST_F(MujocoSimulationTest, PauseStepUnpause)

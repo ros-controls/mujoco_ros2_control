@@ -11,7 +11,7 @@ public:
   {
     return true;
   }
-  void update(const mjModel*, mjData*) override
+  void update(mjData*) override
   {
   }
   void cleanup() override

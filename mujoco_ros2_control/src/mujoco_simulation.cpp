@@ -22,6 +22,7 @@
 #include "mujoco_ros2_control/sim_display_text.hpp"
 
 #include <unistd.h>
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cmath>
@@ -39,6 +40,8 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #include <std_msgs/msg/string.hpp>
 
@@ -514,12 +517,9 @@ MujocoSimulation::~MujocoSimulation()
   {
     mj_deleteData(mj_data_);
   }
-  for (mjData* snapshot : { snapshot_write_, snapshot_read_ })
+  if (control_data_)
   {
-    if (snapshot)
-    {
-      mj_deleteData(snapshot);
-    }
+    mj_deleteData(control_data_);
   }
   if (mj_model_)
   {
@@ -706,29 +706,17 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
   {
     std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
     mj_data_ = mj_makeData(mj_model_);
-    snapshot_write_ = mj_makeData(mj_model_);
-    snapshot_read_ = mj_makeData(mj_model_);
-    snapshot_ready_ = false;
 
-    // Initialize containers for data sharing
-    ctrl_staged_.assign(mj_model_->nu, 0.0);
-    qfrc_applied_staged_.assign(mj_model_->nv, 0.0);
-    control_inputs_staged_ = false;
-    xfrc_plugin_desired_.assign(6 * mj_model_->nbody, 0.0);
-    xfrc_viewer_capture_.assign(6 * mj_model_->nbody, 0.0);
-    xfrc_last_written_.assign(6 * mj_model_->nbody, 0.0);
-    qvel_override_staged_.assign(mj_model_->nv, std::numeric_limits<mjtNum>::quiet_NaN());
+    // Nothing is commanded yet, and unset means "leave unchanged", so the simulation keeps whatever
+    // initial ctrl the model / keyframe provided until a caller stages real commands.
+    ctrl_staged_.assign(mj_model_->nu, mujoco_ros2_control_plugins::kUnsetCommand);
 
-    if (mj_data_ && snapshot_write_ && snapshot_read_)
+    if (mj_data_)
     {
-      // Seed both snapshot buffers so a consumer that arrives before the first physics-loop
-      // refresh still sees valid initial data.
-      mj_copyData(snapshot_read_, mj_model_, mj_data_);
-      refresh_data_snapshot();
       publish_control_state();
     }
   }
-  if (!mj_data_ || !snapshot_write_ || !snapshot_read_)
+  if (!mj_data_)
   {
     RCLCPP_FATAL(get_logger(), "Could not allocate mjData for '%s'", model_path_.c_str());
     return false;
@@ -862,17 +850,12 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state,
   std::fill(mj_data_->xfrc_applied, mj_data_->xfrc_applied + 6 * mj_model_->nbody, 0.0);
 
   {
-    // Clear staged control inputs and plugin contributions so stale commands from before the
-    // reset are not re-applied on the next step.
+    // Discard staged actuator commands so stale pre-reset commands are not re-applied on the next
+    // step. Unset means "leave unchanged", so the reset ctrl values above survive until the
+    // hardware interface stages fresh commands.
     const std::lock_guard<std::mutex> staging_lock(control_staging_mutex_);
-    control_inputs_staged_ = false;
-    std::fill(ctrl_staged_.begin(), ctrl_staged_.end(), 0.0);
-    std::fill(qfrc_applied_staged_.begin(), qfrc_applied_staged_.end(), 0.0);
-    std::fill(xfrc_plugin_desired_.begin(), xfrc_plugin_desired_.end(), 0.0);
-    std::fill(qvel_override_staged_.begin(), qvel_override_staged_.end(), std::numeric_limits<mjtNum>::quiet_NaN());
+    std::fill(ctrl_staged_.begin(), ctrl_staged_.end(), mujoco_ros2_control_plugins::kUnsetCommand);
   }
-  std::fill(xfrc_viewer_capture_.begin(), xfrc_viewer_capture_.end(), 0.0);
-  std::fill(xfrc_last_written_.begin(), xfrc_last_written_.end(), 0.0);
 
   // Restore simulation time to preserve ROS clock continuity
   mj_data_->time = saved_time;
@@ -891,8 +874,7 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state,
   // Run forward dynamics to update derived quantities
   mj_forward(mj_model_, mj_data_);
 
-  // Make the reset state visible to snapshot readers before HW-side bookkeeping runs
-  refresh_data_snapshot();
+  // Make the reset state visible to control-state readers before HW-side bookkeeping runs
   publish_control_state();
 
   // Delegate HW-side bookkeeping (PID resets, command/state interface sync, etc.)
@@ -1260,7 +1242,6 @@ bool MujocoSimulation::set_free_joint_states(
 
   apply_free_joint_states(free_joints);
 
-  refresh_data_snapshot();
   publish_control_state();
   mj_forward(mj_model_, mj_data_);
   return true;
@@ -1295,7 +1276,6 @@ void MujocoSimulation::overwrite_physics_data(mjData* source)
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
   mj_copyData(mj_data_, mj_model_, source);
-  refresh_data_snapshot();
   publish_control_state();
 }
 
@@ -1307,58 +1287,109 @@ void MujocoSimulation::copy_physics_data(mjData*& destination)
   }
 
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
-  // Authoritative copies also refresh the snapshots, so that snapshot readers immediately see
-  // any direct mj_data_ manipulation the caller performed before this call (e.g. during setup).
-  refresh_data_snapshot();
+  // Also republish the control state, so that its readers immediately see any direct mj_data_
+  // manipulation the caller performed before this call (e.g. during setup).
   publish_control_state();
   mj_copyData(destination, mj_model_, mj_data_);
 }
 
-mjData* MujocoSimulation::acquire_data_snapshot()
+void MujocoSimulation::stage_actuator_commands(const std::vector<mjtNum>& ctrl_commands)
 {
+  if (static_cast<int>(ctrl_commands.size()) != mj_model_->nu)
   {
-    const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
-    if (snapshot_ready_)
+    RCLCPP_WARN_THROTTLE(get_logger(), *node_->get_clock(), 5000,
+                         "Ignoring staged actuator commands: got %zu values but the model has %d actuators.",
+                         ctrl_commands.size(), mj_model_->nu);
+    return;
+  }
+
+  const std::lock_guard<std::mutex> lock(control_staging_mutex_);
+  std::copy(ctrl_commands.begin(), ctrl_commands.end(), ctrl_staged_.begin());
+}
+
+void MujocoSimulation::register_plugins(
+    std::vector<std::shared_ptr<mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase>> plugins)
+{
+  // Plugins are typically registered after the physics thread is already running, so the loop
+  // could otherwise be iterating plugins_ while we assign to it.
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+
+  // Drop nulls here so the physics loop can iterate unconditionally.
+  plugins_.clear();
+  for (auto& plugin : plugins)
+  {
+    if (plugin)
     {
-      // Take ownership of the completed snapshot and recycle the previous one back to the
-      // producer. O(1): the consumer never copies and never waits on a fill.
-      std::swap(snapshot_write_, snapshot_read_);
-      snapshot_ready_ = false;
+      plugins_.push_back(std::move(plugin));
     }
   }
 
-  // Ask the physics loop for a fresh snapshot now that this one has been consumed.
-  // Data is therefore at most one consumer period + one physics batch old, while the
-  // expensive refresh runs at the aggregate consumer rate instead of every batch.
-  snapshot_refresh_requested_.store(true, std::memory_order_release);
-  return snapshot_read_;
-}
-
-void MujocoSimulation::apply_control_data(mjData* control_data)
-{
-  const std::lock_guard<std::mutex> lock(control_staging_mutex_);
-  mju_copy(ctrl_staged_.data(), control_data->ctrl, static_cast<int>(mj_model_->nu));
-  mju_copy(qfrc_applied_staged_.data(), control_data->qfrc_applied, static_cast<int>(mj_model_->nv));
-  mju_copy(xfrc_plugin_desired_.data(), control_data->xfrc_applied, 6 * static_cast<int>(mj_model_->nbody));
-  mju_copy(qvel_override_staged_.data(), control_data->qvel, static_cast<int>(mj_model_->nv));
-  control_inputs_staged_ = true;
-}
-
-void MujocoSimulation::refresh_data_snapshot()
-{
+  // A full mjData is a large allocation (it carries contact, Jacobian and constraint arenas), so
+  // only pay for the command buffer once something is actually going to command the simulation.
+  if (!plugins_.empty() && control_data_ == nullptr)
   {
-    // Reclaim the producer-side buffer. Once snapshot_ready_ is lowered the consumer can no
-    // longer swap it away mid-fill, so the copy below can safely run outside the lock.
-    const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
-    snapshot_ready_ = false;
+    control_data_ = mj_makeData(mj_model_);
+    if (control_data_ == nullptr)
+    {
+      RCLCPP_FATAL(get_logger(), "Could not allocate the plugin command buffer; plugins will not be updated.");
+      plugins_.clear();
+      return;
+    }
   }
 
-  // Scene-sized copy, paid by the producer, outside any shared lock.
-  // Writers are serialized by the sim mutex and the consumer never touches snapshot_write_.
-  mj_copyData(snapshot_write_, mj_model_, mj_data_);
+  RCLCPP_INFO(get_logger(), "Registered %zu MuJoCo plugin(s) with the physics loop.", plugins_.size());
+}
 
-  const std::lock_guard<std::mutex> lock(data_exchange_mutex_);
-  snapshot_ready_ = true;
+void MujocoSimulation::detach_plugins()
+{
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  plugins_.clear();
+}
+
+std::vector<MujocoSimulation::CommandableField> MujocoSimulation::commandable_fields()
+{
+  // One list, used both to present the fields as unset and to merge them back. Keeping it single
+  // is what stops a field from being filled but never merged (plugin writes silently dropped) or
+  // merged but never filled (unset entries leaking into the simulation).
+  return {
+    { control_data_->ctrl, mj_data_->ctrl, static_cast<int>(mj_model_->nu) },
+    { control_data_->qfrc_applied, mj_data_->qfrc_applied, static_cast<int>(mj_model_->nv) },
+    { control_data_->xfrc_applied, mj_data_->xfrc_applied, 6 * static_cast<int>(mj_model_->nbody) },
+    { control_data_->qpos, mj_data_->qpos, static_cast<int>(mj_model_->nq) },
+    { control_data_->qvel, mj_data_->qvel, static_cast<int>(mj_model_->nv) },
+  };
+}
+
+void MujocoSimulation::run_plugin_updates()
+{
+  /// @note This method assumes sim_mutex_ is already held by the caller
+
+  if (plugins_.empty())
+  {
+    return;
+  }
+
+  const auto fields = commandable_fields();
+
+  // Present every commandable field as unset, so a plugin only has to write what it commands and
+  // nothing leaks across iterations.
+  for (const CommandableField& field : fields)
+  {
+    mujoco_ros2_control_plugins::mark_unset(field.commanded, field.count);
+  }
+
+  for (auto& plugin : plugins_)
+  {
+    plugin->update(control_data_);
+  }
+
+  // Merge back only what the plugins actually set. Leaving an entry unset preserves whatever is
+  // already in mj_data_, which is what lets the viewer's interactive drag forces survive on bodies
+  // no plugin commands.
+  for (const CommandableField& field : fields)
+  {
+    mujoco_ros2_control_plugins::merge_commands(field.commanded, field.live, field.count);
+  }
 }
 
 void MujocoSimulation::publish_control_state()
@@ -1379,31 +1410,24 @@ void MujocoSimulation::copy_control_state(ControlState& destination)
   destination = control_state_;
 }
 
+void MujocoSimulation::refresh_control_state()
+{
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  // Recompute derived quantities first. A caller that edited qpos / ctrl directly has left
+  // sensordata and qfrc_actuator describing the previous configuration, and publishing that
+  // mixture would hand readers a state that never existed. Every other mutator in this class
+  // pairs its edit with a forward for the same reason.
+  mj_forward(mj_model_, mj_data_);
+  publish_control_state();
+}
+
 void MujocoSimulation::apply_staged_control_inputs()
 {
   const std::lock_guard<std::mutex> lock(control_staging_mutex_);
 
-  // Only apply ctrl / qfrc_applied once the hw interface has staged control inputs,
-  // so that initial or reset values in mj_data_ are not overwritten with zeros.
-  if (control_inputs_staged_)
-  {
-    mju_copy(mj_data_->ctrl, ctrl_staged_.data(), static_cast<int>(mj_model_->nu));
-    mju_copy(mj_data_->qfrc_applied, qfrc_applied_staged_.data(), static_cast<int>(mj_model_->nv));
-  }
-
-  const int nbody6 = 6 * static_cast<int>(mj_model_->nbody);
-  mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
-  mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
-  mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, nbody6);
-
-  // Apply plugin-requested velocity overrides as direct qvel writes
-  for (int i = 0; i < static_cast<int>(mj_model_->nv); ++i)
-  {
-    if (std::isfinite(qvel_override_staged_[i]))
-    {
-      mj_data_->qvel[i] = qvel_override_staged_[i];
-    }
-  }
+  // Unset means "not commanded", so initial, reset and plugin-set ctrl values survive for any
+  // actuator the hardware interface is not driving (e.g. passive actuators).
+  mujoco_ros2_control_plugins::merge_commands(ctrl_staged_.data(), mj_data_->ctrl, static_cast<int>(mj_model_->nu));
 }
 
 // simulate in background thread (while rendering in main thread)
@@ -1457,24 +1481,9 @@ void MujocoSimulation::physics_loop()
       // run only if model is present
       if (mj_model_)
       {
-        // Determine the viewer (drag) forces for this outer iteration.
-        //
-        // mjv_updateScene in simulate.cc reads mj_data_->xfrc_applied BEFORE zeroing it, so
-        // plugin forces written here are visible as arrows in the native viewer. To avoid
-        // accumulation across outer iterations we must preserve the viewer-drag portion.
-        // We do this in xfrc_viewer_capture_.
-        //
-        // After each outer iteration we restore mj_data_->xfrc_applied = viewer + plugin and
-        // record it in xfrc_last_written_. We can then combine the desired forces from the plugins
-        // as well as the viewers prior to stepping, without either of them stacking in
-        // undesirable ways.
-        const int nbody6 = 6 * static_cast<int>(mj_model_->nbody);
-        if (std::memcmp(mj_data_->xfrc_applied, xfrc_last_written_.data(), nbody6 * sizeof(mjtNum)) != 0)
-        {
-          // Render thread ran: xfrc_applied was zeroed then drag was applied.
-          mju_copy(xfrc_viewer_capture_.data(), mj_data_->xfrc_applied, nbody6);
-        }
-        // else: render thread did not run; keep the existing xfrc_viewer_capture_.
+        // Drive the plugins once per outer iteration, before any stepping (see
+        // run_plugin_updates()).
+        run_plugin_updates();
 
         // running (ie, not paused)
         if (sim_->run)
@@ -1488,11 +1497,6 @@ void MujocoSimulation::physics_loop()
             pending_steps_.store(0);
             steps_interrupted_.store(true);
             steps_cv_.notify_all();
-          }
-
-          if (snapshot_refresh_requested_.exchange(false, std::memory_order_acq_rel))
-          {
-            refresh_data_snapshot();
           }
 
           bool stepped = false;
@@ -1624,8 +1628,8 @@ void MujocoSimulation::physics_loop()
             pending_steps_.fetch_add(1);
           }
 
-          // Record so the next iteration can detect render thread changes, only necessary once
-          // when paused
+          // Merge staged actuator commands even while paused, so a queued step (and the viewer's
+          // display of ctrl) reflects the latest commands.
           apply_staged_control_inputs();
 
           // Execute one pending step per physics loop iteration so the clock publisher
@@ -1665,11 +1669,7 @@ void MujocoSimulation::physics_loop()
             update_sim_display();
           }
 
-          // Keep the snapshots in sync while paused so reads reflect steps and UI edits
-          if (snapshot_refresh_requested_.exchange(false, std::memory_order_acq_rel))
-          {
-            refresh_data_snapshot();
-          }
+          // Keep the control state in sync while paused so reads reflect steps and UI edits
           publish_control_state();
         }
 

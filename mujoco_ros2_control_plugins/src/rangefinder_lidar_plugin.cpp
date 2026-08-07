@@ -49,7 +49,6 @@ std::pair<std::string, int> RangefinderLidarPlugin::parse_lidar_name(const std::
 bool RangefinderLidarPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* /*data*/)
 {
   node_ = node;
-  model_ = model;
   lidar_sensors_.clear();
 
   const std::string param_prefix = "mujoco_plugins.rangefinder_lidar_plugin.";
@@ -191,8 +190,9 @@ bool RangefinderLidarPlugin::register_sensor(const std::string& lidar_name, cons
   return true;
 }
 
-void RangefinderLidarPlugin::update(const mjModel* /*model*/, mjData* data)
+void RangefinderLidarPlugin::update(mjData* /*control_data*/)
 {
+  const mjData* data = get_sim_data();
   if (lidar_sensors_.empty())
   {
     return;

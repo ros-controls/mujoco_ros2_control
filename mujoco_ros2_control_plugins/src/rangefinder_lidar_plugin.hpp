@@ -83,7 +83,7 @@ class [[deprecated("We recommend using the 3d Lidar plugin instead."
 {
 public:
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
-  void update(const mjModel* model, mjData* data) override;
+  void update(mjData* control_data) override;
   void cleanup() override;
 
 private:
@@ -115,7 +115,6 @@ private:
   static std::pair<std::string, int> parse_lidar_name(const std::string& sensor_name);
 
   rclcpp::Node::SharedPtr node_;
-  const mjModel* model_{ nullptr };
   double publish_rate_{ 5.0 };
   rclcpp::Time last_publish_time_{ 0, 0, RCL_ROS_TIME };
 
