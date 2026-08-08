@@ -107,13 +107,22 @@ void add_items(std::vector<T>& vector, const std::vector<T>& items)
 
 ActuatorType getActuatorType(const mjModel* mj_model, int mujoco_actuator_id)
 {
-  // Returns the MuJoCo actuator type based on the actuator's bias settings.
+  // Returns the MuJoCo actuator type based on the compiled actuator settings.
   ActuatorType actuator_type = ActuatorType::UNKNOWN;
-  int biastype = mj_model->actuator_biastype[mujoco_actuator_id];
-  const int NBias = 10;
-  const mjtNum* biasprm = mj_model->actuator_biasprm + mujoco_actuator_id * NBias;
+  const int dyntype = mj_model->actuator_dyntype[mujoco_actuator_id];
+  const int gaintype = mj_model->actuator_gaintype[mujoco_actuator_id];
+  const int biastype = mj_model->actuator_biastype[mujoco_actuator_id];
+  const mjtNum* gainprm = mj_model->actuator_gainprm + mujoco_actuator_id * mjNGAIN;
+  const mjtNum* biasprm = mj_model->actuator_biasprm + mujoco_actuator_id * mjNBIAS;
 
-  if (biastype == mjBIAS_NONE)
+  // MuJoCo compiles an intvelocity shortcut into a fixed-gain, affine-bias actuator whose control is integrated into
+  // a position setpoint. Although its feedback terms resemble a position actuator, ctrl has velocity semantics.
+  if (dyntype == mjDYN_INTEGRATOR && gaintype == mjGAIN_FIXED && biastype == mjBIAS_AFFINE && biasprm[0] == 0 &&
+      biasprm[1] == -gainprm[0])
+  {
+    actuator_type = ActuatorType::VELOCITY;
+  }
+  else if (biastype == mjBIAS_NONE)
   {
     actuator_type = ActuatorType::MOTOR;
   }
