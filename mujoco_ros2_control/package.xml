@@ -42,6 +42,7 @@
   <depend>mujoco_ros2_control_msgs</depend>
   <depend>mujoco_ros2_control_plugins</depend>
   <depend>transmission_interface</depend>
+  <depend>liblodepng-dev</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
