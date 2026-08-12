@@ -83,6 +83,52 @@ Demonstrates ``ros2_control`` transmissions with mechanical reduction ratios.
 **Resources:** ``demo_resources/robot/test_robot.urdf`` with ``use_transmissions:=true``
 
 
+Tutorial 5: Base Velocity Plugin
+---------------------------------
+
+Demonstrates driving a mobile/floating-base robot with ``BaseVelocityPlugin``: a free-floating,
+wheeled chassis (MJCF ``<freejoint>``) carrying a 1-DOF arm, driven from a ``cmd_vel`` topic via a
+hard velocity override applied directly to the chassis's free-joint ``qvel`` every cycle. The
+wheels and ground have zero friction, which is now largely cosmetic -- propulsion no longer goes
+through wheel-ground contact at all, so it does not depend on friction either way.
+
+.. warning::
+
+   Because the override is kinematic, it outranks the contact solver: the wall in the scene will
+   **not** stop the base -- it will push through or climb it rather than being stopped by contact,
+   since the commanded velocity is reasserted every cycle regardless of collisions. This is the
+   trade-off for exact, disturbance-immune velocity tracking; see the ``BaseVelocityPlugin``
+   documentation for details.
+
+.. code-block:: bash
+
+   ros2 launch mujoco_ros2_control_demos 05_base_velocity_plugin.launch.py
+
+   # In another terminal, drive the base:
+   ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}, angular: {z: 0.2}}" --rate 10
+
+**Disturbance immunity**: swinging the mounted arm creates a reaction force/torque on the base
+through the joint, unrelated to ground friction, since it acts directly between the two bodies.
+Because ``BaseVelocityPlugin`` overrides the base's driven DOFs directly rather than servoing
+against them, this reaction has *no* effect on the base's velocity at all -- not approximately,
+exactly none -- so with no ``cmd_vel`` active the base stays exactly in place while the arm moves.
+The arm's joint is range-limited to a back-and-forth sweep rather than a continuous spin:
+
+.. code-block:: bash
+
+   ros2 topic pub /arm_position_controller/commands std_msgs/msg/Float64MultiArray "data: [0.7]"
+   ros2 topic pub /arm_position_controller/commands std_msgs/msg/Float64MultiArray "data: [-0.7]"
+
+**Key concepts:** ``BaseVelocityPlugin`` free-joint velocity override, driving a MJCF
+``<freejoint>`` body, immunity to reaction forces from a moving mounted joint, floating-base
+odometry (``odom_free_joint_name``).
+
+**Resources:** ``demo_resources/scenes/scene_mobile_base.xml``, ``demo_resources/mobile_base/mobile_base.xml``,
+``demo_resources/mobile_base/mobile_base.urdf``, ``config/mujoco_ros2_control_plugins_base_velocity.yaml``
+
+See :doc:`../../mujoco_ros2_control_plugins/doc/plugins` for the full list of ``BaseVelocityPlugin`` parameters.
+
+
 Combined Demo
 -------------
 
@@ -121,14 +167,17 @@ Package Structure
 
    mujoco_ros2_control_demos/
    ├── launch/
-   │   ├── 01_basic_robot.launch.py      # Tutorial 1
-   │   ├── 02_mjcf_generation.launch.py  # Tutorial 2
-   │   ├── 03_pid_control.launch.py      # Tutorial 3
-   │   ├── 04_transmissions.launch.py    # Tutorial 4
-   │   └── demo.launch.py               # Combined demo
+   │   ├── 01_basic_robot.launch.py         # Tutorial 1
+   │   ├── 02_mjcf_generation.launch.py     # Tutorial 2
+   │   ├── 03_pid_control.launch.py         # Tutorial 3
+   │   ├── 04_transmissions.launch.py       # Tutorial 4
+   │   ├── 05_base_velocity_plugin.launch.py # Tutorial 5
+   │   └── demo.launch.py                  # Combined demo
    ├── config/
-   │   ├── controllers.yaml             # Controller configuration
-   │   └── mujoco_pid.yaml              # PID gains (Tutorial 3)
+   │   ├── controllers.yaml                        # Controller configuration
+   │   ├── mujoco_pid.yaml                         # PID gains (Tutorial 3)
+   │   ├── controllers_base_velocity.yaml          # joint_state_broadcaster + arm_position_controller (Tutorial 5)
+   │   └── mujoco_ros2_control_plugins_base_velocity.yaml  # BaseVelocityPlugin config (Tutorial 5)
    └── demo_resources/
        ├── robot/
        │   ├── test_robot.urdf          # Shared URDF description
@@ -136,8 +185,12 @@ Package Structure
        ├── scenes/
        │   ├── scene.xml                # Basic scene (Tutorial 1, 4)
        │   ├── scene_pid.xml            # PID scene (Tutorial 3)
-       │   └── scene_info.xml           # Scene generation info
+       │   ├── scene_info.xml           # Scene generation info
+       │   └── scene_mobile_base.xml    # Mobile base + wall obstacle (Tutorial 5)
        ├── mjcf_generation/
        │   └── test_inputs.xml          # MJCF conversion inputs (Tutorial 2)
-       └── pid_control/
-           └── test_robot_pid.xml       # Robot with motor actuators
+       ├── pid_control/
+       │   └── test_robot_pid.xml       # Robot with motor actuators
+       └── mobile_base/
+           ├── mobile_base.xml          # MJCF chassis with freejoint (Tutorial 5)
+           └── mobile_base.urdf         # Minimal URDF, no ros2_control joints (Tutorial 5)

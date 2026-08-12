@@ -48,6 +48,7 @@ target_link_libraries(mujoco_ros2_control_plugins INTERFACE
 add_library(mujoco_ros2_control_plugins_impl SHARED
   src/heartbeat_publisher_plugin.cpp
   src/external_wrench_plugin.cpp
+  src/base_velocity_plugin.cpp
   src/free_joint_state_publisher_plugin.cpp
   src/camera_plugin.cpp
   src/mujoco_3d_lidar_plugin.cpp
@@ -158,6 +159,22 @@ if(BUILD_TESTING)
     ament_index_cpp::ament_index_cpp
   )
   target_link_options(test_3d_lidar_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
+
+  ament_add_gtest(test_base_velocity_plugin
+    test/test_base_velocity_plugin.cpp
+  )
+  target_include_directories(test_base_velocity_plugin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(test_base_velocity_plugin
+    mujoco_ros2_control_plugins_impl
+    ${geometry_msgs_TARGETS}
+  )
+  target_link_options(test_base_velocity_plugin PUBLIC
     "LINKER:--push-state,--no-as-needed"
     "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
     "LINKER:--pop-state"

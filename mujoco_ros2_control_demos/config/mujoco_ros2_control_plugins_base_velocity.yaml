@@ -1,0 +1,7 @@
+/**:
+  ros__parameters:
+    mujoco_plugins:
+      base_velocity_plugin:
+        type: "mujoco_ros2_control_plugins/BaseVelocityPlugin"
+        body: base_link
+        cmd_vel_topic: /cmd_vel

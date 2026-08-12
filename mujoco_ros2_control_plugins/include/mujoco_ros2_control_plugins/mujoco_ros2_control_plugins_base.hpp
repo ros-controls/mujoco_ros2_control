@@ -54,6 +54,12 @@ public:
    * affect the next simulation step.
    * @note This method will be called in a real-time thread, so it should avoid blocking operations and should be
    * efficient.
+   * @note data->qvel is NaN-filled before every plugin's update() runs this cycle. Write a finite value into any
+   * entry to request a hard velocity override on that DOF -- it bypasses the normal mass/contact dynamics for that
+   * DOF this step, overwriting mj_data_->qvel directly right before the next mj_step. Leave an entry NaN to keep its
+   * normal physics-driven value untouched. This is the only channel a plugin has to influence qvel: unlike
+   * ctrl/qfrc_applied/xfrc_applied, data->qvel here cannot be read for the body's actual velocity, since it is not
+   * restored to a real value until after every plugin's update() has run this cycle.
    */
   virtual void update(const mjModel* model, mjData* data) = 0;
 

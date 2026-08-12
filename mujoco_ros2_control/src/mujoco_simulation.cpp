@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -32,6 +33,7 @@
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -715,6 +717,7 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
     xfrc_plugin_desired_.assign(6 * mj_model_->nbody, 0.0);
     xfrc_viewer_capture_.assign(6 * mj_model_->nbody, 0.0);
     xfrc_last_written_.assign(6 * mj_model_->nbody, 0.0);
+    qvel_override_staged_.assign(mj_model_->nv, std::numeric_limits<mjtNum>::quiet_NaN());
 
     if (mj_data_ && snapshot_write_ && snapshot_read_)
     {
@@ -866,6 +869,7 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state,
     std::fill(ctrl_staged_.begin(), ctrl_staged_.end(), 0.0);
     std::fill(qfrc_applied_staged_.begin(), qfrc_applied_staged_.end(), 0.0);
     std::fill(xfrc_plugin_desired_.begin(), xfrc_plugin_desired_.end(), 0.0);
+    std::fill(qvel_override_staged_.begin(), qvel_override_staged_.end(), std::numeric_limits<mjtNum>::quiet_NaN());
   }
   std::fill(xfrc_viewer_capture_.begin(), xfrc_viewer_capture_.end(), 0.0);
   std::fill(xfrc_last_written_.begin(), xfrc_last_written_.end(), 0.0);
@@ -1336,6 +1340,7 @@ void MujocoSimulation::apply_control_data(mjData* control_data)
   mju_copy(ctrl_staged_.data(), control_data->ctrl, static_cast<int>(mj_model_->nu));
   mju_copy(qfrc_applied_staged_.data(), control_data->qfrc_applied, static_cast<int>(mj_model_->nv));
   mju_copy(xfrc_plugin_desired_.data(), control_data->xfrc_applied, 6 * static_cast<int>(mj_model_->nbody));
+  mju_copy(qvel_override_staged_.data(), control_data->qvel, static_cast<int>(mj_model_->nv));
   control_inputs_staged_ = true;
 }
 
@@ -1390,6 +1395,15 @@ void MujocoSimulation::apply_staged_control_inputs()
   mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
   mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
   mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, nbody6);
+
+  // Apply plugin-requested velocity overrides as direct qvel writes
+  for (int i = 0; i < static_cast<int>(mj_model_->nv); ++i)
+  {
+    if (std::isfinite(qvel_override_staged_[i]))
+    {
+      mj_data_->qvel[i] = qvel_override_staged_[i];
+    }
+  }
 }
 
 // simulate in background thread (while rendering in main thread)
