@@ -87,6 +87,11 @@ namespace mujoco_ros2_control
  * Specifically, it stages `ctrl`, `qfrc_applied`, and `xfrc_applied`. Cartesian forces from
  * `xfrc_applied` compete with inputs from Simulate's drag function, so they are resolved
  * separately. This only takes the control staging mutex and never blocks on physics stepping.
+ * It also stages `qvel`: the system interface NaN-fills `qvel` before every plugin's
+ * `update()` runs, so any DOF a plugin leaves untouched is NaN here and any DOF it writes a
+ * finite value into is a requested hard velocity override (see
+ * `MuJoCoROS2ControlPluginBase::update()`'s doc comment). Non-NaN entries are applied as a
+ * direct `qvel` write, bypassing the normal dynamics for that DOF.
  *
  * `overwrite_physics_data(...)` will completely replace the data for the sim. Should be used
  * with extreme caution.
@@ -180,15 +185,11 @@ public:
   }
 
   /**
-   * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state,
-   * optionally applying joint state overrides on top of the restored state.
-   *
-   * Overrides are assumed to have been validated by the caller, so they cannot fail here
-   * (see `validate_joint_state_overrides` / `validate_free_joint_states`).
+   * @brief Reset simulation state (qpos/qvel/ctrl/sensors/forces) to the captured initial state.
    *
    * @note Caller must hold the sim mutex.
    */
-  void reset_world_state(bool fill_initial_state, const mujoco_ros2_control_msgs::msg::SimulationState& state_overrides);
+  void reset_world_state(bool fill_initial_state);
 
   /**
    * @brief Sets the pose and velocity of one or more free-joint objects, identified by body name.
@@ -280,7 +281,11 @@ public:
    * Specifically, copies `control_data->ctrl` and `control_data->qfrc_applied` into staging
    * buffers which the physics loop copies into `mj_data_` immediately before each step.
    * `control_data->xfrc_applied` is copied into `xfrc_plugin_desired_` to avoid conflicts
-   * from the simulate app. This does not lock the sim mutex and never waits on stepping.
+   * from the simulate app. `control_data->qvel` is copied into `qvel_override_staged_`;
+   * entries that are not NaN are plugin-requested velocity overrides (see
+   * `MuJoCoROS2ControlPluginBase::update()`'s doc comment for the NaN convention this
+   * relies on) and are applied as direct `qvel` writes before the next `mj_step`. This does
+   * not lock the sim mutex and never waits on stepping.
    */
   void apply_control_data(mjData* control_data);
 
@@ -344,14 +349,33 @@ private:
   void update_sim_display();
 
   /**
-   * @brief Resolves `frame_id` to a body id: empty means the world frame (`body_id = -1`),
-   * otherwise it must name a known MuJoCo body.
+   * @brief Reset simulation state, applying joint state overrides on top of the restored state.
+   *
+   * Private because the overrides are assumed to have already been validated (see
+   * `validate_joint_state_overrides` / `validate_free_joint_states`) -- a precondition only
+   * in-class callers can satisfy, since the validators are private too. Applying unvalidated
+   * overrides writes through unresolved (-1) addresses.
+   *
+   * @note Caller must hold the sim mutex.
+   */
+  void reset_world_state(bool fill_initial_state, const mujoco_ros2_control_msgs::msg::SimulationState& state_overrides);
+
+  /**
+   * @brief Resolves a `header.frame_id` to the body it names: -1 for the world frame (empty
+   * string) or for an unknown body.
+   *
+   * This is the single definition of the frame_id convention; `validate_frame_id` wraps it to
+   * turn the unknown-body case into an error message.
+   */
+  int frame_body_id(const std::string& frame_id) const;
+
+  /**
+   * @brief Checks that `frame_id` is empty (world frame) or names a known MuJoCo body.
    *
    * @param field_label Identifies which field ("pose"/"twist") in `error_message` on failure.
-   * @return true if resolved; false otherwise, with `error_message` set.
+   * @return true if valid; false otherwise, with `error_message` set.
    */
-  bool resolve_frame_id(const std::string& frame_id, const std::string& field_label, int& body_id,
-                        std::string& error_message);
+  bool validate_frame_id(const std::string& frame_id, const std::string& field_label, std::string& error_message) const;
 
   /**
    * @brief Returns the id of the free joint driving `body_id`, or -1 if there is none.
@@ -456,6 +480,11 @@ private:
   std::vector<mjtNum> xfrc_viewer_capture_;  // Tracks forces from the viewer
   std::vector<mjtNum> xfrc_last_written_;    // tracks the last value written to xfrc_applied
 
+  // qvel as staged by apply_control_data: sized nv, NaN by default. A plugin requests a
+  // velocity override on a DOF by writing a finite value into control_data->qvel during its
+  // update()
+  std::vector<mjtNum> qvel_override_staged_;
+
   // Guards only the snapshot pointer swap and snapshot_ready_ flag.
   // Lock order: sim_mutex_ (if needed) is always taken before this one.
   std::mutex data_exchange_mutex_;
@@ -466,8 +495,9 @@ private:
   std::atomic<bool> snapshot_refresh_requested_{ true };
 
   // Guards the staged control inputs (ctrl_staged_, qfrc_applied_staged_, xfrc_plugin_desired_,
-  // control_inputs_staged_). Separate from data_exchange_mutex_ so that staging commands in
-  // write() and applying them before each physics step never queue behind a full mjData copy.
+  // control_inputs_staged_, qvel_override_staged_). Separate from data_exchange_mutex_ so
+  // that staging commands in write() and applying them before each physics step never queue
+  // behind a full mjData copy.
   // Critical sections are all small buffer copies.
   // Lock order: sim_mutex_ (if needed) before this one; never held with data_exchange_mutex_.
   std::mutex control_staging_mutex_;

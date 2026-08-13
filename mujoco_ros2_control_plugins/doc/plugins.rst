@@ -285,6 +285,132 @@ ExternalWrench Parameters
            force_arrow_scale: 0.01      # 100 N  → 1 m arrow
            torque_arrow_scale: 0.1      # 10 N·m → 1 m arrow
 
+BaseVelocityPlugin
+~~~~~~~~~~~~~~~~~~
+
+Drives a mobile or floating-base robot from a commanded planar body velocity (``vx``, ``vy``,
+yaw-rate) received on a ``cmd_vel``-style topic, without relying on wheel-ground contact.
+
+Wheel-terrain friction/slip is often unreliable enough to make it a poor foundation for testing
+navigation stacks. This plugin instead requests a hard **kinematic override** of the base body's
+free-joint velocity every cycle: the (optionally clamped) commanded planar velocity is written
+directly into the joint's ``qvel``, bypassing force/mass dynamics entirely for the driven DOFs.
+There is no gain to tune and no convergence delay — the measured body velocity on the driven axes
+is exactly the commanded velocity on the very next simulation step.
+
+.. warning::
+
+   Because the override is kinematic, it outranks MuJoCo's contact solver. **Colliding with a
+   wall or obstacle will not slow the base down** on the driven axes — the commanded velocity is
+   reasserted every cycle regardless of what any contact computed in between. If you need
+   physically realistic collision response while driving the base, this plugin is not the right
+   tool; the trade-off it makes is exact, disturbance-immune velocity tracking in exchange for
+   giving up momentum-conserving contacts on the driven DOFs.
+
+Only the planar degrees of freedom are driven: body-frame linear x/y and yaw-rate (about body z).
+Vertical motion and roll/pitch are left entirely to gravity and contacts, so the base settles onto
+the ground normally.
+
+.. list-table::
+   :widths: 25 75
+   :header-rows: 0
+
+   * - **Topic**
+     - ``cmd_vel`` (``geometry_msgs/msg/Twist``, or ``TwistStamped`` if ``use_stamped_twist`` is
+       set)
+
+Velocity Override Behavior
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Each cycle, the commanded body-frame ``vx``/``vy`` is clamped to ``max_linear_velocity`` (preserving
+direction) and rotated into the world frame using the body's current orientation, since a free
+joint's linear ``qvel`` is expressed in the world frame. The commanded yaw-rate is clamped to
+``max_yaw_rate`` and used as-is, since a free joint's rotational ``qvel`` is already expressed in
+the body-local frame. The result is written directly into ``data->qvel`` during ``update()``:
+the core NaN-fills ``qvel`` before every plugin's ``update()`` runs, so writing a finite value
+into an entry requests a hard velocity override there, applied by the core simulation as a direct
+``qvel`` write immediately before the next physics step (see "Creating Your Own Plugin" below for
+the full mechanism, which is not available through ``xfrc_applied`` alone).
+
+A command that hasn't been refreshed within ``cmd_timeout`` seconds is treated as zero (safety
+stop) rather than left to coast on the last commanded velocity.
+
+BaseVelocity Parameters
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :widths: 25 15 15 45
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Default
+     - Description
+   * - ``body``
+     - ``string``
+     - *(required)*
+     - MJCF body name of the base. Must carry a ``<freejoint/>`` — ``init()`` fails otherwise,
+       since there is no ``qvel`` to override without one.
+   * - ``cmd_vel_topic``
+     - ``string``
+     - ``cmd_vel``
+     - Command topic name.
+   * - ``use_stamped_twist``
+     - ``bool``
+     - ``false``
+     - Subscribe to ``geometry_msgs/TwistStamped`` instead of ``geometry_msgs/Twist`` (e.g. for
+       Nav2, which publishes stamped twists by default in some configurations). Even when the param
+       is set to ``true``, the header info is internally not used and only the time at which the
+       message received internal to the plugin takes precedence.
+   * - ``max_linear_velocity``
+     - ``double``
+     - ``+inf``
+     - Clamps the commanded planar speed ``sqrt(vx^2+vy^2)`` [m/s]; unset (the default) passes
+       the command through unclamped.
+   * - ``max_yaw_rate``
+     - ``double``
+     - ``+inf``
+     - Clamps the commanded yaw-rate [rad/s]; unset (the default) passes the command through
+       unclamped.
+   * - ``cmd_timeout``
+     - ``double``
+     - ``0.5``
+     - Seconds since the last received command after which it is treated as zero.
+
+.. note::
+
+   ``rclcpp::Node::create_sub_node()`` (used to give this plugin its own topic/service
+   namespace) does not namespace *parameters* -- they're always node-level. So the plugin's own
+   parameters are declared under an explicitly-built ``mujoco_plugins.<instance_name>.`` prefix
+   (matching the plugin's actual instance key in your YAML), rather than relying on the
+   sub-node's namespace the way topics/services do. This mirrors the pattern used by
+   ``CameraPlugin``/``RangefinderLidarPlugin``/``Mujoco3dLidarPlugin``.
+
+**Example configuration**
+
+.. code-block:: yaml
+
+   /**:
+     ros__parameters:
+       mujoco_plugins:
+         base_velocity_plugin:
+           type: "mujoco_ros2_control_plugins/BaseVelocityPlugin"
+           body: base_link
+           cmd_vel_topic: /cmd_vel
+
+**Example: teleop from the command line**
+
+.. code-block:: bash
+
+   ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+     "{linear: {x: 0.5}, angular: {z: 0.2}}" --rate 10
+
+.. note::
+
+   Odometry for the floating base is published independently by ``mujoco_ros2_control`` itself
+   (parameter ``odom_free_joint_name``, default topic ``/simulator/floating_base_state``) — this
+   plugin only drives the base, it does not publish odometry.
+
 FreeJointStatePublisherPlugin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -571,6 +697,21 @@ Plugin Lifecycle
    before the controller update and ``write`` loops. Changes to ``mjData`` here are visible to
    controllers and affect the next simulation step. This runs in a real-time thread — avoid
    blocking operations.
+
+   ``data->qvel`` here has one special property: it is **NaN-filled before every plugin's**
+   ``update()`` **runs this cycle**. Most plugins never touch it and can ignore this entirely.
+   A plugin that needs to *dictate* a free joint's velocity exactly (``BaseVelocityPlugin`` is
+   the example in this package) can write a finite value into any ``qvel`` entry to request a
+   hard velocity override there — the core simulation applies every non-NaN entry as a direct
+   ``qvel`` write immediately before the next ``mj_step``, bypassing the normal mass/contact
+   dynamics for that DOF. This exists because plugins only ever see a throwaway copy of
+   ``mjData`` — only ``ctrl``, ``qfrc_applied``, and ``xfrc_applied`` are otherwise copied back
+   into the real simulation state, so this NaN convention is the only way a plugin can
+   influence ``qvel`` at all. Leaving an entry ``NaN`` keeps its normal physics-driven value;
+   because of this, ``data->qvel`` cannot be read here for the body's actual velocity either,
+   since it isn't restored to a real value until after every plugin's ``update()`` has run.
+   See ``MuJoCoROS2ControlPluginBase::update()``'s doc comment in
+   ``mujoco_ros2_control_plugins_base.hpp`` for the authoritative reference.
 3. **Cleanup** (``cleanup``): Called when shutting down. Release any resources acquired in
    ``init``.
 

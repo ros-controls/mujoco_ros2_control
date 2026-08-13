@@ -4,13 +4,16 @@
 # Name of the MJCF keyframe to reset to. Empty resets to the initial state captured at startup.
 string keyframe
 
-# Optional overrides for single-DOF (hinge/slide) and free joints, applied on top of the
-# reset state and keyed by MuJoCo joint name.
-# For the single-DOF joint states: `position` and `velocity` must each be empty or the
-# same length as `name`; an empty array leaves that field at its reset value.
-# `effort` is not supported and must be empty. `header` is not used.
-# For the free joint states, any `pose`/`twist` frame_id is resolved against body poses
-# *after* the reset is applied, before any overrides are written.
+# Optional overrides applied on top of the reset state: `joint_states` for single-DOF
+# (hinge/slide) joints keyed by MuJoCo joint name, `free_joints` for free joints keyed by the
+# name of the body each one drives. An empty array leaves the corresponding state at its reset
+# value.
+# In `joint_states`, `position` and `velocity` must each be empty or the same length as `name`,
+# so a given field is set for every listed joint or for none of them; a request violating this is
+# rejected. `effort` is not supported by this service and must be empty.
+# Free-joint `pose`/`twist` frame_ids are resolved against body poses *after* the reset and
+# *after* any `joint_states` overrides have been written, so an object can be placed relative to
+# where another body ends up rather than where it was before the reset.
 SimulationState state_overrides
 
 ---

@@ -49,6 +49,17 @@
       will have their data copied and published whenever it becomes available.
     </description>
   </class>
+  <class name="mujoco_ros2_control_plugins/BaseVelocityPlugin"
+         type="mujoco_ros2_control_plugins::BaseVelocityPlugin"
+         base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
+    <description>
+      Drives a mobile/floating-base robot from a commanded planar body velocity (vx, vy,
+      yaw-rate) received on a cmd_vel-style topic, via a hard kinematic override of the base
+      body's free-joint velocity applied directly before every physics step. Propulsion no
+      longer depends on wheel-ground contact/friction and the commanded velocity is tracked
+      exactly, but this also means contacts no longer slow the base down on the driven axes.
+    </description>
+  </class>
   <class name="mujoco_ros2_control_plugins/RangefinderLidarPlugin"
          type="mujoco_ros2_control_plugins::RangefinderLidarPlugin"
          base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">

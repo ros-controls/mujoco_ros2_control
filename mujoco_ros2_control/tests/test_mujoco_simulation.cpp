@@ -433,7 +433,7 @@ TEST_F(MujocoSimulationTest, ResetWorldKeyframeAndOverrides)
   req->keyframe = "home";  // hinge=0.5, free_object at (1,0,1), free_object_2 at (2,0,1)
   req->state_overrides.joint_states.name = { "hinge" };
   req->state_overrides.joint_states.position = { 0.25 };
-  req->state_overrides.free_joint_states.push_back(free_override);
+  req->state_overrides.free_joints.push_back(free_override);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -476,7 +476,7 @@ TEST_F(MujocoSimulationTest, ResetWorldOverridesResolveFramesAfterReset)
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
   req->keyframe = "home";  // puts free_object at (1,0,1)
-  req->state_overrides.free_joint_states.push_back(free_override);
+  req->state_overrides.free_joints.push_back(free_override);
 
   auto future = client->async_send_request(req);
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
@@ -558,8 +558,8 @@ TEST_F(MujocoSimulationTest, ResetWorldFreeJointInJointState)
   ASSERT_EQ(future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
   auto resp = future.get();
   EXPECT_FALSE(resp->success);
-  EXPECT_NE(resp->message.find("state_overrides.free_joint_states"), std::string::npos)
-      << "Message should point free joints at the state_overrides.free_joint_states field, got: " << resp->message;
+  EXPECT_NE(resp->message.find("state_overrides.free_joints"), std::string::npos)
+      << "Message should point free joints at the state_overrides.free_joints field, got: " << resp->message;
 }
 
 TEST_F(MujocoSimulationTest, SetFreeJointStateSetsPoseAndVelocity)
