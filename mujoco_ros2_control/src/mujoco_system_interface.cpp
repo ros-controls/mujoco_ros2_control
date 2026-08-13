@@ -1572,10 +1572,8 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
             }
             else
             {
-              RCLCPP_ERROR(get_logger(),
-                           "Position command interface for the joint : %s is not supported with velocity or motor "
-                           "actuator without defining the PIDs",
-                           actuator_name.c_str());
+              throw std::runtime_error("Position command interface for the joint : " + actuator_name +
+                                       " is not supported with motor or custom actuator without defining the PIDs");
             }
           }
         }
@@ -1613,11 +1611,8 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
             }
             else
             {
-              RCLCPP_ERROR(
-                  get_logger(),
-                  "Velocity command interface for the joint : %s is not supported with motor or custom actuator "
-                  "without defining the PIDs",
-                  actuator_name.c_str());
+              throw std::runtime_error("Velocity command interface for the joint : " + actuator_name +
+                                       " is not supported with motor or custom actuator without defining the PIDs");
             }
           }
         }
