@@ -115,19 +115,27 @@ Maps to the following ``ros2_control`` hardware interface:
    * - Command Interface
      - MuJoCo ``position``
      - MuJoCo ``velocity``
+     - MuJoCo ``intvelocity``
      - MuJoCo ``motor``, ``general``, etc.
    * - **position**
      - Native support
      - Supported using PIDs
      - Supported using PIDs
+     - Supported using PIDs
    * - **velocity**
      - Not supported
+     - Native support
      - Native support
      - Supported using PIDs
    * - **effort**
      - Not supported
      - Not supported
+     - Not supported
      - Native support
+
+MuJoCo's ``intvelocity`` actuator integrates its ``ctrl`` input into an internal position setpoint. The input itself has
+velocity semantics, so it maps natively to a ros2_control ``velocity`` command interface without changing the actuator's
+integrated-velocity dynamics.
 
 .. note::
 

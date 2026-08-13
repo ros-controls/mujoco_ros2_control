@@ -34,7 +34,7 @@ namespace mujoco_ros2_control
  * Maps to MuJoCo actuator types:
  *  - MOTOR for MuJoCo motor actuator
  *  - POSITION for MuJoCo position actuator
- *  - VELOCITY for MuJoCo velocity actuator
+ *  - VELOCITY for MuJoCo velocity and integrated-velocity actuators
  *  - CUSTOM  for MuJoCo general actuator or other types
  *
  * \note the MuJoCo types are as per the MuJoCo documentation:
