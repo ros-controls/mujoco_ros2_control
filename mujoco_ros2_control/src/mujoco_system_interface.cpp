@@ -777,12 +777,25 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
 {
   auto update_joint_interface = [this](const std::string& interface_name, bool enabled) {
     const size_t delimiter_pos = interface_name.rfind('/');
+    if (delimiter_pos == std::string::npos)
+    {
+      RCLCPP_ERROR(get_logger(), "Invalid interface name format: %s", interface_name.c_str());
+      return;
+    }
+
     std::string joint_name = interface_name.substr(0, delimiter_pos);
     std::string interface_type = interface_name.substr(delimiter_pos + 1);
 
     // Find the MuJoCoActuatorData in the vector
     auto joint_it = std::find_if(urdf_joint_data_.begin(), urdf_joint_data_.end(),
                                  [&joint_name](const URDFJointData& joint) { return joint.name == joint_name; });
+
+    if (joint_it == urdf_joint_data_.end())
+    {
+      RCLCPP_WARN(get_logger(), "Joint %s not found in urdf_joint_data_", joint_name.c_str());
+      return;
+    }
+
     const auto actuator_names = get_joint_actuator_names(joint_name, get_hardware_info(), simulation_->model());
 
     // Collect every controllable MuJoCo actuator this joint drives. A transmission may map one joint to
@@ -794,171 +807,76 @@ MujocoSystemInterface::perform_command_mode_switch(const std::vector<std::string
                                       [&actuator_name](const MuJoCoActuatorData& actuator) {
                                         return actuator.joint_name == actuator_name;
                                       });
-      if (actuator_it != mujoco_actuator_data_.end() && actuator_it->actuator_type != ActuatorType::PASSIVE)
+      if (actuator_it == mujoco_actuator_data_.end())
       {
-        actuators.push_back(&(*actuator_it));
+        continue;
       }
+      if (actuator_it->actuator_type == ActuatorType::PASSIVE)
+      {
+        RCLCPP_DEBUG(get_logger(), "Actuator %s is passive and cannot be controlled.", actuator_name.c_str());
+        continue;
+      }
+      actuators.push_back(&(*actuator_it));
+    }
+
+    if (actuators.empty())
+    {
+      RCLCPP_WARN(get_logger(), "No controllable MuJoCo actuator found for joint %s", joint_name.c_str());
+      return;
+    }
+
+    // Only one type of control mode can be active at a time. Reset the flags on every actuator
+    // the joint drives before (re-)enabling the requested one.
+    joint_it->is_position_control_enabled = false;
+    joint_it->is_velocity_control_enabled = false;
+    joint_it->is_effort_control_enabled = false;
+    for (auto* actuator_it : actuators)
+    {
+      actuator_it->is_position_control_enabled = false;
+      actuator_it->is_velocity_control_enabled = false;
+      actuator_it->is_effort_control_enabled = false;
+      actuator_it->is_position_pid_control_enabled = false;
+      actuator_it->is_velocity_pid_control_enabled = false;
     }
 
     if (!enabled)
     {
-      joint_it->is_position_control_enabled = false;
-      joint_it->is_velocity_control_enabled = false;
-      joint_it->is_effort_control_enabled = false;
-      for (auto* actuator_it : actuators)
-      {
-        actuator_it->is_position_control_enabled = false;
-        actuator_it->is_velocity_control_enabled = false;
-        actuator_it->is_effort_control_enabled = false;
-        actuator_it->is_position_pid_control_enabled = false;
-        actuator_it->is_velocity_pid_control_enabled = false;
-      }
       RCLCPP_INFO(get_logger(), "Joint %s: %s control disabled", joint_name.c_str(), interface_type.c_str());
       return;
     }
 
     if (interface_type == hardware_interface::HW_IF_POSITION)
     {
-      joint_it->is_position_control_enabled = true;
-      joint_it->is_velocity_control_enabled = false;
-      joint_it->is_effort_control_enabled = false;
-
       for (auto* actuator_it : actuators)
       {
-        actuator_it->is_position_control_enabled = (actuator_it->actuator_type == ActuatorType::POSITION);
-        actuator_it->is_position_pid_control_enabled = (actuator_it->actuator_type != ActuatorType::POSITION);
-        actuator_it->is_velocity_control_enabled = false;
-        actuator_it->is_velocity_pid_control_enabled = false;
-        actuator_it->is_effort_control_enabled = false;
+        actuator_it->is_position_control_enabled = (actuator_it->pos_pid == nullptr);
+        actuator_it->is_position_pid_control_enabled = (actuator_it->pos_pid != nullptr);
       }
-      RCLCPP_INFO(get_logger(), "Joint %s: position control enabled", joint_name.c_str());
+      joint_it->is_position_control_enabled = true;
+      RCLCPP_INFO(get_logger(), "Joint %s: position control enabled (velocity, effort disabled)", joint_name.c_str());
     }
     else if (interface_type == hardware_interface::HW_IF_VELOCITY)
     {
-      joint_it->is_position_control_enabled = false;
-      joint_it->is_velocity_control_enabled = true;
-      joint_it->is_effort_control_enabled = false;
-
       for (auto* actuator_it : actuators)
       {
-        actuator_it->is_velocity_control_enabled = (actuator_it->actuator_type == ActuatorType::VELOCITY);
-        actuator_it->is_velocity_pid_control_enabled = (actuator_it->actuator_type != ActuatorType::VELOCITY);
-        actuator_it->is_position_control_enabled = false;
-        actuator_it->is_position_pid_control_enabled = false;
-        actuator_it->is_effort_control_enabled = false;
+        actuator_it->is_velocity_control_enabled = (actuator_it->vel_pid == nullptr);
+        actuator_it->is_velocity_pid_control_enabled = (actuator_it->vel_pid != nullptr);
       }
-      RCLCPP_INFO(get_logger(), "Joint %s: velocity control enabled", joint_name.c_str());
+      joint_it->is_velocity_control_enabled = true;
+      RCLCPP_INFO(get_logger(), "Joint %s: velocity control enabled (position, effort disabled)", joint_name.c_str());
     }
-    else if (interface_type == hardware_interface::HW_IF_EFFORT ||
-             interface_type == hardware_interface::HW_IF_TORQUE ||
+    else if (interface_type == hardware_interface::HW_IF_EFFORT || interface_type == hardware_interface::HW_IF_TORQUE ||
              interface_type == hardware_interface::HW_IF_FORCE)
     {
-      joint_it->is_position_control_enabled = false;
-      joint_it->is_velocity_control_enabled = false;
-      joint_it->is_effort_control_enabled = true;
-
       for (auto* actuator_it : actuators)
       {
         actuator_it->is_effort_control_enabled = true;
-        actuator_it->is_position_control_enabled = false;
-        actuator_it->is_position_pid_control_enabled = false;
-        actuator_it->is_velocity_control_enabled = false;
-        actuator_it->is_velocity_pid_control_enabled = false;
       }
-      RCLCPP_INFO(get_logger(), "Joint %s: %s control enabled", joint_name.c_str(), interface_type.c_str());
+      joint_it->is_effort_control_enabled = true;
+      RCLCPP_INFO(get_logger(), "Joint %s: %s control enabled (position, velocity disabled)", joint_name.c_str(),
+                  interface_type.c_str());
     }
   };
-
-  auto validate_interface = [this](const std::string& interface_name, bool enabled) -> bool {
-    const size_t delimiter_pos = interface_name.rfind('/');
-    if (delimiter_pos == std::string::npos)
-    {
-      RCLCPP_ERROR(get_logger(), "Invalid interface name format: %s", interface_name.c_str());
-      return false;
-    }
-
-    std::string joint_name = interface_name.substr(0, delimiter_pos);
-    std::string interface_type = interface_name.substr(delimiter_pos + 1);
-
-    auto joint_it = std::find_if(urdf_joint_data_.begin(), urdf_joint_data_.end(),
-                                 [&joint_name](const URDFJointData& joint) { return joint.name == joint_name; });
-
-    if (joint_it == urdf_joint_data_.end())
-    {
-      RCLCPP_WARN(get_logger(), "Joint %s not found in urdf_joint_data_", joint_name.c_str());
-      return false;
-    }
-    const auto actuator_names = get_joint_actuator_names(joint_name, get_hardware_info(), simulation_->model());
-
-    std::vector<const MuJoCoActuatorData*> actuators;
-    for (const auto& actuator_name : actuator_names)
-    {
-      auto actuator_it = std::find_if(mujoco_actuator_data_.begin(), mujoco_actuator_data_.end(),
-                                      [&actuator_name](const MuJoCoActuatorData& actuator) {
-                                        return actuator.joint_name == actuator_name;
-                                      });
-      if (actuator_it != mujoco_actuator_data_.end() && actuator_it->actuator_type != ActuatorType::PASSIVE)
-      {
-        actuators.push_back(&(*actuator_it));
-      }
-    }
-
-    if (actuators.empty())
-    {
-      RCLCPP_WARN(get_logger(), "No controllable MuJoCo actuator found for joint %s", joint_name.c_str());
-      return false;
-    }
-
-    // If disabling, the verification of joint/actuator presence is sufficient
-    if (!enabled)
-    {
-      return true;
-    }
-
-    // If enabling, verify actuator compatibility
-    if (interface_type == hardware_interface::HW_IF_POSITION)
-    {
-      return std::all_of(actuators.begin(), actuators.end(), [](const auto* act) {
-        return act->actuator_type == ActuatorType::POSITION ||
-              (act->has_pos_pid && act->actuator_type == ActuatorType::MOTOR);
-      });
-    }
-    else if (interface_type == hardware_interface::HW_IF_VELOCITY)
-    {
-      return std::all_of(actuators.begin(), actuators.end(), [](const auto* act) {
-        return act->actuator_type == ActuatorType::VELOCITY ||
-          (act->has_vel_pid && act->actuator_type == ActuatorType::MOTOR);
-      });
-    }
-    else if (interface_type == hardware_interface::HW_IF_EFFORT ||
-             interface_type == hardware_interface::HW_IF_TORQUE ||
-             interface_type == hardware_interface::HW_IF_FORCE)
-    {
-      return std::all_of(actuators.begin(), actuators.end(), [](const auto* act) {
-        return act->actuator_type == ActuatorType::MOTOR || act->actuator_type == ActuatorType::CUSTOM;
-      });
-    }
-
-    return false;
-  };
-
-  // Validate stopped interfaces
-  for (const auto& interface : stop_interfaces)
-  {
-    if (!validate_interface(interface, false))
-    {
-      return hardware_interface::return_type::ERROR;
-    }
-  }
-
-  // Validate started interfaces
-  for (const auto& interface : start_interfaces)
-  {
-    if (!validate_interface(interface, true))
-    {
-      return hardware_interface::return_type::ERROR;
-    }
-  }
 
   // Disable stopped interfaces
   for (const auto& interface : stop_interfaces)
