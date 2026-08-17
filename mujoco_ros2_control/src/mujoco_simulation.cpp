@@ -528,13 +528,15 @@ MujocoSimulation::~MujocoSimulation()
 }
 
 bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::string& model_path,
-                                  const std::string& mujoco_model_topic, double sim_speed_factor, bool headless)
+                                  const std::string& mujoco_model_topic, double sim_speed_factor, bool headless,
+                                  const std::string& camera_tracked_body)
 {
   node_ = node;
   model_path_ = model_path;
   mujoco_model_topic_ = mujoco_model_topic;
   sim_speed_factor_ = sim_speed_factor;
   headless_ = headless;
+  camera_tracked_body_ = camera_tracked_body;
 
   if (sim_speed_factor_ > 0)
   {
@@ -755,6 +757,31 @@ bool MujocoSimulation::apply_keyframe(const std::string& keyframe_name)
   return true;
 }
 
+void MujocoSimulation::apply_tracking_camera()
+{
+  if (camera_tracked_body_.empty())
+  {
+    return;
+  }
+
+  const int body_id = mj_name2id(mj_model_, mjOBJ_BODY, camera_tracked_body_.c_str());
+  if (body_id == -1)
+  {
+    RCLCPP_WARN(get_logger(),
+                "Body '%s' requested for camera tracking was not found in the MuJoCo model. "
+                "Falling back to the free camera.",
+                camera_tracked_body_.c_str());
+    return;
+  }
+
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  cam_.type = mjCAMERA_TRACKING;
+  cam_.trackbodyid = body_id;
+  cam_.fixedcamid = -1;
+
+  RCLCPP_INFO(get_logger(), "Viewer camera is tracking body '%s' (id %d).", camera_tracked_body_.c_str(), body_id);
+}
+
 void MujocoSimulation::capture_initial_state()
 {
   const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
@@ -795,6 +822,10 @@ void MujocoSimulation::start_physics_thread()
     {
       sim_->Load(mj_model_, mj_data_, model_path_.c_str());
     }
+
+    // Must follow the load: Simulate resets to the free camera whenever it loads a new model.
+    this->apply_tracking_camera();
+
     // lock the sim mutex
     {
       const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
