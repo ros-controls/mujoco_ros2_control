@@ -361,6 +361,92 @@ TEST_F(CameraPluginTest, PolledCameraPublishesOncePerTrigger)
   plugin.cleanup();
 }
 
+// ---------------------------------------------------------------------------------------
+// Dropped-frame accounting
+//
+// update() runs on the sim thread and must not overwrite a snapshot the rendering thread is
+// still working on. When it has to skip, it consumes the slot and counts one lost frame.
+// A high publish rate against a camera large enough that a pass outlasts the interval puts
+// the guard on the hot path without needing to control the rendering thread directly.
+// ---------------------------------------------------------------------------------------
+
+namespace
+{
+// 1280x720 is comfortably slower to render and read back than a 1 ms publish interval.
+constexpr const char* SLOW_CAMERA_MODEL = R"(<?xml version="1.0"?>
+<mujoco model="slow_camera">
+  <visual>
+    <global offwidth="1280" offheight="720"/>
+  </visual>
+  <worldbody>
+    <light pos="0 0 3"/>
+    <body name="box" pos="0 0 0.1">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+      <geom type="box" size="0.05 0.05 0.05"/>
+    </body>
+    <camera name="cam" pos="0 -1 0.2" mode="fixed" resolution="1280 720"/>
+  </worldbody>
+</mujoco>
+)";
+}  // namespace
+
+TEST_F(CameraPluginTest, NoFramesAreDroppedWhenTheRendererKeepsUp)
+{
+  load_model(SLOW_CAMERA_MODEL);
+  // One frame every 100 s, so no slot ever comes due after the first.
+  plugin_node_->declare_parameter("mujoco_plugins.camera_plugin.camera_publish_rate", 0.01);
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  wait_for_rendering(plugin);
+
+  for (int i = 0; i < 2000; ++i)
+  {
+    plugin.update(model_, data_);
+  }
+  EXPECT_EQ(plugin.dropped_frames(), 0u);
+  plugin.cleanup();
+}
+
+// The regression this guards: without the in-flight check, update() would copy into the
+// snapshot the rendering thread is reading, producing a frame blended from two sim times --
+// corruption that still looks like a valid image. The counter is the observable proof that
+// the slot was skipped instead.
+TEST_F(CameraPluginTest, SkippedSlotsAreCountedOncePerLostFrameNotPerAttempt)
+{
+  load_model(SLOW_CAMERA_MODEL);
+  // 1 kHz: a slot comes due every millisecond, far faster than a 1280x720 pass completes.
+  plugin_node_->declare_parameter("mujoco_plugins.camera_plugin.camera_publish_rate", 1000.0);
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  wait_for_rendering(plugin);
+
+  // Drive update() the way a 2 kHz control loop would, for long enough that several render
+  // passes are outrun.
+  std::size_t calls = 0;
+  const auto deadline = std::chrono::steady_clock::now() + 500ms;
+  while (std::chrono::steady_clock::now() < deadline)
+  {
+    plugin.update(model_, data_);
+    ++calls;
+    std::this_thread::sleep_for(std::chrono::microseconds(200));
+  }
+
+  const uint64_t dropped = plugin.dropped_frames();
+  ASSERT_GT(calls, 500u) << "the loop did not run often enough to be meaningful";
+  EXPECT_GT(dropped, 0u) << "a 1280x720 pass cannot keep up with a 1 kHz slot rate";
+
+  // The point of consuming the slot: each lost frame is counted once, so the number of
+  // drops is bounded by the elapsed slots (~500 at 1 kHz over 500 ms) and not by the number
+  // of update() calls. Without that, every call during a render would increment.
+  EXPECT_LT(dropped, static_cast<uint64_t>(calls))
+      << "counted " << dropped << " drops over " << calls << " update() calls: the slot is not being consumed";
+  EXPECT_LT(dropped, 1500u) << "far more drops than slots elapsed in 500 ms";
+  plugin.cleanup();
+}
+
 int main(int argc, char** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
