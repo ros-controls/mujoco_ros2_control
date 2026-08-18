@@ -2,6 +2,35 @@
 Changelog for package mujoco_ros2_control_tests
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.1.0 (2026-08-18)
+------------------
+* Add support for Magnetometer sensor (`#257 <https://github.com/ros-controls/mujoco_ros2_control/issues/257>`_)
+* Add missing dependencies (`#250 <https://github.com/ros-controls/mujoco_ros2_control/issues/250>`_)
+* Fix transmissions integration working with multiple actuators (`#241 <https://github.com/ros-controls/mujoco_ros2_control/issues/241>`_)
+  Co-authored-by: Daniel Costanzi <daniel.costanzi@pal-robotics.com>
+* Add service to set the free joint body state (`#233 <https://github.com/ros-controls/mujoco_ros2_control/issues/233>`_)
+* Add pose sensor test to launch tests (`#232 <https://github.com/ros-controls/mujoco_ros2_control/issues/232>`_)
+  Co-authored-by: Sebastian Castro <sebastian.a.castrofernandez@nasa.gov>
+  Co-authored-by: Sai Kishor Kothakota <sai.kishor@pal-robotics.com>
+* Switch to isolated launch tests (`#234 <https://github.com/ros-controls/mujoco_ros2_control/issues/234>`_)
+* remove shebangs from launch files (`#227 <https://github.com/ros-controls/mujoco_ros2_control/issues/227>`_)
+  Co-authored-by: Erik Holum <erik.holum@nasa.gov>
+* Add a 3-D Lidar Extension (`#205 <https://github.com/ros-controls/mujoco_ros2_control/issues/205>`_)
+  Co-authored-by: Nathan Dunkelberger <138718889+ndunkelb-nasa@users.noreply.github.com>
+* Add support for "site" transmission type (`#154 <https://github.com/ros-controls/mujoco_ros2_control/issues/154>`_)
+  Co-authored-by: Sai Kishor Kothakota <sai.kishor@pal-robotics.com>
+* Add support for pose sensors (`#220 <https://github.com/ros-controls/mujoco_ros2_control/issues/220>`_)
+  Co-authored-by: Sai Kishor Kothakota <sai.kishor@pal-robotics.com>
+* fixing plugin export so that downstream plugins don't fail (`#215 <https://github.com/ros-controls/mujoco_ros2_control/issues/215>`_)
+  Co-authored-by: Erik Holum <erik.holum@nasa.gov>
+* Re-add descoped ResetWorld functional test (`#206 <https://github.com/ros-controls/mujoco_ros2_control/issues/206>`_)
+* Isolate flakey functional tests and update pixi (`#204 <https://github.com/ros-controls/mujoco_ros2_control/issues/204>`_)
+* Support/cameras rendering/headless (`#197 <https://github.com/ros-controls/mujoco_ros2_control/issues/197>`_)
+  Co-authored-by: Sai Kishor Kothakota <sai.kishor@pal-robotics.com>
+  Co-authored-by: Erik Holum <erik.holum@nasa.gov>
+* Increase timeout for mjcf_generation* tests (`#201 <https://github.com/ros-controls/mujoco_ros2_control/issues/201>`_)
+* Contributors: Christian Rauch, Christoph Fröhlich, Erik Holum, Nathan Dunkelberger, Sai Kishor Kothakota, Sebastian Castro, msavchen-nasa
+
 0.0.3 (2026-05-01)
 ------------------
 * Switch to forward_command_controller dependency (`#173 <https://github.com/ros-controls/mujoco_ros2_control/issues/173>`_)
