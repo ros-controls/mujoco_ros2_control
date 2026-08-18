@@ -326,11 +326,9 @@ Each cycle, the commanded body-frame ``vx``/``vy`` is clamped to ``max_linear_ve
 direction) and rotated into the world frame using the body's current orientation, since a free
 joint's linear ``qvel`` is expressed in the world frame. The commanded yaw-rate is clamped to
 ``max_yaw_rate`` and used as-is, since a free joint's rotational ``qvel`` is already expressed in
-the body-local frame. The result is written directly into ``data->qvel`` during ``update()``:
-the core NaN-fills ``qvel`` before every plugin's ``update()`` runs, so writing a finite value
-into an entry requests a hard velocity override there, applied by the core simulation as a direct
-``qvel`` write immediately before the next physics step (see "Creating Your Own Plugin" below for
-the full mechanism, which is not available through ``xfrc_applied`` alone).
+the body-local frame. The result is written directly into ``data->qvel`` during ``pre_step()``,
+which runs on the physics thread immediately before every ``mj_step``, which will happen per physics
+step!
 
 A command that hasn't been refreshed within ``cmd_timeout`` seconds is treated as zero (safety
 stop) rather than left to coast on the last commanded velocity.
@@ -602,7 +600,12 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
    {
    public:
      bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
+
+     // Override whichever of these you need -- both have a no-op default, see
+     // "Plugin Lifecycle" below for how they differ.
      void update(const mjModel* model, mjData* data) override;
+     void pre_step(mjData* data) override;
+
      void cleanup() override;
 
    private:
@@ -633,7 +636,12 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
 
    void MyCustomPlugin::update(const mjModel* model, mjData* data)
    {
-     // Called every control loop iteration
+     // Called once per ros2_control write() cycle, on the control thread.
+   }
+
+   void MyCustomPlugin::pre_step(mjData* data)
+   {
+     // Called on the physics thread, immediately before every mj_step.
    }
 
    void MyCustomPlugin::cleanup()
@@ -693,27 +701,24 @@ Plugin Lifecycle
 
 1. **Initialization** (``init``): Called once when the plugin is loaded. Use this to read
    parameters and set up publishers, subscribers, and services.
-2. **Update** (``update``): Called every simulation step at the **end of the** ``read`` **loop**,
-   before the controller update and ``write`` loops. Changes to ``mjData`` here are visible to
-   controllers and affect the next simulation step. This runs in a real-time thread — avoid
-   blocking operations.
-
-   ``data->qvel`` here has one special property: it is **NaN-filled before every plugin's**
-   ``update()`` **runs this cycle**. Most plugins never touch it and can ignore this entirely.
-   A plugin that needs to *dictate* a free joint's velocity exactly (``BaseVelocityPlugin`` is
-   the example in this package) can write a finite value into any ``qvel`` entry to request a
-   hard velocity override there — the core simulation applies every non-NaN entry as a direct
-   ``qvel`` write immediately before the next ``mj_step``, bypassing the normal mass/contact
-   dynamics for that DOF. This exists because plugins only ever see a throwaway copy of
-   ``mjData`` — only ``ctrl``, ``qfrc_applied``, and ``xfrc_applied`` are otherwise copied back
-   into the real simulation state, so this NaN convention is the only way a plugin can
-   influence ``qvel`` at all. Leaving an entry ``NaN`` keeps its normal physics-driven value;
-   because of this, ``data->qvel`` cannot be read here for the body's actual velocity either,
-   since it isn't restored to a real value until after every plugin's ``update()`` has run.
-   See ``MuJoCoROS2ControlPluginBase::update()``'s doc comment in
-   ``mujoco_ros2_control_plugins_base.hpp`` for the authoritative reference.
-3. **Cleanup** (``cleanup``): Called when shutting down. Release any resources acquired in
+2. **Update** (``update``, optional): Called once per ``ros2_control`` ``write()`` cycle, on the
+   control thread. ``data`` is a recent snapshot, not the live simulation data. Use this for
+   anything that doesn't need to run on exactly one physics step: publishing sensor data,
+   servicing a trigger, etc. Most plugins in this package (``CameraPlugin``, the lidar plugins,
+   ``HeartbeatPublisherPlugin``, ``FreeJointStatePublisherPlugin``) use only this hook.
+3. **Pre-step** (``pre_step``, optional): Called on the physics thread, immediately before every
+   ``mj_step`` -- including multiple times per outer iteration when the loop batches steps to
+   catch up. ``data`` is the live simulation data: read and write it directly, with no separate
+   command buffer, so an untouched entry keeps its last value. Use this for anything that must
+   hold for exactly one physics step, such as ``BaseVelocityPlugin``'s kinematic velocity
+   override. Runs with the simulation mutex held, so blocking here stalls the physics loop and
+   native viewer too.
+4. **Cleanup** (``cleanup``): Called when shutting down. Release any resources acquired in
    ``init``.
+
+Both hooks default to doing nothing, so implement whichever fits (or both, or neither). See
+``MuJoCoROS2ControlPluginBase``'s class doc comment in ``mujoco_ros2_control_plugins_base.hpp``
+for the authoritative reference.
 
 
 Building

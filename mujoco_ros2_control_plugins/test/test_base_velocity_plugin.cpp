@@ -237,7 +237,7 @@ TEST_F(BaseVelocityPluginTest, NoCommandRequestsZeroVelocity)
   auto plugin = makeInitializedPlugin();
   fillQvelNaN();
 
-  plugin->update(model_, data_);
+  plugin->pre_step(data_);
 
   const mjtNum* qvel = data_->qvel + dofAdr();
   EXPECT_DOUBLE_EQ(qvel[0], 0.0);
@@ -259,7 +259,7 @@ TEST_F(BaseVelocityPluginTest, CommandIsReportedAsOverride)
   fillQvelNaN();
 
   publishTwist("cmd_vel", /*vx=*/1.0, /*vy=*/0.0, /*wz=*/0.3);
-  plugin->update(model_, data_);
+  plugin->pre_step(data_);
 
   const mjtNum* qvel = data_->qvel + dofAdr();
   // Identity orientation => body-x == world-x. This is a direct assignment, not a servo,
@@ -282,13 +282,13 @@ TEST_F(BaseVelocityPluginTest, StaleCommandRequestsZeroVelocity)
 
   publishTwist("cmd_vel", /*vx=*/1.0, /*vy=*/0.0, /*wz=*/0.0);
 
-  plugin->update(model_, data_);
+  plugin->pre_step(data_);
   const mjtNum* qvel = data_->qvel + dofAdr();
   ASSERT_GT(qvel[0], 0.0) << "sanity: velocity requested while command is fresh";
 
   // Wait past the timeout without publishing again.
   std::this_thread::sleep_for(std::chrono::milliseconds(400));
-  plugin->update(model_, data_);
+  plugin->pre_step(data_);
 
   EXPECT_NEAR(qvel[0], 0.0, 1e-9) << "stale command should be treated as zero";
 
@@ -301,7 +301,7 @@ TEST_F(BaseVelocityPluginTest, LinearCommandIsClampedToMaxLinearVelocity)
   auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/5.0, /*vy=*/0.0, /*wz=*/0.0);
-  plugin->update(model_, data_);
+  plugin->pre_step(data_);
 
   const mjtNum* qvel = data_->qvel + dofAdr();
   EXPECT_NEAR(qvel[0], 0.2, 1e-9);
@@ -315,7 +315,7 @@ TEST_F(BaseVelocityPluginTest, YawCommandIsClampedToMaxYawRate)
   auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/0.0, /*vy=*/0.0, /*wz=*/5.0);
-  plugin->update(model_, data_);
+  plugin->pre_step(data_);
 
   const mjtNum* qvel = data_->qvel + dofAdr();
   EXPECT_NEAR(qvel[5], 0.3, 1e-9);
@@ -330,7 +330,7 @@ TEST_F(BaseVelocityPluginTest, UnsetLimitsDoNotClamp)
   auto plugin = makeInitializedPlugin();
 
   publishTwist("cmd_vel", /*vx=*/1000.0, /*vy=*/0.0, /*wz=*/1000.0);
-  plugin->update(model_, data_);
+  plugin->pre_step(data_);
 
   const mjtNum* qvel = data_->qvel + dofAdr();
   EXPECT_NEAR(qvel[0], 1000.0, 1e-6);
@@ -355,7 +355,7 @@ TEST_F(BaseVelocityPluginTest, BodyFrameCommandIsRotatedIntoFreeJointFrame)
   mj_forward(model_, data_);
 
   publishTwist("cmd_vel", /*vx=*/1.0, /*vy=*/0.0, /*wz=*/0.0);
-  plugin->update(model_, data_);
+  plugin->pre_step(data_);
 
   const mjtNum* qvel = data_->qvel + dofAdr();
   EXPECT_NEAR(qvel[0], 0.0, 1e-6) << "world-x should be ~0 after a 90 deg yaw";
