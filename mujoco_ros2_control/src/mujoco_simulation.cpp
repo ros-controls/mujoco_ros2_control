@@ -28,12 +28,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <future>
 #include <iostream>
-#include <limits>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -714,10 +712,6 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
     ctrl_staged_.assign(mj_model_->nu, 0.0);
     qfrc_applied_staged_.assign(mj_model_->nv, 0.0);
     control_inputs_staged_ = false;
-    xfrc_plugin_desired_.assign(6 * mj_model_->nbody, 0.0);
-    xfrc_viewer_capture_.assign(6 * mj_model_->nbody, 0.0);
-    xfrc_last_written_.assign(6 * mj_model_->nbody, 0.0);
-    qvel_override_staged_.assign(mj_model_->nv, std::numeric_limits<mjtNum>::quiet_NaN());
 
     if (mj_data_ && snapshot_write_ && snapshot_read_)
     {
@@ -766,6 +760,17 @@ void MujocoSimulation::capture_initial_state()
 void MujocoSimulation::set_reset_callback(ResetCallback callback)
 {
   reset_callback_ = std::move(callback);
+}
+
+void MujocoSimulation::set_pre_step_callback(PreStepCallback callback)
+{
+  // Don't drop in a nullptr if requested, just pass an empty function.
+  PreStepCallback next = callback ? std::move(callback) : PreStepCallback([](mjData* /*data*/) {});
+
+  // Plugins may be registered after the physics thread is already running, so the loop
+  // could otherwise be reading pre_step_callback_ while we assign to it.
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  pre_step_callback_ = std::move(next);
 }
 
 void MujocoSimulation::start_physics_thread()
@@ -862,17 +867,13 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state,
   std::fill(mj_data_->xfrc_applied, mj_data_->xfrc_applied + 6 * mj_model_->nbody, 0.0);
 
   {
-    // Clear staged control inputs and plugin contributions so stale commands from before the
-    // reset are not re-applied on the next step.
+    // Clear staged control inputs so stale commands from before the reset are not re-applied
+    // on the next step.
     const std::lock_guard<std::mutex> staging_lock(control_staging_mutex_);
     control_inputs_staged_ = false;
     std::fill(ctrl_staged_.begin(), ctrl_staged_.end(), 0.0);
     std::fill(qfrc_applied_staged_.begin(), qfrc_applied_staged_.end(), 0.0);
-    std::fill(xfrc_plugin_desired_.begin(), xfrc_plugin_desired_.end(), 0.0);
-    std::fill(qvel_override_staged_.begin(), qvel_override_staged_.end(), std::numeric_limits<mjtNum>::quiet_NaN());
   }
-  std::fill(xfrc_viewer_capture_.begin(), xfrc_viewer_capture_.end(), 0.0);
-  std::fill(xfrc_last_written_.begin(), xfrc_last_written_.end(), 0.0);
 
   // Restore simulation time to preserve ROS clock continuity
   mj_data_->time = saved_time;
@@ -1339,8 +1340,6 @@ void MujocoSimulation::apply_control_data(mjData* control_data)
   const std::lock_guard<std::mutex> lock(control_staging_mutex_);
   mju_copy(ctrl_staged_.data(), control_data->ctrl, static_cast<int>(mj_model_->nu));
   mju_copy(qfrc_applied_staged_.data(), control_data->qfrc_applied, static_cast<int>(mj_model_->nv));
-  mju_copy(xfrc_plugin_desired_.data(), control_data->xfrc_applied, 6 * static_cast<int>(mj_model_->nbody));
-  mju_copy(qvel_override_staged_.data(), control_data->qvel, static_cast<int>(mj_model_->nv));
   control_inputs_staged_ = true;
 }
 
@@ -1389,20 +1388,6 @@ void MujocoSimulation::apply_staged_control_inputs()
   {
     mju_copy(mj_data_->ctrl, ctrl_staged_.data(), static_cast<int>(mj_model_->nu));
     mju_copy(mj_data_->qfrc_applied, qfrc_applied_staged_.data(), static_cast<int>(mj_model_->nv));
-  }
-
-  const int nbody6 = 6 * static_cast<int>(mj_model_->nbody);
-  mju_copy(mj_data_->xfrc_applied, xfrc_viewer_capture_.data(), nbody6);
-  mju_addTo(mj_data_->xfrc_applied, xfrc_plugin_desired_.data(), nbody6);
-  mju_copy(xfrc_last_written_.data(), mj_data_->xfrc_applied, nbody6);
-
-  // Apply plugin-requested velocity overrides as direct qvel writes
-  for (int i = 0; i < static_cast<int>(mj_model_->nv); ++i)
-  {
-    if (std::isfinite(qvel_override_staged_[i]))
-    {
-      mj_data_->qvel[i] = qvel_override_staged_[i];
-    }
   }
 }
 
@@ -1457,25 +1442,6 @@ void MujocoSimulation::physics_loop()
       // run only if model is present
       if (mj_model_)
       {
-        // Determine the viewer (drag) forces for this outer iteration.
-        //
-        // mjv_updateScene in simulate.cc reads mj_data_->xfrc_applied BEFORE zeroing it, so
-        // plugin forces written here are visible as arrows in the native viewer. To avoid
-        // accumulation across outer iterations we must preserve the viewer-drag portion.
-        // We do this in xfrc_viewer_capture_.
-        //
-        // After each outer iteration we restore mj_data_->xfrc_applied = viewer + plugin and
-        // record it in xfrc_last_written_. We can then combine the desired forces from the plugins
-        // as well as the viewers prior to stepping, without either of them stacking in
-        // undesirable ways.
-        const int nbody6 = 6 * static_cast<int>(mj_model_->nbody);
-        if (std::memcmp(mj_data_->xfrc_applied, xfrc_last_written_.data(), nbody6 * sizeof(mjtNum)) != 0)
-        {
-          // Render thread ran: xfrc_applied was zeroed then drag was applied.
-          mju_copy(xfrc_viewer_capture_.data(), mj_data_->xfrc_applied, nbody6);
-        }
-        // else: render thread did not run; keep the existing xfrc_viewer_capture_.
-
         // running (ie, not paused)
         if (sim_->run)
         {
@@ -1524,6 +1490,7 @@ void MujocoSimulation::physics_loop()
             sim_->speed_changed = false;
 
             apply_staged_control_inputs();
+            pre_step_callback_(mj_data_);
             // run single step, let next iteration deal with timing
             mj_step(mj_model_, mj_data_);
 
@@ -1575,6 +1542,7 @@ void MujocoSimulation::physics_loop()
               sim_->InjectNoise(-1);
 #endif
               apply_staged_control_inputs();
+              pre_step_callback_(mj_data_);
               // call mj_step
               mj_step(mj_model_, mj_data_);
 
@@ -1624,14 +1592,15 @@ void MujocoSimulation::physics_loop()
             pending_steps_.fetch_add(1);
           }
 
-          // Record so the next iteration can detect render thread changes, only necessary once
-          // when paused
+          // Merge staged actuator commands even while paused, so a queued step (and the
+          // viewer's display of ctrl) reflects the latest commands.
           apply_staged_control_inputs();
 
           // Execute one pending step per physics loop iteration so the clock publisher
           // (try_publish) has time to flush between steps, matching play mode behavior.
           if (pending_steps_.load() > 0)
           {
+            pre_step_callback_(mj_data_);
             mj_step(mj_model_, mj_data_);
             publish_control_state();
             publish_clock();

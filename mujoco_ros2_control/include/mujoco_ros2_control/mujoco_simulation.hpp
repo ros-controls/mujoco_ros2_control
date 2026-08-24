@@ -84,17 +84,20 @@ namespace mujoco_ros2_control
  *
  * `apply_control_data(...)` will copy control inputs from the provided mjData into staging
  * buffers that the physics loop applies to `mj_data_` immediately before each step.
- * Specifically, it stages `ctrl`, `qfrc_applied`, and `xfrc_applied`. Cartesian forces from
- * `xfrc_applied` compete with inputs from Simulate's drag function, so they are resolved
- * separately. This only takes the control staging mutex and never blocks on physics stepping.
- * It also stages `qvel`: the system interface NaN-fills `qvel` before every plugin's
- * `update()` runs, so any DOF a plugin leaves untouched is NaN here and any DOF it writes a
- * finite value into is a requested hard velocity override (see
- * `MuJoCoROS2ControlPluginBase::update()`'s doc comment). Non-NaN entries are applied as a
- * direct `qvel` write, bypassing the normal dynamics for that DOF.
+ * Specifically, it stages `ctrl` and `qfrc_applied`. Both of these values should come from
+ * the interfaces consuming this class. This  This only takes the control staging mutex
+ * and never blocks on physics stepping.
  *
  * `overwrite_physics_data(...)` will completely replace the data for the sim. Should be used
  * with extreme caution.
+ *
+ * `set_pre_step_callback(...)` registers a callback which will be triggered in the Physics
+ * Loop. It will be called immediately before `mj_step()`, providing direct access to
+ * `mj_data_` immediately before progressing the simulation. This gives consumers direct
+ * access to access and modify the data immediately before integration. Users should be
+ * extremely careful with this callback, as it exposes "god like" powers to the simulation
+ * environment and can break, slow down, or otherwise damage the simulation. This should also
+ * be used with caution.
  *
  * Thread safety is still somewhat messy, as callers are provided with a simulation mutex that
  * locks the model and data while the actual mujoco engine moves the sim forward. Callers
@@ -116,6 +119,15 @@ public:
    *        initial state. When false, a keyframe has already been applied.
    */
   using ResetCallback = std::function<void(bool fill_initial_state)>;
+
+  /**
+   * @brief Callback function type the `set_pre_step_callback` hook.
+   *
+   * Called before `mjStep` in the physics loop, use with care.
+   *
+   * @param data The data from the physics simulation, under thread lock.
+   */
+  using PreStepCallback = std::function<void(mjData* data)>;
 
   /**
    * @brief Construct a new Mujoco Simulation object. This is a no-op until initialization.
@@ -153,6 +165,14 @@ public:
    * @brief Register a callback function to be called on `reset_world_state`.
    */
   void set_reset_callback(ResetCallback callback);
+
+  /**
+   * @brief Register the callback run before every `mj_step()`.
+   *
+   * See the class documentation for more information. Any function called here will hold
+   * the simulation mutex and block the physics loop. Use with care.
+   */
+  void set_pre_step_callback(PreStepCallback callback);
 
   /**
    * @brief Start the physics thread. Must be called after load_model().
@@ -279,13 +299,10 @@ public:
    * @brief Stages control fields from `control_data` for the physics loop in a thread safe way.
    *
    * Specifically, copies `control_data->ctrl` and `control_data->qfrc_applied` into staging
-   * buffers which the physics loop copies into `mj_data_` immediately before each step.
-   * `control_data->xfrc_applied` is copied into `xfrc_plugin_desired_` to avoid conflicts
-   * from the simulate app. `control_data->qvel` is copied into `qvel_override_staged_`;
-   * entries that are not NaN are plugin-requested velocity overrides (see
-   * `MuJoCoROS2ControlPluginBase::update()`'s doc comment for the NaN convention this
-   * relies on) and are applied as direct `qvel` writes before the next `mj_step`. This does
-   * not lock the sim mutex and never waits on stepping.
+   * buffers which the physics loop copies into `mj_data_` immediately before each step. These
+   * are the only two fields staged here because both are "held" quantities that persist
+   * correctly across a batch of steps. Anything else that requires direct access to simulation
+   * data can access it through the `set_pre_step_callback` functions.
    */
   void apply_control_data(mjData* control_data);
 
@@ -474,17 +491,6 @@ private:
   // reset ctrl values in mj_data_ are not clobbered by stale staging buffers.
   bool control_inputs_staged_{ false };
 
-  // Buffers to track actively applied Cartesian forces from both the plugins and the Simulate /
-  // viewer-only drag forces.
-  std::vector<mjtNum> xfrc_plugin_desired_;  // Tracks forces from plugins
-  std::vector<mjtNum> xfrc_viewer_capture_;  // Tracks forces from the viewer
-  std::vector<mjtNum> xfrc_last_written_;    // tracks the last value written to xfrc_applied
-
-  // qvel as staged by apply_control_data: sized nv, NaN by default. A plugin requests a
-  // velocity override on a DOF by writing a finite value into control_data->qvel during its
-  // update()
-  std::vector<mjtNum> qvel_override_staged_;
-
   // Guards only the snapshot pointer swap and snapshot_ready_ flag.
   // Lock order: sim_mutex_ (if needed) is always taken before this one.
   std::mutex data_exchange_mutex_;
@@ -494,10 +500,9 @@ private:
   // demand instead of the batch rate. Starts true so the first refresh happens.
   std::atomic<bool> snapshot_refresh_requested_{ true };
 
-  // Guards the staged control inputs (ctrl_staged_, qfrc_applied_staged_, xfrc_plugin_desired_,
-  // control_inputs_staged_, qvel_override_staged_). Separate from data_exchange_mutex_ so
-  // that staging commands in write() and applying them before each physics step never queue
-  // behind a full mjData copy.
+  // Guards the staged control inputs (ctrl_staged_, qfrc_applied_staged_,
+  // control_inputs_staged_). Separate from data_exchange_mutex_ so that staging commands in
+  // write() and applying them before each physics step never queue behind a full mjData copy.
   // Critical sections are all small buffer copies.
   // Lock order: sim_mutex_ (if needed) before this one; never held with data_exchange_mutex_.
   std::mutex control_staging_mutex_;
@@ -571,6 +576,9 @@ private:
 
   // Callback into the HW interface to perform component-side reset bookkeeping.
   ResetCallback reset_callback_;
+
+  // Callback run immediately before every mj_step(), defaults to nothing.
+  PreStepCallback pre_step_callback_{ [](mjData* /*data*/) {} };
 };
 
 }  // namespace mujoco_ros2_control

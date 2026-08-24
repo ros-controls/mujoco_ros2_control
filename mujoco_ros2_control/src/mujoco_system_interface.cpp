@@ -25,7 +25,6 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
-#include <limits>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -251,6 +250,13 @@ MujocoSystemInterface::MujocoSystemInterface() = default;
 
 MujocoSystemInterface::~MujocoSystemInterface()
 {
+  // We don't know what plugins are doing with the mj_data pointer, so be
+  // sure to kill callback so that nothing can access it on destruction.
+  if (simulation_)
+  {
+    simulation_->set_pre_step_callback(nullptr);
+  }
+
   // Stop plugins
   for (auto& plugin : plugin_instances_)
   {
@@ -1084,13 +1090,8 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     }
   }
 
-  // Update plugins.
-  // Clear plugin data, then let each plugin update as needed, in order. This enables plugins to read and
-  // rewrite control inputs immediately before they are sent to the simulation. Namely, we have to zero
-  // out xfrc_applied so plugins can update as needed. qvel is NaN-filled rather than zeroed: a plugin
-  // requests a hard velocity override on a DOF by writing a finite value into it.
-  mju_zero(control_data->xfrc_applied, 6 * static_cast<int>(simulation_->model()->nbody));
-  std::fill(control_data->qvel, control_data->qvel + simulation_->model()->nv, std::numeric_limits<mjtNum>::quiet_NaN());
+  // Update plugins, in order. This enables plugins to read and rewrite ctrl/qfrc_applied
+  // immediately before they are sent to the simulation.
   for (auto& plugin : plugin_instances_)
   {
     plugin->update(simulation_->model(), control_data);
@@ -2302,6 +2303,14 @@ void MujocoSystemInterface::load_mujoco_plugins()
   {
     RCLCPP_ERROR(get_logger(), "Failed to create plugin loader: %s", ex.what());
   }
+
+  // Connect plugin pre-step callbacks directly to the physics simulation.
+  simulation_->set_pre_step_callback([this](mjData* data) {
+    for (auto& plugin : plugin_instances_)
+    {
+      plugin->pre_step(data);
+    }
+  });
 }
 
 ///

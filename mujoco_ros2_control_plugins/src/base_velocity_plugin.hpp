@@ -31,9 +31,7 @@ namespace mujoco_ros2_control_plugins
 /**
  * @brief Drives a mobile/floating-base robot from a commanded planar body velocity
  *        (vx, vy, yaw-rate) by writing a hard kinematic override of the base's free-joint
- *        velocity directly into data->qvel every cycle (see
- *        MuJoCoROS2ControlPluginBase::update()'s doc comment for the NaN convention this
- *        relies on).
+ *        velocity directly into data->qvel every cycle.
  *
  * Wheel-terrain friction/slip modelling is often unreliable enough to make it a poor
  * foundation for testing navigation stacks. This plugin instead subscribes to a
@@ -73,7 +71,7 @@ public:
   ~BaseVelocityPlugin() override = default;
 
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
-  void update(const mjModel* model, mjData* data) override;
+  void pre_step(mjData* data) override;
   void cleanup() override;
 
 private:
@@ -106,12 +104,12 @@ private:
   };
 
   // Latest command, written by the subscription callback (ROS executor thread) under
-  // cmd_mutex_. update() (real-time thread) copies it into cached_cmd_ via try_lock, so
+  // cmd_mutex_. pre_step() (physics thread) copies it into cached_cmd_ via try_lock, so
   // it never blocks on the subscription callback.
   std::mutex cmd_mutex_;
   CommandState latest_cmd_;
 
-  // Local copy of the command, only ever touched from update() (single real-time thread).
+  // Local copy of the command, only ever touched from pre_step() (physics thread).
   CommandState cached_cmd_;
 };
 

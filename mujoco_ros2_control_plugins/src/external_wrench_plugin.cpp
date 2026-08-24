@@ -55,12 +55,10 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
   return true;
 }
 
-void ExternalWrenchPlugin::update(const mjModel* /*model_arg*/, mjData* data)
+void ExternalWrenchPlugin::pre_step(mjData* data)
 {
-  // Step 0 - undo the xfrc_applied contributions written in the previous cycle
-  // so stale forces are never left in the array when all wrenches have expired.
-  // When the system interface also zeroes xfrc_applied before calling update(),
-  // this loop is a harmless no-op on already-zero values.
+  // Step 0 - undo the xfrc_applied contributions written last cycle, so an expired wrench is
+  // actually released instead of left in place.
   for (const int body_id : prev_written_body_ids_)
   {
     mjtNum* base = data->xfrc_applied + body_id * 6;

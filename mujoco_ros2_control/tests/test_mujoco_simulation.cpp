@@ -229,32 +229,27 @@ TEST_F(MujocoSimulationTest, ControlUpdateTests)
   mj_deleteData(control);
 }
 
-TEST_F(MujocoSimulationTest, XfrcAppliedTests)
+TEST_F(MujocoSimulationTest, PreStepCallbackAppliesXfrcApplied)
 {
   ASSERT_TRUE(initialize_sim());
 
-  // Simulate the read/write cycle in the ros2_control loop, making sure data
-  // is updated where expected
-  mjData* control = nullptr;
-  sim_->copy_physics_data(control);
-  ASSERT_NE(control, nullptr);
-
-  // Zero xfrc_applied (like for plugins), and apply a force
+  // xfrc_applied is not staged through apply_control_data, instead we register a pre-step callback that
+  // writes directly into the live mjData immediately before every mj_step.
   const size_t body_id = 1;
-  mju_zero(control->xfrc_applied, 6 * sim_->model()->nbody);
-  control->xfrc_applied[body_id * 6 + 0] = 1.0;
-  control->xfrc_applied[body_id * 6 + 1] = 2.0;
-  control->xfrc_applied[body_id * 6 + 2] = 3.0;
+  sim_->set_pre_step_callback([body_id](mjData* data) {
+    data->xfrc_applied[body_id * 6 + 0] = 1.0;
+    data->xfrc_applied[body_id * 6 + 1] = 2.0;
+    data->xfrc_applied[body_id * 6 + 2] = 3.0;
+  });
 
-  sim_->apply_control_data(control);
-
-  // xfrc_applied should NOT be in mj_data_ directly, it goes through the triple
-  // plugin buffer and gets composed in the physics loop
+  // The callback has not run yet as it is only invoked from the physics loop.
   EXPECT_DOUBLE_EQ(sim_->data()->xfrc_applied[body_id * 6 + 0], 0.0);
-  EXPECT_DOUBLE_EQ(sim_->data()->xfrc_applied[body_id * 6 + 1], 0.0);
-  EXPECT_DOUBLE_EQ(sim_->data()->xfrc_applied[body_id * 6 + 2], 0.0);
 
-  mj_deleteData(control);
+  sim_->start_physics_thread();
+  EXPECT_TRUE(wait_until([this, body_id]() { return sim_->data()->xfrc_applied[body_id * 6 + 0] == 1.0; }))
+      << "pre_step callback's xfrc_applied write was not applied by the physics loop";
+  EXPECT_DOUBLE_EQ(sim_->data()->xfrc_applied[body_id * 6 + 1], 2.0);
+  EXPECT_DOUBLE_EQ(sim_->data()->xfrc_applied[body_id * 6 + 2], 3.0);
 }
 
 TEST_F(MujocoSimulationTest, PauseStepUnpause)
