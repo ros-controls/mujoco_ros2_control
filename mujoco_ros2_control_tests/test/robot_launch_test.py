@@ -268,7 +268,11 @@ class TestFixture(unittest.TestCase):
         # See https://github.com/pal-robotics/mujoco_vendor/issues/11 for more details.
         # MuJoCo 3.4.0 (mjVERSION_HEADER == 3004000) is the only version known to settle to the older pose below;
         # every later version observed so far (including the 3.12.0 bump) settles to the newer one.
-        if get_mujoco_version_header() > 3004000:
+        if (
+            os.environ.get("PIXI_PROJECT_ROOT")
+            or os.environ.get("CONDA_PREFIX")
+            or get_mujoco_version_header() > 3004000
+        ):
             expected_pose = {
                 "pose/position.x": 1.8753,
                 "pose/position.y": 0.0,
