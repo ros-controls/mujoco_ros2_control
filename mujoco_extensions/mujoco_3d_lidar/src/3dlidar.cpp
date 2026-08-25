@@ -30,7 +30,12 @@
 #include <mujoco/mjdata.h>
 #include <mujoco/mjmodel.h>
 #include <mujoco/mjplugin.h>
+#include <mujoco/mujoco.h>  // pulls in whichever exists
+#if mjVERSION_HEADER >= 3009000
+#include <mujoco/mjtype.h>
+#else
 #include <mujoco/mjtnum.h>
+#endif
 #include <mujoco/mjvisualize.h>
 #include <mujoco/mujoco.h>
 
