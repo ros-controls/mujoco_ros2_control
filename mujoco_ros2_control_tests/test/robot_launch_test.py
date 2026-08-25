@@ -42,11 +42,7 @@ from controller_manager_msgs.srv import ListHardwareInterfaces, SwitchController
 def get_mujoco_version_header():
     """Return the mjVERSION_HEADER integer (e.g. 3012000 for MuJoCo 3.12.0) of the
     MuJoCo build that mujoco_vendor actually installed/linked, read from its
-    installed mujoco.h. The settled contact pose checked in
-    test_pose_interfaces_transform is deterministic but version-dependent (see
-    https://github.com/pal-robotics/mujoco_vendor/issues/11), so the expected pose
-    must be chosen from the MuJoCo version that is actually running rather than
-    guessed from which packaging path (apt/ROS binaries vs. pixi/conda) produced it.
+    installed mujoco.h.
     """
     prefix = get_package_prefix("mujoco_vendor")
     header_path = os.path.join(prefix, "opt", "mujoco_vendor", "include", "mujoco", "mujoco.h")
