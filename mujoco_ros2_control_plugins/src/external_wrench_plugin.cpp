@@ -31,16 +31,19 @@ bool ExternalWrenchPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* mod
   model_ = model;
 
   // Visualization parameters
-  if (!node_->has_parameter("force_arrow_scale"))
+  const std::string param_prefix = "mujoco_plugins." + node_->get_sub_namespace() + ".";
+  const std::string force_arrow_scale_param = param_prefix + "force_arrow_scale";
+  if (!node_->has_parameter(force_arrow_scale_param))
   {
-    node_->declare_parameter("force_arrow_scale", force_arrow_scale_);
+    node_->declare_parameter(force_arrow_scale_param, force_arrow_scale_);
   }
-  if (!node_->has_parameter("torque_arrow_scale"))
+  const std::string torque_arrow_scale_param = param_prefix + "torque_arrow_scale";
+  if (!node_->has_parameter(torque_arrow_scale_param))
   {
-    node_->declare_parameter("torque_arrow_scale", torque_arrow_scale_);
+    node_->declare_parameter(torque_arrow_scale_param, torque_arrow_scale_);
   }
-  force_arrow_scale_ = node_->get_parameter("force_arrow_scale").as_double();
-  torque_arrow_scale_ = node_->get_parameter("torque_arrow_scale").as_double();
+  force_arrow_scale_ = node_->get_parameter(force_arrow_scale_param).as_double();
+  torque_arrow_scale_ = node_->get_parameter(torque_arrow_scale_param).as_double();
 
   marker_pub_raw_ = node_->create_publisher<MarkerArray>("~/wrench_markers", rclcpp::SystemDefaultsQoS());
   marker_pub_ = std::make_unique<realtime_tools::RealtimePublisher<MarkerArray>>(marker_pub_raw_);

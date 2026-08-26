@@ -84,27 +84,32 @@ bool FreeJointStatePublisherPlugin::init(rclcpp::Node::SharedPtr node, const mjM
   model_ = model;
   logger_ = node_->get_logger().get_child(node->get_sub_namespace());
 
-  if (!node_->has_parameter("frame_id"))
+  const std::string param_prefix = "mujoco_plugins." + node_->get_sub_namespace() + ".";
+  const std::string frame_id_param = param_prefix + "frame_id";
+  if (!node_->has_parameter(frame_id_param))
   {
-    node_->declare_parameter("frame_id", std::string(""));
+    node_->declare_parameter(frame_id_param, std::string(""));
   }
-  if (!node_->has_parameter("body_names"))
+  const std::string body_names_param = param_prefix + "body_names";
+  if (!node_->has_parameter(body_names_param))
   {
-    node_->declare_parameter("body_names", std::vector<std::string>{});
+    node_->declare_parameter(body_names_param, std::vector<std::string>{});
   }
-  if (!node_->has_parameter("topic"))
+  const std::string topic_param = param_prefix + "topic";
+  if (!node_->has_parameter(topic_param))
   {
-    node_->declare_parameter("topic", std::string("free_joint_states"));
+    node_->declare_parameter(topic_param, std::string("free_joint_states"));
   }
-  if (!node_->has_parameter("publish_rate"))
+  const std::string publish_rate_param = param_prefix + "publish_rate";
+  if (!node_->has_parameter(publish_rate_param))
   {
-    node_->declare_parameter("publish_rate", 50.0);
+    node_->declare_parameter(publish_rate_param, 50.0);
   }
 
-  const std::string frame_id = node_->get_parameter("frame_id").as_string();
-  const std::vector<std::string> body_names = node_->get_parameter("body_names").as_string_array();
-  const std::string topic = node_->get_parameter("topic").as_string();
-  const double publish_rate = node_->get_parameter("publish_rate").as_double();
+  const std::string frame_id = node_->get_parameter(frame_id_param).as_string();
+  const std::vector<std::string> body_names = node_->get_parameter(body_names_param).as_string_array();
+  const std::string topic = node_->get_parameter(topic_param).as_string();
+  const double publish_rate = node_->get_parameter(publish_rate_param).as_double();
 
   if (publish_rate <= 0.0)
   {

@@ -219,7 +219,7 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   // site name in the MJCF if not provided. Topics default to `/scan` and `/points` for 2-D and
   // 3-D scans, respectively.
   // Note that we must prefix our param declarations to ensure nesting works out properly.
-  const std::string param_prefix = "mujoco_plugins.mujoco_3d_lidar_plugin.";
+  const std::string param_prefix = "mujoco_plugins." + node_->get_sub_namespace() + ".";
   const auto site_name = mj_id2name(model, mjtObj::mjOBJ_SITE, model->sensor_objid[sensor_idx]);
   const std::string frame_name_param = param_prefix + lidar_config.name + ".frame_name";
   if (!node_->has_parameter(frame_name_param))
