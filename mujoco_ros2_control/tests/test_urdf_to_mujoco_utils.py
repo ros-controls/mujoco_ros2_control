@@ -450,6 +450,13 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertIn("col_mesh_collision_1.obj", result_xml)
             # obj2mjcf's visual sub-geom (whole mesh) is not cloned as a collision geom
             self.assertNotRegex(result_xml, r'<geom[^>]*mesh="col_mesh"[^>]*class="collision"[^>]*>')
+            # decomposed collision pieces get the explicit collision separation attributes
+            # (group 3, contype/conaffinity 1) ...
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*group="3"[^>]*>')
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*contype="1"[^>]*>')
+            # ... but are NOT tinted bright_orange - they keep obj2mjcf's own decomposition
+            # materials, and no bright_orange material is injected for them.
+            self.assertNotIn('material="bright_orange"', result_xml)
 
     def test_update_obj_assets_visual_only_untouched(self):
         # A visual-only mesh (not in the decomposed dir) is a plain reference: its geom
@@ -502,8 +509,8 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertRegex(result_xml, r'<geom[^>]*mesh="shared_collision_0"[^>]*class="collision"[^>]*>')
 
     def test_update_non_obj_assets_visual_geom(self):
-        # A geom with contype is a MuJoCo-imported <visual>; it is classified as
-        # visual only (no collision clone) and its raw import attributes are stripped.
+        # A geom with contype is a MuJoCo-imported <visual>; it is classified as visual and
+        # given explicit render attributes (contype=0 so it never collides) plus group 2.
         xml_string = """<?xml version="1.0"?>
 <mujoco>
   <worldbody>
@@ -517,16 +524,18 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_xml = result_dom.toxml()
         assert 'class="visual"' in result_xml
         assert 'class="collision"' not in result_xml
-        assert "contype" not in result_xml
-        assert "conaffinity" not in result_xml
-        assert 'group="1"' not in result_xml
-        assert 'density="0"' not in result_xml
+        # explicit visual attributes: visuals never collide and live in group 2
+        assert 'contype="0"' in result_xml
+        assert 'conaffinity="0"' in result_xml
+        assert 'group="2"' in result_xml
+        assert 'density="0"' in result_xml
         # visual keeps its rgba for rendering
         assert 'rgba="0.2 0.2 0.2 1"' in result_xml
 
     def test_update_non_obj_assets_collision_geom(self):
-        # A geom without contype is a MuJoCo-imported <collision>; it is classified
-        # as collision and its rgba (if any) is dropped.
+        # A geom without contype is a MuJoCo-imported <collision>; it is classified as
+        # collision, its rgba is dropped, and it gets explicit collision attributes
+        # (group 3, contype/conaffinity 1) tinted bright_orange for inspection.
         xml_string = """<?xml version="1.0"?>
 <mujoco>
   <worldbody>
@@ -540,7 +549,33 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_xml = result_dom.toxml()
         assert 'class="collision"' in result_xml
         assert 'class="visual"' not in result_xml
-        assert "rgba" not in result_xml
+        assert 'rgba="0.2 0.2 0.2 1"' not in result_xml
+        assert 'group="3"' in result_xml
+        assert 'contype="1"' in result_xml
+        assert 'conaffinity="1"' in result_xml
+        assert 'material="bright_orange"' in result_xml
+        # the referenced material is auto-defined so the MJCF still loads
+        self.assertRegex(result_xml, r'<material[^>]*name="bright_orange"')
+
+    def test_update_non_obj_assets_keeps_existing_bright_orange_material(self):
+        # If the user already defines a bright_orange material, the converter must not add a
+        # duplicate (MuJoCo errors on repeated names).
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <asset>
+    <material name="bright_orange" rgba="0.9 0.4 0.1 1"/>
+  </asset>
+  <worldbody>
+    <body name="test">
+      <geom type="box" size="1 1 1"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        result_xml = update_non_obj_assets(dom, "/tmp/output/").toxml()
+        self.assertEqual(result_xml.count('name="bright_orange"'), 1)
+        # the user's definition is preserved, not overwritten
+        assert 'rgba="0.9 0.4 0.1 1"' in result_xml
 
     def test_update_non_obj_assets_visual_and_collision(self):
         # Real case: a link with both a visual mesh and a collision mesh. The visual
@@ -560,7 +595,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_xml = result_dom.toxml()
         self.assertEqual(result_xml.count('class="visual"'), 1)
         self.assertEqual(result_xml.count('class="collision"'), 1)
-        self.assertEqual(result_xml.count("contype"), 0)
+        # both geoms now carry an explicit contype (0 for visual, 1 for collision)
         self.assertRegex(result_xml, r'<geom[^>]*mesh="visual_mesh"[^>]*class="visual"[^>]*>')
         self.assertRegex(result_xml, r'<geom[^>]*mesh="collision_mesh"[^>]*class="collision"[^>]*>')
 
