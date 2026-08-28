@@ -310,8 +310,12 @@ def fix_mujoco_description(
     dom = mrc.update_obj_assets(dom, output_filepath, mesh_info_dict)
     dom = mrc.update_non_obj_assets(dom, output_filepath, mesh_info_dict)
 
-    # Add the MuJoCo input elements
+    # Add the MuJoCo input elements (user-defined default classes land here)
     dom = mrc.add_mujoco_inputs(dom, raw_inputs, scene_inputs)
+
+    # Fill in any missing visual/collision/decomposed_collision default class blocks so
+    # geoms that only carry class= can inherit their physics attrs from the defaults.
+    dom = mrc.ensure_default_geom_classes(dom)
 
     # Add links as sites
     dom = mrc.add_links_as_sites(urdf, dom, request_add_free_joint)
