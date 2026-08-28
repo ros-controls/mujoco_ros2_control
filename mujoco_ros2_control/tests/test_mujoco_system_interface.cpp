@@ -301,6 +301,7 @@ TEST_F(MujocoSystemInterfaceTest, PoseSensorStateInterfacesRead)
 
 TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorStateInterfacesRead)
 {
+  constexpr double kMagneticFieldScale = 0.25;
   auto hardware_info = create_hardware_info();
   hardware_interface::ComponentInfo sensor_info;
   sensor_info.name = "magnetometer_sensor";
@@ -312,6 +313,12 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorStateInterfacesRead)
     sensor_info.state_interfaces.push_back(interface_info);
   }
   hardware_info.sensors.push_back(sensor_info);
+
+  auto scaled_sensor_info = sensor_info;
+  scaled_sensor_info.name = "scaled_magnetometer_sensor";
+  scaled_sensor_info.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = "magnetometer_sensor";
+  scaled_sensor_info.parameters[mujoco_ros2_control::MAGNETOMETER_SCALE_PARAM] = std::to_string(kMagneticFieldScale);
+  hardware_info.sensors.push_back(scaled_sensor_info);
 
   ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
 
@@ -326,10 +333,13 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorStateInterfacesRead)
   interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
 
   const auto state_interfaces = interface_->export_state_interfaces();
-  ASSERT_EQ(state_interfaces.size(), 3u);
+  ASSERT_EQ(state_interfaces.size(), 6u);
   ASSERT_EQ(state_interfaces[0].get_name(), "magnetometer_sensor/magnetic_field.x");
   ASSERT_EQ(state_interfaces[1].get_name(), "magnetometer_sensor/magnetic_field.y");
   ASSERT_EQ(state_interfaces[2].get_name(), "magnetometer_sensor/magnetic_field.z");
+  ASSERT_EQ(state_interfaces[3].get_name(), "scaled_magnetometer_sensor/magnetic_field.x");
+  ASSERT_EQ(state_interfaces[4].get_name(), "scaled_magnetometer_sensor/magnetic_field.y");
+  ASSERT_EQ(state_interfaces[5].get_name(), "scaled_magnetometer_sensor/magnetic_field.z");
 
   const int magnetometer_id = mj_name2id(model, mjOBJ_SENSOR, "magnetometer_sensor");
   ASSERT_NE(magnetometer_id, -1);
@@ -339,16 +349,25 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorStateInterfacesRead)
   const double magnetic_field_x = state_interfaces[0].get_value();
   const double magnetic_field_y = state_interfaces[1].get_value();
   const double magnetic_field_z = state_interfaces[2].get_value();
+  const double scaled_magnetic_field_x = state_interfaces[3].get_value();
+  const double scaled_magnetic_field_y = state_interfaces[4].get_value();
+  const double scaled_magnetic_field_z = state_interfaces[5].get_value();
 #else
   const double magnetic_field_x = state_interfaces[0].get_optional().value();
   const double magnetic_field_y = state_interfaces[1].get_optional().value();
   const double magnetic_field_z = state_interfaces[2].get_optional().value();
+  const double scaled_magnetic_field_x = state_interfaces[3].get_optional().value();
+  const double scaled_magnetic_field_y = state_interfaces[4].get_optional().value();
+  const double scaled_magnetic_field_z = state_interfaces[5].get_optional().value();
 #endif
 
   const double tol = 1e-9;
   EXPECT_NEAR(magnetic_field_x, data->sensordata[magnetometer_data_index], tol);
   EXPECT_NEAR(magnetic_field_y, data->sensordata[magnetometer_data_index + 1], tol);
   EXPECT_NEAR(magnetic_field_z, data->sensordata[magnetometer_data_index + 2], tol);
+  EXPECT_NEAR(scaled_magnetic_field_x, kMagneticFieldScale * magnetic_field_x, tol);
+  EXPECT_NEAR(scaled_magnetic_field_y, kMagneticFieldScale * magnetic_field_y, tol);
+  EXPECT_NEAR(scaled_magnetic_field_z, kMagneticFieldScale * magnetic_field_z, tol);
 }
 
 int main(int argc, char** argv)

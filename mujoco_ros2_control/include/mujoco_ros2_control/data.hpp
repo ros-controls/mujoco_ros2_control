@@ -227,6 +227,7 @@ struct MagnetometerSensorData
 {
   std::string name;
   SensorData<Eigen::Vector3d> magnetic_field;
+  double scale = 1.0;
 };
 
 }  // namespace mujoco_ros2_control
