@@ -179,8 +179,10 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
         # Only decompose a collision mesh when its link was named in a decompose_mesh input.
         decompose_this = used_as_collision and (mesh_name in decompose_dict)
 
-        print(f"processing {full_filepath} (mesh_name={mesh_name}, collision={used_as_collision}, "
-              f"decompose={decompose_this})")
+        print(
+            f"processing {full_filepath} (mesh_name={mesh_name}, collision={used_as_collision}, "
+            f"decompose={decompose_this})"
+        )
 
         if decompose_this:
             # whole .obj in the decomposed dir so obj2mjcf --decompose can run on it; the
