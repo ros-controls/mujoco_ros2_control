@@ -241,7 +241,7 @@ TEST_F(ExternalWrenchPluginTest, UpdateAppliesForceToXfrcApplied)
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
-  plugin.update(model_, data_);
+  plugin.pre_step(data_);
 
   // At least one xfrc_applied entry must carry a non-zero value.
   double total = 0.0;
@@ -264,10 +264,10 @@ TEST_F(ExternalWrenchPluginTest, UpdateUndoesPreviousContributionOnNextCall)
   ASSERT_TRUE(resp->success);
 
   // First update: wrench applied, then immediately expired (zero duration).
-  plugin.update(model_, data_);
+  plugin.pre_step(data_);
 
   // Second update: plugin subtracts its saved contribution; no active wrenches remain.
-  plugin.update(model_, data_);
+  plugin.pre_step(data_);
 
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
@@ -295,7 +295,7 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
   }
 
   // First update: both wrenches active, both expire (zero duration).
-  plugin.update(model_, data_);
+  plugin.pre_step(data_);
 
   double total_both = 0.0;
   for (int i = 0; i < model_->nbody * 6; ++i)
@@ -304,7 +304,7 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
   }
 
   // Second update clears state.
-  plugin.update(model_, data_);
+  plugin.pre_step(data_);
 
   // Queue a single wrench of the same magnitude.
   {
@@ -313,7 +313,7 @@ TEST_F(ExternalWrenchPluginTest, MultipleWrenchesAccumulateLinearly)
     ASSERT_TRUE(r->success);
   }
 
-  plugin.update(model_, data_);
+  plugin.pre_step(data_);
 
   double total_one = 0.0;
   for (int i = 0; i < model_->nbody * 6; ++i)
@@ -339,7 +339,7 @@ TEST_F(ExternalWrenchPluginTest, TorqueOnlyWrenchAppliesRotationalForce)
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
-  plugin.update(model_, data_);
+  plugin.pre_step(data_);
 
   double total = 0.0;
   for (int i = 0; i < model_->nbody * 6; ++i)
@@ -382,7 +382,7 @@ TEST_F(ExternalWrenchPluginTest, SingleCallWithMultipleWrenchesAppliesAll)
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
-  plugin.update(model_, data_);
+  plugin.pre_step(data_);
 
   double total = 0.0;
   for (int i = 0; i < model_->nbody * 6; ++i)
@@ -427,7 +427,7 @@ TEST_F(ExternalWrenchPluginTest, SingleCallRejectsIfAnyBodyNameInvalid)
   EXPECT_FALSE(resp->message.empty());
 
   // No wrench should have been applied — xfrc_applied must remain zero.
-  plugin.update(model_, data_);
+  plugin.pre_step(data_);
   for (int i = 0; i < model_->nbody * 6; ++i)
   {
     EXPECT_DOUBLE_EQ(data_->xfrc_applied[i], 0.0) << "xfrc_applied[" << i << "] must be zero after rejected batch";
@@ -442,14 +442,14 @@ TEST_F(ExternalWrenchPluginTest, PublishMarkersForActiveForceWrench)
   ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
 
   // Send a wrench with a 200 ms duration from a background thread so the
-  // sleeping service callback does not block update() in the main thread.
+  // sleeping service callback does not block pre_step() in the main thread.
   std::thread svc_thread([this]() { callServiceWithDuration("test_body", 0.2, /*fx=*/10.0); });
 
   // Wait briefly for the wrench to reach the pending queue.
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  // Run update() while the wrench is still active.
-  plugin.update(model_, data_);
+  // Run pre_step() while the wrench is still active.
+  plugin.pre_step(data_);
 
   // Collect markers via the new aggregation API.
   MarkerArray markers;
@@ -484,7 +484,7 @@ TEST_F(ExternalWrenchPluginTest, PublishMarkersContributesNothingWhenNoWrenchesA
   ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
 
   // No service calls — no active wrenches.
-  plugin.update(model_, data_);
+  plugin.pre_step(data_);
 
   // publish_markers() must not append anything when there are no active wrenches.
   // Marker lifetime-based expiry (managed by the system interface) handles cleanup
@@ -504,7 +504,7 @@ TEST_F(ExternalWrenchPluginTest, PublishMarkersAppendsToExistingArray)
 
   std::thread svc_thread([this]() { callServiceWithDuration("test_body", 0.2, /*fx=*/5.0, /*fy=*/0.0, /*fz=*/0.0); });
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  plugin.update(model_, data_);
+  plugin.pre_step(data_);
 
   // Pre-populate the array with a sentinel marker (simulates another plugin's contribution).
   MarkerArray markers;

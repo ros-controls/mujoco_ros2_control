@@ -26,7 +26,6 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
-#include <limits>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -108,13 +107,22 @@ void add_items(std::vector<T>& vector, const std::vector<T>& items)
 
 ActuatorType getActuatorType(const mjModel* mj_model, int mujoco_actuator_id)
 {
-  // Returns the MuJoCo actuator type based on the actuator's bias settings.
+  // Returns the MuJoCo actuator type based on the compiled actuator settings.
   ActuatorType actuator_type = ActuatorType::UNKNOWN;
-  int biastype = mj_model->actuator_biastype[mujoco_actuator_id];
-  const int NBias = 10;
-  const mjtNum* biasprm = mj_model->actuator_biasprm + mujoco_actuator_id * NBias;
+  const int dyntype = mj_model->actuator_dyntype[mujoco_actuator_id];
+  const int gaintype = mj_model->actuator_gaintype[mujoco_actuator_id];
+  const int biastype = mj_model->actuator_biastype[mujoco_actuator_id];
+  const mjtNum* gainprm = mj_model->actuator_gainprm + mujoco_actuator_id * mjNGAIN;
+  const mjtNum* biasprm = mj_model->actuator_biasprm + mujoco_actuator_id * mjNBIAS;
 
-  if (biastype == mjBIAS_NONE)
+  // MuJoCo compiles an intvelocity shortcut into a fixed-gain, affine-bias actuator whose control is integrated into
+  // a position setpoint. Although its feedback terms resemble a position actuator, ctrl has velocity semantics.
+  if (dyntype == mjDYN_INTEGRATOR && gaintype == mjGAIN_FIXED && biastype == mjBIAS_AFFINE && biasprm[0] == 0 &&
+      biasprm[1] == -gainprm[0])
+  {
+    actuator_type = ActuatorType::VELOCITY;
+  }
+  else if (biastype == mjBIAS_NONE)
   {
     actuator_type = ActuatorType::MOTOR;
   }
@@ -243,6 +251,13 @@ MujocoSystemInterface::MujocoSystemInterface() = default;
 
 MujocoSystemInterface::~MujocoSystemInterface()
 {
+  // We don't know what plugins are doing with the mj_data pointer, so be
+  // sure to kill callback so that nothing can access it on destruction.
+  if (simulation_)
+  {
+    simulation_->set_pre_step_callback(nullptr);
+  }
+
   // Stop plugins
   for (auto& plugin : plugin_instances_)
   {
@@ -1076,13 +1091,8 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
     }
   }
 
-  // Update plugins.
-  // Clear plugin data, then let each plugin update as needed, in order. This enables plugins to read and
-  // rewrite control inputs immediately before they are sent to the simulation. Namely, we have to zero
-  // out xfrc_applied so plugins can update as needed. qvel is NaN-filled rather than zeroed: a plugin
-  // requests a hard velocity override on a DOF by writing a finite value into it.
-  mju_zero(control_data->xfrc_applied, 6 * static_cast<int>(simulation_->model()->nbody));
-  std::fill(control_data->qvel, control_data->qvel + simulation_->model()->nv, std::numeric_limits<mjtNum>::quiet_NaN());
+  // Update plugins, in order. This enables plugins to read and rewrite ctrl/qfrc_applied
+  // immediately before they are sent to the simulation.
   for (auto& plugin : plugin_instances_)
   {
     plugin->update(simulation_->model(), control_data);
@@ -1292,20 +1302,14 @@ bool MujocoSystemInterface::register_mujoco_actuators()
       return std::isfinite(gains.p_gain_) && std::isfinite(gains.i_gain_) && std::isfinite(gains.d_gain_);
     };
 
-    if (actuator_data.actuator_type == ActuatorType::POSITION)
-    {
-      actuator_data.is_position_control_enabled = true;
-    }
-    else if (actuator_data.actuator_type == ActuatorType::VELOCITY)
+    if (actuator_data.actuator_type == ActuatorType::VELOCITY)
     {
       actuator_data.has_pos_pid = initialize_position_pids();
-      actuator_data.is_velocity_control_enabled = true;
     }
     else if (actuator_data.actuator_type == ActuatorType::MOTOR || actuator_data.actuator_type == ActuatorType::CUSTOM)
     {
       actuator_data.has_pos_pid = initialize_position_pids();
       actuator_data.has_vel_pid = initialize_velocity_pids();
-      actuator_data.is_effort_control_enabled = true;
     }
     RCLCPP_DEBUG(get_logger(), "Successfully registered actuator '%s'", act_name);
   }
@@ -1581,10 +1585,8 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
             }
             else
             {
-              RCLCPP_ERROR(get_logger(),
-                           "Position command interface for the joint : %s is not supported with velocity or motor "
-                           "actuator without defining the PIDs",
-                           actuator_name.c_str());
+              throw std::runtime_error("Position command interface for the joint : " + actuator_name +
+                                       " is not supported with motor or custom actuator without defining the PIDs");
             }
           }
         }
@@ -1622,11 +1624,8 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
             }
             else
             {
-              RCLCPP_ERROR(
-                  get_logger(),
-                  "Velocity command interface for the joint : %s is not supported with motor or custom actuator "
-                  "without defining the PIDs",
-                  actuator_name.c_str());
+              throw std::runtime_error("Velocity command interface for the joint : " + actuator_name +
+                                       " is not supported with motor or custom actuator without defining the PIDs");
             }
           }
         }
@@ -2325,6 +2324,14 @@ void MujocoSystemInterface::load_mujoco_plugins()
   {
     RCLCPP_ERROR(get_logger(), "Failed to create plugin loader: %s", ex.what());
   }
+
+  // Connect plugin pre-step callbacks directly to the physics simulation.
+  simulation_->set_pre_step_callback([this](mjData* data) {
+    for (auto& plugin : plugin_instances_)
+    {
+      plugin->pre_step(data);
+    }
+  });
 }
 
 ///

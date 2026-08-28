@@ -2,6 +2,31 @@
 Changelog for package mujoco_ros2_control_tests
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.1.1 (2026-08-25)
+------------------
+* Fix compilation on MuJoCo 3.12.0 (`#290 <https://github.com/pal-robotics-forks/mujoco_ros2_control/issues/290>`_)
+* Fix the generate changelog of 0.1.0 (`#288 <https://github.com/pal-robotics-forks/mujoco_ros2_control/issues/288>`_)
+* Contributors: Sai Kishor Kothakota
+
+0.1.0 (2026-08-18)
+------------------
+* Add support for Magnetometer sensor (`#257 <https://github.com/ros-controls/mujoco_ros2_control/issues/257>`_)
+* Add missing dependencies (`#250 <https://github.com/ros-controls/mujoco_ros2_control/issues/250>`_)
+* Fix transmissions integration working with multiple actuators (`#241 <https://github.com/ros-controls/mujoco_ros2_control/issues/241>`_)
+* Add service to set the free joint body state (`#233 <https://github.com/ros-controls/mujoco_ros2_control/issues/233>`_)
+* Add pose sensor test to launch tests (`#232 <https://github.com/ros-controls/mujoco_ros2_control/issues/232>`_)
+* Switch to isolated launch tests (`#234 <https://github.com/ros-controls/mujoco_ros2_control/issues/234>`_)
+* remove shebangs from launch files (`#227 <https://github.com/ros-controls/mujoco_ros2_control/issues/227>`_)
+* Add a 3-D Lidar Extension (`#205 <https://github.com/ros-controls/mujoco_ros2_control/issues/205>`_)
+* Add support for "site" transmission type (`#154 <https://github.com/ros-controls/mujoco_ros2_control/issues/154>`_)
+* Add support for pose sensors (`#220 <https://github.com/ros-controls/mujoco_ros2_control/issues/220>`_)
+* fixing plugin export so that downstream plugins don't fail (`#215 <https://github.com/ros-controls/mujoco_ros2_control/issues/215>`_)
+* Re-add descoped ResetWorld functional test (`#206 <https://github.com/ros-controls/mujoco_ros2_control/issues/206>`_)
+* Isolate flakey functional tests and update pixi (`#204 <https://github.com/ros-controls/mujoco_ros2_control/issues/204>`_)
+* Support/cameras rendering/headless (`#197 <https://github.com/ros-controls/mujoco_ros2_control/issues/197>`_)
+* Increase timeout for mjcf_generation* tests (`#201 <https://github.com/ros-controls/mujoco_ros2_control/issues/201>`_)
+* Contributors: Christian Rauch, Christoph Fröhlich, Erik Holum, Nathan Dunkelberger, Sai Kishor Kothakota, Sebastian Castro, msavchen-nasa
+
 0.0.3 (2026-05-01)
 ------------------
 * Switch to forward_command_controller dependency (`#173 <https://github.com/ros-controls/mujoco_ros2_control/issues/173>`_)

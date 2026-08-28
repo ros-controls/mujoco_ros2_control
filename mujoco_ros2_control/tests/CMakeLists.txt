@@ -6,6 +6,7 @@ target_link_libraries(test_mujoco_simulation
   mujoco_ros2_control
   rclcpp::rclcpp
 )
+target_include_directories(test_mujoco_simulation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
 ament_add_gtest(test_mujoco_system_interface test_mujoco_system_interface.cpp)
 target_link_libraries(test_mujoco_system_interface

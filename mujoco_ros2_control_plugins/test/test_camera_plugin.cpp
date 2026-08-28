@@ -257,8 +257,9 @@ TEST_F(CameraPluginTest, InitAndPublish)
 // Only polled cameras should expose a trigger service; streaming cameras should not.
 TEST_F(CameraPluginTest, OnlyPolledCamerasCreateTriggerService)
 {
-  plugin_node_->declare_parameter("mujoco_plugins.mujoco_camera_plugin.stream_cam.policy", std::string("streaming"));
-  plugin_node_->declare_parameter("mujoco_plugins.mujoco_camera_plugin.poll_cam.policy", std::string("polled"));
+  const std::string param_prefix = "mujoco_plugins." + plugin_node_->get_sub_namespace() + ".";
+  plugin_node_->declare_parameter(param_prefix + "stream_cam.policy", std::string("streaming"));
+  plugin_node_->declare_parameter(param_prefix + "poll_cam.policy", std::string("polled"));
   load_model(R"(<?xml version="1.0"?>
 <mujoco model="two_cameras">
   <worldbody>
@@ -313,7 +314,8 @@ TEST_F(CameraPluginTest, PolledCameraPublishesOncePerTrigger)
 )");
   ASSERT_EQ(model_->ncam, 1);
 
-  plugin_node_->declare_parameter("mujoco_plugins.mujoco_camera_plugin.poll_cam.policy", std::string("polled"));
+  const std::string param_prefix = "mujoco_plugins." + plugin_node_->get_sub_namespace() + ".";
+  plugin_node_->declare_parameter(param_prefix + "poll_cam.policy", std::string("polled"));
 
   mujoco_ros2_control_plugins::CameraPlugin plugin;
   EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, []() { return 0; }));

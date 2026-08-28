@@ -124,7 +124,7 @@ bool RangefinderLidarPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* m
 
 bool RangefinderLidarPlugin::register_sensor(const std::string& lidar_name, const mjModel* /* model */)
 {
-  const std::string ns = "mujoco_plugins.rangefinder_lidar_plugin." + lidar_name + ".";
+  const std::string ns = "mujoco_plugins." + node_->get_sub_namespace() + "." + lidar_name + ".";
 
   // Check required parameters
   if (!node_->has_parameter(ns + "frame_name"))

@@ -152,14 +152,14 @@ void CameraPlugin::trigger_update()
 
 bool CameraPlugin::register_cameras()
 {
-  const std::string param_prefix = "mujoco_plugins.mujoco_camera_plugin.";
-
-  if (!node_->has_parameter(param_prefix + "camera_publish_rate"))
+  const std::string param_prefix = "mujoco_plugins." + node_->get_sub_namespace() + ".";
+  const std::string camera_publish_rate_param = param_prefix + "camera_publish_rate";
+  if (!node_->has_parameter(camera_publish_rate_param))
   {
-    node_->declare_parameter(param_prefix + "camera_publish_rate", 5.0);
+    node_->declare_parameter(camera_publish_rate_param, 5.0);
   }
 
-  camera_publish_rate_ = node_->get_parameter(param_prefix + "camera_publish_rate").as_double();
+  camera_publish_rate_ = node_->get_parameter(camera_publish_rate_param).as_double();
   RCLCPP_INFO(node_->get_logger(), "Publishing camera data at rate %f per second.", camera_publish_rate_);
 
   cameras_.resize(0);

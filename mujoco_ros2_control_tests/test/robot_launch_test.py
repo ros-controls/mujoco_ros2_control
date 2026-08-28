@@ -15,10 +15,11 @@
 # limitations under the License.
 
 import os
+import re
 import time
 import unittest
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from controller_manager.test_utils import check_controllers_running, check_if_js_published, check_node_running
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
@@ -36,6 +37,18 @@ from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState, Image, CameraInfo
 from geometry_msgs.msg import PoseStamped
 from controller_manager_msgs.srv import ListHardwareInterfaces, SwitchController
+
+
+def get_mujoco_version_header():
+    """Return the mjVERSION_HEADER integer (e.g. 3012000 for MuJoCo 3.12.0) of the
+    MuJoCo build that mujoco_vendor actually installed/linked, read from its
+    installed mujoco.h.
+    """
+    prefix = get_package_prefix("mujoco_vendor")
+    header_path = os.path.join(prefix, "opt", "mujoco_vendor", "include", "mujoco", "mujoco.h")
+    with open(header_path) as header_file:
+        match = re.search(r"#define\s+mjVERSION_HEADER\s+(\d+)", header_file.read())
+    return int(match.group(1))
 
 
 # This function specifies the processes to be run for our test
@@ -246,10 +259,16 @@ class TestFixture(unittest.TestCase):
             self.skipTest("pose_broadcaster is only spawned in the basic robot configuration")
 
         # The settled contact pose differs between MuJoCo versions: the ROS binaries and pixi/conda environment
-        # ships different versions of libmujoco. Both are deterministic, so keep one exact expected pose per
-        # environment instead of a tolerance loose enough to span the gap between them.
+        # can ship different versions of libmujoco. Both are deterministic, so keep one exact expected pose per
+        # MuJoCo version instead of a tolerance loose enough to span the gap between them.
         # See https://github.com/pal-robotics/mujoco_vendor/issues/11 for more details.
-        if os.environ.get("PIXI_PROJECT_ROOT") or os.environ.get("CONDA_PREFIX"):
+        # MuJoCo 3.4.0 (mjVERSION_HEADER == 3004000) is the only version known to settle to the older pose below;
+        # every later version observed so far (including the 3.12.0 bump) settles to the newer one.
+        if (
+            os.environ.get("PIXI_PROJECT_ROOT")
+            or os.environ.get("CONDA_PREFIX")
+            or get_mujoco_version_header() > 3004000
+        ):
             expected_pose = {
                 "pose/position.x": 1.8753,
                 "pose/position.y": 0.0,

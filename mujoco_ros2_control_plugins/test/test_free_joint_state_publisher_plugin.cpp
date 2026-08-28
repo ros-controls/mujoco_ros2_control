@@ -152,11 +152,12 @@ protected:
   template <typename T>
   void setParam(const std::string& name, const T& value)
   {
-    if (!plugin_node_->has_parameter(name))
+    const std::string resolved_name = "mujoco_plugins." + plugin_node_->get_sub_namespace() + "." + name;
+    if (!plugin_node_->has_parameter(resolved_name))
     {
-      plugin_node_->declare_parameter(name, rclcpp::ParameterValue(value));
+      plugin_node_->declare_parameter(resolved_name, rclcpp::ParameterValue(value));
     }
-    plugin_node_->set_parameter(rclcpp::Parameter(name, value));
+    plugin_node_->set_parameter(rclcpp::Parameter(resolved_name, value));
   }
 
   /// Subscribes to `topic` on plugin_node_ (matching the publisher's node) and spins until a

@@ -128,7 +128,7 @@ void BaseVelocityPlugin::storeCommand(double vx, double vy, double wz)
   latest_cmd_ = { vx, vy, wz, node_->get_clock()->now() };
 }
 
-void BaseVelocityPlugin::update(const mjModel* /*model_arg*/, mjData* data)
+void BaseVelocityPlugin::pre_step(mjData* data)
 {
   // Step 1 - refresh the cached command from the subscription callback without
   // blocking the real-time thread; if the lock is contended, keep using the last
