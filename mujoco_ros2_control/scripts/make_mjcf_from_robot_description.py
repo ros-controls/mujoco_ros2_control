@@ -401,6 +401,13 @@ def main(args=None):
         help="Allows MuJoCo to merge static bodies. Use --no-fuse to prevent merging.",
     )
     parser.add_argument(
+        "--use_collision_tags",
+        action="store_true",
+        help="Use the URDF's authored <collision> geometry for the MuJoCo collision geoms. "
+        "Without this flag, authored collisions are ignored and all collision geometry is "
+        "derived from the <visual> tags instead (the legacy behavior).",
+    )
+    parser.add_argument(
         "-a",
         "--asset_dir",
         required=False,
@@ -489,10 +496,17 @@ def main(args=None):
     # Add required MuJoCo tags to the starting URDF
     xml_data = mrc.add_mujoco_info(urdf, output_filepath, parsed_args.publish_topic, parsed_args.fuse)
 
-    # Keep authored collision geometry so it drives the MuJoCo collision geoms, and
-    # only synthesize a collision from the visual for links that don't define one.
-    # This way visual meshes render the robot while the (often simpler) collision
-    # geometry is used for physics, with the visual mesh as the fallback.
+    # Unless --use_collision_tags is given, drop the URDF's authored collision geometry
+    # first so every link falls back to a collision synthesized from its visuals (the
+    # legacy behavior, and the default).
+    if not parsed_args.use_collision_tags:
+        xml_data = mrc.remove_tag(xml_data, "collision")
+
+    # With --use_collision_tags, authored collision geometry is kept so it drives the
+    # MuJoCo collision geoms, and a collision is only synthesized from the visual for
+    # links that don't define one. This way visual meshes render the robot while the
+    # (often simpler) collision geometry is used for physics, with the visual mesh as
+    # the fallback.
     xml_data = mrc.add_missing_collisions(xml_data)
 
     xml_data = mrc.replace_package_names(xml_data)

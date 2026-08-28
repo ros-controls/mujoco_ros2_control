@@ -523,14 +523,6 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                     parent = geom_element.parentNode
                     parent.removeChild(geom_element)
                     for sub_geom in sub_geoms:
-                        # obj2mjcf's file classifies its own geoms: the render geoms (whole
-                        # mesh, with materials) are class "visual" and the collidable ones
-                        # (the whole mesh for composed, the convex pieces for decomposed) are
-                        # class "collision". Match them to the role of the URDF geom being
-                        # replaced - cloning everything into both would render the collision
-                        # pieces and, worse, collide the whole concave mesh as a convex hull.
-                        if (sub_geom.getAttribute("class") == "visual") != is_visual:
-                            continue
                         sub_geom_local = sub_geom.cloneNode(False)
                         if pos:
                             sub_geom_local.setAttribute("pos", pos)
