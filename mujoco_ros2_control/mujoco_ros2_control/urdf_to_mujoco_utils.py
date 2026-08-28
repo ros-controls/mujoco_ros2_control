@@ -450,7 +450,11 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
     for mesh in meshes:
         mesh_name = mesh.getAttribute("name")
 
-        # This should definitely be there, otherwise something is horribly wrong
+        # MuJoCo emits an auto-renamed sibling asset (e.g., "my_mesh1") when the same mesh
+        # file is referenced with a different scale. Leave these referencing the whole mesh.
+        if mesh_name not in mesh_info_dict:
+            continue
+
         scale = mesh_info_dict[mesh_name]["scale"]
 
         mesh_path = ""
@@ -519,9 +523,19 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                     parent = geom_element.parentNode
                     parent.removeChild(geom_element)
                     for sub_geom in sub_geoms:
+                        # obj2mjcf's file classifies its own geoms: the render geoms (whole
+                        # mesh, with materials) are class "visual" and the collidable ones
+                        # (the whole mesh for composed, the convex pieces for decomposed) are
+                        # class "collision". Match them to the role of the URDF geom being
+                        # replaced - cloning everything into both would render the collision
+                        # pieces and, worse, collide the whole concave mesh as a convex hull.
+                        if (sub_geom.getAttribute("class") == "visual") != is_visual:
+                            continue
                         sub_geom_local = sub_geom.cloneNode(False)
-                        sub_geom_local.setAttribute("pos", pos)
-                        sub_geom_local.setAttribute("quat", quat)
+                        if pos:
+                            sub_geom_local.setAttribute("pos", pos)
+                        if quat:
+                            sub_geom_local.setAttribute("quat", quat)
                         for attribute in remove_attributes:
                             if sub_geom_local.hasAttribute(attribute):
                                 sub_geom_local.removeAttribute(attribute)
@@ -577,7 +591,10 @@ def update_non_obj_assets(dom, output_filepath):
             continue
 
         if geom.hasAttribute("contype"):
-            # visual geom: keep rgba, strip the raw import attributes
+            # visual geom: keep rgba, strip the raw import attributes.
+            # Ensure a type: the saved model omits type="sphere" (MuJoCo's default).
+            if not geom.hasAttribute("type"):
+                geom.setAttribute("type", "sphere")
             geom.setAttribute("class", "visual")
             for attribute in remove_attributes:
                 if geom.hasAttribute(attribute):

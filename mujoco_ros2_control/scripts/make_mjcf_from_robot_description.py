@@ -266,22 +266,27 @@ def run_obj2mjcf(output_filepath, decompose_dict, mesh_info_dict):
     thresholds_file = os.path.join(f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}", "metadata.json")
     thresholds_data = {}
 
-    # run obj2mjcf to generate folders of processed objs with decompose option for decomposed components
-    for mesh_name, threshold in decompose_dict.items():
-        mesh_item = mesh_info_dict[mesh_name]
-        if not mesh_item["is_pre_generated"]:
-            cmd = [
-                "obj2mjcf",
-                "--obj-dir",
-                f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}",
-                "--save-mjcf",
-                "--decompose",
-                "--coacd-args.threshold",
-                threshold,
-            ]
-            subprocess.run(cmd)
+    # run obj2mjcf to generate folders of processed objs with decompose option for decomposed
+    # components. Make sure a collision mesh sharing its stem with a visual mesh is decomposed too.
+    for mesh_name, mesh_item in mesh_info_dict.items():
+        filename_no_ext = os.path.splitext(os.path.basename(mesh_item["filename"]))[0]
+        if mesh_name not in decompose_dict and filename_no_ext not in decompose_dict:
+            continue
+        if mesh_item["is_pre_generated"]:
+            continue
+        threshold = decompose_dict.get(mesh_name, decompose_dict.get(filename_no_ext))
+        cmd = [
+            "obj2mjcf",
+            "--obj-dir",
+            f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}",
+            "--save-mjcf",
+            "--decompose",
+            "--coacd-args.threshold",
+            threshold,
+        ]
+        subprocess.run(cmd)
 
-            thresholds_data[mesh_name] = float(threshold)
+        thresholds_data[mesh_name] = float(threshold)
 
     with open(thresholds_file, "w") as f:
         json.dump(thresholds_data, f, indent=4)
