@@ -167,6 +167,29 @@ protected:
 #endif
   }
 
+  // Exports state interfaces via whichever API this distro provides, always returning shared
+  // pointers so call sites don't need to know which one was used. Spelled as
+  // std::shared_ptr<StateInterface> rather than StateInterface::SharedPtr: Humble's StateInterface
+  // has no nested SharedPtr typedef at all (it was only added alongside on_export_*() in Jazzy).
+  std::vector<std::shared_ptr<hardware_interface::StateInterface>> export_state_interfaces()
+  {
+#if ROS_DISTRO_HUMBLE
+    std::vector<std::shared_ptr<hardware_interface::StateInterface>> interfaces;
+    for (auto& state_interface : interface_->export_state_interfaces())
+    {
+      interfaces.push_back(std::make_shared<hardware_interface::StateInterface>(std::move(state_interface)));
+    }
+    return interfaces;
+#else
+    std::vector<std::shared_ptr<hardware_interface::StateInterface>> interfaces;
+    for (const auto& state_interface : interface_->on_export_state_interfaces())
+    {
+      interfaces.push_back(std::const_pointer_cast<hardware_interface::StateInterface>(state_interface));
+    }
+    return interfaces;
+#endif
+  }
+
   // Helper function to poll a condition until it returns true or the timeout expires.
   bool wait_until(std::function<bool()> condition, std::chrono::milliseconds timeout = std::chrono::seconds(5),
                   std::chrono::milliseconds poll_interval = std::chrono::milliseconds(10))
@@ -215,12 +238,22 @@ TEST_F(MujocoSystemInterfaceTest, IntVelocityActuatorSupportsVelocityCommandInte
   ASSERT_NE(actuator_id, -1);
   EXPECT_EQ(model->actuator_dyntype[actuator_id], mjDYN_INTEGRATOR);
 
+#if ROS_DISTRO_HUMBLE
   auto command_interfaces = interface_->export_command_interfaces();
+  auto& exported_command_interface = command_interfaces.front();
+#else
+  auto command_interfaces = interface_->on_export_command_interfaces();
+  auto& exported_command_interface = *command_interfaces.front();
+#endif
   ASSERT_EQ(command_interfaces.size(), 1u);
-  EXPECT_EQ(command_interfaces.front().get_name(), "wheel_joint/velocity");
+  EXPECT_EQ(exported_command_interface.get_name(), "wheel_joint/velocity");
 
   constexpr double velocity_command = 2.0;
-  command_interfaces.front().set_value(velocity_command);
+#if ROS_DISTRO_HUMBLE
+  exported_command_interface.set_value(velocity_command);
+#else
+  ASSERT_TRUE(exported_command_interface.set_value(velocity_command));
+#endif
   ASSERT_EQ(interface_->write(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002)),
             hardware_interface::return_type::OK);
 
@@ -229,6 +262,63 @@ TEST_F(MujocoSystemInterfaceTest, IntVelocityActuatorSupportsVelocityCommandInte
     interface_->get_data(data);
     return data != nullptr && std::abs(data->ctrl[actuator_id] - velocity_command) < 1e-9;
   })) << "Velocity command was not written to the intvelocity actuator ctrl input";
+
+  mj_deleteData(data);
+  mj_deleteModel(model);
+}
+
+// Pins the read()-side handle sync introduced when migrating off the pointer-aliasing
+// StateInterface API: from Jazzy on, the exported handles own their value rather than aliasing
+// the joint's state double directly, so read() must push the refreshed doubles into the handles
+// itself. Without that push this test would observe NaN (the handle's un-seeded initial value)
+// instead of the pendulum's actual qpos/qvel.
+TEST_F(MujocoSystemInterfaceTest, JointStateInterfacesReflectSimulationAfterRead)
+{
+  auto hardware_info = create_hardware_info();
+
+  hardware_interface::ComponentInfo joint_info;
+  joint_info.name = "hinge";
+  for (const auto* interface_name : { hardware_interface::HW_IF_POSITION, hardware_interface::HW_IF_VELOCITY })
+  {
+    hardware_interface::InterfaceInfo state_interface;
+    state_interface.name = interface_name;
+    joint_info.state_interfaces.push_back(state_interface);
+  }
+  hardware_info.joints.push_back(joint_info);
+
+  ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
+
+  // Wait for the pendulum to swing under gravity so qpos/qvel are non-zero.
+  mjModel* model = nullptr;
+  mjData* data = nullptr;
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_model(model);
+    interface_->get_data(data);
+    return model != nullptr && data != nullptr && data->time > 0.1;
+  })) << "Simulation did not start stepping";
+
+  interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+
+  const auto state_interfaces = export_state_interfaces();
+  ASSERT_EQ(state_interfaces.size(), 2u);
+  ASSERT_EQ(state_interfaces[0]->get_name(), "hinge/position");
+  ASSERT_EQ(state_interfaces[1]->get_name(), "hinge/velocity");
+
+#if ROS_DISTRO_HUMBLE
+  const double position = state_interfaces[0]->get_value();
+  const double velocity = state_interfaces[1]->get_value();
+#else
+  const double position = state_interfaces[0]->get_optional().value();
+  const double velocity = state_interfaces[1]->get_optional().value();
+#endif
+  ASSERT_TRUE(std::isfinite(position)) << "Exported position state interface was not synced by read()";
+  ASSERT_TRUE(std::isfinite(velocity)) << "Exported velocity state interface was not synced by read()";
+
+  const int joint_id = mj_name2id(model, mjOBJ_JOINT, "hinge");
+  ASSERT_NE(joint_id, -1);
+  const double tol = 1e-9;
+  EXPECT_NEAR(position, data->qpos[model->jnt_qposadr[joint_id]], tol);
+  EXPECT_NEAR(velocity, data->qvel[model->jnt_dofadr[joint_id]], tol);
 
   mj_deleteData(data);
   mj_deleteModel(model);
@@ -267,28 +357,28 @@ TEST_F(MujocoSystemInterfaceTest, PoseSensorStateInterfacesRead)
 
   // The pose sensor is the only component registered, so its interfaces are exported
   // in registration order: position.x/y/z, orientation.x/y/z/w.
-  const auto state_interfaces = interface_->export_state_interfaces();
+  const auto state_interfaces = export_state_interfaces();
   ASSERT_EQ(state_interfaces.size(), 7u);
-  ASSERT_EQ(state_interfaces[0].get_name(), "pose_sensor/position.x");
-  ASSERT_EQ(state_interfaces[1].get_name(), "pose_sensor/position.y");
-  ASSERT_EQ(state_interfaces[2].get_name(), "pose_sensor/position.z");
-  ASSERT_EQ(state_interfaces[3].get_name(), "pose_sensor/orientation.x");
-  ASSERT_EQ(state_interfaces[4].get_name(), "pose_sensor/orientation.y");
-  ASSERT_EQ(state_interfaces[5].get_name(), "pose_sensor/orientation.z");
-  ASSERT_EQ(state_interfaces[6].get_name(), "pose_sensor/orientation.w");
+  ASSERT_EQ(state_interfaces[0]->get_name(), "pose_sensor/position.x");
+  ASSERT_EQ(state_interfaces[1]->get_name(), "pose_sensor/position.y");
+  ASSERT_EQ(state_interfaces[2]->get_name(), "pose_sensor/position.z");
+  ASSERT_EQ(state_interfaces[3]->get_name(), "pose_sensor/orientation.x");
+  ASSERT_EQ(state_interfaces[4]->get_name(), "pose_sensor/orientation.y");
+  ASSERT_EQ(state_interfaces[5]->get_name(), "pose_sensor/orientation.z");
+  ASSERT_EQ(state_interfaces[6]->get_name(), "pose_sensor/orientation.w");
 
 #if ROS_DISTRO_HUMBLE
-  const double position_z = state_interfaces[2].get_value();
-  const double qx = state_interfaces[3].get_value();
-  const double qy = state_interfaces[4].get_value();
-  const double qz = state_interfaces[5].get_value();
-  const double qw = state_interfaces[6].get_value();
+  const double position_z = state_interfaces[2]->get_value();
+  const double qx = state_interfaces[3]->get_value();
+  const double qy = state_interfaces[4]->get_value();
+  const double qz = state_interfaces[5]->get_value();
+  const double qw = state_interfaces[6]->get_value();
 #else
-  const double position_z = state_interfaces[2].get_optional().value();
-  const double qx = state_interfaces[3].get_optional().value();
-  const double qy = state_interfaces[4].get_optional().value();
-  const double qz = state_interfaces[5].get_optional().value();
-  const double qw = state_interfaces[6].get_optional().value();
+  const double position_z = state_interfaces[2]->get_optional().value();
+  const double qx = state_interfaces[3]->get_optional().value();
+  const double qy = state_interfaces[4]->get_optional().value();
+  const double qz = state_interfaces[5]->get_optional().value();
+  const double qw = state_interfaces[6]->get_optional().value();
 #endif
 
   // The site sits at the pendulum body origin at height 1.0, so the pose should be
@@ -325,24 +415,24 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorStateInterfacesRead)
 
   interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
 
-  const auto state_interfaces = interface_->export_state_interfaces();
+  const auto state_interfaces = export_state_interfaces();
   ASSERT_EQ(state_interfaces.size(), 3u);
-  ASSERT_EQ(state_interfaces[0].get_name(), "magnetometer_sensor/magnetic_field.x");
-  ASSERT_EQ(state_interfaces[1].get_name(), "magnetometer_sensor/magnetic_field.y");
-  ASSERT_EQ(state_interfaces[2].get_name(), "magnetometer_sensor/magnetic_field.z");
+  ASSERT_EQ(state_interfaces[0]->get_name(), "magnetometer_sensor/magnetic_field.x");
+  ASSERT_EQ(state_interfaces[1]->get_name(), "magnetometer_sensor/magnetic_field.y");
+  ASSERT_EQ(state_interfaces[2]->get_name(), "magnetometer_sensor/magnetic_field.z");
 
   const int magnetometer_id = mj_name2id(model, mjOBJ_SENSOR, "magnetometer_sensor");
   ASSERT_NE(magnetometer_id, -1);
   const int magnetometer_data_index = model->sensor_adr[magnetometer_id];
 
 #if ROS_DISTRO_HUMBLE
-  const double magnetic_field_x = state_interfaces[0].get_value();
-  const double magnetic_field_y = state_interfaces[1].get_value();
-  const double magnetic_field_z = state_interfaces[2].get_value();
+  const double magnetic_field_x = state_interfaces[0]->get_value();
+  const double magnetic_field_y = state_interfaces[1]->get_value();
+  const double magnetic_field_z = state_interfaces[2]->get_value();
 #else
-  const double magnetic_field_x = state_interfaces[0].get_optional().value();
-  const double magnetic_field_y = state_interfaces[1].get_optional().value();
-  const double magnetic_field_z = state_interfaces[2].get_optional().value();
+  const double magnetic_field_x = state_interfaces[0]->get_optional().value();
+  const double magnetic_field_y = state_interfaces[1]->get_optional().value();
+  const double magnetic_field_z = state_interfaces[2]->get_optional().value();
 #endif
 
   const double tol = 1e-9;

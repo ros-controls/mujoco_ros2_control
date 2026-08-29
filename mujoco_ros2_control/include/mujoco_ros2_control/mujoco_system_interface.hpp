@@ -99,8 +99,18 @@ public:
 #else
   on_init(const hardware_interface::HardwareComponentInterfaceParams& params) override;
 #endif
+// On Humble, StateInterface/CommandInterface directly alias a `double*`, and the framework
+// consumes the by-value vector returned here. From Jazzy on, handles own their value instead of
+// pointing at external memory, so we build and keep our own handles (in on_init) and export them
+// through the newer on_export_*() hooks; read()/write() then sync those handles against the
+// double storage below.
+#if ROS_DISTRO_HUMBLE
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
+#else
+  std::vector<hardware_interface::StateInterface::ConstSharedPtr> on_export_state_interfaces() override;
+  std::vector<hardware_interface::CommandInterface::SharedPtr> on_export_command_interfaces() override;
+#endif
 
   hardware_interface::CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
   hardware_interface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State& previous_state) override;
@@ -162,6 +172,52 @@ protected:
   rclcpp::Logger get_logger() const;
 
 private:
+  /// One exported interface: the double it mirrors, and where it comes from. Built once from the
+  /// per-joint/per-sensor data containers, this description is common to both the Humble
+  /// (raw-pointer Handle) and the Jazzy+ (owned-value Handle) export paths.
+  struct InterfaceBinding
+  {
+    std::string prefix;          ///< joint or sensor name
+    std::string interface_name;  ///< exported interface name, e.g. hardware_interface::HW_IF_POSITION
+    double* value;               ///< storage inside urdf_joint_data_ / *_sensor_data_
+  };
+
+  /// Enumerates every state interface to export, in export order, from the joint and sensor data
+  /// containers. Used directly on Humble; used to build owned StateInterface handles from Jazzy on.
+  std::vector<InterfaceBinding> collect_state_interface_bindings();
+
+  /// Enumerates every command interface to export, in export order, from the joint data
+  /// containers. Used directly on Humble; used to build owned CommandInterface handles from Jazzy on.
+  std::vector<InterfaceBinding> collect_command_interface_bindings();
+
+#if !ROS_DISTRO_HUMBLE
+  // Jazzy+ handles own their value; the resource manager only ever sees these shared pointers, so
+  // they must be built once (in on_init) and kept alive here rather than rebuilt per on_export_*
+  // call. Each pairs a handle with the double it mirrors.
+  std::vector<std::pair<hardware_interface::StateInterface::SharedPtr, double*>> state_bindings_;
+  std::vector<std::pair<hardware_interface::CommandInterface::SharedPtr, double*>> command_bindings_;
+
+  /// Builds state_bindings_/command_bindings_ from collect_*_interface_bindings(), seeding each
+  /// handle's value from the current double so a read/write before the first read()/write() call
+  /// observes the same value the old pointer-aliasing implementation would have.
+  void build_interface_handles();
+
+  /// Pushes the current joint/sensor state doubles into their exported StateInterface handles.
+  /// Called at the end of read(), after all sensor and joint state doubles have been refreshed.
+  void push_states_to_interfaces();
+
+  /// Pulls commands from the exported CommandInterface handles into their mirrored doubles.
+  /// Called at the top of write(), before mimic joints and actuator command translation consume
+  /// the doubles.
+  void pull_commands_from_interfaces();
+
+  /// Pushes the current joint/sensor command doubles into their exported CommandInterface
+  /// handles. Called at the end of reset_simulation_state(), which resets those doubles directly;
+  /// without this push the next pull_commands_from_interfaces() would overwrite the reset values
+  /// with the stale ones still held by the handles.
+  void push_commands_to_interfaces();
+#endif
+
   /**
    * @brief Loads actuator information from MuJoCo model into the SystemInterface.
    *
