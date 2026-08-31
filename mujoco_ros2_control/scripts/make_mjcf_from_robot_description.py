@@ -171,16 +171,21 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
     for mesh_name in mesh_info_dict:
         mesh_item = mesh_info_dict[mesh_name]
         filename = os.path.basename(mesh_item["filename"])
+        filename_no_ext = os.path.splitext(filename)[0]
         filename_ext = os.path.splitext(filename)[1].lower()
         full_filepath = mesh_item["filename"]
         new_filepath = mesh_item["new_filepath"]
-        used_as_visual = mesh_item.get("used_as_visual", False)
         used_as_collision = mesh_item.get("used_as_collision", False)
-        # Only decompose a collision mesh when its link was named in a decompose_mesh input.
-        decompose_this = used_as_collision and (mesh_name in decompose_dict)
+        # Only decompose a collision mesh when it was named in a decompose_mesh input.
+        # Match by entry name or by the source file's stem, so an entry renamed by stem
+        # disambiguation (e.g. a collision mesh "finger_v6__1" sharing its stem with a
+        # visual mesh) still decomposes when its file is listed.
+        decompose_this = used_as_collision and (mesh_name in decompose_dict or filename_no_ext in decompose_dict)
 
-        print(f"processing {full_filepath} (mesh_name={mesh_name}, collision={used_as_collision}, "
-              f"decompose={decompose_this})")
+        print(
+            f"processing {full_filepath} (mesh_name={mesh_name}, collision={used_as_collision}, "
+            f"decompose={decompose_this})"
+        )
 
         if decompose_this:
             # whole .obj in the decomposed dir so obj2mjcf --decompose can run on it; the
@@ -189,9 +194,11 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
             assets_relative_filepath = f"{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}"
             force_obj = True
         else:
-            # plain reference, used directly: visual meshes (and the shared case) go to the
-            # visual dir, collision-only meshes used directly go to the composed dir
-            plain_dir = mrc.VISUAL_PATH_NAME if used_as_visual else mrc.COMPOSED_PATH_NAME
+            # plain reference, used directly: collision-used meshes go to the composed dir
+            # so obj2mjcf can process them (real materials for the shared visual, a plain
+            # whole-mesh geom for the collision); visual-only meshes are plain render
+            # references in the visual dir
+            plain_dir = mrc.COMPOSED_PATH_NAME if used_as_collision else mrc.VISUAL_PATH_NAME
             assets_relative_filepath = f"{plain_dir}/{mesh_name}"
             force_obj = False
 
@@ -242,19 +249,40 @@ def run_obj2mjcf(output_filepath, decompose_dict, mesh_info_dict):
                 if os.path.isdir(second_level_path):
                     shutil.rmtree(second_level_path)
 
+    # run obj2mjcf (without decomposition) over the composed AND visual dirs so every
+    # plain mesh gets per-material submeshes and MJCF materials/textures; visual geoms
+    # then render with real materials instead of a flat rgba, in both modes.
+    for plain_dir in (mrc.COMPOSED_PATH_NAME, mrc.VISUAL_PATH_NAME):
+        base_path = f"{output_filepath}assets/{plain_dir}"
+        if not os.path.isdir(base_path):
+            continue
+        cmd = ["obj2mjcf", "--obj-dir", base_path, "--save-mjcf"]
+        subprocess.run(cmd)
+        # obj2mjcf moves nothing into its per-mesh folder for single-material meshes; make
+        # sure the source obj is available inside each folder so the mjcf's file refs resolve
+        for file in os.listdir(base_path):
+            if file.lower().endswith(".obj"):
+                mesh_name = os.path.splitext(file)[0]
+                target_path = os.path.join(base_path, mesh_name, file)
+                source_path = os.path.join(base_path, file)
+                if os.path.isdir(os.path.dirname(target_path)) and not os.path.exists(target_path):
+                    shutil.copy2(source_path, target_path)
+
     thresholds_file = os.path.join(top_level_path, "metadata.json")
     thresholds_data = {}
 
-    # decompose only the collision meshes named in a decompose_mesh input
+    # decompose only the collision meshes named in a decompose_mesh input (by entry name
+    # or source file stem, matching the placement logic in convert_to_objs)
     for mesh_name, mesh_item in mesh_info_dict.items():
+        filename_no_ext = os.path.splitext(os.path.basename(mesh_item["filename"]))[0]
         if not mesh_item.get("used_as_collision", False):
             continue
-        if mesh_name not in decompose_dict:
+        if mesh_name not in decompose_dict and filename_no_ext not in decompose_dict:
             continue
         if mesh_item["is_pre_generated"]:
             continue
 
-        threshold = str(decompose_dict[mesh_name])
+        threshold = str(decompose_dict.get(mesh_name, decompose_dict.get(filename_no_ext)))
         cmd = [
             "obj2mjcf",
             "--obj-dir",
@@ -310,6 +338,9 @@ def fix_mujoco_description(
 
     # Add the MuJoCo input elements
     dom = mrc.add_mujoco_inputs(dom, raw_inputs, scene_inputs)
+
+    # Inject any default geom classes the user's mujoco inputs did not define themselves
+    dom = mrc.ensure_default_classes(dom)
 
     # Add links as sites
     dom = mrc.add_links_as_sites(urdf, dom, request_add_free_joint)

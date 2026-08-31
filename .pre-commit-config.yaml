@@ -85,3 +85,4 @@ repos:
     hooks:
       - id: codespell
         exclude: '\.(svg|stl|dae)$|.*pixi.*'
+        args: ["--ignore-words-list=assertin"]
