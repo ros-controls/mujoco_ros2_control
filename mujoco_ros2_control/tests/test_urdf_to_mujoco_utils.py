@@ -414,16 +414,16 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         os.makedirs(mesh_dir)
         with open(os.path.join(mesh_dir, f"{name}.xml"), "w") as f:
             f.write(
-                '<mujoco><asset>'
+                "<mujoco><asset>"
                 '<mesh file="{n}.obj"/>'
                 '<mesh file="{n}_collision_0.obj"/>'
                 '<mesh file="{n}_collision_1.obj"/>'
-                '</asset>'
-                '<worldbody><body>'
+                "</asset>"
+                "<worldbody><body>"
                 '<geom mesh="{n}" class="visual"/>'
                 '<geom mesh="{n}_collision_0" class="collision"/>'
                 '<geom mesh="{n}_collision_1" class="collision"/>'
-                '</body></worldbody></mujoco>'.format(n=name)
+                "</body></worldbody></mujoco>".format(n=name)
             )
 
     def test_update_obj_assets_expands_collision_only(self):
@@ -444,12 +444,15 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
                 "col_mesh": {"scale": "1 1 1", "used_as_visual": False, "used_as_collision": True},
             }
             result_xml = update_obj_assets(dom, tmpdir + "/", mesh_info_dict).toxml()
-            self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*class="collision"[^>]*>')
+            # convex pieces land in their own class (and viewer group) for inspection
+            self.assertRegex(
+                result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*class="decomposed_collision"[^>]*>'
+            )
             # both convex piece mesh assets are present (not skipped as duplicate empty names)
             self.assertIn("col_mesh_collision_0.obj", result_xml)
             self.assertIn("col_mesh_collision_1.obj", result_xml)
-            # obj2mjcf's visual sub-geom (whole mesh) is not cloned as a collision geom
-            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="col_mesh"[^>]*class="collision"[^>]*>')
+            # obj2mjcf's visual sub-geom (whole mesh) is not cloned as a collidable geom
+            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="col_mesh"[^>]*class="(decomposed_)?collision"[^>]*>')
 
     def test_update_obj_assets_visual_only_untouched(self):
         # A visual-only mesh (not in the decomposed dir) is a plain reference: its geom
@@ -496,10 +499,12 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             # nameless re-emit (file decomposed/shared/shared/shared.obj) is deduped away
             self.assertEqual(result_xml.count('name="shared"'), 1)
             self.assertNotIn("shared/shared/shared.obj", result_xml)
-            # the visual geom still references the whole mesh (keeps its contype for now)
-            self.assertRegex(result_xml, r'<geom[^>]*contype[^>]*mesh="shared"[^>]*>')
-            # the collision geom was expanded into decomposed pieces
-            self.assertRegex(result_xml, r'<geom[^>]*mesh="shared_collision_0"[^>]*class="collision"[^>]*>')
+            # the visual geom is replaced by obj2mjcf's render geom, still referencing the
+            # whole mesh (this is what carries the obj2mjcf material instead of a flat rgba)
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="shared"[^>]*class="visual"[^>]*>')
+            self.assertNotRegex(result_xml, r"<geom[^>]*contype[^>]*>")
+            # the collision geom was expanded into decomposed pieces in their own class
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="shared_collision_0"[^>]*class="decomposed_collision"[^>]*>')
 
     def test_update_non_obj_assets_visual_geom(self):
         # A geom with contype is a MuJoCo-imported <visual>; it is classified as
