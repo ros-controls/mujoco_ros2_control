@@ -452,15 +452,22 @@ def set_up_axis_to_z_up(dae_file_path):
 
 def update_obj_assets(dom, output_filepath, mesh_info_dict):
     """
-    Expands each decomposed collision mesh into its obj2mjcf convex pieces.
+    Expands every obj2mjcf-processed mesh into the final model.
 
-    Only meshes that were decomposed (collision meshes, found under DECOMPOSED_PATH_NAME)
-    are processed. For each such mesh, the collision geoms referencing it (the no-contype
-    geoms) are replaced with the decomposed sub-geoms in the ``collision`` class. Visual
-    geoms (contype-bearing) are left untouched referencing the whole mesh, and when the
-    mesh is shared by a visual the whole ``<mesh>`` asset is kept so that visual still
-    resolves. Visual-only meshes live in VISUAL_PATH_NAME, are not decomposed, and are
-    left as plain single references.
+    Two kinds of processed meshes exist:
+
+    - Decomposed collision meshes (under DECOMPOSED_PATH_NAME): their collision geoms
+      are replaced with the convex pieces in the ``decomposed_collision`` class, keeping
+      obj2mjcf's per-piece colors so the hulls stay distinguishable when their viewer
+      group is toggled on. The whole ``<mesh>`` asset is kept while a visual still
+      references it.
+    - Plain meshes (under COMPOSED_PATH_NAME): the whole-mesh asset is swapped for
+      obj2mjcf's per-material submeshes, materials, and textures.
+
+    In both cases obj2mjcf's own classification drives the geom split: its
+    class="visual" sub-geoms (carrying materials) replace URDF visuals, its collision
+    sub-geoms replace URDF collisions. This is what lets visual meshes render with
+    their real materials instead of a flat rgba.
     """
     # Find the <asset> element
     asset = dom.getElementsByTagName("asset")
@@ -471,24 +478,13 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
         print("No assets in URDF, skipping conversions...")
         return dom
 
-    # Find the <worldbody> element
-    worldbody = dom.getElementsByTagName("worldbody")
-    worldbody_element = worldbody[0]
-    worldbody_geoms = worldbody_element.getElementsByTagName("geom")
-
-    # get all of the mesh tags in the asset element
+    worldbody_element = dom.getElementsByTagName("worldbody")[0]
     asset_element = asset[0]
-    meshes = asset_element.getElementsByTagName("mesh")
-
-    full_decomposed_path = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}"
-    decomposed_dirs = [
-        name for name in os.listdir(full_decomposed_path) if os.path.isdir(os.path.join(full_decomposed_path, name))
-    ]
 
     # obj2mjcf emits its meshes WITHOUT a name attribute, so MuJoCo derives the name from
     # the file stem. We dedupe on that "effective name" (explicit name, else file stem):
     # this skips obj2mjcf's whole/visual mesh when it collides with the kept whole mesh,
-    # while still letting every uniquely-named collision piece through.
+    # while still letting every uniquely-named piece through.
     def effective_mesh_name(m):
         name = m.getAttribute("name")
         return name if name else pathlib.Path(m.getAttribute("file")).stem
@@ -497,45 +493,18 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
     existing_material_names = {m.getAttribute("name") for m in asset_element.getElementsByTagName("material")}
     existing_texture_names = {t.getAttribute("name") for t in asset_element.getElementsByTagName("texture")}
 
-    for mesh in meshes:
-        mesh_name = mesh.getAttribute("name")
-
-        # only collision meshes are decomposed; visual-only plain references are skipped
-        if mesh_name not in decomposed_dirs:
-            continue
-
-        # This should definitely be there, otherwise something is horribly wrong
-        scale = mesh_info_dict[mesh_name]["scale"]
-        used_as_visual = mesh_info_dict[mesh_name].get("used_as_visual", False)
-
-        mesh_path = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/{mesh_name}.xml"
-        if not os.path.exists(mesh_path):
-            continue
-
-        sub_dom = minidom.parse(mesh_path)
-        sub_asset_element = sub_dom.getElementsByTagName("asset")[0]
-
-        # If a visual also uses this mesh (shared / fallback), keep the whole <mesh> asset
-        # so the visual geom still resolves; otherwise the undecomposed mesh is unused.
-        if not used_as_visual:
-            asset_element.removeChild(mesh)
-            existing_mesh_names.discard(mesh_name)
-
-        # bring in the decomposed sub-mesh assets, skipping any effective name we already
-        # have (notably obj2mjcf's nameless visual mesh, which maps to mesh_name)
+    def merge_sub_assets(sub_asset_element, path_prefix, scale):
+        """Appends the obj2mjcf file's meshes/materials/textures into the model's assets,
+        de-duplicated by name, with file paths rewritten relative to the assets dir."""
         for sub_mesh in sub_asset_element.getElementsByTagName("mesh"):
             eff = effective_mesh_name(sub_mesh)
             if eff in existing_mesh_names:
                 continue
-            sub_mesh_file = sub_mesh.getAttribute("file")
-            sub_mesh.setAttribute("file", f"{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/{sub_mesh_file}")
+            sub_mesh.setAttribute("file", f"{path_prefix}/{sub_mesh.getAttribute('file')}")
             if scale:
                 sub_mesh.setAttribute("scale", scale)
             asset_element.appendChild(sub_mesh)
             existing_mesh_names.add(eff)
-
-        # bring in any materials/textures (collision usually has none, kept for safety),
-        # also de-duplicating by name
         for sub_material in sub_asset_element.getElementsByTagName("material"):
             name = sub_material.getAttribute("name")
             if name in existing_material_names:
@@ -547,40 +516,77 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                 name = sub_texture.getAttribute("name")
                 if name in existing_texture_names:
                     continue
-                sub_texture_file = sub_texture.getAttribute("file")
-                sub_texture.setAttribute("file", f"{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/{sub_texture_file}")
+                sub_texture.setAttribute("file", f"{path_prefix}/{sub_texture.getAttribute('file')}")
                 asset_element.appendChild(sub_texture)
                 existing_texture_names.add(name)
 
-        body_element = sub_dom.getElementsByTagName("body")[0]
-        sub_geoms = body_element.getElementsByTagName("geom")
+    def replace_geoms(mesh_name, sub_geoms, collision_class=None):
+        """
+        Replaces every geom referencing mesh_name with the sub-geoms matching its role:
+        obj2mjcf's class="visual" sub-geoms for a URDF visual (which carries a contype marker
+        from the import), the rest for a URDF collision.
 
-        # Replace each collision geom (no contype) referencing this mesh with the decomposed
-        # convex pieces. Visual geoms (contype) are left referencing the whole mesh.
-        for geom_element in list(worldbody_geoms):
+        When ``collision_class`` is given it overrides the class on the collision sub-geoms.
+        This is used to route decomposed pieces into their own class/viewer group.
+        """
+        for geom_element in list(worldbody_element.getElementsByTagName("geom")):
             if geom_element.getAttribute("mesh") != mesh_name:
                 continue
-            if geom_element.hasAttribute("contype"):
-                continue
-
+            is_visual = geom_element.hasAttribute("contype")
             pos = geom_element.getAttribute("pos")
             quat = geom_element.getAttribute("quat")
             parent = geom_element.parentNode
             parent.removeChild(geom_element)
             for sub_geom in sub_geoms:
-                # skip obj2mjcf's own visual geom (it references the whole mesh); only the
-                # convex collision pieces should become collision geoms
-                if sub_geom.getAttribute("class") == "visual" or sub_geom.getAttribute("mesh") == mesh_name:
+                # match obj2mjcf's own classification to the role of the replaced geom
+                if (sub_geom.getAttribute("class") == "visual") != is_visual:
                     continue
                 sub_geom_local = sub_geom.cloneNode(False)
                 if pos:
                     sub_geom_local.setAttribute("pos", pos)
                 if quat:
                     sub_geom_local.setAttribute("quat", quat)
-                sub_geom_local.setAttribute("class", "collision")
-                if sub_geom_local.hasAttribute("rgba"):
-                    sub_geom_local.removeAttribute("rgba")
+                if not is_visual and collision_class:
+                    sub_geom_local.setAttribute("class", collision_class)
                 parent.appendChild(sub_geom_local)
+
+    for mesh in list(asset_element.getElementsByTagName("mesh")):
+        mesh_name = mesh.getAttribute("name")
+
+        # skip assets with no entry of their own, e.g. MuJoCo's auto-renamed scaled
+        # sibling of a mesh referenced at two different scales
+        if mesh_name not in mesh_info_dict:
+            continue
+
+        decomposed_prefix = f"{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}"
+        plain_prefixes = (f"{COMPOSED_PATH_NAME}/{mesh_name}", f"{VISUAL_PATH_NAME}/{mesh_name}")
+        if os.path.exists(f"{output_filepath}assets/{decomposed_prefix}/{mesh_name}.xml"):
+            path_prefix = decomposed_prefix
+            collision_class = "decomposed_collision"
+            # keep the whole <mesh> asset while a visual still resolves against it
+            keep_whole_mesh = mesh_info_dict[mesh_name].get("used_as_visual", False)
+        else:
+            # plain mesh: composed dir (collision-used) or visual dir (render-only)
+            path_prefix = next(
+                (p for p in plain_prefixes if os.path.exists(f"{output_filepath}assets/{p}/{mesh_name}.xml")), None
+            )
+            if path_prefix is None:
+                # not processed by obj2mjcf (e.g. an unconverted plain .stl reference)
+                continue
+            collision_class = None
+            # the per-material submeshes fully replace the whole-mesh asset
+            keep_whole_mesh = False
+
+        sub_dom = minidom.parse(f"{output_filepath}assets/{path_prefix}/{mesh_name}.xml")
+        sub_asset_element = sub_dom.getElementsByTagName("asset")[0]
+
+        if not keep_whole_mesh:
+            asset_element.removeChild(mesh)
+            existing_mesh_names.discard(mesh_name)
+
+        merge_sub_assets(sub_asset_element, path_prefix, mesh_info_dict[mesh_name]["scale"])
+        sub_geoms = sub_dom.getElementsByTagName("body")[0].getElementsByTagName("geom")
+        replace_geoms(mesh_name, sub_geoms, collision_class)
 
     return dom
 
@@ -649,6 +655,51 @@ def update_non_obj_assets(dom, output_filepath, mesh_info_dict=None):
             geom.setAttribute("class", "collision")
             if geom.hasAttribute("rgba"):
                 geom.removeAttribute("rgba")
+
+    return dom
+
+
+def ensure_default_classes(dom):
+    """
+    Ensures the default geom classes the converter tags geoms with (visual, collision,
+    decomposed_collision) exist in the final MJCF. Classes the user already defined via
+    their mujoco inputs are left untouched; only the missing ones are injected, into a
+    top-level <default> block. This keeps the generated model self-contained without
+    requiring every robot config to declare the classes itself.
+    """
+    required = {
+        # render-only geoms: never collide, viewer group 2
+        "visual": {"group": "2", "type": "mesh", "contype": "0", "conaffinity": "0"},
+        # authored / whole-mesh collision geoms: viewer group 3
+        "collision": {"group": "3", "type": "mesh"},
+        # obj2mjcf convex decomposition pieces: same physics as collision, but their own
+        # viewer group (4) so the decomposition can be toggled on for inspection
+        "decomposed_collision": {"group": "4", "type": "mesh"},
+    }
+    existing = {d.getAttribute("class") for d in dom.getElementsByTagName("default")}
+    missing = {name: attrs for name, attrs in required.items() if name not in existing}
+    if not missing:
+        return dom
+
+    # Reuse the first top-level <default> block if one exists, otherwise create one.
+    root = dom.documentElement
+    top_default = None
+    for child in root.childNodes:
+        if child.nodeType == child.ELEMENT_NODE and child.tagName == "default":
+            top_default = child
+            break
+    if top_default is None:
+        top_default = dom.createElement("default")
+        root.appendChild(top_default)
+
+    for name, attrs in missing.items():
+        class_default = dom.createElement("default")
+        class_default.setAttribute("class", name)
+        geom = dom.createElement("geom")
+        for attr, value in attrs.items():
+            geom.setAttribute(attr, value)
+        class_default.appendChild(geom)
+        top_default.appendChild(class_default)
 
     return dom
 

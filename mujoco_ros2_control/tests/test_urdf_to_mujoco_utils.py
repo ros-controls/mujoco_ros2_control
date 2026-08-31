@@ -414,16 +414,16 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         os.makedirs(mesh_dir)
         with open(os.path.join(mesh_dir, f"{name}.xml"), "w") as f:
             f.write(
-                '<mujoco><asset>'
+                "<mujoco><asset>"
                 '<mesh file="{n}.obj"/>'
                 '<mesh file="{n}_collision_0.obj"/>'
                 '<mesh file="{n}_collision_1.obj"/>'
-                '</asset>'
-                '<worldbody><body>'
+                "</asset>"
+                "<worldbody><body>"
                 '<geom mesh="{n}" class="visual"/>'
                 '<geom mesh="{n}_collision_0" class="collision"/>'
                 '<geom mesh="{n}_collision_1" class="collision"/>'
-                '</body></worldbody></mujoco>'.format(n=name)
+                "</body></worldbody></mujoco>".format(n=name)
             )
 
     def test_update_obj_assets_expands_collision_only(self):
