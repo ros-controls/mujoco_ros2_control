@@ -450,7 +450,11 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
     for mesh in meshes:
         mesh_name = mesh.getAttribute("name")
 
-        # This should definitely be there, otherwise something is horribly wrong
+        # MuJoCo emits an auto-renamed sibling asset (e.g., "my_mesh1") when the same mesh
+        # file is referenced with a different scale. Leave these referencing the whole mesh.
+        if mesh_name not in mesh_info_dict:
+            continue
+
         scale = mesh_info_dict[mesh_name]["scale"]
 
         mesh_path = ""
@@ -520,8 +524,10 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                     parent.removeChild(geom_element)
                     for sub_geom in sub_geoms:
                         sub_geom_local = sub_geom.cloneNode(False)
-                        sub_geom_local.setAttribute("pos", pos)
-                        sub_geom_local.setAttribute("quat", quat)
+                        if pos:
+                            sub_geom_local.setAttribute("pos", pos)
+                        if quat:
+                            sub_geom_local.setAttribute("quat", quat)
                         for attribute in remove_attributes:
                             if sub_geom_local.hasAttribute(attribute):
                                 sub_geom_local.removeAttribute(attribute)
@@ -576,16 +582,18 @@ def update_non_obj_assets(dom, output_filepath):
         if geom.hasAttribute("class"):
             continue
 
+        # Ensure a type: the saved model omits type="sphere" (MuJoCo's default).
+        if not geom.hasAttribute("type"):
+            geom.setAttribute("type", "sphere")
+
         if geom.hasAttribute("contype"):
-            # visual geom: keep rgba, strip the raw import attributes
+            # visual geom: keep rgba, strip the raw import attributes.
             geom.setAttribute("class", "visual")
             for attribute in remove_attributes:
                 if geom.hasAttribute(attribute):
                     geom.removeAttribute(attribute)
         else:
-            # collision geom: ensure a type, drop rgba (not rendered)
-            if not geom.hasAttribute("type"):
-                geom.setAttribute("type", "sphere")
+            # collision geom: drop rgba (not rendered)
             geom.setAttribute("class", "collision")
             if geom.hasAttribute("rgba"):
                 geom.removeAttribute("rgba")
