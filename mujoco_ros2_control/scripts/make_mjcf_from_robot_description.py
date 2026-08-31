@@ -502,11 +502,6 @@ def main(args=None):
     if not parsed_args.use_collision_tags:
         xml_data = mrc.remove_tag(xml_data, "collision")
 
-    # With --use_collision_tags, authored collision geometry is kept so it drives the
-    # MuJoCo collision geoms, and a collision is only synthesized from the visual for
-    # links that don't define one. This way visual meshes render the robot while the
-    # (often simpler) collision geometry is used for physics, with the visual mesh as
-    # the fallback.
     xml_data = mrc.add_missing_collisions(xml_data)
 
     xml_data = mrc.replace_package_names(xml_data)

@@ -582,19 +582,18 @@ def update_non_obj_assets(dom, output_filepath):
         if geom.hasAttribute("class"):
             continue
 
+        # Ensure a type: the saved model omits type="sphere" (MuJoCo's default).
+        if not geom.hasAttribute("type"):
+            geom.setAttribute("type", "sphere")
+
         if geom.hasAttribute("contype"):
             # visual geom: keep rgba, strip the raw import attributes.
-            # Ensure a type: the saved model omits type="sphere" (MuJoCo's default).
-            if not geom.hasAttribute("type"):
-                geom.setAttribute("type", "sphere")
             geom.setAttribute("class", "visual")
             for attribute in remove_attributes:
                 if geom.hasAttribute(attribute):
                     geom.removeAttribute(attribute)
         else:
-            # collision geom: ensure a type, drop rgba (not rendered)
-            if not geom.hasAttribute("type"):
-                geom.setAttribute("type", "sphere")
+            # collision geom: drop rgba (not rendered)
             geom.setAttribute("class", "collision")
             if geom.hasAttribute("rgba"):
                 geom.removeAttribute("rgba")
