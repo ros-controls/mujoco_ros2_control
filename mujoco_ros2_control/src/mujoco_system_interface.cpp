@@ -2395,6 +2395,12 @@ void MujocoSystemInterface::load_legacy_cameras(const std::vector<std::string>& 
     get_node()->declare_parameter(prefix + "camera_publish_rate", camera_publish_rate);
   }
 
+  const std::string render_backend = get_hardware_parameter_or(get_hardware_info(), "camera_render_backend", "auto");
+  if (!get_node()->has_parameter(prefix + "render_backend"))
+  {
+    get_node()->declare_parameter(prefix + "render_backend", render_backend);
+  }
+
   for (int i = 0; i < simulation_->model()->ncam; ++i)
   {
     const char* cam_name = simulation_->model()->names + simulation_->model()->name_camadr[i];
