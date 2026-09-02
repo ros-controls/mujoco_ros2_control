@@ -105,6 +105,18 @@ Note that any number of cameras can be configured in the plugin configuration.
    giving each pass more wall-clock time. Polled triggers are never lost this way, only
    deferred to the next pass.
 
+   The cost of each pass is reported alongside it, split by stage, so it is clear which one
+   is over budget -- pixel readback typically dominates the draw call by an order of
+   magnitude::
+
+      Render pass: 6 camera(s) in 33.1 ms (render+readback 28.4, convert 4.1, publish 0.6)
+      -> ceiling 30.2 Hz
+
+   This is logged at DEBUG normally and raised to WARN only while frames are actually being
+   lost, because a pass may legitimately outlast ``1/camera_publish_rate`` when the
+   simulation is slowed: the interval is measured on the sim clock, so the wall-clock budget
+   is ``1/(rate * real-time factor)``.
+
 Headless Rendering
 ^^^^^^^^^^^^^^^^^^
 

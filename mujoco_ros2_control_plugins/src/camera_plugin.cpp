@@ -611,14 +611,49 @@ void CameraPlugin::update_cameras()
   const rclcpp::Duration duration = rclcpp::Duration::from_seconds(mj_camera_data_->time);
   rclcpp::Time stamp(duration.nanoseconds(), RCL_ROS_TIME);
 
+  pass_gl_seconds_ = 0.0;
+  pass_convert_seconds_ = 0.0;
+  pass_publish_seconds_ = 0.0;
+
   for (const auto idx : render_indices_)
   {
     render_and_publish_camera(cameras_[idx], stamp);
+  }
+
+  // Report the cost split. The three stages differ by more than an order of magnitude, so
+  // saying which one dominates turns "cannot keep up" into an actionable message.
+  //
+  // Escalate to WARN only when frames were actually lost since the last report, rather than
+  // when the pass outlasts 1/camera_publish_rate. The publish interval is measured on the
+  // sim clock, so the wall-clock budget for a pass is 1/(rate * real-time factor): with the
+  // simulation deliberately slowed a pass may take far longer than 1/rate and still drop
+  // nothing. Keying off the drop counter is correct at any speed factor.
+  const double pass_seconds = pass_gl_seconds_ + pass_convert_seconds_ + pass_publish_seconds_;
+  const double ceiling_hz = pass_seconds > 0.0 ? 1.0 / pass_seconds : 0.0;
+  const char* const fmt = "Render pass: %zu camera(s) in %.1f ms "
+                          "(render+readback %.1f, convert %.1f, publish %.1f) -> ceiling %.1f Hz";
+  const uint64_t drops = dropped_frames_.load();
+  const bool losing_frames = drops > reported_drops_;
+  reported_drops_ = drops;
+  if (losing_frames)
+  {
+    RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 5000, fmt, render_indices_.size(),
+                         1e3 * pass_seconds, 1e3 * pass_gl_seconds_, 1e3 * pass_convert_seconds_,
+                         1e3 * pass_publish_seconds_, ceiling_hz);
+  }
+  else
+  {
+    RCLCPP_DEBUG_THROTTLE(node_->get_logger(), *node_->get_clock(), 5000, fmt, render_indices_.size(),
+                          1e3 * pass_seconds, 1e3 * pass_gl_seconds_, 1e3 * pass_convert_seconds_,
+                          1e3 * pass_publish_seconds_, ceiling_hz);
   }
 }
 
 void CameraPlugin::render_and_publish_camera(CameraData& camera, const rclcpp::Time& stamp)
 {
+  using clock = std::chrono::steady_clock;
+  const auto t_start = clock::now();
+
   // Step 1: Render the scene and copy images to relevant camera data containers.
   // Render scene
   mjv_updateScene(mj_model_, mj_camera_data_, &mjv_opt_, NULL, &camera.mjv_cam, mjCAT_ALL, &mjv_scn_);
@@ -626,6 +661,8 @@ void CameraPlugin::render_and_publish_camera(CameraData& camera, const rclcpp::T
 
   // Copy image into relevant buffers
   mjr_readPixels(camera.image_buffer.data(), camera.depth_buffer.data(), camera.viewport, &mjr_con_);
+
+  const auto t_read = clock::now();
 
   // Step 2: Adjust the images and copy depth data.
   // Fix non-linear depth buffer and flip it vertically (OpenGL's origin is the bottom left)
@@ -650,6 +687,8 @@ void CameraPlugin::render_and_publish_camera(CameraData& camera, const rclcpp::T
     std::memcpy(&camera.image.data[dest_idx], &camera.image_buffer[src_idx], row_size);
   }
 
+  const auto t_convert = clock::now();
+
   // Step 3: Publish the images and camera info.
   camera.image.header.stamp = stamp;
   camera.depth_image.header.stamp = stamp;
@@ -658,6 +697,11 @@ void CameraPlugin::render_and_publish_camera(CameraData& camera, const rclcpp::T
   camera.image_pub->publish(camera.image);
   camera.depth_image_pub->publish(camera.depth_image);
   camera.camera_info_pub->publish(camera.camera_info);
+
+  const auto t_publish = clock::now();
+  pass_gl_seconds_ += std::chrono::duration<double>(t_read - t_start).count();
+  pass_convert_seconds_ += std::chrono::duration<double>(t_convert - t_read).count();
+  pass_publish_seconds_ += std::chrono::duration<double>(t_publish - t_convert).count();
 }
 
 void CameraPlugin::handle_trigger(const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,

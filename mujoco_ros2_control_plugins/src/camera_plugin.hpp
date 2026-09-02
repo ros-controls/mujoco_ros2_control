@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <mutex>
 #include <queue>
@@ -196,6 +197,30 @@ public:
     return dropped_frames_.load();
   }
 
+  /// Wall-clock cost of the most recent render pass, in seconds, split by stage.
+  struct RenderPassTiming
+  {
+    double gl_seconds{ 0.0 };       ///< Draw call plus pixel readback.
+    double convert_seconds{ 0.0 };  ///< Depth linearisation and row flipping.
+    double publish_seconds{ 0.0 };  ///< Handing the messages to the middleware.
+
+    [[nodiscard]] double total_seconds() const
+    {
+      return gl_seconds + convert_seconds + publish_seconds;
+    }
+  };
+
+  /**
+   * @brief Cost of the most recent render pass.
+   *
+   * Reset at the start of every pass and summed over the cameras rendered in it, so this is
+   * the cost of one pass rather than a running total. All zero until a pass has completed.
+   */
+  [[nodiscard]] RenderPassTiming render_pass_timing() const
+  {
+    return { pass_gl_seconds_, pass_convert_seconds_, pass_publish_seconds_ };
+  }
+
 private:
   // ROS interfaces
   rclcpp::Logger logger_{ rclcpp::get_logger("CameraPlugin") };
@@ -294,6 +319,16 @@ private:
   // slot rather than per attempt, so it reads as "frames lost", not "times we looked".
   // Atomic so the counter can be read for diagnostics from a thread other than the sim one.
   std::atomic<uint64_t> dropped_frames_{ 0 };
+
+  // Value of dropped_frames_ at the last cost report, so a pass can tell whether anything
+  // was actually lost since then.
+  uint64_t reported_drops_{ 0 };
+
+  // Wall-clock cost of the last render pass, split by stage and summed over the cameras
+  // rendered in it. Only ever touched by the rendering thread, so no synchronisation.
+  double pass_gl_seconds_{ 0.0 };
+  double pass_convert_seconds_{ 0.0 };
+  double pass_publish_seconds_{ 0.0 };
 
   // EGL context for headless rendering (used when GLFW is unavailable)
   EGLDisplay egl_display_{ EGL_NO_DISPLAY };

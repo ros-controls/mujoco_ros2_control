@@ -447,6 +447,55 @@ TEST_F(CameraPluginTest, SkippedSlotsAreCountedOncePerLostFrameNotPerAttempt)
   plugin.cleanup();
 }
 
+// ---------------------------------------------------------------------------------------
+// Render-pass cost accounting
+// ---------------------------------------------------------------------------------------
+
+TEST_F(CameraPluginTest, RenderPassTimingIsZeroBeforeAnyPass)
+{
+  load_model(SLOW_CAMERA_MODEL);
+  plugin_node_->declare_parameter("mujoco_plugins.camera_plugin.camera_publish_rate", 0.01);
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+
+  const auto timing = plugin.render_pass_timing();
+  EXPECT_DOUBLE_EQ(timing.gl_seconds, 0.0);
+  EXPECT_DOUBLE_EQ(timing.convert_seconds, 0.0);
+  EXPECT_DOUBLE_EQ(timing.publish_seconds, 0.0);
+  EXPECT_DOUBLE_EQ(timing.total_seconds(), 0.0);
+  plugin.cleanup();
+}
+
+TEST_F(CameraPluginTest, RenderPassTimingIsPopulatedAfterAPass)
+{
+  load_model(SLOW_CAMERA_MODEL);
+  plugin_node_->declare_parameter("mujoco_plugins.camera_plugin.camera_publish_rate", 1000.0);
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  wait_for_rendering(plugin);
+
+  // Drive a handful of passes.
+  const auto deadline = std::chrono::steady_clock::now() + 500ms;
+  while (std::chrono::steady_clock::now() < deadline)
+  {
+    plugin.update(model_, data_);
+    std::this_thread::sleep_for(POLL_INTERVAL);
+  }
+
+  const auto timing = plugin.render_pass_timing();
+  EXPECT_GT(timing.gl_seconds, 0.0) << "the draw and readback cannot be free";
+  EXPECT_GE(timing.convert_seconds, 0.0);
+  EXPECT_GE(timing.publish_seconds, 0.0);
+  EXPECT_DOUBLE_EQ(timing.total_seconds(), timing.gl_seconds + timing.convert_seconds + timing.publish_seconds);
+
+  // The cost of ONE pass, not a running total: a single 1280x720 pass is nowhere near the
+  // half-second this test spent driving several of them.
+  EXPECT_LT(timing.total_seconds(), 0.25) << "the timing looks cumulative rather than per-pass";
+  plugin.cleanup();
+}
+
 int main(int argc, char** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
