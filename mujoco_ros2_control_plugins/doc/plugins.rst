@@ -108,6 +108,14 @@ This allows camera topics to be published even when running in headless mode (e.
    EGL requires proper GPU drivers and EGL libraries to be installed (e.g., libegl1-mesa on Ubuntu).
    If both GLFW and EGL fail to initialize, camera publishing will be disabled with a warning.
 
+.. note::
+   EGL is bound surfaceless when the driver will not accept the PBuffer surface. Some drivers
+   (NVIDIA among them) refuse to bind a PBuffer in a process that already holds a GLX context,
+   which is the case whenever the MuJoCo viewer is open, and report success from
+   ``eglGetError`` while ``eglMakeCurrent`` fails. Rendering targets an offscreen framebuffer
+   in any case, so binding with no surface is equivalent; a warning names the retry when it
+   happens. If both binds fail, camera publishing is disabled and the error says so.
+
 
 ExternalWrenchPlugin
 ~~~~~~~~~~~~~~~~~~~~~
