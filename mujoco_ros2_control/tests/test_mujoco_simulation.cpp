@@ -40,7 +40,8 @@ namespace
 {
 
 // Basic model for executing unit tests: a hinge joint with an actuator, plus two free-floating
-// bodies ("free_object", "free_object_2") for exercising the free-joint state service.
+// bodies ("free_object", "free_object_2") for exercising the free-joint state service, plus an
+// inactive weld equality ("test_weld") for exercising the eq_active restore on world reset.
 //    nu=1, nq=15 (1 hinge + 7 + 7 free joint), nv=13 (1 hinge + 6 + 6 free joint), nbody=4
 //    (world + pendulum + free_object + free_object_2)
 constexpr const char* kTestModel = R"(<?xml version="1.0"?>
@@ -65,6 +66,10 @@ constexpr const char* kTestModel = R"(<?xml version="1.0"?>
   <actuator>
     <position name="hinge_pos" joint="hinge" kp="10"/>
   </actuator>
+
+  <equality>
+    <weld name="test_weld" body1="pendulum" body2="free_object" active="false"/>
+  </equality>
 
   <keyframe>
     <key name="home" qpos="0.5 1 0 1 1 0 0 0 2 0 1 1 0 0 0"/>
@@ -410,6 +415,26 @@ TEST_F(MujocoSimulationTest, ResetWorldTest)
   const double time_after_reset = sim_->data()->time;
   ASSERT_TRUE(wait_until([&]() { return sim_->data()->time > time_after_reset; }))
       << "Time should advance after unpausing post-reset";
+}
+
+TEST_F(MujocoSimulationTest, ResetWorldRestoresEqualityConstraintActivation)
+{
+  ASSERT_TRUE(initialize_sim());
+
+  const int eq_id = mj_name2id(sim_->model(), mjOBJ_EQUALITY, "test_weld");
+  ASSERT_NE(eq_id, -1);
+  ASSERT_EQ(sim_->model()->eq_active0[eq_id], 0) << "test_weld must be authored inactive";
+  ASSERT_EQ(sim_->data()->eq_active[eq_id], 0);
+
+  sim_->capture_initial_state();
+
+  // Simulate a plugin activating the constraint at runtime (e.g. a vacuum gripper engaging
+  // a weld); a world reset must restore the activation to the MJCF-authored default.
+  sim_->data()->eq_active[eq_id] = 1;
+  sim_->reset_world_state(true);
+
+  EXPECT_EQ(sim_->data()->eq_active[eq_id], 0)
+      << "eq_active should be restored to its MJCF default (eq_active0) on world reset";
 }
 
 TEST_F(MujocoSimulationTest, ResetWorldJointStateOverrides)

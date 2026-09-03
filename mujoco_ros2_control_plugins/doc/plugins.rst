@@ -601,10 +601,11 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
    public:
      bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
 
-     // Override whichever of these you need -- both have a no-op default, see
+     // Override whichever of these you need -- all have a no-op default, see
      // "Plugin Lifecycle" below for how they differ.
      void update(const mjModel* model, mjData* data) override;
      void pre_step(mjData* data) override;
+     void on_reset(mjData* /*data*/)
 
      void cleanup() override;
 
@@ -644,12 +645,17 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
      // Called on the physics thread, immediately before every mj_step.
    }
 
+   void on_reset(mjData* /*data*/)
+   {
+     // Called after a world reset (ResetWorld service or UI reset).
+   }
+
    void MyCustomPlugin::cleanup()
    {
      // Clean up resources
    }
 
-   }  // namespace my_namespace
+   } // namespace my_namespace
 
    PLUGINLIB_EXPORT_CLASS(
      my_namespace::MyCustomPlugin,
@@ -713,7 +719,10 @@ Plugin Lifecycle
    hold for exactly one physics step, such as ``BaseVelocityPlugin``'s kinematic velocity
    override. Runs with the simulation mutex held, so blocking here stalls the physics loop and
    native viewer too.
-4. **Cleanup** (``cleanup``): Called when shutting down. Release any resources acquired in
+4. **On Reset** (``on_reset``, optional): Called when the simulation is "reset", either from
+   the ResetWorld service from the UI. This lets plugins know that the state of the world has
+   been reset and they can take appropriate action.
+5. **Cleanup** (``cleanup``): Called when shutting down. Release any resources acquired in
    ``init``.
 
 Both hooks default to doing nothing, so implement whichever fits (or both, or neither). See

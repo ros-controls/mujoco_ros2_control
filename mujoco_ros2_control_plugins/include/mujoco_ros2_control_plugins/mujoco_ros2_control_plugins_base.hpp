@@ -27,7 +27,7 @@ namespace mujoco_ros2_control_plugins
  * Plugins extend mujoco_ros2_control with custom behavior, e.g. publishing extra topics or
  * applying external forces.
  *
- * Two optional hooks are available. Override whichever fits your use case:
+ * Three optional hooks are available. Override whichever fits your use case:
  *
  * - `update()` runs on the ros2_control control thread, once per `write()` cycle. `data` is a
  *   recent snapshot, not the live `mj_data_`. Use this for anything that doesn't need to run on
@@ -37,8 +37,11 @@ namespace mujoco_ros2_control_plugins
  *   e.g. a hard kinematic override. There's no command buffer: an untouched entry keeps its
  *   last value, so releasing a command (e.g. an expired force) needs an explicit write. This
  *   should be used with caution!
+ * - `on_reset()` runs immediately after a world reset, with the live `mj_data_` in its
+ *   post-reset state. Use this to clear plugin state that refers to the pre-reset world,
+ *   e.g. a latched command.
  *
- * @note Both hooks must avoid blocking or the control loop or simulation itself will be held up!
+ * @note All hooks must avoid blocking or the control loop or simulation itself will be held up!
  */
 class MuJoCoROS2ControlPluginBase
 {
@@ -74,6 +77,15 @@ public:
    * @param data Pointer to the live MuJoCo data, can be modified as needed.
    */
   virtual void pre_step(mjData* /*data*/)
+  {
+  }
+
+  /**
+   * @brief Called after a world reset (ResetWorld service or UI reset). Default does nothing.
+   *
+   * @param data Pointer to the live MuJoCo data in its post-reset state.
+   */
+  virtual void on_reset(mjData* /*data*/)
   {
   }
 
