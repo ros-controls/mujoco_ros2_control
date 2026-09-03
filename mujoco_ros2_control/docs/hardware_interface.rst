@@ -41,6 +41,10 @@ Specify it in your URDF and point to a valid MJCF on launch:
        <!-- Optional: run the simulator without a GUI window. Defaults to false. -->
        <param name="headless">false</param>
 
+       <!-- Optional: name of a body for the viewer camera to track on startup. When set, the
+            camera starts in tracking mode instead of the default free camera. -->
+       <param name="camera_tracked_body">base_link</param>
+
        <!-- Optional: name of a MuJoCo free joint whose odometry is published as a
             nav_msgs/Odometry message. -->
        <param name="odom_free_joint_name">floating_base_joint</param>

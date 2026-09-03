@@ -178,9 +178,9 @@ protected:
   }
 
   // initialize the simulation in headless mode with default settings.
-  bool initialize_sim()
+  bool initialize_sim(const std::string& camera_tracked_body = "")
   {
-    return sim_->initialize(node_, kTestModelPath, "/mujoco_robot_description", -1.0, true);
+    return sim_->initialize(node_, kTestModelPath, "/mujoco_robot_description", -1.0, true, camera_tracked_body);
   }
 
   // Helper function to poll a condition until it returns true or the timeout expires.
@@ -236,6 +236,28 @@ TEST_F(MujocoSimulationTest, TestInitialization)
   EXPECT_EQ(sim_->model()->nv, 13);
   EXPECT_EQ(sim_->model()->nu, 1);
   EXPECT_EQ(sim_->model()->nbody, 4);
+}
+
+TEST_F(MujocoSimulationTest, TrackingCameraFollowsNamedBody)
+{
+  ASSERT_TRUE(initialize_sim("pendulum"));
+  sim_->start_physics_thread();
+  const int expected_id = mj_name2id(sim_->model(), mjOBJ_BODY, "pendulum");
+  ASSERT_NE(expected_id, -1);
+  EXPECT_TRUE(wait_until([this, expected_id]() {
+    return sim_->camera().type == mjCAMERA_TRACKING && sim_->camera().trackbodyid == expected_id;
+  })) << "Camera did not switch to tracking the requested body";
+}
+
+TEST_F(MujocoSimulationTest, TrackingCameraFallsBackOnUnknownBody)
+{
+  ASSERT_TRUE(initialize_sim("not_a_body"));
+
+  sim_->start_physics_thread();
+
+  // Let the physics loop run so that the camera would have been applied if it were going to be.
+  ASSERT_TRUE(wait_until([this]() { return sim_->step_count() > 0; }));
+  EXPECT_EQ(sim_->camera().type, mjCAMERA_FREE);
 }
 
 TEST_F(MujocoSimulationTest, ControlUpdateTests)

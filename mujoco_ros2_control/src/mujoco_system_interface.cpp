@@ -331,6 +331,9 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   const bool headless =
       hardware_interface::parse_bool(get_hardware_parameter(get_hardware_info(), "headless").value_or("false"));
 
+  // Optional: body for the viewer camera to track on startup
+  const std::string camera_tracked_body = get_hardware_parameter_or(get_hardware_info(), "camera_tracked_body", "");
+
   // Construct and start the ROS node spinning
   /// The PIDs config file
   const auto pids_config_file = get_hardware_parameter(get_hardware_info(), "pids_config_file");
@@ -371,7 +374,8 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
 
   // Construct the simulation wrapper with the loaded parameters.
   simulation_ = std::make_unique<MujocoSimulation>();
-  if (!simulation_->initialize(get_node(), model_path, mujoco_model_topic, sim_speed_factor, headless))
+  if (!simulation_->initialize(get_node(), model_path, mujoco_model_topic, sim_speed_factor, headless,
+                               camera_tracked_body))
   {
     return hardware_interface::CallbackReturn::ERROR;
   }
