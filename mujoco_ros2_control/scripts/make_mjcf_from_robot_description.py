@@ -266,22 +266,27 @@ def run_obj2mjcf(output_filepath, decompose_dict, mesh_info_dict):
     thresholds_file = os.path.join(f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}", "metadata.json")
     thresholds_data = {}
 
-    # run obj2mjcf to generate folders of processed objs with decompose option for decomposed components
-    for mesh_name, threshold in decompose_dict.items():
-        mesh_item = mesh_info_dict[mesh_name]
-        if not mesh_item["is_pre_generated"]:
-            cmd = [
-                "obj2mjcf",
-                "--obj-dir",
-                f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}",
-                "--save-mjcf",
-                "--decompose",
-                "--coacd-args.threshold",
-                threshold,
-            ]
-            subprocess.run(cmd)
+    # run obj2mjcf to generate folders of processed objs with decompose option for decomposed
+    # components. Make sure a collision mesh sharing its stem with a visual mesh is decomposed too.
+    for mesh_name, mesh_item in mesh_info_dict.items():
+        filename_no_ext = os.path.splitext(os.path.basename(mesh_item["filename"]))[0]
+        if mesh_name not in decompose_dict and filename_no_ext not in decompose_dict:
+            continue
+        if mesh_item["is_pre_generated"]:
+            continue
+        threshold = decompose_dict.get(mesh_name, decompose_dict.get(filename_no_ext))
+        cmd = [
+            "obj2mjcf",
+            "--obj-dir",
+            f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}",
+            "--save-mjcf",
+            "--decompose",
+            "--coacd-args.threshold",
+            threshold,
+        ]
+        subprocess.run(cmd)
 
-            thresholds_data[mesh_name] = float(threshold)
+        thresholds_data[mesh_name] = float(threshold)
 
     with open(thresholds_file, "w") as f:
         json.dump(thresholds_data, f, indent=4)
@@ -396,6 +401,13 @@ def main(args=None):
         help="Allows MuJoCo to merge static bodies. Use --no-fuse to prevent merging.",
     )
     parser.add_argument(
+        "--use_collision_tags",
+        action="store_true",
+        help="Use the URDF's authored <collision> geometry for the MuJoCo collision geoms. "
+        "Without this flag, authored collisions are ignored and all collision geometry is "
+        "derived from the <visual> tags instead (the legacy behavior).",
+    )
+    parser.add_argument(
         "-a",
         "--asset_dir",
         required=False,
@@ -484,9 +496,13 @@ def main(args=None):
     # Add required MuJoCo tags to the starting URDF
     xml_data = mrc.add_mujoco_info(urdf, output_filepath, parsed_args.publish_topic, parsed_args.fuse)
 
-    # get rid of collision data, assuming the visual data is much better resolution.
-    # not sure if this is the best move...
-    xml_data = mrc.remove_tag(xml_data, "collision")
+    # Unless --use_collision_tags is given, drop the URDF's authored collision geometry
+    # first so every link falls back to a collision synthesized from its visuals (the
+    # legacy behavior, and the default).
+    if not parsed_args.use_collision_tags:
+        xml_data = mrc.remove_tag(xml_data, "collision")
+
+    xml_data = mrc.add_missing_collisions(xml_data)
 
     xml_data = mrc.replace_package_names(xml_data)
     mesh_info_dict, xml_data = mrc.extract_mesh_info(xml_data, parsed_args.asset_dir, decompose_dict)
