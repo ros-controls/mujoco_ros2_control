@@ -28,9 +28,61 @@ import math
 import numpy as np
 
 from urdf_parser_py.urdf import URDF
+import urdf_parser_py.urdf as _urdf
+import urdf_parser_py.xml_reflection as xmlr
 
 from ament_index_python.packages import get_package_share_directory
 from xml.dom import minidom
+
+
+class Capsule(xmlr.Object):
+    """A ``<capsule radius="" length="">`` collision/visual geometry.
+
+    Capsule is NOT part of the URDF specification, which defines only box, cylinder,
+    sphere and mesh. MuJoCo's own URDF importer nevertheless accepts it as an extension,
+    and MJCF has capsules natively, so robot descriptions written for MuJoCo legitimately
+    emit one: a capsule sole made of a few parallel capsules gives a far better
+    conditioned flat contact patch than the equivalent collision mesh.
+
+    ``urdf_parser_py`` is the odd one out. This module parses the description with it for
+    bookkeeping only (asset paths, link and joint structure); the actual URDF to MJCF
+    conversion is done by MuJoCo itself via ``MjModel.from_xml_path``. But its geometry
+    factory is a closed dict, so an unknown child of ``<geometry>`` raises
+    ``Exception: Invalid geometric tag: capsule`` and aborts the whole conversion before
+    MuJoCo is ever reached. Registering the type below removes that veto without touching
+    the conversion path; MuJoCo produces the capsule geom either way.
+    """
+
+    def __init__(self, radius=0.0, length=0.0):
+        self.radius = radius
+        self.length = length
+
+
+xmlr.reflect(Capsule, tag='capsule', params=[
+    xmlr.Attribute('radius', float),
+    xmlr.Attribute('length', float),
+])
+
+
+def _register_capsule_geometry():
+    """Teach ``urdf_parser_py``'s ``<geometry>`` factory about capsules.
+
+    The factory is built inside ``GeometricType.__init__`` and the instance is held in the
+    global value-type registry, so the maps have to be extended on the registered instance
+    rather than by subclassing. Idempotent, and a no-op on any future urdf_parser_py that
+    ships capsule support itself.
+    """
+    for value_type in xmlr.core.value_types.values():
+        if not isinstance(value_type, _urdf.GeometricType):
+            continue
+        factory = value_type.factory
+        if 'capsule' in factory.typeMap:
+            continue
+        factory.typeMap['capsule'] = Capsule
+        factory.nameMap[Capsule] = 'capsule'
+
+
+_register_capsule_geometry()
 
 # Hardcoded relative paths for MuJoCo asset outputs
 DECOMPOSED_PATH_NAME = "decomposed"
