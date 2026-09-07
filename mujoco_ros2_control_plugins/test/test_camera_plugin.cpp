@@ -361,6 +361,139 @@ TEST_F(CameraPluginTest, PolledCameraPublishesOncePerTrigger)
   plugin.cleanup();
 }
 
+// ---------------------------------------------------------------------------------------
+// render_backend
+//
+// The dispatch is only reached when the model actually has a camera (init returns early
+// otherwise), so these load a one-camera model. GLFW availability is injected through the
+// init() overload rather than depending on whether this machine has a display.
+// ---------------------------------------------------------------------------------------
+
+namespace
+{
+constexpr const char* ONE_CAMERA_MODEL = R"(<?xml version="1.0"?>
+<mujoco model="one_camera">
+  <worldbody>
+    <body name="box" pos="0 0 0.1">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+      <geom type="box" size="0.05 0.05 0.05"/>
+    </body>
+    <camera name="cam" pos="0 -1 0.2" mode="fixed"/>
+  </worldbody>
+</mujoco>
+)";
+
+constexpr const char* NO_CAMERA_MODEL = R"(<?xml version="1.0"?>
+<mujoco model="no_cameras_backend">
+  <worldbody>
+    <body name="box" pos="0 0 0.1">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+      <geom type="box" size="0.05 0.05 0.05"/>
+    </body>
+  </worldbody>
+</mujoco>
+)";
+}  // namespace
+
+// An unrecognised value is rejected outright rather than silently treated as "auto":
+// a typo in a description would otherwise be invisible.
+TEST_F(CameraPluginTest, UnknownRenderBackendIsRejected)
+{
+  load_model(NO_CAMERA_MODEL);
+  plugin_node_->declare_parameter("mujoco_plugins.camera_plugin.render_backend", "vulkan");
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  EXPECT_FALSE(plugin.init(plugin_node_, model_, data_));
+  plugin.cleanup();
+}
+
+TEST_F(CameraPluginTest, RenderBackendDefaultsToAuto)
+{
+  load_model(NO_CAMERA_MODEL);
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  EXPECT_EQ(plugin_node_->get_parameter("mujoco_plugins.camera_plugin.render_backend").as_string(), "auto");
+  plugin.cleanup();
+}
+
+// auto is the pre-existing behaviour: prefer GLFW, fall back to EGL when it is unavailable.
+TEST_F(CameraPluginTest, AutoPrefersGlfwWhenAvailable)
+{
+  load_model(ONE_CAMERA_MODEL);
+  plugin_node_->declare_parameter("mujoco_plugins.camera_plugin.render_backend", "auto");
+
+  bool glfw_consulted = false;
+  auto fake_glfw = [&glfw_consulted]() {
+    glfw_consulted = true;
+    return 1;
+  };
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, fake_glfw));
+  EXPECT_TRUE(glfw_consulted);
+  plugin.cleanup();
+}
+
+TEST_F(CameraPluginTest, AutoFallsBackToEglWhenGlfwIsUnavailable)
+{
+  load_model(ONE_CAMERA_MODEL);
+  plugin_node_->declare_parameter("mujoco_plugins.camera_plugin.render_backend", "auto");
+
+  auto fake_glfw = []() { return 0; };
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, fake_glfw));
+  plugin.cleanup();
+}
+
+// The reason the parameter exists: on a desktop, GLFW shares the X queue with the viewer.
+// Choosing EGL must therefore not touch GLFW at all, even when GLFW would have worked.
+TEST_F(CameraPluginTest, ExplicitEglDoesNotConsultGlfw)
+{
+  load_model(ONE_CAMERA_MODEL);
+  plugin_node_->declare_parameter("mujoco_plugins.camera_plugin.render_backend", "egl");
+
+  bool glfw_consulted = false;
+  auto fake_glfw = [&glfw_consulted]() {
+    glfw_consulted = true;
+    return 1;
+  };
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, fake_glfw));
+  EXPECT_FALSE(glfw_consulted) << "render_backend=egl must not initialize GLFW";
+  plugin.cleanup();
+}
+
+// An explicit request that cannot be honoured fails loudly. Falling back to EGL here would
+// hand the caller the backend they specifically avoided.
+TEST_F(CameraPluginTest, ExplicitGlfwFailureIsNotDowngradedToEgl)
+{
+  load_model(ONE_CAMERA_MODEL);
+  plugin_node_->declare_parameter("mujoco_plugins.camera_plugin.render_backend", "glfw");
+
+  auto fake_glfw = []() { return 0; };
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  EXPECT_FALSE(plugin.init(plugin_node_, model_, data_, fake_glfw));
+  plugin.cleanup();
+}
+
+TEST_F(CameraPluginTest, ExplicitGlfwSucceedsWhenGlfwIsAvailable)
+{
+  load_model(ONE_CAMERA_MODEL);
+  plugin_node_->declare_parameter("mujoco_plugins.camera_plugin.render_backend", "glfw");
+
+  auto fake_glfw = []() { return 1; };
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, fake_glfw));
+  plugin.cleanup();
+}
+
 int main(int argc, char** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
