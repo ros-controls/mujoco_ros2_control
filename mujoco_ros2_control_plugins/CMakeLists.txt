@@ -147,6 +147,13 @@ if(BUILD_TESTING)
     "LINKER:--pop-state"
   )
 
+  ament_add_gtest(test_depth_sensor_model
+    test/test_depth_sensor_model.cpp
+  )
+  target_include_directories(test_depth_sensor_model PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+
   ament_add_gtest(test_3d_lidar_plugin
     test/test_3d_lidar_plugin.cpp
   )

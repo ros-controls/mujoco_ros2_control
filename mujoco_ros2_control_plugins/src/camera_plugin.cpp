@@ -162,6 +162,45 @@ bool CameraPlugin::register_cameras()
   camera_publish_rate_ = node_->get_parameter(camera_publish_rate_param).as_double();
   RCLCPP_INFO(node_->get_logger(), "Publishing camera data at rate %f per second.", camera_publish_rate_);
 
+  // Depth sensor model. MuJoCo returns exact geometric depth at every pixel: no noise, no
+  // invalid returns, and values below the real Min-Z. A map or an estimator built against
+  // that looks far better in simulation than it can on hardware, so the sensor is modelled
+  // here rather than letting the consumer discover the difference on the robot.
+  const auto declare_double = [this](const std::string& name, double fallback) {
+    if (!node_->has_parameter(name))
+    {
+      node_->declare_parameter(name, fallback);
+    }
+    return node_->get_parameter(name).as_double();
+  };
+  if (!node_->has_parameter(param_prefix + "depth_sensor_model"))
+  {
+    node_->declare_parameter(param_prefix + "depth_sensor_model", true);
+  }
+  depth_sensor_model_ = node_->get_parameter(param_prefix + "depth_sensor_model").as_bool();
+  depth_model_.min_range = static_cast<float>(declare_double(param_prefix + "depth_min_range", 0.28));
+  depth_model_.max_range = static_cast<float>(declare_double(param_prefix + "depth_max_range", 3.0));
+  depth_model_.stereo_baseline =
+      static_cast<float>(declare_double(param_prefix + "depth_stereo_baseline", 0.05));
+  depth_model_.subpixel_error =
+      static_cast<float>(declare_double(param_prefix + "depth_subpixel_error", 0.15));
+  depth_model_.dropout_fraction = declare_double(param_prefix + "depth_dropout_fraction", 0.02);
+  if (depth_model_.min_range > depth_model_.max_range)
+  {
+    RCLCPP_ERROR(node_->get_logger(),
+                 "depth_min_range (%.3f m) is above depth_max_range (%.3f m); every pixel would be NaN.",
+                 depth_model_.min_range, depth_model_.max_range);
+    return false;
+  }
+  if (depth_sensor_model_)
+  {
+    RCLCPP_INFO(node_->get_logger(),
+                "Depth sensor model ON: range [%.2f, %.2f] m, stereo baseline %.3f m, "
+                "subpixel error %.3f px, dropout %.1f%%. Invalid pixels are NaN.",
+                depth_model_.min_range, depth_model_.max_range, depth_model_.stereo_baseline,
+                depth_model_.subpixel_error, 100.0 * depth_model_.dropout_fraction);
+  }
+
   cameras_.resize(0);
   for (auto i = 0; i < mj_model_->ncam; ++i)
   {
@@ -595,7 +634,10 @@ void CameraPlugin::render_and_publish_camera(CameraData& camera, const rclcpp::T
     float* dst_row = depth_out + static_cast<size_t>(camera.height - 1 - h) * camera.width;
     for (uint32_t w = 0; w < camera.width; ++w)
     {
-      dst_row[w] = camera_near_distance_ / (1.0f - src_row[w] * camera_depth_scale_);
+      const float true_depth = camera_near_distance_ / (1.0f - src_row[w] * camera_depth_scale_);
+      dst_row[w] = depth_sensor_model_ ?
+                       depth_model_.apply(true_depth, static_cast<float>(camera.camera_info.k[0])) :
+                       true_depth;
     }
   }
 

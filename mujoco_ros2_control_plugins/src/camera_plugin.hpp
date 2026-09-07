@@ -34,6 +34,8 @@
 
 #include "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
 
+#include "depth_sensor_model.hpp"
+
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLFW/glfw3.h>
@@ -234,6 +236,10 @@ private:
 
   // Image publishing rate (applies to streaming cameras only)
   double camera_publish_rate_{ 5.0 };
+
+  // Depth sensor model. Off restores MuJoCo's exact geometric depth.
+  bool depth_sensor_model_{ true };
+  DepthSensorModel depth_model_;
   rclcpp::Time last_publish_time_{ 0, 0, RCL_ROS_TIME };
 
   // Whether any streaming camera is registered. This lets the update loop skip the
