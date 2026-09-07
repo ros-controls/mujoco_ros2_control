@@ -143,6 +143,10 @@ public:
   /** Signature of the GLFW initializer; injectable for testing. */
   using GlfwInitFn = std::function<int()>;
 
+  /// Seam for eglMakeCurrent, so the surfaceless fallback below can be tested without a
+  /// driver that reproduces the failure. Defaults to the real entry point.
+  using EglMakeCurrentFn = std::function<EGLBoolean(EGLDisplay, EGLSurface, EGLSurface, EGLContext)>;
+
   CameraPlugin() = default;
   ~CameraPlugin() override = default;
 
@@ -159,6 +163,18 @@ public:
    * @param glfw_init_fn Function used to attempt GLFW initialization; same signature as `glfwInit`.
    */
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data, GlfwInitFn glfw_init_fn);
+
+  /**
+   * @brief Overrides the eglMakeCurrent used when creating the EGL context.
+   *
+   * Exposed for the same reason as the GlfwInitFn overload above: the surfaceless fallback
+   * exists for a driver behaviour that cannot be provoked on demand. Must be called before
+   * init(), which starts the rendering thread.
+   */
+  void set_egl_make_current(EglMakeCurrentFn fn)
+  {
+    egl_make_current_ = std::move(fn);
+  }
   void update(const mjModel* model, mjData* data) override;
   void cleanup() override;
 
@@ -271,6 +287,9 @@ private:
   EGLDisplay egl_display_{ EGL_NO_DISPLAY };
   EGLContext egl_context_{ EGL_NO_CONTEXT };
   EGLSurface egl_surface_{ EGL_NO_SURFACE };
+  EglMakeCurrentFn egl_make_current_{ [](EGLDisplay d, EGLSurface draw, EGLSurface read, EGLContext ctx) {
+    return eglMakeCurrent(d, draw, read, ctx);
+  } };
   bool use_egl_{ false };
 
   /**
