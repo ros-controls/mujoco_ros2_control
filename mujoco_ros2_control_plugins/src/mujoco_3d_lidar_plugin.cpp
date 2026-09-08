@@ -219,7 +219,7 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   // site name in the MJCF if not provided. Topics default to `/scan` and `/points` for 2-D and
   // 3-D scans, respectively.
   // Note that we must prefix our param declarations to ensure nesting works out properly.
-  const std::string param_prefix = "mujoco_plugins.mujoco_3d_lidar_plugin.";
+  const std::string param_prefix = "mujoco_plugins." + node_->get_sub_namespace() + ".";
   const auto site_name = mj_id2name(model, mjtObj::mjOBJ_SITE, model->sensor_objid[sensor_idx]);
   const std::string frame_name_param = param_prefix + lidar_config.name + ".frame_name";
   if (!node_->has_parameter(frame_name_param))
@@ -305,9 +305,11 @@ void Mujoco3dLidarPlugin::update(const mjModel* /* model */, mjData* data)
 {
   for (Lidar3dConfig& lidar : lidar_sensors_)
   {
-    // Check for new sensor data, and skip if not yet computed or if it is stale
+    // Check for new sensor data, and skip if not yet computed, stale, or otherwise
+    // invalid. This will explicitly skip the 0th timepoint, since that is not a valid
+    // point for a scan, anyway.
     mjtNum compute_time = data->plugin_state[lidar.plugin_stateadr];
-    if (compute_time < 0.0 || compute_time == lidar.last_published_time)
+    if (!(compute_time > lidar.last_published_time))
     {
       continue;
     }

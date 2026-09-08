@@ -620,20 +620,34 @@ def get_processed_mujoco_inputs(processed_inputs_element):
 
             # get the attributes from the modify_element_tag
             attr_dict = {attr.name: attr.value for attr in modify_element_element.attributes.values()}
-            # we must have a name element
-            if "name" not in attr_dict or "type" not in attr_dict:
-                raise ValueError("'name' and 'type' must be in the attributes of a 'modify_element' tag!")
 
-            # remove the name and type entries because those will be used as the key in the returned dict
-            element_name = attr_dict["name"]
-            element_type = attr_dict["type"]
-            del attr_dict["name"]
-            del attr_dict["type"]
-            modify_element_dict[(element_type, element_name)] = attr_dict
+            # we must have a type element
+            element_type = attr_dict.pop("type", None)
+            if element_type is None:
+                raise ValueError("'type' must be in the attributes of a 'modify_element' tag!")
 
-            print(f"Will add the following attributes to {element_type} '{element_name}':")
-            for key, value in attr_dict.items():
-                print(f"  {key}: {value}")
+            if element_type == "geom":
+                mesh_name = attr_dict.pop("mesh", None)
+                if mesh_name is None:
+                    raise ValueError("'mesh' must be in the attributes of a 'modify_element' tag!")
+
+                geom_class = attr_dict.pop("class", None)
+                if geom_class is None:
+                    raise ValueError("'class' must be in the attributes of a 'modify_element' tag!")
+                key = (element_type, (mesh_name, geom_class))
+                identifier_str = f"mesh='{mesh_name}'" + (f", class='{geom_class}'")
+            else:
+                element_name = attr_dict.pop("name", None)
+                if element_name is None:
+                    raise ValueError("'name' must be in the attributes of a 'modify_element' tag!")
+                key = (element_type, element_name)
+                identifier_str = f"name='{element_name}'"
+
+            modify_element_dict[key] = attr_dict
+
+            print(f"Will add the following attributes to {element_type} ({identifier_str}):")
+            for key_attr, value in attr_dict.items():
+                print(f"  {key_attr}: {value}")
 
     return decompose_dict, cameras_dict, modify_element_dict, lidar_dict
 
@@ -1122,14 +1136,30 @@ def add_modifiers(dom, modify_element_dict):
     # work on each set of element types at a time
     for element_type in types:
         element_set = worldbody_element.getElementsByTagName(element_type)
-        # check if the each element needs modification
-        for element in element_set:
-            potential_key = (element.tagName, element.getAttribute("name"))
-            if potential_key in modify_element_dict:
-                # apply attributes to the elements
-                attr_dict = modify_element_dict[potential_key]
-                for attr_name, attr_value in attr_dict.items():
-                    element.setAttribute(attr_name, attr_value)
+
+        # match by mesh and class only for geoms
+        if element_type == "geom":
+            # check if the each element needs modification
+            for element in element_set:
+                raw_mesh_name = element.getAttribute("mesh")
+                base_mesh_name = re.sub(r"_collision_\d+$", "", raw_mesh_name)
+                mesh_key = (element.tagName, (base_mesh_name, element.getAttribute("class")))
+                attr_dict = modify_element_dict.get(mesh_key)
+                if attr_dict is not None:
+                    # apply attributes to the elements
+                    for attr_name, attr_value in attr_dict.items():
+                        element.setAttribute(attr_name, attr_value)
+
+        # match by explicit name
+        else:
+            # check if the each element needs modification
+            for element in element_set:
+                name_key = (element.tagName, element.getAttribute("name"))
+                attr_dict = modify_element_dict.get(name_key)
+                if attr_dict is not None:
+                    # apply attributes to the elements
+                    for attr_name, attr_value in attr_dict.items():
+                        element.setAttribute(attr_name, attr_value)
 
     return dom
 

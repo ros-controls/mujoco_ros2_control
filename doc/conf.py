@@ -24,8 +24,11 @@ pygments_style = "sphinx"
 extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.todo",
+    "sphinx.ext.githubpages",
     "sphinx_rtd_theme",
     "sphinx_copybutton",
+    "sphinx_tabs.tabs",
+    "sphinx.ext.autosectionlabel",
 ]
 
 todo_include_todos = True

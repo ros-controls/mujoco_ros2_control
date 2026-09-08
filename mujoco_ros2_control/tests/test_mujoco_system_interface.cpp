@@ -38,10 +38,10 @@
 namespace
 {
 
-// Pendulum model with framepos/framequat sensors on a site at the pendulum body origin.
+// Pendulum model with framepos/framequat and magnetometer sensors on a site at the pendulum body origin.
 constexpr const char* kTestModel = R"(<?xml version="1.0"?>
 <mujoco model="test_system_interface">
-  <option timestep="0.002"/>
+  <option timestep="0.002" magnetic="0.1 0.2 0.3"/>
 
   <worldbody>
     <body name="pendulum" pos="0 0 1">
@@ -54,16 +54,43 @@ constexpr const char* kTestModel = R"(<?xml version="1.0"?>
   <sensor>
     <framepos name="pose_sensor_pos" objtype="site" objname="pendulum_site"/>
     <framequat name="pose_sensor_quat" objtype="site" objname="pendulum_site"/>
+    <magnetometer name="magnetometer_sensor" site="pendulum_site"/>
   </sensor>
+</mujoco>
+)";
+
+constexpr const char* kIntVelocityTestModel = R"(<?xml version="1.0"?>
+<mujoco model="intvelocity_system_interface">
+  <option timestep="0.002"/>
+
+  <worldbody>
+    <body name="wheel" pos="0 0 0">
+      <joint name="wheel_joint" type="hinge" axis="0 1 0"/>
+      <geom type="cylinder" size="0.1 0.02" mass="1"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <intvelocity name="wheel_joint" joint="wheel_joint" kp="10" kv="1" ctrlrange="-5 5"
+                 actrange="-100 100"/>
+  </actuator>
 </mujoco>
 )";
 
 // Write to disk for testing
 const std::string kTestModelPath = "/tmp/test_mujoco_system_interface_model.xml";
+const std::string kIntVelocityTestModelPath = "/tmp/test_mujoco_system_interface_intvelocity_model.xml";
 void write_test_model()
 {
   std::ofstream file(kTestModelPath);
   file << kTestModel;
+  file.close();
+}
+
+void write_intvelocity_test_model()
+{
+  std::ofstream file(kIntVelocityTestModelPath);
+  file << kIntVelocityTestModel;
   file.close();
 }
 
@@ -109,6 +136,10 @@ protected:
     {
       std::filesystem::remove(kTestModelPath);
     }
+    if (std::filesystem::exists(kIntVelocityTestModelPath))
+    {
+      std::filesystem::remove(kIntVelocityTestModelPath);
+    }
   }
 
   // Create the hardware info to initialize the interface with, in headless mode.
@@ -153,13 +184,63 @@ protected:
   std::shared_ptr<mujoco_ros2_control::MujocoSystemInterface> interface_;
 };
 
+TEST_F(MujocoSystemInterfaceTest, IntVelocityActuatorSupportsVelocityCommandInterface)
+{
+  write_intvelocity_test_model();
+  auto hardware_info = create_hardware_info();
+  hardware_info.hardware_parameters["mujoco_model"] = kIntVelocityTestModelPath;
+
+  hardware_interface::ComponentInfo joint_info;
+  joint_info.name = "wheel_joint";
+
+  hardware_interface::InterfaceInfo command_interface;
+  command_interface.name = hardware_interface::HW_IF_VELOCITY;
+  joint_info.command_interfaces.push_back(command_interface);
+
+  for (const auto* interface_name :
+       { hardware_interface::HW_IF_POSITION, hardware_interface::HW_IF_VELOCITY, hardware_interface::HW_IF_EFFORT })
+  {
+    hardware_interface::InterfaceInfo state_interface;
+    state_interface.name = interface_name;
+    joint_info.state_interfaces.push_back(state_interface);
+  }
+  hardware_info.joints.push_back(joint_info);
+
+  ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
+
+  mjModel* model = nullptr;
+  interface_->get_model(model);
+  ASSERT_NE(model, nullptr);
+  const int actuator_id = mj_name2id(model, mjOBJ_ACTUATOR, "wheel_joint");
+  ASSERT_NE(actuator_id, -1);
+  EXPECT_EQ(model->actuator_dyntype[actuator_id], mjDYN_INTEGRATOR);
+
+  auto command_interfaces = interface_->export_command_interfaces();
+  ASSERT_EQ(command_interfaces.size(), 1u);
+  EXPECT_EQ(command_interfaces.front().get_name(), "wheel_joint/velocity");
+
+  constexpr double velocity_command = 2.0;
+  command_interfaces.front().set_value(velocity_command);
+  ASSERT_EQ(interface_->write(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002)),
+            hardware_interface::return_type::OK);
+
+  mjData* data = nullptr;
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_data(data);
+    return data != nullptr && std::abs(data->ctrl[actuator_id] - velocity_command) < 1e-9;
+  })) << "Velocity command was not written to the intvelocity actuator ctrl input";
+
+  mj_deleteData(data);
+  mj_deleteModel(model);
+}
+
 TEST_F(MujocoSystemInterfaceTest, PoseSensorStateInterfacesRead)
 {
   // Register a pose sensor mapped to the framepos/framequat sensors in the MJCF model.
   auto hardware_info = create_hardware_info();
   hardware_interface::ComponentInfo sensor_info;
   sensor_info.name = "pose_sensor";
-  sensor_info.parameters["mujoco_type"] = "pose";
+  sensor_info.parameters[mujoco_ros2_control::MUJOCO_TYPE_PARAM] = mujoco_ros2_control::MUJOCO_TYPE_POSE;
   for (const auto* interface_name :
        { "position.x", "position.y", "position.z", "orientation.x", "orientation.y", "orientation.z", "orientation.w" })
   {
@@ -216,6 +297,58 @@ TEST_F(MujocoSystemInterfaceTest, PoseSensorStateInterfacesRead)
   const double quat_norm = std::sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
   EXPECT_NEAR(quat_norm, 1.0, tol);
   EXPECT_NEAR(position_z, 1.0, tol);
+}
+
+TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorStateInterfacesRead)
+{
+  auto hardware_info = create_hardware_info();
+  hardware_interface::ComponentInfo sensor_info;
+  sensor_info.name = "magnetometer_sensor";
+  sensor_info.parameters[mujoco_ros2_control::MUJOCO_TYPE_PARAM] = mujoco_ros2_control::MUJOCO_TYPE_MAGNETOMETER;
+  for (const auto* interface_name : { "magnetic_field.x", "magnetic_field.y", "magnetic_field.z" })
+  {
+    hardware_interface::InterfaceInfo interface_info;
+    interface_info.name = interface_name;
+    sensor_info.state_interfaces.push_back(interface_info);
+  }
+  hardware_info.sensors.push_back(sensor_info);
+
+  ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
+
+  mjModel* model = nullptr;
+  mjData* data = nullptr;
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_model(model);
+    interface_->get_data(data);
+    return model != nullptr && data != nullptr && data->time > 0.0;
+  })) << "Simulation did not start stepping";
+
+  interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+
+  const auto state_interfaces = interface_->export_state_interfaces();
+  ASSERT_EQ(state_interfaces.size(), 3u);
+  ASSERT_EQ(state_interfaces[0].get_name(), "magnetometer_sensor/magnetic_field.x");
+  ASSERT_EQ(state_interfaces[1].get_name(), "magnetometer_sensor/magnetic_field.y");
+  ASSERT_EQ(state_interfaces[2].get_name(), "magnetometer_sensor/magnetic_field.z");
+
+  const int magnetometer_id = mj_name2id(model, mjOBJ_SENSOR, "magnetometer_sensor");
+  ASSERT_NE(magnetometer_id, -1);
+  const int magnetometer_data_index = model->sensor_adr[magnetometer_id];
+
+#if ROS_DISTRO_HUMBLE
+  const double magnetic_field_x = state_interfaces[0].get_value();
+  const double magnetic_field_y = state_interfaces[1].get_value();
+  const double magnetic_field_z = state_interfaces[2].get_value();
+#else
+  const double magnetic_field_x = state_interfaces[0].get_optional().value();
+  const double magnetic_field_y = state_interfaces[1].get_optional().value();
+  const double magnetic_field_z = state_interfaces[2].get_optional().value();
+#endif
+
+  const double tol = 1e-9;
+  EXPECT_NEAR(magnetic_field_x, data->sensordata[magnetometer_data_index], tol);
+  EXPECT_NEAR(magnetic_field_y, data->sensordata[magnetometer_data_index + 1], tol);
+  EXPECT_NEAR(magnetic_field_z, data->sensordata[magnetometer_data_index + 2], tol);
 }
 
 int main(int argc, char** argv)

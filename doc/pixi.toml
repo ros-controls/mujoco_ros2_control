@@ -10,6 +10,7 @@ python = ">=3.11,<3.13"
 sphinx = ">=7,<9"
 sphinx_rtd_theme = ">=3,<4"
 sphinx-copybutton = ">=0.5,<1"
+sphinx-tabs = ">=3.5.0,<4"
 
 [pypi-dependencies]
 sphinx-autobuild = ">=2024,<2026"

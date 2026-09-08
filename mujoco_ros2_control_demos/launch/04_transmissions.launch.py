@@ -20,7 +20,8 @@ Transmissions allow mapping between actuators and joints with mechanical
 reduction ratios and offsets.
 
 Key concepts:
-- SimpleTransmission interface from transmission_interface
+- DifferentialTransmission interface from transmission_interface, coupling
+  joint1/joint2 through a shared pair of actuators
 - Mechanical reduction configuration (gear ratios)
 - Actuator-to-joint mapping in MJCF
 - Runtime MJCF modification to rename joints to actuators

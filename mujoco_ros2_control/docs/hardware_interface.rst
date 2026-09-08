@@ -115,19 +115,27 @@ Maps to the following ``ros2_control`` hardware interface:
    * - Command Interface
      - MuJoCo ``position``
      - MuJoCo ``velocity``
+     - MuJoCo ``intvelocity``
      - MuJoCo ``motor``, ``general``, etc.
    * - **position**
      - Native support
      - Supported using PIDs
      - Supported using PIDs
+     - Supported using PIDs
    * - **velocity**
      - Not supported
+     - Native support
      - Native support
      - Supported using PIDs
    * - **effort**
      - Not supported
      - Not supported
+     - Not supported
      - Native support
+
+MuJoCo's ``intvelocity`` actuator integrates its ``ctrl`` input into an internal position setpoint. The input itself has
+velocity semantics, so it maps natively to a ros2_control ``velocity`` command interface without changing the actuator's
+integrated-velocity dynamics.
 
 .. note::
 
@@ -164,7 +172,7 @@ The drivers expose control and state for that single joint, while the simulation
 Sensors
 -------
 
-The hardware interface supports force-torque sensors (FTS) and inertial measurement units (IMUs).
+The hardware interface supports force-torque sensors (FTS), inertial measurement units (IMUs), pose sensors, and magnetometers.
 MuJoCo does not model complete FTS and IMUs natively, so we combine supported MJCF sensor constructs to map to a single ``ros2_control`` sensor.
 
 Force-Torque Sensors
@@ -237,10 +245,36 @@ Map to the corresponding ``ros2_control`` sensor:
 
 These sensor state interfaces work out of the box with the standard ROS 2 broadcasters.
 
+Magnetometer
+~~~~~~~~~~~~
+
+Model a MuJoCo ``magnetometer`` sensor in the MJCF:
+
+.. code-block:: xml
+
+   <sensor>
+     <magnetometer name="magnetometer_sensor" site="imu_sensor"/>
+   </sensor>
+
+Map it to the corresponding ``ros2_control`` sensor:
+
+.. code-block:: xml
+
+   <sensor name="magnetometer_sensor">
+     <param name="mujoco_type">magnetometer</param>
+     <!-- mujoco_sensor_name does not need to match the ros2_control sensor name -->
+     <param name="mujoco_sensor_name">magnetometer_sensor</param>
+     <state_interface name="magnetic_field.x"/>
+     <state_interface name="magnetic_field.y"/>
+     <state_interface name="magnetic_field.z"/>
+   </sensor>
+
 .. warning::
 
    Cameras and lidar sensors are no longer supported in the base interface, they are now provided as ``mujoco_ros2_control_plugins``.
-   Refer to the :ref:`camera_plugin` and :ref:`lidar_plugin` for more information.
+   Refer to the :ref:`CameraPlugin <camera_plugin>` and :ref:`RangefinderLidarPlugin <rangefinder_lidar_plugin>` for more information.
+
+.. _simulation_topics_and_services:
 
 Simulation Topics and Services
 ================================
@@ -273,11 +307,30 @@ Services
       ros2 service call /ros2_control_node/set_pause mujoco_ros2_control_msgs/srv/SetPause "{paused: false}"
 
 ``~/reset_world`` (``mujoco_ros2_control_msgs/srv/ResetWorld``)
-   Resets the simulation state.
+   Resets the simulation state, optionally applying per-joint state overrides on top of the restored state.
 
    - If the optional ``keyframe`` string field is empty, the simulation is restored to the state captured at startup (initial joint positions, velocities, and control values).
    - If a ``keyframe`` name is provided, that named keyframe from the MJCF is applied instead.
+   - ``state_overrides`` (``mujoco_ros2_control_msgs/SimulationState``): optional overrides applied on top of the
+     restored state — ``joint_states`` for single-DOF (hinge/slide) joints keyed by MuJoCo joint name, and
+     ``free_joints`` for free joints keyed by the name of the body each one drives.
+     The split follows the representation: ``joint_states`` carries raw scalar joint coordinates, while
+     ``free_joints`` carries a frame-relative Cartesian pose and twist. Ball and other multi-DOF joints fit
+     neither and are not supported.
+   - In ``joint_states``, ``position`` and ``velocity`` must each be empty or the same length as ``name``, so a given
+     field is set for every listed joint or for none of them; an empty array leaves that field at its reset value.
+     ``effort`` is not supported and must be empty.
+   - In ``free_joints``, entries behave exactly like the ``~/set_free_joint_state`` service (see below), except that any
+     ``pose``/``twist`` ``frame_id`` is resolved against body poses *after* the reset and *after* any ``joint_states``
+     overrides have been written. An object can therefore be placed relative to where another body ends up, rather than
+     where it was before the reset.
    - Returns ``success`` and a human-readable ``message``.
+
+   .. note::
+
+      There is no standalone service for setting a single-DOF joint; unlike free-joint bodies, articulated joints are
+      usually actuated, so writing one has to re-sync the hardware interface's command interfaces and reset its PIDs.
+      That reconciliation only happens as part of a reset, which is why the capability lives here.
 
    .. code-block:: bash
 
@@ -287,10 +340,24 @@ Services
       # Reset to a named MJCF keyframe
       ros2 service call /ros2_control_node/reset_world mujoco_ros2_control_msgs/srv/ResetWorld "{keyframe: 'home'}"
 
+      # Reset to a keyframe, but with the cabinet door open and "box_1" placed on the table
+      ros2 service call /ros2_control_node/reset_world mujoco_ros2_control_msgs/srv/ResetWorld \
+        "{keyframe: 'home',
+          state_overrides: {
+            joint_states: {name: ['door_hinge'], position: [1.57]},
+            free_joints: [
+              {name: 'box_1', pose: {header: {frame_id: 'table'}, pose: {position: {z: 0.4}}}}
+            ]
+          }
+        }"
+
    .. important::
 
       If controllers are active during the service call, the robot may reset to the initial state and then immediately
       snap back to its previous commanded position. Deactivate any active joint controllers before calling this service.
+      This applies equally to ``state_overrides.joint_states`` targeting controlled joints: the hardware interface re-syncs
+      its command interfaces to the overridden positions as part of the reset, but an active controller may still
+      command the joints elsewhere on its next update.
 
 ``~/step_simulation`` (``mujoco_ros2_control_msgs/srv/StepSimulation``)
    Advances the paused simulation by an exact number of physics steps and blocks until all steps have completed.
@@ -305,6 +372,63 @@ Services
 
       # Step the simulation forward by 100 physics steps
       ros2 service call /ros2_control_node/step_simulation mujoco_ros2_control_msgs/srv/StepSimulation "{steps: 100}"
+
+``~/set_free_joint_state`` (``mujoco_ros2_control_msgs/srv/SetFreeJointState``)
+   Directly sets the pose and velocity of one or more MuJoCo free-joint objects (e.g. manipulable
+   props) in a single call, each identified by the name of the body its free joint drives. Useful
+   for teleporting or resetting object poses.
+
+   - ``free_joints`` (``mujoco_ros2_control_msgs/FreeJointState[]``): list of free-joint
+     bodies to set. Each entry has:
+
+     - ``name`` (``string``): name of the MuJoCo body driven by the target free joint.
+     - ``pose`` (``geometry_msgs/PoseStamped``): desired pose. An unset ``orientation``
+       defaults to identity. ``pose.header.frame_id`` selects the reference frame: empty
+       (default) means the world frame; set to the name of another MuJoCo body to compose
+       ``pose.pose`` onto that body's current world pose, letting you place an object relative
+       to a link instead of computing its world pose yourself. ``pose.header.stamp`` is not
+       used.
+     - ``twist`` (``geometry_msgs/TwistStamped``): desired velocity. Left at its default
+       (all-zero), the object comes to rest at the new pose. ``twist.header.frame_id`` selects
+       the reference frame the same way as ``pose.header.frame_id``, but **independently**: if
+       set, ``twist.twist`` is rotated into the world frame using that body's current world
+       orientation (the reference body's own velocity is not added). ``twist.header.stamp`` is
+       not used.
+
+   - ``pose`` and ``twist`` are resolved **independently** -- they may reference different
+     bodies, or one may be world-frame while the other is relative.
+   - Application is **atomic across the whole list**: every entry is validated (body exists, is
+     driven by a free joint, and any ``pose``/``twist`` ``frame_id`` names a known body) before
+     anything is written. Returns ``success = false`` (with no data modified for *any* entry) if
+     a single entry is invalid; ``message`` identifies the offending entry by index and body
+     name.
+   - If the same body name appears more than once in the list, entries are applied in order, so
+     the last one wins.
+   - To *observe* the current state of every free-joint object, see the ``FreeJointPlugin`` in
+     ``mujoco_ros2_control_plugins`` (published on its ``free_joint_states`` topic).
+
+   .. code-block:: bash
+
+      # Teleport "box_1" to (x=0, y=0, z=1) with identity orientation, at rest
+      ros2 service call /ros2_control_node/set_free_joint_state \
+        mujoco_ros2_control_msgs/srv/SetFreeJointState \
+        "{free_joints: [{name: 'box_1', pose: {pose: {position: {x: 0.0, y: 0.0, z: 1.0}}}}]}"
+
+      # Place "box_1" 10 cm above the "gripper_link" body, in that link's frame, while giving
+      # it a world-frame velocity
+      ros2 service call /ros2_control_node/set_free_joint_state \
+        mujoco_ros2_control_msgs/srv/SetFreeJointState \
+        "{free_joints: [{name: 'box_1',
+                         pose: {header: {frame_id: 'gripper_link'}, pose: {position: {z: 0.1}}},
+                         twist: {twist: {linear: {x: 0.2}}}}]}"
+
+      # Teleport both "box_1" and "box_2" in a single, atomic call
+      ros2 service call /ros2_control_node/set_free_joint_state \
+        mujoco_ros2_control_msgs/srv/SetFreeJointState \
+        "{free_joints: [
+          {name: 'box_1', pose: {pose: {position: {x: 0.0, y: 0.0, z: 1.0}}}},
+          {name: 'box_2', pose: {pose: {position: {x: 1.0, y: 0.0, z: 1.0}}}}
+        ]}"
 
 Debugging
 =========

@@ -15,10 +15,11 @@
 # limitations under the License.
 
 import os
+import re
 import time
 import unittest
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from controller_manager.test_utils import check_controllers_running, check_if_js_published, check_node_running
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
@@ -30,11 +31,24 @@ import pytest
 import rclpy
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from rosgraph_msgs.msg import Clock
-from mujoco_ros2_control_msgs.srv import ResetWorld, SetPause, StepSimulation
+from mujoco_ros2_control_msgs.msg import FreeJointState
+from mujoco_ros2_control_msgs.srv import ResetWorld, SetFreeJointState, SetPause, StepSimulation
 from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState, Image, CameraInfo
 from geometry_msgs.msg import PoseStamped
 from controller_manager_msgs.srv import ListHardwareInterfaces, SwitchController
+
+
+def get_mujoco_version_header():
+    """Return the mjVERSION_HEADER integer (e.g. 3012000 for MuJoCo 3.12.0) of the
+    MuJoCo build that mujoco_vendor actually installed/linked, read from its
+    installed mujoco.h.
+    """
+    prefix = get_package_prefix("mujoco_vendor")
+    header_path = os.path.join(prefix, "opt", "mujoco_vendor", "include", "mujoco", "mujoco.h")
+    with open(header_path) as header_file:
+        match = re.search(r"#define\s+mjVERSION_HEADER\s+(\d+)", header_file.read())
+    return int(match.group(1))
 
 
 # This function specifies the processes to be run for our test
@@ -45,6 +59,7 @@ def generate_test_description_common(use_pid="false", use_mjcf_from_topic="false
     os.environ["USE_PID"] = use_pid
     os.environ["USE_MJCF_FROM_TOPIC"] = use_mjcf_from_topic
     os.environ["TEST_TRANSMISSIONS"] = test_transmissions
+    os.environ["USE_PIDS"] = use_pid
 
     if use_mjcf_from_topic == "true":
         # Setup the venv needed for the make_mjcf_from_robot_description node
@@ -244,10 +259,16 @@ class TestFixture(unittest.TestCase):
             self.skipTest("pose_broadcaster is only spawned in the basic robot configuration")
 
         # The settled contact pose differs between MuJoCo versions: the ROS binaries and pixi/conda environment
-        # ships different versions of libmujoco. Both are deterministic, so keep one exact expected pose per
-        # environment instead of a tolerance loose enough to span the gap between them.
+        # can ship different versions of libmujoco. Both are deterministic, so keep one exact expected pose per
+        # MuJoCo version instead of a tolerance loose enough to span the gap between them.
         # See https://github.com/pal-robotics/mujoco_vendor/issues/11 for more details.
-        if os.environ.get("PIXI_PROJECT_ROOT") or os.environ.get("CONDA_PREFIX"):
+        # MuJoCo 3.4.0 (mjVERSION_HEADER == 3004000) is the only version known to settle to the older pose below;
+        # every later version observed so far (including the 3.12.0 bump) settles to the newer one.
+        if (
+            os.environ.get("PIXI_PROJECT_ROOT")
+            or os.environ.get("CONDA_PREFIX")
+            or get_mujoco_version_header() > 3004000
+        ):
             expected_pose = {
                 "pose/position.x": 1.8753,
                 "pose/position.y": 0.0,
@@ -306,7 +327,14 @@ class TestFixture(unittest.TestCase):
         if os.environ.get("TEST_TRANSMISSIONS") != "true":
             expected_actuators = {"joint1": 0.5, "joint2": -0.5}
         else:
-            expected_actuators = {"actuator1": 0.5 * 2.0, "actuator2": -0.5 * 0.5}
+            # test_robot.urdf couples joint1/joint2 through a single DifferentialTransmission
+            # (joint reductions 2.0/0.5, actuator reductions 1.0/1.0, no offsets), so each
+            # actuator position is a sum/difference of both joint targets, not a 1:1 scaling.
+            joint1, joint2, jr1, jr2 = 0.5, -0.5, 2.0, 0.5
+            expected_actuators = {
+                "actuator1": joint1 * jr1 + joint2 * jr2,
+                "actuator2": joint1 * jr1 - joint2 * jr2,
+            }
 
         self.wait_for_joint_positions(expected_actuators, delta=0.05, timeout=15.0, topic="actuator_states")
 
@@ -495,6 +523,37 @@ class TestFixture(unittest.TestCase):
         self.assertIsNotNone(result, "step_simulation returned None")
         self.assertFalse(result.success, "step_simulation should fail when simulation is resumed mid-countdown")
 
+    def test_reset_free_body_poses(self):
+        """set_free_joint_state must reposition free-body objects, reported via response.success.
+
+        Both bodies are set in a single request to exercise the service's list/atomic behaviour.
+        """
+        if (
+            os.environ.get("TEST_TRANSMISSIONS") == "true"
+            or os.environ.get("USE_MJCF_FROM_TOPIC") == "true"
+            or os.environ.get("USE_PIDS") == "true"
+        ):
+            self.skipTest("cube1/cube2 free bodies are only present in the default test_robot.xml scene")
+
+        mujoco_sim_node = "/mujoco_ros2_control_node"
+
+        client = self.node.create_client(SetFreeJointState, f"{mujoco_sim_node}/set_free_joint_state")
+        self.assertTrue(client.wait_for_service(timeout_sec=10.0), "set_free_joint_state service not available")
+
+        req = SetFreeJointState.Request()
+        for body_name, target in (("cube1", (1.0, 1.0, 1.0)), ("cube2", (-1.0, 1.0, 1.0))):
+            entry = FreeJointState()
+            entry.name = body_name
+            entry.pose.pose.position.x, entry.pose.pose.position.y, entry.pose.pose.position.z = target
+            entry.pose.pose.orientation.w = 1.0
+            req.free_joints.append(entry)
+
+        future = client.call_async(req)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        result = future.result()
+        self.assertIsNotNone(result, "set_free_joint_state returned None")
+        self.assertTrue(result.success, f"set_free_joint_state failed: {result.message}")
+
 
 class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
 
@@ -551,6 +610,9 @@ class TestFixtureHardwareInterfacesCheck(unittest.TestCase):
             "pose/position.x",
             "pose/position.y",
             "pose/position.z",
+            "magnetometer/magnetic_field.x",
+            "magnetometer/magnetic_field.y",
+            "magnetometer/magnetic_field.z",
         ]
         assert len(available_state_interfaces_names) == len(
             expected_state_interfaces

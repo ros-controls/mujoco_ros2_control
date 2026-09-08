@@ -7,7 +7,7 @@ This package provides ready-to-use tutorials that show how to use MuJoCo with ro
 
 Full tutorial documentation is maintained in RST format:
 
-- **[Demos and Tutorials](doc/tutorials.rst)** — step-by-step tutorials covering basic robot setup, MJCF generation, PID control, and transmissions.
+- **[Demos and Tutorials](doc/tutorials.rst)** — step-by-step tutorials covering basic robot setup, MJCF generation, PID control, transmissions, and the base velocity plugin.
 
 ## Quick Start
 
@@ -23,6 +23,9 @@ ros2 launch mujoco_ros2_control_demos 03_pid_control.launch.py
 
 # Tutorial 4 – Transmissions
 ros2 launch mujoco_ros2_control_demos 04_transmissions.launch.py
+
+# Tutorial 5 – Base Velocity Plugin
+ros2 launch mujoco_ros2_control_demos 05_base_velocity_plugin.launch.py
 ```
 
 All tutorials support `headless:=true` to run without the MuJoCo viewer.

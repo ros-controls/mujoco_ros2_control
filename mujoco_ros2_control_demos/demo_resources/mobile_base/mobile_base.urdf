@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="mobile_base">
+
+  <xacro:arg name="headless" default="false"/>
+
+  <link name="world"/>
+
+  <!-- Nominal fixed joint only, so robot_state_publisher has a valid tree rooted at "world".
+       base_link's *actual* pose comes from the MJCF <freejoint>, published separately as
+       odometry by mujoco_ros2_control (odom_free_joint_name, defaulting to
+       "floating_base_joint", which matches the MJCF freejoint name), not from this joint. -->
+  <link name="base_link"/>
+  <joint name="world_to_base_joint" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+  </joint>
+
+  <link name="arm_link">
+    <inertial>
+      <origin xyz="0.15 0 0" rpy="0 0 0"/>
+      <mass value="2.0"/>
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.02" iyz="0.0" izz="0.02"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <cylinder radius="0.025" length="0.3"/>
+      </geometry>
+      <origin rpy="0 1.5708 0" xyz="0.15 0 0"/>
+    </visual>
+  </link>
+  <joint name="arm_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="arm_link"/>
+    <origin rpy="0 0 0" xyz="0 0 0.05"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.7" upper="0.7" velocity="3.14" effort="200"/>
+  </joint>
+
+  <ros2_control name="MujocoSystem" type="system">
+    <hardware>
+      <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+      <param name="mujoco_model">$(find mujoco_ros2_control_demos)/demo_resources/scenes/scene_mobile_base.xml</param>
+      <param name="headless">$(arg headless)</param>
+      <param name="sim_speed_factor">1.0</param>
+    </hardware>
+    <!-- Actuated purely to demonstrate that swinging a mounted joint doesn't drag the base
+         around: BaseVelocityPlugin holds the base's velocity at whatever is commanded on
+         cmd_vel (zero, by default) regardless of what's disturbing it. -->
+    <joint name="arm_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
+</robot>

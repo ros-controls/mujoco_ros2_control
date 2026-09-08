@@ -80,13 +80,10 @@ namespace mujoco_ros2_control_plugins
  * where R = data->xmat (body → world rotation) and
  *       p_world = data->xpos + R * application_point_body.
  *
- * At the start of every update() call the plugin zeroes the xfrc_applied slots
- * it wrote during the previous cycle before re-accumulating the current active
- * wrenches.  This self-cleanup ensures the plugin leaves no stale contributions
- * in xfrc_applied when all wrenches have expired.  When the surrounding system
- * interface also zeroes xfrc_applied before calling update() (as
- * MujocoSystemInterface::read() does), the plugin's undo step is a harmless
- * no-op on already-zero values.
+ * pre_step() writes directly into the live xfrc_applied, which holds its value across steps
+ * until written again. So at the start of every pre_step() call, the plugin zeroes the
+ * xfrc_applied slots it wrote last cycle before re-accumulating the active wrenches, that
+ * will release the expired wrenches.
  */
 class ExternalWrenchPlugin : public MuJoCoROS2ControlPluginBase
 {
@@ -95,7 +92,7 @@ public:
   ~ExternalWrenchPlugin() override = default;
 
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
-  void update(const mjModel* model, mjData* data) override;
+  void pre_step(mjData* data) override;
   void cleanup() override;
 
   /**
@@ -135,7 +132,7 @@ private:
   void handleApplyWrench(const ApplyExternalWrench::Request::SharedPtr request,
                          ApplyExternalWrench::Response::SharedPtr response);
 
-  /// Publish the result of publish_markers() via the realtime publisher. Called from update().
+  /// Publish the result of publish_markers() via the realtime publisher. Called from pre_step().
   void publish_markers();
 
   // ROS interfaces
@@ -149,15 +146,15 @@ private:
   // Model pointer (const, valid for simulation lifetime)
   const mjModel* model_{ nullptr };
 
-  // Pending queue written by service callback, drained in update()
+  // Pending queue written by service callback, drained in pre_step()
   std::mutex pending_mutex_;
   std::queue<ActiveWrench> pending_wrenches_;
 
-  // Active wrenches — only modified inside update()
+  // Active wrenches — only modified inside pre_step()
   std::vector<ActiveWrench> active_wrenches_;
 
-  // Body IDs whose xfrc_applied slots were written in the previous update() call.
-  // Zeroed at the start of the next update() before re-accumulating.
+  // Body IDs whose xfrc_applied slots were written in the previous pre_step() call.
+  // Zeroed at the start of the next pre_step() before re-accumulating.
   std::vector<int> prev_written_body_ids_;
 
   // Marker visualization scaling

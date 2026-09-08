@@ -24,9 +24,21 @@ namespace mujoco_ros2_control_plugins
 /**
  * @brief Base class for MuJoCo ROS 2 control plugins
  *
- * This is an example base class that plugins can inherit from.
- * Plugins can extend the functionality of mujoco_ros2_control
- * by implementing custom behaviors.
+ * Plugins extend mujoco_ros2_control with custom behavior, e.g. publishing extra topics or
+ * applying external forces.
+ *
+ * Two optional hooks are available. Override whichever fits your use case:
+ *
+ * - `update()` runs on the ros2_control control thread, once per `write()` cycle. `data` is a
+ *   recent snapshot, not the live `mj_data_`. Use this for anything that doesn't need to run on
+ *   exactly one physics step, e.g. publishing sensor data or servicing a trigger.
+ * - `pre_step()` runs on the physics thread, immediately before every `mj_step()`, with direct
+ *   access to the live `mj_data_`. Use this for anything that must hold for exactly one step,
+ *   e.g. a hard kinematic override. There's no command buffer: an untouched entry keeps its
+ *   last value, so releasing a command (e.g. an expired force) needs an explicit write. This
+ *   should be used with caution!
+ *
+ * @note Both hooks must avoid blocking or the control loop or simulation itself will be held up!
  */
 class MuJoCoROS2ControlPluginBase
 {
@@ -46,16 +58,24 @@ public:
   virtual bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) = 0;
 
   /**
-   * @brief Update the plugin (called every simulation step)
+   * @brief Called once per control cycle, on the control thread. Default does nothing.
    * @param model Pointer to the MuJoCo model
-   * @param data Pointer to the MuJoCo data
-   * @note This method will be called at the end of the mujoco_ros2_control read loop, before the update loop of
-   * controllers and the write loop. This means that changes to the data here will be visible to controllers and will
-   * affect the next simulation step.
-   * @note This method will be called in a real-time thread, so it should avoid blocking operations and should be
-   * efficient.
+   * @param data Pointer to a recent snapshot (not the live `mj_data_`)
    */
-  virtual void update(const mjModel* model, mjData* data) = 0;
+  virtual void update(const mjModel* /*model*/, mjData* /*data*/)
+  {
+  }
+
+  /**
+   * @brief Called immediately before every simulation step on the physics thread. Default does nothing.
+   *
+   * USE WITH CAUTION.
+   *
+   * @param data Pointer to the live MuJoCo data, can be modified as needed.
+   */
+  virtual void pre_step(mjData* /*data*/)
+  {
+  }
 
   /**
    * @brief Cleanup the plugin

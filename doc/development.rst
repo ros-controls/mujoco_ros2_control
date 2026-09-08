@@ -45,7 +45,7 @@ pixi also provides an interactive shell that sources the installed package envir
    ros2 launch mujoco_ros2_control_demos demo.launch.py
 
 For more information on pixi and ROS refer to the documentation or this excellent
-`blog post <https://jafarabdi.github.io/blog/2025/ros2-pixi-dev/>`_.
+`blog post <https://jafarabdi.github.io/2025/08/23/ros2-pixi-dev/>`_.
 
 Docker Development Workflow
 ----------------------------

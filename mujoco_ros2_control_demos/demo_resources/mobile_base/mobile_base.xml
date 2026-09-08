@@ -1,0 +1,48 @@
+<mujoco model="mobile_base">
+  <worldbody>
+    <body name="base_link" pos="0 0 0.11">
+      <freejoint name="floating_base_joint"/>
+      <!-- mass=20kg is just a physically plausible value for settling under gravity; it has no
+           bearing on the driven DOFs, since BaseVelocityPlugin overrides their velocity
+           directly rather than servoing a force against the body's mass. -->
+      <inertial pos="0 0 0" mass="20.0" diaginertia="0.1667 0.2833 0.4167"/>
+      <!-- Chassis: doesn't touch the ground (the wheels below reach lower and take the floor
+           contact instead), but still collides normally with the wall obstacle. -->
+      <geom name="chassis" type="box" size="0.2 0.15 0.05" rgba="0.2 0.6 0.9 1"/>
+      <!-- Forward-direction marker (cosmetic only, no collision) -->
+      <geom name="heading_marker" type="box" size="0.03 0.03 0.01" pos="0.18 0 0.06" rgba="0.9 0.2 0.1 1"
+            contype="0" conaffinity="0"/>
+      <!-- Wheels: the base's actual ground contact. BaseVelocityPlugin drives the base by
+           overriding its free-joint velocity directly, not through wheel-ground contact, so
+           friction="0 0 0" here (and on the floor geom in scene_mobile_base.xml) is no longer
+           functionally required; it's kept simply so the wheels can never exert any
+           tangential force on the base at all, leaving the velocity override as the sole thing
+           that can change its planar velocity. -->
+      <geom name="wheel_fl" type="cylinder" size="0.08 0.03" pos="0.15 0.18 -0.02" quat="0.7071068 0.7071068 0 0"
+            rgba="0.1 0.1 0.1 1" friction="0 0 0"/>
+      <geom name="wheel_fr" type="cylinder" size="0.08 0.03" pos="0.15 -0.18 -0.02" quat="0.7071068 0.7071068 0 0"
+            rgba="0.1 0.1 0.1 1" friction="0 0 0"/>
+      <geom name="wheel_rl" type="cylinder" size="0.08 0.03" pos="-0.15 0.18 -0.02" quat="0.7071068 0.7071068 0 0"
+            rgba="0.1 0.1 0.1 1" friction="0 0 0"/>
+      <geom name="wheel_rr" type="cylinder" size="0.08 0.03" pos="-0.15 -0.18 -0.02" quat="0.7071068 0.7071068 0 0"
+            rgba="0.1 0.1 0.1 1" friction="0 0 0"/>
+      <!-- Mounted arm: swinging it (via arm_joint's position actuator below) creates a
+           reaction force/torque on the base through the joint, unrelated to ground
+           friction, since it acts directly between the two bodies. BaseVelocityPlugin
+           overrides the base's driven DOFs directly every cycle, so this reaction has no
+           path to influence them at all: the base stays exactly in place while the arm
+           moves, and only travels once cmd_vel commands it to. The joint is range-limited
+           to a back-and-forth sweep rather than a continuous spin simply because a real arm
+           reaches to poses and doesn't windmill; it has no bearing on the base's motion
+           either way now that the override makes the base immune to the reaction forces. -->
+      <body name="arm_link" pos="0 0 0.05">
+        <joint name="arm_joint" type="hinge" axis="0 1 0" pos="0 0 0" range="-0.7 0.7" limited="true"/>
+        <inertial pos="0.15 0 0" mass="2.0" diaginertia="0.001 0.02 0.02"/>
+        <geom name="arm_geom" type="capsule" fromto="0 0 0 0.3 0 0" size="0.025" rgba="0.9 0.6 0.1 1"/>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="arm_joint" joint="arm_joint" kp="200" ctrlrange="-0.7 0.7"/>
+  </actuator>
+</mujoco>

@@ -108,12 +108,16 @@ public:
 
 private:
   /**
-   * @brief Helper function to construct data given the provided index and mjModel.
+   * @brief Builds a Lidar3dConfig for a `mujoco.plugin.lidar` sensor and adds it to lidar_sensors_.
+   *
+   * Assumes the caller (init()) has already verified the sensor at @p sensor_idx is a
+   * `mujoco.plugin.lidar` sensor. Unnamed sensors are skipped (a warning is logged) without
+   * being added to lidar_sensors_, but this still returns true — false is reserved for actual
+   * registration failures.
    *
    * @param model MuJoCo model for the simulation
-   * @param sensor_idx Index of the sensor in the MuJoCo model
-   * @return true
-   * @return false
+   * @param sensor_idx Index of the sensor to register, in the MuJoCo model's sensor array
+   * @return true if the sensor was skipped or registered successfully, false if registration failed
    */
   bool register_sensor(const mjModel* model, int sensor_idx);
 

@@ -11,6 +11,7 @@ find_package(backward_ros REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(pluginlib REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
@@ -59,6 +60,7 @@ target_link_libraries(mujoco_ros2_control_plugins_impl PUBLIC
   mujoco_ros2_control_plugins
   pluginlib::pluginlib
   realtime_tools::realtime_tools
+  ${geometry_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
   ${std_msgs_TARGETS}
   ${std_srvs_TARGETS}
@@ -88,6 +90,7 @@ install(
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_index_cpp REQUIRED)
 
   ament_add_gtest(test_external_wrench_plugin
     test/test_external_wrench_plugin.cpp
@@ -107,6 +110,22 @@ if(BUILD_TESTING)
   # TODO: Remove this after the following is resolved and the next ROS sync
   # https://github.com/pal-robotics/mujoco_vendor/issues/2
   target_link_options(test_external_wrench_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
+
+  ament_add_gtest(test_free_joint_state_publisher_plugin
+    test/test_free_joint_state_publisher_plugin.cpp
+  )
+  target_include_directories(test_free_joint_state_publisher_plugin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(test_free_joint_state_publisher_plugin
+    mujoco_ros2_control_plugins_impl
+    ${mujoco_ros2_control_msgs_TARGETS}
+  )
+  target_link_options(test_free_joint_state_publisher_plugin PUBLIC
     "LINKER:--push-state,--no-as-needed"
     "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
     "LINKER:--pop-state"
@@ -138,8 +157,25 @@ if(BUILD_TESTING)
   target_link_libraries(test_3d_lidar_plugin
     mujoco_ros2_control_plugins_impl
     ${sensor_msgs_TARGETS}
+    ament_index_cpp::ament_index_cpp
   )
   target_link_options(test_3d_lidar_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
+
+  ament_add_gtest(test_base_velocity_plugin
+    test/test_base_velocity_plugin.cpp
+  )
+  target_include_directories(test_base_velocity_plugin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(test_base_velocity_plugin
+    mujoco_ros2_control_plugins_impl
+    ${geometry_msgs_TARGETS}
+  )
+  target_link_options(test_base_velocity_plugin PUBLIC
     "LINKER:--push-state,--no-as-needed"
     "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
     "LINKER:--pop-state"

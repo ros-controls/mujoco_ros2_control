@@ -580,7 +580,20 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         assert key in modify_element_dict
         self.assertEqual(modify_element_dict[key]["pos"], "1 2 3")
 
-    def test_get_processed_mujoco_inputs_modify_element_missing_attrs(self):
+    def test_get_processed_mujoco_inputs_modify_element_geom(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <modify_element mesh="test_mesh" type="geom" class="test_class" friction="1 0.005 0.0001"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        key = ("geom", ("test_mesh", "test_class"))
+        assert key in modify_element_dict
+        self.assertEqual(modify_element_dict[key]["friction"], "1 0.005 0.0001")
+
+    def test_get_processed_mujoco_inputs_modify_element_missing_type(self):
         xml_string = """<?xml version="1.0"?>
 <processed_inputs>
   <modify_element name="test_body"/>
@@ -590,7 +603,43 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         with self.assertRaises(ValueError) as context:
             get_processed_mujoco_inputs(processed_element)
-        assert "'name' and 'type'" in str(context.exception)
+        assert "'type'" in str(context.exception)
+
+    def test_get_processed_mujoco_inputs_modify_element_missing_name(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <modify_element type="body"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        with self.assertRaises(ValueError) as context:
+            get_processed_mujoco_inputs(processed_element)
+        assert "'name'" in str(context.exception)
+
+    def test_get_processed_mujoco_inputs_modify_geom_element_missing_mesh(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <modify_element type="geom" name="test_body"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        with self.assertRaises(ValueError) as context:
+            get_processed_mujoco_inputs(processed_element)
+        assert "'mesh'" in str(context.exception)
+
+    def test_get_processed_mujoco_inputs_modify_geom_element_missing_class(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <modify_element type="geom" mesh="box_mesh"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        with self.assertRaises(ValueError) as context:
+            get_processed_mujoco_inputs(processed_element)
+        assert "'class'" in str(context.exception)
 
     def test_get_processed_mujoco_inputs_multiple_elements(self):
         xml_string = """<?xml version="1.0"?>
@@ -815,18 +864,26 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 <mujoco>
   <worldbody>
     <body name="base_link">
-      <geom type="box" size="1 1 1"/>
+      <geom type="box" mesh="box_mesh" class="collision" size="1 1 1"/>
     </body>
   </worldbody>
 </mujoco>"""
         dom = minidom.parseString(xml_string)
-        modify_element_dict = {("body", "base_link"): {"pos": "1 2 3", "quat": "0 0 0 1"}}
+        modify_element_dict = {
+            ("body", "base_link"): {"pos": "1 2 3", "quat": "0 0 0 1"},
+            ("geom", ("box_mesh", "collision")): {"friction": "1 0.005 0.0001"},
+        }
         result_dom = add_modifiers(dom, modify_element_dict)
         result_xml = result_dom.toxml()
         print(result_xml)
         assert 'name="base_link"' in result_xml
         assert 'pos="1 2 3"' in result_xml
         assert 'quat="0 0 0 1"' in result_xml
+        assert 'type="box"' in result_xml
+        assert 'mesh="box_mesh"' in result_xml
+        assert 'class="collision"' in result_xml
+        assert 'size="1 1 1"' in result_xml
+        assert 'friction="1 0.005 0.0001"' in result_xml
 
         # Make sure the original attributes are preserved
         # check per element attributes to ensure no unintended modifications
@@ -844,7 +901,12 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("type"), "box")
         self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("size"), "1 1 1")
-        self.assertEqual(len(result_dom.getElementsByTagName("geom")[0].attributes), 2)  # type, size
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("mesh"), "box_mesh")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("class"), "collision")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("friction"), "1 0.005 0.0001")
+        self.assertEqual(
+            len(result_dom.getElementsByTagName("geom")[0].attributes), 5
+        )  # type, size, class, mesh, friction
 
         self.assertEqual(
             len(result_dom.getElementsByTagName("worldbody")[0].attributes), 0
@@ -864,22 +926,30 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 <mujoco>
   <worldbody>
     <body name="link1">
+      <geom type="sphere" size="0.1" class="visual" mesh="sphere_mesh"/>
       <joint name="joint1"/>
     </body>
     <body name="link2">
+      <geom type="box" size="0.1" class="visual" mesh="sphere_mesh_collision_0"/>
       <joint name="joint2"/>
     </body>
   </worldbody>
 </mujoco>"""
         dom = minidom.parseString(xml_string)
-        modify_element_dict = {("body", "link1"): {"pos": "0 0 1"}, ("joint", "joint2"): {"damping": "0.5"}}
+        modify_element_dict = {
+            ("body", "link1"): {"pos": "0 0 1"},
+            ("joint", "joint2"): {"damping": "0.5"},
+            ("geom", ("sphere_mesh", "visual")): {"friction": "1 0.005 0.0001"},
+        }
         result_dom = add_modifiers(dom, modify_element_dict)
         result_xml = result_dom.toxml()
         assert 'pos="0 0 1"' in result_xml
         assert 'damping="0.5"' in result_xml
+        assert 'friction="1 0.005 0.0001"' in result_xml
 
         self.assertEqual(len(result_dom.getElementsByTagName("body")), 2)  # two body elements should be present
         self.assertEqual(len(result_dom.getElementsByTagName("joint")), 2)  # two joint elements should be present
+        self.assertEqual(len(result_dom.getElementsByTagName("geom")), 2)
 
         self.assertEqual(result_dom.getElementsByTagName("body")[0].getAttribute("name"), "link1")
         self.assertEqual(result_dom.getElementsByTagName("body")[1].getAttribute("name"), "link2")
@@ -888,6 +958,17 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertEqual(result_dom.getElementsByTagName("joint")[0].getAttribute("name"), "joint1")
         self.assertEqual(result_dom.getElementsByTagName("joint")[1].getAttribute("name"), "joint2")
         self.assertEqual(result_dom.getElementsByTagName("joint")[1].getAttribute("damping"), "0.5")
+
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("type"), "sphere")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[1].getAttribute("type"), "box")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("size"), "0.1")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[1].getAttribute("size"), "0.1")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("class"), "visual")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[1].getAttribute("class"), "visual")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("mesh"), "sphere_mesh")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[1].getAttribute("mesh"), "sphere_mesh_collision_0")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[0].getAttribute("friction"), "1 0.005 0.0001")
+        self.assertEqual(result_dom.getElementsByTagName("geom")[1].getAttribute("friction"), "1 0.005 0.0001")
 
         # Make sure no unnecessary modifications
         self.assertEqual(len(result_dom.getElementsByTagName("body")[0].attributes), 2)  # name and pos for link1
@@ -899,6 +980,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         )  # only name for joint1, no damping added
         self.assertEqual(len(result_dom.getElementsByTagName("joint")[1].attributes), 2)  # name and damping for joint2
 
+        self.assertEqual(len(result_dom.getElementsByTagName("geom")[0].attributes), 5)  # type size class mesh friction
+        self.assertEqual(len(result_dom.getElementsByTagName("geom")[1].attributes), 5)  # type size class mesh friction
+
         self.assertEqual(
             len(result_dom.getElementsByTagName("worldbody")[0].attributes), 0
         )  # worldbody should have no attributes
@@ -909,10 +993,10 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
         # Validate the number of children for each body element
         self.assertEqual(
-            len(get_child_elements(result_dom.getElementsByTagName("body")[0])), 1
+            len(get_child_elements(result_dom.getElementsByTagName("body")[0])), 2
         )  # link1 should have one child joint
         self.assertEqual(
-            len(get_child_elements(result_dom.getElementsByTagName("body")[1])), 1
+            len(get_child_elements(result_dom.getElementsByTagName("body")[1])), 2
         )  # link2 should have one child joint
         self.assertEqual(
             len(get_child_elements(result_dom.getElementsByTagName("joint")[0])), 0
@@ -932,16 +1016,21 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 <mujoco>
   <worldbody>
     <body name="base_link" pos="0 0 0">
-      <geom type="box"/>
+      <geom type="sphere" size="0.1" class="collision" mesh="sphere_mesh"/>
     </body>
   </worldbody>
 </mujoco>"""
         dom = minidom.parseString(xml_string)
-        modify_element_dict = {("body", "base_link"): {"pos": "1 2 3"}}
+        modify_element_dict = {
+            ("body", "base_link"): {"pos": "1 2 3"},
+            ("geom", ("sphere_mesh", "collision")): {"size": "0.2"},
+        }
         result_dom = add_modifiers(dom, modify_element_dict)
         result_xml = result_dom.toxml()
         assert 'pos="1 2 3"' in result_xml
         assert 'pos="0 0 0"' not in result_xml
+        assert 'size="0.2"' in result_xml
+        assert 'size="0.1"' not in result_xml
 
     def test_add_modifiers_empty_dict(self):
         xml_string = """<?xml version="1.0"?>
