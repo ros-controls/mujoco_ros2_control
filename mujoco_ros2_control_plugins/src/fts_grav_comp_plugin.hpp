@@ -40,7 +40,7 @@ struct FtsData
   int sensor_adr_torque{ -1 };
   int cog_site_id;
   mjtNum cog_pos[3];
-  mjtNum cog_force;
+  mjtNum cog_mass;
   geometry_msgs::msg::Wrench wrench;
   int fts_site_id{ -1 };
 };
@@ -83,6 +83,7 @@ public:
 
 private:
   rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr fts_wrench_publisher_;
+  rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr fts_comped_wrench_publisher_;
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_ = rclcpp::get_logger("FtsGravCompPlugin");
   rclcpp::Time last_publish_time_;
