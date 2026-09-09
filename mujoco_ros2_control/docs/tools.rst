@@ -128,11 +128,66 @@ Rough outline of the automated conversion process
      Duplicate mesh files will have an ``_N`` appended to them to avoid conflicts in the output ``assets`` folder.
      For instance, if running multiple types of UR robots in one sim, there will be multiple ``shoulder.dae`` files.
 
-- Reads absolute filepaths of all meshes and converts either ``.dae`` or ``.stl`` to ``.obj`` using trimesh.
+- Reads absolute filepaths of all meshes (from both ``<visual>`` and ``<collision>`` tags) and
+  materializes them into an ``assets/`` folder under ``mjcf_data/`` relative to the current
+  working dir, rewriting the URDF mesh paths to point there.
 
-  - Puts all meshes into an ``assets/`` folder under ``mjcf_data/`` relative to current working dir.
-  - Modifies filepaths again in URDF to point to the ``assets/`` folder.
-  - Decomposes large meshes into multiple components to ensure convex hulls.
+- Handles visual and collision geometry independently:
+
+  - **Visual** geometry is used purely for rendering (the ``visual`` class). Visual meshes are
+    plain references - ``.stl``/``.obj`` are kept as-is and only ``.dae`` is converted to ``.obj``
+    (MuJoCo cannot load DAE). They live under ``assets/visual/`` and are **never decomposed**; their
+    color is applied as the geom's ``rgba``.
+  - **Collision** geometry drives physics (the ``collision`` class). Collision *primitives*
+    (box/sphere/cylinder/capsule) are used directly. Collision *meshes* are also used directly
+    (as a single whole-mesh collision geom) **unless** their link is named in a ``decompose_mesh``
+    input, in which case they are convex-decomposed with obj2mjcf (coacd) under
+    ``assets/decomposed/`` at the requested threshold. So decomposition is opt-in per link.
+  - When a link defines no ``<collision>``, one is synthesized from its ``<visual>`` so the visual
+    mesh is reused as the collision shape. This synthesis happens at the URDF level, so it stays
+    correct per link even when MuJoCo fuses fixed-jointed bodies together. A mesh shared by a visual
+    and a collision is converted once and reused for both (and, if that link requests decomposition,
+    the whole mesh renders while its decomposed pieces collide).
+  - The converter uses MuJoCo ``<default>`` class blocks to centralise the physics attributes
+    so individual geoms stay compact. Three classes are auto-generated in the output MJCF
+    (unless the user already supplies them via ``mujoco_inputs``, in which case the user's
+    definition is kept as-is):
+
+    .. code-block:: xml
+
+       <default>
+         <default class="visual">
+           <geom contype="0" conaffinity="0" group="2" density="0"/>
+         </default>
+         <default class="collision">
+           <geom group="3" type="mesh" contype="1" conaffinity="1" material="bright_orange"/>
+         </default>
+         <default class="decomposed_collision">
+           <geom group="3" type="mesh" contype="1" conaffinity="1"/>
+         </default>
+       </default>
+
+    - **Visual** geoms (``class="visual"``) are render-only and never collide.  They keep their
+      ``rgba`` for colour; the raw URDF-import attrs (``contype``, ``conaffinity``, ``group``,
+      ``density``) are stripped from the geom element and inherited from the class default.
+    - **Collision** geoms (``class="collision"``) are whole-mesh or primitive shapes that
+      collide (``contype="1" conaffinity="1"``).  The class sets ``type="mesh"`` as a fallback;
+      primitive collisions carry their own explicit ``type`` (e.g. ``box``) which overrides it.
+      They are tinted ``bright_orange`` (via the class default's ``material``) so they are easy
+      to inspect in the viewer (toggle group 3); the material is added to ``<asset>``
+      automatically.  If the user provides a ``bright_orange`` material in ``mujoco_inputs`` it
+      is left untouched.
+    - **Decomposed collision** geoms (``class="decomposed_collision"``) are the convex pieces
+      produced by obj2mjcf.  They reference a mesh by name only, so the class sets
+      ``type="mesh"`` (without it MuJoCo defaults to ``type="sphere"`` and fits a sphere around
+      each piece).  ``group="3"`` keeps them in the collision group and ``contype="1"
+      conaffinity="1"`` makes them collide with everything; no ``material`` override is applied
+      so obj2mjcf's own per-piece colours remain visible and each convex hull stays
+      distinguishable in the viewer.
+  - Mirrored links (e.g. left/right feet) make MuJoCo emit a scaled sibling of a decomposed
+    mesh (same source, ``scale="1 -1 1"``). The sibling is decomposed as well - scaled copies
+    of the convex pieces are generated - so both sides of a mirrored link get the
+    decomposition rather than only one.
 
 - Publishes the new formatted robot description XML file that can be used for conversion.
 - Converts the new robot description URDF file.

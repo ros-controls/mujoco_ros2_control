@@ -31,7 +31,6 @@ import trimesh  # Added trimesh
 
 from xml.dom import minidom
 import mujoco_ros2_control as mrc
-import pathlib
 
 
 def extract_rgba(visual):
@@ -67,221 +66,209 @@ def extract_rgba(visual):
     return np.array([0.7, 0.7, 0.7, 1.0])
 
 
-def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, decompose_dict):
-    # keep track of files we have already processed so we don't do it again
-    converted_filenames = []
+def _export_stl_to_obj(full_filepath, output_path, mesh_item, mesh_name):
+    """Convert an STL source mesh to an OBJ at output_path, baking in the URDF color."""
+    mesh = trimesh.load(full_filepath)
+    if "color" in mesh_item:
+        # trimesh expects an rgba; make a material so the color survives the export
+        rgba = mesh_item["color"]
+        mtl_name = "mtl_" + mesh_name
+        material = trimesh.visual.material.SimpleMaterial(
+            name=mtl_name, diffuse=rgba, glossiness=1000, specular=[0.2, 0.2, 0.2]
+        )
+        mesh.visual = trimesh.visual.TextureVisuals(material=material)
+        mesh.export(output_path, include_color=True, mtl_name=mtl_name)
+    else:
+        mesh.export(output_path)
 
+
+def _export_dae_to_obj(full_filepath, output_path, mesh_name):
+    """Convert a Collada (.dae) source mesh to an OBJ at output_path, preserving its
+    materials/textures (MuJoCo cannot load DAE directly, so conversion is required)."""
+    # keep track of the image files that we need to copy from the dae
+    image_files = mrc.get_images_from_dae(full_filepath)
+    copied_image_files = []
+
+    # set z axis to up in the dae file because that is how MuJoCo expects it
+    z_up_dae_txt = mrc.set_up_axis_to_z_up(full_filepath)
+
+    # make a temporary file rather than overwriting the old one
+    temp_file = tempfile.NamedTemporaryFile(suffix=".dae", mode="w+", delete=False)
+    temp_filepath = temp_file.name
+    temp_folder = os.path.dirname(temp_filepath)
+    try:
+        temp_file.write(z_up_dae_txt)
+        temp_file.close()
+
+        for image_file in image_files:
+            shutil.copy2(image_file, temp_folder)
+            copied_image_files.append(f"{temp_folder}/{os.path.basename(image_file)}")
+
+        scene = trimesh.load(temp_filepath, force=trimesh.scene)
+
+        # The default glossiness was way too high, so reassign default glossiness and
+        # specular but keep the rgba values. Skipped when there are image files so we
+        # don't accidentally overwrite textures.
+        if not image_files:
+            for geom in scene.geometry.values():
+                visual = geom.visual
+                rgba = extract_rgba(visual)
+                new_mat = trimesh.visual.material.SimpleMaterial(
+                    diffuse=rgba[:3],
+                    alpha=rgba[3],
+                    glossiness=1000,
+                    specular=[0.2, 0.2, 0.2],
+                )
+                visual.material = new_mat
+
+        # give the material a unique name so that it can be properly referenced
+        mtl_modifier = f"{mesh_name}"
+        mtl_name = "mtl_" + mtl_modifier
+        mtl_filepath = os.path.dirname(output_path) + f"/{mtl_name}"
+        scene.export(output_path, include_color=True, mtl_name=mtl_name)
+        mrc.rename_material_textures(dir_path=os.path.dirname(output_path), modifier=mtl_modifier)
+
+        # make the material names unique (material_0 -> material_{mesh_name}_0) so the
+        # per-mesh .obj/.mtl pair don't collide across meshes
+        if os.path.exists(mtl_filepath):
+            for filepath in [mtl_filepath, output_path]:
+                with open(filepath) as f:
+                    data = f.read()
+                data = data.replace("material_", f"material_{mtl_modifier}_")
+                with open(filepath, "w") as f:
+                    f.write(data)
+    finally:
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
+
+    for copied_image_file in copied_image_files:
+        if os.path.exists(copied_image_file):
+            os.remove(copied_image_file)
+
+
+def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, decompose_dict):
+    """
+    Materializes each URDF mesh into the assets folder and rewrites xml_data to point at
+    it. Visual and collision meshes are routed differently:
+
+    - Visual-only meshes are plain references for rendering: kept as-is (.stl/.obj copied,
+      .dae converted to .obj) under ``VISUAL_PATH_NAME``. They are never decomposed and
+      never run through obj2mjcf; their color is applied later as the geom's rgba.
+    - Collision meshes (and the collision side of a shared mesh) are converted to a whole
+      .obj under ``DECOMPOSED_PATH_NAME/<stem>/`` so run_obj2mjcf can convex-decompose them
+      for the collision class.
+    - A mesh used by both a visual and a collision (the shared / fallback case) is
+      converted once: the single whole .obj backs the visual geom directly, and its
+      decomposed pieces back the collision geoms - no duplicate copy.
+    """
     # clean assets directory and remake required paths
     if os.path.exists(f"{directory}assets/"):
         shutil.rmtree(f"{directory}assets/")
+    os.makedirs(f"{directory}assets/{mrc.VISUAL_PATH_NAME}", exist_ok=True)
     os.makedirs(f"{directory}assets/{mrc.COMPOSED_PATH_NAME}", exist_ok=True)
     os.makedirs(f"{directory}assets/{mrc.DECOMPOSED_PATH_NAME}", exist_ok=True)
 
     for mesh_name in mesh_info_dict:
         mesh_item = mesh_info_dict[mesh_name]
         filename = os.path.basename(mesh_item["filename"])
-        filename_no_ext = os.path.splitext(filename)[0]
-        filename_ext = os.path.splitext(filename)[1]
+        filename_ext = os.path.splitext(filename)[1].lower()
         full_filepath = mesh_item["filename"]
         new_filepath = mesh_item["new_filepath"]
-        if full_filepath in converted_filenames:
-            pass
+        used_as_visual = mesh_item.get("used_as_visual", False)
+        used_as_collision = mesh_item.get("used_as_collision", False)
+        # Only decompose a collision mesh when its link was named in a decompose_mesh input.
+        decompose_this = used_as_collision and (mesh_name in decompose_dict)
 
-        print(f"processing {full_filepath} (mesh_name={mesh_name})")
+        print(
+            f"processing {full_filepath} (mesh_name={mesh_name}, collision={used_as_collision}, "
+            f"decompose={decompose_this})"
+        )
 
-        # if we want to decompose the mesh, put it in decomposed filepath, otherwise put it in full
-        # Note: we use the mesh_name as the the unique rather than filename_no_ext to avoid collisions
-        # for commonly named elements like on UR robots.
-        if mesh_name in decompose_dict or filename_no_ext in decompose_dict:
-            assets_relative_filepath = f"{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}/"
-            os.makedirs(f"{directory}assets/{assets_relative_filepath}", exist_ok=True)
+        if decompose_this:
+            # whole .obj in the decomposed dir so obj2mjcf --decompose can run on it; the
+            # visual side of a shared mesh reuses that same whole .obj
+            os.makedirs(f"{directory}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}", exist_ok=True)
+            assets_relative_filepath = f"{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}"
+            force_obj = True
         else:
-            assets_relative_filepath = f"{mrc.COMPOSED_PATH_NAME}/"
-        assets_relative_filepath += mesh_name
+            # plain reference, used directly: visual meshes (and the shared case) go to the
+            # visual dir, collision-only meshes used directly go to the composed dir
+            plain_dir = mrc.VISUAL_PATH_NAME if used_as_visual else mrc.COMPOSED_PATH_NAME
+            assets_relative_filepath = f"{plain_dir}/{mesh_name}"
+            force_obj = False
 
         output_path = f"{directory}assets/{assets_relative_filepath}.obj"
 
-        # Import the .stl or .dae file
-        if filename_ext.lower() == ".stl":
-            if filename_no_ext in decompose_dict and not convert_stl_to_obj:
-                raise ValueError("The --convert_stl_to_obj argument must be specified to decompose .stl mesh")
-            if convert_stl_to_obj:
-                # Load mesh using trimesh
-                mesh = trimesh.load(full_filepath)
-
-                # bring in file color from urdf
-                if "color" in mesh_item:
-                    # trimesh expects 0-255 uint8 for colors
-                    rgba = mesh_item["color"]
-                    # make a material for the rgba values and export it
-                    mtl_name = "mtl_" + mesh_name
-                    material = trimesh.visual.material.SimpleMaterial(
-                        name=mtl_name, diffuse=rgba, glossiness=1000, specular=[0.2, 0.2, 0.2]
-                    )  # RGBA
-                    mesh.visual = trimesh.visual.TextureVisuals(material=material)
-
-                # Export to OBJ
-                mesh.export(output_path, include_color=True, mtl_name=mtl_name)
+        if filename_ext == ".stl":
+            if convert_stl_to_obj or force_obj:
+                # collision meshes always need an .obj (obj2mjcf input); visuals only when asked
+                _export_stl_to_obj(full_filepath, output_path, mesh_item, mesh_name)
                 xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.obj")
             else:
+                # plain visual reference: MuJoCo loads .stl directly, no conversion needed
                 shutil.copy2(full_filepath, f"{directory}assets/{assets_relative_filepath}.stl")
                 xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.stl")
-                pass
-        elif filename_ext.lower() == ".obj":
-            # If import .obj files from URDF
+        elif filename_ext == ".obj":
             if not mesh_item["is_pre_generated"]:
-                shutil.copy2(full_filepath, f"{directory}assets/{assets_relative_filepath}.obj")
-                # If the .obj depends on a mtl should copy also this
+                shutil.copy2(full_filepath, output_path)
+                # if the .obj depends on a mtl, copy that too
                 old_directory = os.path.dirname(mesh_item["filename"])
                 if os.path.exists(old_directory + "/material.mtl"):
                     final_path = os.path.dirname(assets_relative_filepath)
                     shutil.copy2(old_directory + "/material.mtl", f"{directory}assets/{final_path}/material.mtl")
-            pass
-            # objs are ok as is
-        elif filename_ext.lower() == ".dae":
-            # keep track of the image files that we need to copy from the dae
-            image_files = mrc.get_images_from_dae(full_filepath)
-            # keep track of the files that were copied to tmp directory to delete
-            copied_image_files = []
-
-            # set z axis to up in the dae file because that is how MuJoCo expects it
-            z_up_dae_txt = mrc.set_up_axis_to_z_up(full_filepath)
-
-            # make a temporary file rather than overwriting the old one
-            temp_file = tempfile.NamedTemporaryFile(suffix=".dae", mode="w+", delete=False)
-            temp_filepath = temp_file.name
-            temp_folder = os.path.dirname(temp_filepath)
-            try:
-                temp_file.write(z_up_dae_txt)
-                temp_file.close()
-
-                # copy relevant images into the temporary directory
-                for image_file in image_files:
-                    shutil.copy2(image_file, temp_folder)
-                    copied_image_files.append(f"{temp_folder}/{os.path.basename(image_file)}")
-
-                # Load scene using trimesh
-                scene = trimesh.load(temp_filepath, force=trimesh.scene)
-
-                # The default glossiness was way too high, so here we iterate over each visual
-                # element, assign default glossiness and specular but keep the rgba values.
-                # We also ignore this process if there are any image files so that we don't
-                # accidentally overwrite those. Technically we could have cases where daes have
-                # both images, and materials but I think the logic gets exceedingly complex to
-                # handle that.
-                if not image_files:
-                    for geom in scene.geometry.values():
-                        visual = geom.visual
-                        rgba = extract_rgba(visual)
-                        new_mat = trimesh.visual.material.SimpleMaterial(
-                            diffuse=rgba[:3],
-                            alpha=rgba[3],
-                            glossiness=1000,
-                            specular=[0.2, 0.2, 0.2],
-                        )
-                        visual.material = new_mat
-
-                # give the material a unique name so that it can be properly referenced
-                mtl_modifier = f"{mesh_name}"
-                mtl_name = "mtl_" + mtl_modifier
-                mtl_filepath = os.path.dirname(output_path) + f"/{mtl_name}"
-                scene.export(output_path, include_color=True, mtl_name=mtl_name)
-                # rename textures
-                mrc.rename_material_textures(dir_path=os.path.dirname(output_path), modifier=mtl_modifier)
-
-                # we need to modify the material names to not all be material_X so they don't conflict
-                # all of the objs will have a line that looks like
-                #   usemtl material_0
-                # and all of the mtl files will have a line that looks like
-                #   newmtl material_0
-                # We will modify both of them to be like so
-                #   usemtl material_{mesh_name}_0
-                #   newmtl material_{mesh_name}_0
-
-                if os.path.exists(mtl_filepath):
-                    for filepath in [mtl_filepath, output_path]:
-                        with open(filepath) as f:
-                            data = f.read()
-                        data = data.replace("material_", f"material_{mtl_modifier}_")
-                        with open(filepath, "w") as f:
-                            f.write(data)
-            finally:
-                if os.path.exists(temp_filepath):
-                    os.remove(temp_filepath)
-
-            # get rid of copied image files in the temporary file directory
-            for copied_image_file in copied_image_files:
-                if os.path.exists(copied_image_file):
-                    os.remove(copied_image_file)
-
+            xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.obj")
+        elif filename_ext == ".dae":
+            _export_dae_to_obj(full_filepath, output_path, mesh_name)
             xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.obj")
         else:
-            print(f"Can't convert {full_filepath} \n\tOnly stl and dae file extensions are supported at the moment")
+            print(f"Can't convert {full_filepath} \n\tOnly stl, obj and dae file extensions are supported")
             print(f"extension: {filename_ext}")
-            pass
-
-        # keep track of what we have been working on
-        converted_filenames.append(full_filepath)
 
     return xml_data
 
 
 def run_obj2mjcf(output_filepath, decompose_dict, mesh_info_dict):
-    # remove the folders in the asset directory so that we are clean to run obj2mjcf
-    with os.scandir(f"{output_filepath}assets/{mrc.COMPOSED_PATH_NAME}") as entries:
-        for entry in entries:
-            if entry.is_dir():
-                shutil.rmtree(entry.path)
-
-    # remove the folders in the asset directory so that we are clean to run obj2mjcf
+    """
+    Convex-decomposes the collision meshes that were explicitly requested via a
+    decompose_mesh input (obj2mjcf --decompose, at the requested coacd threshold). Visual
+    meshes and collision meshes used directly are plain references and are NOT processed
+    here.
+    """
+    # clean any pre-existing decomposed sub-folders so the run starts fresh
     top_level_path = f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}"
     for item in os.listdir(top_level_path):
         first_level_path = os.path.join(top_level_path, item)
         if os.path.isdir(first_level_path):
-            # Now check inside this first-level directory
             for sub_item in os.listdir(first_level_path):
                 second_level_path = os.path.join(first_level_path, sub_item)
                 if os.path.isdir(second_level_path):
                     shutil.rmtree(second_level_path)
 
-    # run obj2mjcf to generate folders of processed objs
-    cmd = ["obj2mjcf", "--obj-dir", f"{output_filepath}assets/{mrc.COMPOSED_PATH_NAME}", "--save-mjcf"]
-    subprocess.run(cmd)
-    composed_base_path = f"{output_filepath}assets/{mrc.COMPOSED_PATH_NAME}"
-    for file in os.listdir(composed_base_path):
-        if file.lower().endswith(".obj"):
-            mesh_name = pathlib.Path(file).stem
-            mesh_subfolder = os.path.join(composed_base_path, mesh_name)
-
-            target_path = os.path.join(mesh_subfolder, file)
-            source_path = os.path.join(composed_base_path, file)
-
-            try:
-                if not os.path.exists(target_path):
-                    shutil.copy2(source_path, target_path)
-            except Exception as e:
-                print(f"Error while running the obj2mjcf command for {mesh_name}:{e}")
-                raise
-
-    thresholds_file = os.path.join(f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}", "metadata.json")
+    thresholds_file = os.path.join(top_level_path, "metadata.json")
     thresholds_data = {}
 
-    # run obj2mjcf to generate folders of processed objs with decompose option for decomposed components
-    for mesh_name, threshold in decompose_dict.items():
-        mesh_item = mesh_info_dict[mesh_name]
-        if not mesh_item["is_pre_generated"]:
-            cmd = [
-                "obj2mjcf",
-                "--obj-dir",
-                f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}",
-                "--save-mjcf",
-                "--decompose",
-                "--coacd-args.threshold",
-                threshold,
-            ]
-            subprocess.run(cmd)
+    # decompose only the collision meshes named in a decompose_mesh input
+    for mesh_name, mesh_item in mesh_info_dict.items():
+        if not mesh_item.get("used_as_collision", False):
+            continue
+        if mesh_name not in decompose_dict:
+            continue
+        if mesh_item["is_pre_generated"]:
+            continue
 
-            thresholds_data[mesh_name] = float(threshold)
+        threshold = str(decompose_dict[mesh_name])
+        cmd = [
+            "obj2mjcf",
+            "--obj-dir",
+            f"{output_filepath}assets/{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}",
+            "--save-mjcf",
+            "--decompose",
+            "--coacd-args.threshold",
+            threshold,
+        ]
+        subprocess.run(cmd)
+
+        thresholds_data[mesh_name] = float(threshold)
 
     with open(thresholds_file, "w") as f:
         json.dump(thresholds_data, f, indent=4)
@@ -321,10 +308,14 @@ def fix_mujoco_description(
 
     # Update and add the new fixed assets
     dom = mrc.update_obj_assets(dom, output_filepath, mesh_info_dict)
-    dom = mrc.update_non_obj_assets(dom, output_filepath)
+    dom = mrc.update_non_obj_assets(dom, output_filepath, mesh_info_dict)
 
-    # Add the MuJoCo input elements
+    # Add the MuJoCo input elements (user-defined default classes land here)
     dom = mrc.add_mujoco_inputs(dom, raw_inputs, scene_inputs)
+
+    # Fill in any missing visual/collision/decomposed_collision default class blocks so
+    # geoms that only carry class= can inherit their physics attrs from the defaults.
+    dom = mrc.ensure_default_geom_classes(dom)
 
     # Add links as sites
     dom = mrc.add_links_as_sites(urdf, dom, request_add_free_joint)
@@ -484,9 +475,11 @@ def main(args=None):
     # Add required MuJoCo tags to the starting URDF
     xml_data = mrc.add_mujoco_info(urdf, output_filepath, parsed_args.publish_topic, parsed_args.fuse)
 
-    # get rid of collision data, assuming the visual data is much better resolution.
-    # not sure if this is the best move...
-    xml_data = mrc.remove_tag(xml_data, "collision")
+    # Keep authored collision geometry so it drives the MuJoCo collision geoms, and
+    # only synthesize a collision from the visual for links that don't define one.
+    # This way visual meshes render the robot while the (often simpler) collision
+    # geometry is used for physics, with the visual mesh as the fallback.
+    xml_data = mrc.add_missing_collisions(xml_data)
 
     xml_data = mrc.replace_package_names(xml_data)
     mesh_info_dict, xml_data = mrc.extract_mesh_info(xml_data, parsed_args.asset_dir, decompose_dict)
