@@ -17,6 +17,7 @@
 # License for the specific language governing permissions and limitations
 # under the License
 
+import hashlib
 import os
 import pathlib
 import re
@@ -184,6 +185,21 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
     # that one source.
     uri_to_stem = {}
 
+    # Content-addressed lookup so a collision mesh that is a byte-identical copy of an
+    # already-cataloged file (e.g., collision/ holds copies of visual/) collapses into
+    # that entry instead of becoming a disambiguated duplicate.
+    content_to_stem = {}
+    file_digests = {}
+
+    def file_digest(path):
+        if path not in file_digests:
+            try:
+                with open(path, "rb") as f:
+                    file_digests[path] = hashlib.md5(f.read()).hexdigest()
+            except OSError:
+                file_digests[path] = None
+        return file_digests[path]
+
     def mark_usage(stem_key, is_collision):
         entry = mesh_info_dict[stem_key]
         if is_collision:
@@ -205,7 +221,24 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
             mark_usage(uri_to_stem[uri], is_collision)
             return
 
-        original_stem = pathlib.Path(uri).stem  # NEW: remember original for disambiguation
+        scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
+
+        # A collision mesh byte-identical to an already-cataloged file at the same scale
+        # also collapses into that entry: identical content means identical converted
+        # assets and decomposition. Rewrite the URDF so both references share one file
+        # and MuJoCo sees a single asset.
+        digest = file_digest(uri)
+        if is_collision and digest is not None:
+            shared_stem = content_to_stem.get((digest, scale))
+            if shared_stem is not None:
+                shared = mesh_info_dict[shared_stem]
+                shared_ref = shared["new_filepath"] if shared["source_stem"] != shared_stem else shared["filename"]
+                raw_xml = raw_xml.replace(uri, shared_ref)
+                uri_to_stem.setdefault(uri, shared_stem)
+                mark_usage(shared_stem, is_collision)
+                return
+
+        original_stem = pathlib.Path(uri).stem  # remember original for disambiguation
         stem = original_stem
         counter = 0
         while stem in stem_to_original_uri and stem_to_original_uri[stem] != uri:
@@ -213,59 +246,11 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
             stem = f"{original_stem}__{counter}"
         stem_to_original_uri[stem] = uri
 
-        # A collision mesh is only decomposed when its link was named in a decompose_mesh
-        # input; otherwise (and for all visual meshes) it is used directly as a plain mesh.
-        decompose_this = is_collision and (original_stem in decompose_dict)
-
-        # Select the mesh file: use a pre-generated OBJ if available and valid; otherwise use the original
-        is_pre_generated = False
-        new_uri = uri  # default fallback
-
-        if asset_dir:
-            if decompose_this:
-                # Decomposed collision mesh: reuse a pre-generated OBJ only if its coacd
-                # threshold matches the requested one.
-                mesh_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/{stem}/{stem}/{stem}.obj"
-                settings_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/metadata.json"
-                required_threshold = float(decompose_dict[original_stem])
-
-                if os.path.exists(mesh_file) and os.path.exists(settings_file):
-                    try:
-                        with open(settings_file) as f:
-                            data = json.load(f)
-                            used_threshold = float(data.get(f"{stem}"))
-                    except (FileNotFoundError, PermissionError, json.JSONDecodeError) as e:
-                        print(f"Warning: could not read thresholds for {stem}: {e}")
-                        used_threshold = None
-                    # Use existing decomposed object only if it has the same threshold, otherwise regenerate it.
-                    if used_threshold is not None and math.isclose(used_threshold, required_threshold, rel_tol=1e-9):
-                        new_uri = mesh_file
-                        is_pre_generated = True
-                        raw_xml = raw_xml.replace(geom.filename, new_uri)
-                    else:
-                        print(
-                            f"Existing decomposed obj for {stem} has different threshold {used_threshold} "
-                            f"than required {required_threshold}. Regenerating..."
-                        )
-            else:
-                # Plain mesh (visual, or a collision used directly): reuse a pre-generated
-                # asset (.obj or copied .stl) from the appropriate plain dir.
-                plain_dir = VISUAL_PATH_NAME if not is_collision else COMPOSED_PATH_NAME
-                for ext in (".obj", ".stl"):
-                    candidate = f"{asset_dir}/{plain_dir}/{stem}{ext}"
-                    if os.path.exists(candidate):
-                        new_uri = candidate
-                        is_pre_generated = True
-                        raw_xml = raw_xml.replace(geom.filename, new_uri)
-                        break
-
-        scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
         # Collision elements carry no <material>, so they default to white.
         rgba = (1.0, 1.0, 1.0, 1.0) if is_collision else resolve_color(element)
 
         mesh_dict_value = {
-            "is_pre_generated": is_pre_generated,
-            "filename": new_uri,
+            "filename": uri,
             "scale": scale,
             "color": rgba,
         }
@@ -283,32 +268,32 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
             mark_usage(existing_identifier, is_collision)
             return
 
-        # get the name of the new file so that we can reference it later, but grab correct
-        # pre generated asset if it exists
-        path_obj = pathlib.Path(new_uri)
-        if is_pre_generated and decompose_this:
-            # pre-generated decomposed layout: .../<stem>/<stem>/<stem>.obj
-            new_filepath = str(path_obj.parent.parent / stem / (stem + path_obj.suffix))
-        else:
-            # plain asset (visual or direct collision), or a freshly-sourced mesh
-            new_filepath = str(path_obj.parent / (stem + path_obj.suffix))
+        # the (possibly disambiguated) reference the URDF will carry for this entry
+        path_obj = pathlib.Path(uri)
+        new_filepath = str(path_obj.parent / (stem + path_obj.suffix))
 
-        # add the unique name to the dictionary
+        # add the unique name to the dictionary.
+        # Whether an entry can reuse a cached asset depends on where it will live
+        # (visual/full/decomposed), which depends on usage flags that are
+        # only complete after both passes - see resolve_pregenerated below.
         mesh_info_dict[stem] = {
-            "is_pre_generated": is_pre_generated,
-            "filename": new_uri,
+            "is_pre_generated": False,
+            "filename": uri,
             "scale": scale,
             "color": rgba,
             "new_filepath": new_filepath,
+            "source_stem": original_stem,
             # which classes reference this source; a shared source carries both
             "used_as_visual": not is_collision,
             "used_as_collision": is_collision,
         }
         uri_to_stem.setdefault(uri, stem)
+        if digest is not None:
+            content_to_stem.setdefault((digest, scale), stem)
 
         # if we changed the identifier, make sure we update it in the underlying file
-        if stem != pathlib.Path(new_uri).stem:
-            raw_xml = raw_xml.replace(new_uri, new_filepath)
+        if stem != original_stem:
+            raw_xml = raw_xml.replace(uri, new_filepath)
 
     # First pass: visual meshes (their material color wins). Second pass: collision
     # meshes, which only add genuinely distinct meshes thanks to processed_uris.
@@ -319,7 +304,102 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
         for col in link.collisions:
             process_geometry(col, is_collision=True)
 
+    # Phase 2: with usage flags final, probe the pregenerated cache at each entry's home
+    raw_xml = resolve_pregenerated(mesh_info_dict, raw_xml, asset_dir, decompose_dict)
+
     return mesh_info_dict, raw_xml
+
+
+def decompose_threshold(mesh_name, mesh_item, decompose_dict):
+    """
+    Returns the coacd threshold for a mesh entry that should be convex-decomposed, or
+    None when it should not be. Only collision-used meshes decompose, and only when
+    named in a decompose_mesh input - matched by entry name or, for entries renamed by
+    stem disambiguation, by the source file's stem.
+    """
+    if not mesh_item.get("used_as_collision", False):
+        return None
+    return decompose_dict.get(mesh_name, decompose_dict.get(mesh_item.get("source_stem")))
+
+
+def mesh_home(mesh_name, mesh_item, decompose_dict):
+    """
+    The single source of truth for where a mesh entry lives in the assets tree:
+
+      - DECOMPOSED_PATH_NAME for meshes that decompose
+      - COMPOSED_PATH_NAME for other collision-used meshes
+      - VISUAL_PATH_NAME for render-only meshes.
+
+    The cache probe, conversion routing, obj2mjcf runs, and the pregenerated copy-in
+    must all agree on this, so they all call it.
+    """
+    if decompose_threshold(mesh_name, mesh_item, decompose_dict) is not None:
+        return DECOMPOSED_PATH_NAME
+    if mesh_item.get("used_as_collision", False):
+        return COMPOSED_PATH_NAME
+    return VISUAL_PATH_NAME
+
+
+def resolve_pregenerated(mesh_info_dict, raw_xml, asset_dir, decompose_dict):
+    """
+    Probes the pregenerated asset cache (--asset_dir) for every catalog entry and, on a
+    hit, points the entry and the URDF at the cached file by ABSOLUTE path. The MuJoCo
+    compile then reads the cache directly; copy_pre_generated_meshes later brings the
+    cached assets into the output tree and post-processing relativizes the references.
+
+    Runs after both catalog passes because an entry's home (visual/full/decomposed)
+    depends on its final usage flags. A decomposed home is only accepted when the coacd
+    threshold recorded in the cache's metadata.json matches the requested one.
+    """
+    if not asset_dir:
+        return raw_xml
+
+    metadata = {}
+    metadata_file = f"{asset_dir}/{DECOMPOSED_PATH_NAME}/metadata.json"
+    if os.path.exists(metadata_file):
+        try:
+            with open(metadata_file) as f:
+                metadata = json.load(f)
+        except (PermissionError, json.JSONDecodeError) as e:
+            print(f"Warning: could not read decomposition metadata: {e}")
+
+    for mesh_name, mesh_item in mesh_info_dict.items():
+        home = mesh_home(mesh_name, mesh_item, decompose_dict)
+
+        if home == DECOMPOSED_PATH_NAME:
+            threshold = decompose_threshold(mesh_name, mesh_item, decompose_dict)
+            candidates = [f"{asset_dir}/{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/{mesh_name}.obj"]
+            used_threshold = metadata.get(mesh_name)
+            if used_threshold is not None and not math.isclose(float(used_threshold), float(threshold), rel_tol=1e-9):
+                print(
+                    f"Existing decomposed obj for {mesh_name} has different threshold "
+                    f"{used_threshold} than required {threshold}. Regenerating..."
+                )
+                continue
+            if used_threshold is None:
+                # no metadata record: the cached folder (if any) is unverifiable
+                continue
+        else:
+            candidates = [f"{asset_dir}/{home}/{mesh_name}{ext}" for ext in (".obj", ".stl")]
+
+        # the string the URDF currently carries for this entry: the raw source URI, or
+        # the disambiguated path substituted when the stem was renamed (new_filepath is
+        # pathlib-normalized, so it only matches the document in the renamed case)
+        if mesh_item.get("source_stem") != mesh_name:
+            current_ref = mesh_item["new_filepath"]
+        else:
+            current_ref = mesh_item["filename"]
+
+        for candidate in candidates:
+            if not os.path.exists(candidate):
+                continue
+            raw_xml = raw_xml.replace(current_ref, candidate)
+            mesh_item["filename"] = candidate
+            mesh_item["new_filepath"] = candidate
+            mesh_item["is_pre_generated"] = True
+            break
+
+    return raw_xml
 
 
 def replace_package_names(xml_data):
@@ -452,15 +532,22 @@ def set_up_axis_to_z_up(dae_file_path):
 
 def update_obj_assets(dom, output_filepath, mesh_info_dict):
     """
-    Expands each decomposed collision mesh into its obj2mjcf convex pieces.
+    Expands every obj2mjcf-processed mesh into the final model.
 
-    Only meshes that were decomposed (collision meshes, found under DECOMPOSED_PATH_NAME)
-    are processed. For each such mesh, the collision geoms referencing it (the no-contype
-    geoms) are replaced with the decomposed sub-geoms in the ``collision`` class. Visual
-    geoms (contype-bearing) are left untouched referencing the whole mesh, and when the
-    mesh is shared by a visual the whole ``<mesh>`` asset is kept so that visual still
-    resolves. Visual-only meshes live in VISUAL_PATH_NAME, are not decomposed, and are
-    left as plain single references.
+    Two kinds of processed meshes exist:
+
+    - Decomposed collision meshes (under DECOMPOSED_PATH_NAME): their collision geoms
+      are replaced with the convex pieces in the ``decomposed_collision`` class, keeping
+      obj2mjcf's per-piece colors so the hulls stay distinguishable when their viewer
+      group is toggled on. The whole ``<mesh>`` asset is kept while a visual still
+      references it.
+    - Plain meshes (under COMPOSED_PATH_NAME): the whole-mesh asset is swapped for
+      obj2mjcf's per-material submeshes, materials, and textures.
+
+    In both cases obj2mjcf's own classification drives the geom split: its
+    class="visual" sub-geoms (carrying materials) replace URDF visuals, its collision
+    sub-geoms replace URDF collisions. This is what lets visual meshes render with
+    their real materials instead of a flat rgba.
     """
     # Find the <asset> element
     asset = dom.getElementsByTagName("asset")
@@ -471,24 +558,13 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
         print("No assets in URDF, skipping conversions...")
         return dom
 
-    # Find the <worldbody> element
-    worldbody = dom.getElementsByTagName("worldbody")
-    worldbody_element = worldbody[0]
-    worldbody_geoms = worldbody_element.getElementsByTagName("geom")
-
-    # get all of the mesh tags in the asset element
+    worldbody_element = dom.getElementsByTagName("worldbody")[0]
     asset_element = asset[0]
-    meshes = asset_element.getElementsByTagName("mesh")
-
-    full_decomposed_path = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}"
-    decomposed_dirs = [
-        name for name in os.listdir(full_decomposed_path) if os.path.isdir(os.path.join(full_decomposed_path, name))
-    ]
 
     # obj2mjcf emits its meshes WITHOUT a name attribute, so MuJoCo derives the name from
     # the file stem. We dedupe on that "effective name" (explicit name, else file stem):
     # this skips obj2mjcf's whole/visual mesh when it collides with the kept whole mesh,
-    # while still letting every uniquely-named collision piece through.
+    # while still letting every uniquely-named piece through.
     def effective_mesh_name(m):
         name = m.getAttribute("name")
         return name if name else pathlib.Path(m.getAttribute("file")).stem
@@ -497,45 +573,18 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
     existing_material_names = {m.getAttribute("name") for m in asset_element.getElementsByTagName("material")}
     existing_texture_names = {t.getAttribute("name") for t in asset_element.getElementsByTagName("texture")}
 
-    for mesh in meshes:
-        mesh_name = mesh.getAttribute("name")
-
-        # only collision meshes are decomposed; visual-only plain references are skipped
-        if mesh_name not in decomposed_dirs:
-            continue
-
-        # This should definitely be there, otherwise something is horribly wrong
-        scale = mesh_info_dict[mesh_name]["scale"]
-        used_as_visual = mesh_info_dict[mesh_name].get("used_as_visual", False)
-
-        mesh_path = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/{mesh_name}.xml"
-        if not os.path.exists(mesh_path):
-            continue
-
-        sub_dom = minidom.parse(mesh_path)
-        sub_asset_element = sub_dom.getElementsByTagName("asset")[0]
-
-        # If a visual also uses this mesh (shared / fallback), keep the whole <mesh> asset
-        # so the visual geom still resolves; otherwise the undecomposed mesh is unused.
-        if not used_as_visual:
-            asset_element.removeChild(mesh)
-            existing_mesh_names.discard(mesh_name)
-
-        # bring in the decomposed sub-mesh assets, skipping any effective name we already
-        # have (notably obj2mjcf's nameless visual mesh, which maps to mesh_name)
+    def merge_sub_assets(sub_asset_element, path_prefix, scale):
+        """Appends the obj2mjcf file's meshes/materials/textures into the model's assets,
+        de-duplicated by name, with file paths rewritten relative to the assets dir."""
         for sub_mesh in sub_asset_element.getElementsByTagName("mesh"):
             eff = effective_mesh_name(sub_mesh)
             if eff in existing_mesh_names:
                 continue
-            sub_mesh_file = sub_mesh.getAttribute("file")
-            sub_mesh.setAttribute("file", f"{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/{sub_mesh_file}")
+            sub_mesh.setAttribute("file", f"{path_prefix}/{sub_mesh.getAttribute('file')}")
             if scale:
                 sub_mesh.setAttribute("scale", scale)
             asset_element.appendChild(sub_mesh)
             existing_mesh_names.add(eff)
-
-        # bring in any materials/textures (collision usually has none, kept for safety),
-        # also de-duplicating by name
         for sub_material in sub_asset_element.getElementsByTagName("material"):
             name = sub_material.getAttribute("name")
             if name in existing_material_names:
@@ -547,40 +596,77 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                 name = sub_texture.getAttribute("name")
                 if name in existing_texture_names:
                     continue
-                sub_texture_file = sub_texture.getAttribute("file")
-                sub_texture.setAttribute("file", f"{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/{sub_texture_file}")
+                sub_texture.setAttribute("file", f"{path_prefix}/{sub_texture.getAttribute('file')}")
                 asset_element.appendChild(sub_texture)
                 existing_texture_names.add(name)
 
-        body_element = sub_dom.getElementsByTagName("body")[0]
-        sub_geoms = body_element.getElementsByTagName("geom")
+    def replace_geoms(mesh_name, sub_geoms, collision_class=None):
+        """
+        Replaces every geom referencing mesh_name with the sub-geoms matching its role:
+        obj2mjcf's class="visual" sub-geoms for a URDF visual (which carries a contype marker
+        from the import), the rest for a URDF collision.
 
-        # Replace each collision geom (no contype) referencing this mesh with the decomposed
-        # convex pieces. Visual geoms (contype) are left referencing the whole mesh.
-        for geom_element in list(worldbody_geoms):
+        When ``collision_class`` is given it overrides the class on the collision sub-geoms.
+        This is used to route decomposed pieces into their own class/viewer group.
+        """
+        for geom_element in list(worldbody_element.getElementsByTagName("geom")):
             if geom_element.getAttribute("mesh") != mesh_name:
                 continue
-            if geom_element.hasAttribute("contype"):
-                continue
-
+            is_visual = geom_element.hasAttribute("contype")
             pos = geom_element.getAttribute("pos")
             quat = geom_element.getAttribute("quat")
             parent = geom_element.parentNode
             parent.removeChild(geom_element)
             for sub_geom in sub_geoms:
-                # skip obj2mjcf's own visual geom (it references the whole mesh); only the
-                # convex collision pieces should become collision geoms
-                if sub_geom.getAttribute("class") == "visual" or sub_geom.getAttribute("mesh") == mesh_name:
+                # match obj2mjcf's own classification to the role of the replaced geom
+                if (sub_geom.getAttribute("class") == "visual") != is_visual:
                     continue
                 sub_geom_local = sub_geom.cloneNode(False)
                 if pos:
                     sub_geom_local.setAttribute("pos", pos)
                 if quat:
                     sub_geom_local.setAttribute("quat", quat)
-                sub_geom_local.setAttribute("class", "collision")
-                if sub_geom_local.hasAttribute("rgba"):
-                    sub_geom_local.removeAttribute("rgba")
+                if not is_visual and collision_class:
+                    sub_geom_local.setAttribute("class", collision_class)
                 parent.appendChild(sub_geom_local)
+
+    for mesh in list(asset_element.getElementsByTagName("mesh")):
+        mesh_name = mesh.getAttribute("name")
+
+        # skip assets with no entry of their own, e.g. MuJoCo's auto-renamed scaled
+        # sibling of a mesh referenced at two different scales
+        if mesh_name not in mesh_info_dict:
+            continue
+
+        decomposed_prefix = f"{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}"
+        plain_prefixes = (f"{COMPOSED_PATH_NAME}/{mesh_name}", f"{VISUAL_PATH_NAME}/{mesh_name}")
+        if os.path.exists(f"{output_filepath}assets/{decomposed_prefix}/{mesh_name}.xml"):
+            path_prefix = decomposed_prefix
+            collision_class = "decomposed_collision"
+            # keep the whole <mesh> asset while a visual still resolves against it
+            keep_whole_mesh = mesh_info_dict[mesh_name].get("used_as_visual", False)
+        else:
+            # plain mesh: composed dir (collision-used) or visual dir (render-only)
+            path_prefix = next(
+                (p for p in plain_prefixes if os.path.exists(f"{output_filepath}assets/{p}/{mesh_name}.xml")), None
+            )
+            if path_prefix is None:
+                # not processed by obj2mjcf (e.g. an unconverted plain .stl reference)
+                continue
+            collision_class = None
+            # the per-material submeshes fully replace the whole-mesh asset
+            keep_whole_mesh = False
+
+        sub_dom = minidom.parse(f"{output_filepath}assets/{path_prefix}/{mesh_name}.xml")
+        sub_asset_element = sub_dom.getElementsByTagName("asset")[0]
+
+        if not keep_whole_mesh:
+            asset_element.removeChild(mesh)
+            existing_mesh_names.discard(mesh_name)
+
+        merge_sub_assets(sub_asset_element, path_prefix, mesh_info_dict[mesh_name]["scale"])
+        sub_geoms = sub_dom.getElementsByTagName("body")[0].getElementsByTagName("geom")
+        replace_geoms(mesh_name, sub_geoms, collision_class)
 
     return dom
 
@@ -649,6 +735,51 @@ def update_non_obj_assets(dom, output_filepath, mesh_info_dict=None):
             geom.setAttribute("class", "collision")
             if geom.hasAttribute("rgba"):
                 geom.removeAttribute("rgba")
+
+    return dom
+
+
+def ensure_default_classes(dom):
+    """
+    Ensures the default geom classes the converter tags geoms with (visual, collision,
+    decomposed_collision) exist in the final MJCF. Classes the user already defined via
+    their mujoco inputs are left untouched; only the missing ones are injected, into a
+    top-level <default> block. This keeps the generated model self-contained without
+    requiring every robot config to declare the classes itself.
+    """
+    required = {
+        # render-only geoms: never collide, viewer group 2
+        "visual": {"group": "2", "type": "mesh", "contype": "0", "conaffinity": "0"},
+        # authored / whole-mesh collision geoms: viewer group 3
+        "collision": {"group": "3", "type": "mesh"},
+        # obj2mjcf convex decomposition pieces: same physics as collision, but their own
+        # viewer group (4) so the decomposition can be toggled on for inspection
+        "decomposed_collision": {"group": "4", "type": "mesh"},
+    }
+    existing = {d.getAttribute("class") for d in dom.getElementsByTagName("default")}
+    missing = {name: attrs for name, attrs in required.items() if name not in existing}
+    if not missing:
+        return dom
+
+    # Reuse the first top-level <default> block if one exists, otherwise create one.
+    root = dom.documentElement
+    top_default = None
+    for child in root.childNodes:
+        if child.nodeType == child.ELEMENT_NODE and child.tagName == "default":
+            top_default = child
+            break
+    if top_default is None:
+        top_default = dom.createElement("default")
+        root.appendChild(top_default)
+
+    for name, attrs in missing.items():
+        class_default = dom.createElement("default")
+        class_default.setAttribute("class", name)
+        geom = dom.createElement("geom")
+        for attr, value in attrs.items():
+            geom.setAttribute(attr, value)
+        class_default.appendChild(geom)
+        top_default.appendChild(class_default)
 
     return dom
 
@@ -1304,10 +1435,11 @@ def add_modifiers(dom, modify_element_dict):
 
 def copy_pre_generated_meshes(output_filepath, mesh_info_dict, decompose_dict):
     """
-    Copies pre-generated meshes (from an --asset_dir) into the final MJCF assets
-    structure. Collision meshes are copied as decomposed folders under
-    DECOMPOSED_PATH_NAME; plain visual meshes are copied as single files under
-    VISUAL_PATH_NAME.
+    Copies every cache-resolved entry's assets into the output tree, at the same home
+    mesh_home dictates everywhere else, so the output stays self-contained and usable as
+    a future --asset_dir. Decomposed entries copy their obj2mjcf pieces folder (and merge
+    their threshold into metadata.json); plain entries copy the mesh file plus its
+    obj2mjcf per-mesh folder (materials and mjcf) when present.
     """
     thresholds_file = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/metadata.json"
     thresholds_data = {}
@@ -1318,28 +1450,27 @@ def copy_pre_generated_meshes(output_filepath, mesh_info_dict, decompose_dict):
         except json.JSONDecodeError:
             thresholds_data = {}
 
-    for mesh_name in mesh_info_dict:
-        mesh_item = mesh_info_dict[mesh_name]
+    for mesh_name, mesh_item in mesh_info_dict.items():
         if not mesh_item["is_pre_generated"]:
             continue
 
-        full_path = mesh_item["filename"]
-        # decomposed only when the collision mesh was explicitly requested via decompose_mesh
-        decompose_this = mesh_item.get("used_as_collision", False) and (mesh_name in decompose_dict)
+        # after resolve_pregenerated, filename is the absolute path into the cache
+        cache_path = mesh_item["filename"]
+        home = mesh_home(mesh_name, mesh_item, decompose_dict)
 
-        if decompose_this:
-            # decomposed collision mesh: copy the .../<stem>/<stem>/ folder of pieces
-            threshold = decompose_dict[mesh_name]
-            src_dir = os.path.dirname(full_path)
-            dst_base = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/"
-            shutil.copytree(src_dir, dst_base, dirs_exist_ok=True)
-            thresholds_data[mesh_name] = float(threshold)
+        if home == DECOMPOSED_PATH_NAME:
+            # cache layout: .../decomposed/<name>/<name>/<name>.obj plus the pieces
+            src_dir = os.path.dirname(cache_path)
+            dst_dir = f"{output_filepath}assets/{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}/"
+            shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
+            thresholds_data[mesh_name] = float(decompose_threshold(mesh_name, mesh_item, decompose_dict))
         else:
-            # plain mesh used directly: copy the single file into its plain dir
-            plain_dir = VISUAL_PATH_NAME if mesh_item.get("used_as_visual", False) else COMPOSED_PATH_NAME
-            os.makedirs(f"{output_filepath}assets/{plain_dir}", exist_ok=True)
-            ext = os.path.splitext(full_path)[1]
-            shutil.copy2(full_path, f"{output_filepath}assets/{plain_dir}/{mesh_name}{ext}")
+            dst_dir = f"{output_filepath}assets/{home}"
+            os.makedirs(dst_dir, exist_ok=True)
+            shutil.copy2(cache_path, os.path.join(dst_dir, os.path.basename(cache_path)))
+            src_folder = os.path.join(os.path.dirname(cache_path), mesh_name)
+            if os.path.isdir(src_folder):
+                shutil.copytree(src_folder, os.path.join(dst_dir, mesh_name), dirs_exist_ok=True)
 
     if thresholds_data:
         with open(thresholds_file, "w") as f:

@@ -174,13 +174,21 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
         filename_ext = os.path.splitext(filename)[1].lower()
         full_filepath = mesh_item["filename"]
         new_filepath = mesh_item["new_filepath"]
-        used_as_visual = mesh_item.get("used_as_visual", False)
         used_as_collision = mesh_item.get("used_as_collision", False)
-        # Only decompose a collision mesh when its link was named in a decompose_mesh input.
-        decompose_this = used_as_collision and (mesh_name in decompose_dict)
+        home = mrc.mesh_home(mesh_name, mesh_item, decompose_dict)
+        decompose_this = home == mrc.DECOMPOSED_PATH_NAME
 
-        print(f"processing {full_filepath} (mesh_name={mesh_name}, collision={used_as_collision}, "
-              f"decompose={decompose_this})")
+        # Cache-resolved entries need no conversion: the URDF already references the
+        # cached file by absolute path, so the MuJoCo compile reads the cache directly
+        # and copy_pre_generated_meshes brings its assets into the output tree.
+        if mesh_item["is_pre_generated"]:
+            print(f"reusing pre-generated asset for {mesh_name} ({full_filepath})")
+            continue
+
+        print(
+            f"processing {full_filepath} (mesh_name={mesh_name}, collision={used_as_collision}, "
+            f"decompose={decompose_this})"
+        )
 
         if decompose_this:
             # whole .obj in the decomposed dir so obj2mjcf --decompose can run on it; the
@@ -189,10 +197,11 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
             assets_relative_filepath = f"{mrc.DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}"
             force_obj = True
         else:
-            # plain reference, used directly: visual meshes (and the shared case) go to the
-            # visual dir, collision-only meshes used directly go to the composed dir
-            plain_dir = mrc.VISUAL_PATH_NAME if used_as_visual else mrc.COMPOSED_PATH_NAME
-            assets_relative_filepath = f"{plain_dir}/{mesh_name}"
+            # plain reference, used directly: collision-used meshes go to the composed dir
+            # so obj2mjcf can process them (real materials for the shared visual, a plain
+            # whole-mesh geom for the collision); visual-only meshes are plain render
+            # references in the visual dir
+            assets_relative_filepath = f"{home}/{mesh_name}"
             force_obj = False
 
         output_path = f"{directory}assets/{assets_relative_filepath}.obj"
@@ -207,13 +216,12 @@ def convert_to_objs(mesh_info_dict, directory, xml_data, convert_stl_to_obj, dec
                 shutil.copy2(full_filepath, f"{directory}assets/{assets_relative_filepath}.stl")
                 xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.stl")
         elif filename_ext == ".obj":
-            if not mesh_item["is_pre_generated"]:
-                shutil.copy2(full_filepath, output_path)
-                # if the .obj depends on a mtl, copy that too
-                old_directory = os.path.dirname(mesh_item["filename"])
-                if os.path.exists(old_directory + "/material.mtl"):
-                    final_path = os.path.dirname(assets_relative_filepath)
-                    shutil.copy2(old_directory + "/material.mtl", f"{directory}assets/{final_path}/material.mtl")
+            shutil.copy2(full_filepath, output_path)
+            # if the .obj depends on a mtl, copy that too
+            old_directory = os.path.dirname(mesh_item["filename"])
+            if os.path.exists(old_directory + "/material.mtl"):
+                final_path = os.path.dirname(assets_relative_filepath)
+                shutil.copy2(old_directory + "/material.mtl", f"{directory}assets/{final_path}/material.mtl")
             xml_data = xml_data.replace(new_filepath, f"{assets_relative_filepath}.obj")
         elif filename_ext == ".dae":
             _export_dae_to_obj(full_filepath, output_path, mesh_name)
@@ -242,19 +250,37 @@ def run_obj2mjcf(output_filepath, decompose_dict, mesh_info_dict):
                 if os.path.isdir(second_level_path):
                     shutil.rmtree(second_level_path)
 
+    # run obj2mjcf (without decomposition) over the composed AND visual dirs so every
+    # plain mesh gets per-material submeshes and MJCF materials/textures; visual geoms
+    # then render with real materials instead of a flat rgba, in both modes.
+    for plain_dir in (mrc.COMPOSED_PATH_NAME, mrc.VISUAL_PATH_NAME):
+        base_path = f"{output_filepath}assets/{plain_dir}"
+        if not os.path.isdir(base_path):
+            continue
+        cmd = ["obj2mjcf", "--obj-dir", base_path, "--save-mjcf"]
+        subprocess.run(cmd)
+        # obj2mjcf moves nothing into its per-mesh folder for single-material meshes; make
+        # sure the source obj is available inside each folder so the mjcf's file refs resolve
+        for file in os.listdir(base_path):
+            if file.lower().endswith(".obj"):
+                mesh_name = os.path.splitext(file)[0]
+                target_path = os.path.join(base_path, mesh_name, file)
+                source_path = os.path.join(base_path, file)
+                if os.path.isdir(os.path.dirname(target_path)) and not os.path.exists(target_path):
+                    shutil.copy2(source_path, target_path)
+
     thresholds_file = os.path.join(top_level_path, "metadata.json")
     thresholds_data = {}
 
-    # decompose only the collision meshes named in a decompose_mesh input
+    # decompose only the collision meshes named in a decompose_mesh input, per the same
+    # routing decision (mesh_home) that placed them in the decomposed dir
     for mesh_name, mesh_item in mesh_info_dict.items():
-        if not mesh_item.get("used_as_collision", False):
-            continue
-        if mesh_name not in decompose_dict:
+        if mrc.mesh_home(mesh_name, mesh_item, decompose_dict) != mrc.DECOMPOSED_PATH_NAME:
             continue
         if mesh_item["is_pre_generated"]:
             continue
 
-        threshold = str(decompose_dict[mesh_name])
+        threshold = str(mrc.decompose_threshold(mesh_name, mesh_item, decompose_dict))
         cmd = [
             "obj2mjcf",
             "--obj-dir",
@@ -310,6 +336,9 @@ def fix_mujoco_description(
 
     # Add the MuJoCo input elements
     dom = mrc.add_mujoco_inputs(dom, raw_inputs, scene_inputs)
+
+    # Inject any default geom classes the user's mujoco inputs did not define themselves
+    dom = mrc.ensure_default_classes(dom)
 
     # Add links as sites
     dom = mrc.add_links_as_sites(urdf, dom, request_add_free_joint)
