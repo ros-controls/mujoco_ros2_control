@@ -70,43 +70,33 @@ bool FtsGravCompPlugin::register_fts(const mjModel* model)
   const std::string force_suffix = "_force";
   const std::string torque_suffix = "_torque";
 
-  auto param_names = node_->list_parameters({ "mujoco_plugins." + node_->get_sub_namespace() }, 3).names;
-
-  for (const auto& name : param_names)
-  {
-    RCLCPP_INFO(logger_, "Parameter: %s", name.c_str());
-  }
-
   fts_.resize(0);
   for (const auto& sensor_name : sensor_names)
   {
     const std::string sensor_param_prefix = param_prefix + sensor_name + ".";
-    // std::string sensor_name;
-    // if it doesn't end in _force, it is not designed to work with mujoco_ros2_control
-
-    const std::string sensor_name_force = sensor_name + "_force";
-    const std::string sensor_name_torque = sensor_name + "_torque";
+    const std::string sensor_name_force = sensor_name + force_suffix;
+    const std::string sensor_name_torque = sensor_name + torque_suffix;
 
     // get sensor ids and make sure they are valid
     int sensor_id_force = mj_name2id(model, mjOBJ_SENSOR, sensor_name_force.c_str());
     if (sensor_id_force == -1)
     {
-      RCLCPP_ERROR(logger_, "FtsGravCompPlugin failed to initialize. Force sensor name %s not found in the model.",
-                   sensor_name_force.c_str());
+      RCLCPP_ERROR(logger_, "Force sensor name %s not found in the model.", sensor_name_force.c_str());
       return false;
     }
     int sensor_id_torque = mj_name2id(model, mjOBJ_SENSOR, sensor_name_torque.c_str());
     if (sensor_id_torque == -1)
     {
-      RCLCPP_ERROR(logger_, "FtsGravCompPlugin failed to initialize. Torque sensor name %s not found in the model.",
-                   sensor_name_torque.c_str());
+      RCLCPP_ERROR(logger_, "Torque sensor name %s not found in the model.", sensor_name_torque.c_str());
       return false;
     }
 
+    // grab the rest of the parameters that we need
     const std::vector<double> cog_pos_param = node_->get_parameter(sensor_param_prefix + "CoG.pos").as_double_array();
     const double cog_force_param = node_->get_parameter(sensor_param_prefix + "CoG.force").as_double();
     const std::string frame_id_param = node_->get_parameter(sensor_param_prefix + "frame_id").as_string();
 
+    // make sure that the force and torque sensors are of the right dimension
     const int sensor_dim_force = model->sensor_dim[sensor_id_force];
     const int sensor_dim_torque = model->sensor_dim[sensor_id_torque];
 
@@ -127,6 +117,7 @@ bool FtsGravCompPlugin::register_fts(const mjModel* model)
     fts_data.cog_pos[0] = cog_pos_param[0];
     fts_data.cog_pos[1] = cog_pos_param[1];
     fts_data.cog_pos[2] = cog_pos_param[2];
+    fts_data.fts_site_id = model->sensor_objid[sensor_id_force];
 
     RCLCPP_INFO(logger_, "Registered FTS under fts_grav_comp_plugin with");
     RCLCPP_INFO(logger_, "\tname: '%s'", fts_data.sensor_name.c_str());
@@ -170,6 +161,7 @@ void FtsGravCompPlugin::update(const mjModel* /*model*/, mjData* data)
   auto current_time = node_->get_clock()->now();
   auto elapsed = current_time - last_publish_time_;
 
+  // run gravity compensation for each force torque sensor
   for (auto& fts : fts_) {}
 
   // Check if it's time to publish

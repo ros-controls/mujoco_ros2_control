@@ -42,10 +42,11 @@ struct FtsData
   mjtNum cog_pos[3];
   mjtNum cog_force;
   geometry_msgs::msg::Wrench wrench;
+  int fts_site_id{ -1 };
 };
 
 /**
- * @brief Simple plugin that publishes a heartbeat message every second
+ * @brief Plugin that runs gravity compensation on a force torque sensor
  */
 class FtsGravCompPlugin : public MuJoCoROS2ControlPluginBase
 {
