@@ -28,6 +28,23 @@ namespace mujoco_ros2_control_plugins
 {
 
 /**
+ * @brief Per-FTS bookkeeping -
+ *
+ * One instance exists per camera registered by CameraPlugin::register_cameras(). Buffers and
+ * messages are reused across renders to avoid reallocating on every publish.
+ */
+struct FtsData
+{
+  std::string sensor_name;
+  int sensor_adr_force{ -1 };
+  int sensor_adr_torque{ -1 };
+  std::string frame_id;
+  mjtNum cog_pos[3];
+  mjtNum cog_force;
+  geometry_msgs::msg::Wrench wrench;
+};
+
+/**
  * @brief Simple plugin that publishes a heartbeat message every second
  */
 class FtsGravCompPlugin : public MuJoCoROS2ControlPluginBase
@@ -35,6 +52,18 @@ class FtsGravCompPlugin : public MuJoCoROS2ControlPluginBase
 public:
   FtsGravCompPlugin() = default;
   ~FtsGravCompPlugin() override = default;
+
+  /**
+   * @brief Parses the params file and returns a vector of unique sensor names
+   *
+   */
+  std::vector<std::string> get_sensor_names_from_parameters();
+
+  /**
+   * @brief Register force torque sensors from the model that match the params
+   *
+   */
+  bool register_fts(const mjModel* model);
 
   /**
    * @brief Initialize the plugin
@@ -58,11 +87,8 @@ private:
   rclcpp::Time last_publish_time_;
   rclcpp::Duration publish_period_{ 1, 0 };  // Publish every 1 second
   uint64_t message_count_{ 0 };
-  int sensor_adr_force_{ -1 };
-  int sensor_adr_torque_{ -1 };
-  int sensor_dim_force_{ -1 };
-  int sensor_dim_torque_{ -1 };
-  geometry_msgs::msg::Wrench wrench_;
+
+  std::vector<FtsData> fts_;
 };
 
 }  // namespace mujoco_ros2_control_plugins
