@@ -149,6 +149,14 @@ Rough outline of the automated conversion process
     and a collision is converted once and reused for both (and, if that link requests decomposition,
     the whole mesh renders while its decomposed pieces collide).
 
+- Handles visual and collision geometry independently:
+
+  - The ``<visual>`` geometry is used purely for rendering (the ``visual`` class).
+  - The ``<collision>`` geometry drives physics (the ``collision`` class). When a link defines no
+    ``<collision>``, a collision is synthesized from its ``<visual>`` so the visual mesh is reused
+    as the collision shape (the previous behaviour). This synthesis happens at the URDF level, so it
+    stays correct per link even when MuJoCo fuses fixed-jointed bodies together.
+
 - Publishes the new formatted robot description XML file that can be used for conversion.
 - Converts the new robot description URDF file.
 - Runs the MuJoCo conversion tool to get the MJCF version.
