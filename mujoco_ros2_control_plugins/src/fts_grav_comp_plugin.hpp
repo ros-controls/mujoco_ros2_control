@@ -38,7 +38,7 @@ struct FtsData
   std::string sensor_name;
   int sensor_adr_force{ -1 };
   int sensor_adr_torque{ -1 };
-  std::string frame_id;
+  int cog_site_id;
   mjtNum cog_pos[3];
   mjtNum cog_force;
   geometry_msgs::msg::Wrench wrench;

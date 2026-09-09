@@ -112,7 +112,7 @@ bool FtsGravCompPlugin::register_fts(const mjModel* model)
     fts_data.sensor_name = sensor_name;
     fts_data.sensor_adr_force = model->sensor_adr[sensor_id_force];
     fts_data.sensor_adr_torque = model->sensor_adr[sensor_id_torque];
-    fts_data.frame_id = frame_id_param;
+    fts_data.cog_site_id = mj_name2id(model, mjOBJ_SITE, frame_id_param.c_str());
     fts_data.cog_force = cog_force_param;
     fts_data.cog_pos[0] = cog_pos_param[0];
     fts_data.cog_pos[1] = cog_pos_param[1];
@@ -121,10 +121,11 @@ bool FtsGravCompPlugin::register_fts(const mjModel* model)
 
     RCLCPP_INFO(logger_, "Registered FTS under fts_grav_comp_plugin with");
     RCLCPP_INFO(logger_, "\tname: '%s'", fts_data.sensor_name.c_str());
-    RCLCPP_INFO(logger_, "\tframe_id: '%s'", fts_data.frame_id.c_str());
+    RCLCPP_INFO(logger_, "\tfts_site: '%s'", mj_id2name(model, mjOBJ_SITE, fts_data.fts_site_id));
     RCLCPP_INFO(logger_, "\tcog_force: '%0.3f'", fts_data.cog_force);
     RCLCPP_INFO(logger_, "\tcog_pos: '%0.3f, %0.3f, %0.3f'", fts_data.cog_pos[0], fts_data.cog_pos[1],
                 fts_data.cog_pos[2]);
+    RCLCPP_INFO(logger_, "\tcog_site: '%s'", mj_id2name(model, mjOBJ_SITE, fts_data.cog_site_id));
     fts_.push_back(fts_data);
   }
   return true;
