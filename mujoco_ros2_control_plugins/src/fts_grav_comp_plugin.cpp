@@ -108,6 +108,13 @@ bool FtsGravCompPlugin::register_fts(const mjModel* model)
       return false;
     }
 
+    int cog_site_id = mj_name2id(model, mjOBJ_SITE, frame_id_param.c_str());
+    if (cog_site_id == -1)
+    {
+      RCLCPP_ERROR(logger_, "Param cog.frame_id '%s' does not exist as a site in the mjcf", frame_id_param.c_str());
+      return false;
+    }
+
     FtsData fts_data;
     fts_data.sensor_name = sensor_name;
     fts_data.sensor_adr_force = model->sensor_adr[sensor_id_force];

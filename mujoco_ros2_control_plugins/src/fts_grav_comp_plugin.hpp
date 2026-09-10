@@ -81,6 +81,14 @@ public:
    */
   void cleanup() override;
 
+  /**
+   * @brief getter for fts data used for testing
+   */
+  std::vector<FtsData> get_fts_data() const
+  {
+    return fts_;
+  }
+
 private:
   rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr fts_wrench_publisher_;
   rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr fts_comped_wrench_publisher_;

@@ -61,6 +61,7 @@ constexpr const char* kMjcf = R"(
   <sensor>
     <force name="fts_sensor_force" site="ft_sensor_site"/>
     <torque name="fts_sensor_torque" site="ft_sensor_site"/>
+    <!-- second fts located at the offset rotated site -->
     <force name="or_fts_sensor_force" site="offset_rotated_site"/>
     <torque name="or_fts_sensor_torque" site="offset_rotated_site"/>
   </sensor>
@@ -145,6 +146,39 @@ protected:
     plugin_node_->set_parameter(rclcpp::Parameter(resolved_name, value));
   }
 
+  /// sets parameters for the plugin
+  /// fts_grav_comp_plugin:
+  ///   fts_sensor:
+  ///     # frame the CoG is represented in
+  ///     frame_id: ft_sensor_site
+  ///     # specifies the center of gravity of the end effector
+  ///     CoG:
+  ///       pos:
+  ///         - 0.1 # x
+  ///         - 0.0 # y
+  ///         - 0.0 # z
+  ///       mass: 10.0 # mass
+  ///   or_fts_sensor:
+  ///     # frame the CoG is represented in
+  ///     frame_id: offset_rotated_site
+  ///     # specifies the center of gravity of the end effector
+  ///     CoG:
+  ///       pos:
+  ///         - 0.0 # x
+  ///         - 0.0 # y
+  ///         - 0.05 # z
+  ///       mass: 10.0 # mass
+  void set_plugin_params()
+  {
+    setParam("fts_sensor.frame_id", std::string("ft_sensor_site"));
+    setParam("fts_sensor.CoG.pos", std::vector<double>{ 0.1, 0.0, 0.0 });
+    setParam("fts_sensor.CoG.mass", double{ 10.0 });
+
+    setParam("or_fts_sensor.frame_id", std::string("offset_rotated_site"));
+    setParam("or_fts_sensor.CoG.pos", std::vector<double>{ 0.0, 0.0, 0.05 });
+    setParam("or_fts_sensor.CoG.mass", double{ 10.0 });
+  }
+
   mjModel* model_{ nullptr };
   mjData* data_{ nullptr };
   rclcpp::Node::SharedPtr node_;
@@ -155,9 +189,47 @@ private:
   std::thread spin_thread_;
 };
 
+// can properly load the MJCF and initialize the plugin
 TEST_F(FtsGravCompPluginTest, InitSucceeds)
 {
   mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
   EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
+  plugin.cleanup();
+}
+
+// reads in the plugin and verifies that the sensors loaded were correct
+TEST_F(FtsGravCompPluginTest, SensorsLoaded)
+{
+  set_plugin_params();
+  mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+
+  ASSERT_EQ(plugin.get_fts_data().size(), 2) << "Two sensors should have been loaded";
+  EXPECT_EQ(plugin.get_fts_data()[0].sensor_name, "fts_sensor");
+  EXPECT_EQ(plugin.get_fts_data()[1].sensor_name, "or_fts_sensor");
+  plugin.cleanup();
+}
+
+// verifies that initialization fails if a site id is wrong
+TEST_F(FtsGravCompPluginTest, FailOnNonExistentSite)
+{
+  set_plugin_params();
+  setParam("fts_sensor.frame_id", std::string("non_existent_site"));
+  mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
+  ASSERT_FALSE(plugin.init(plugin_node_, model_, data_));
+
+  plugin.cleanup();
+}
+
+// verifies that initialization fails if the name of the sensor is wrong
+TEST_F(FtsGravCompPluginTest, FailOnNonExistentSensor)
+{
+  set_plugin_params();
+  setParam("nonexistent_fts_sensor.frame_id", std::string("ft_sensor_site"));
+  setParam("nonexistent_fts_sensor.CoG.pos", std::vector<double>{ 0.1, 0.0, 0.0 });
+  setParam("nonexistent_fts_sensor.CoG.mass", double{ 10.0 });
+  mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
+  ASSERT_FALSE(plugin.init(plugin_node_, model_, data_));
+
   plugin.cleanup();
 }
