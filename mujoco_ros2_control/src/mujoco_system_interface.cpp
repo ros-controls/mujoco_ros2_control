@@ -23,6 +23,7 @@
 #include <fmt/ranges.h>
 
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -984,9 +985,9 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // Magnetometer sensor data
   for (auto& data : magnetometer_sensor_data_)
   {
-    data.magnetic_field.data.x() = control_state_.sensordata[data.magnetic_field.mj_sensor_index];
-    data.magnetic_field.data.y() = control_state_.sensordata[data.magnetic_field.mj_sensor_index + 1];
-    data.magnetic_field.data.z() = control_state_.sensordata[data.magnetic_field.mj_sensor_index + 2];
+    data.magnetic_field.data.x() = data.scale * control_state_.sensordata[data.magnetic_field.mj_sensor_index];
+    data.magnetic_field.data.y() = data.scale * control_state_.sensordata[data.magnetic_field.mj_sensor_index + 1];
+    data.magnetic_field.data.z() = data.scale * control_state_.sensordata[data.magnetic_field.mj_sensor_index + 2];
   }
 
   // Publish Odometry
@@ -2022,6 +2023,26 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       MagnetometerSensorData sensor_data;
       sensor_data.name = sensor_name;
       sensor_data.magnetic_field.name = mujoco_sensor_name;
+
+      if (const auto scale_it = sensor.parameters.find(MAGNETOMETER_SCALE_PARAM); scale_it != sensor.parameters.end())
+      {
+        try
+        {
+          size_t parsed_characters = 0;
+          sensor_data.scale = std::stod(scale_it->second, &parsed_characters);
+          if (parsed_characters != scale_it->second.size() || !std::isfinite(sensor_data.scale) ||
+              sensor_data.scale <= 0.0)
+          {
+            throw std::invalid_argument("scale must be a finite positive number");
+          }
+        }
+        catch (const std::exception& exception)
+        {
+          RCLCPP_ERROR(get_logger(), "Invalid '%s' for magnetometer sensor '%s': '%s' (%s)", MAGNETOMETER_SCALE_PARAM,
+                       sensor_name.c_str(), scale_it->second.c_str(), exception.what());
+          continue;
+        }
+      }
 
       const int magnetometer_id =
           mj_name2id(simulation_->model(), mjOBJ_SENSOR, sensor_data.magnetic_field.name.c_str());

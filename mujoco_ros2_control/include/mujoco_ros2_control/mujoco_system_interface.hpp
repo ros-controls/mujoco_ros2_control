@@ -68,6 +68,8 @@ namespace mujoco_ros2_control
 constexpr char MUJOCO_TYPE_PARAM[] = "mujoco_type";
 /// Optional `<sensor>` parameter key overriding the MJCF sensor name; defaults to the sensor's own name.
 constexpr char MUJOCO_SENSOR_NAME_PARAM[] = "mujoco_sensor_name";
+/// Optional factor converting MuJoCo magnetometer values to tesla; defaults to 1.0.
+constexpr char MAGNETOMETER_SCALE_PARAM[] = "magnetic_field_scale";
 
 /// Force/torque sensor: reads a paired MJCF `force` + `torque` sensor.
 constexpr char MUJOCO_TYPE_FTS[] = "fts";

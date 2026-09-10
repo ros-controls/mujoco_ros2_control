@@ -264,10 +264,18 @@ Map it to the corresponding ``ros2_control`` sensor:
      <param name="mujoco_type">magnetometer</param>
      <!-- mujoco_sensor_name does not need to match the ros2_control sensor name -->
      <param name="mujoco_sensor_name">magnetometer_sensor</param>
+     <!-- Convert MuJoCo model units to tesla; defaults to 1.0 -->
+     <param name="magnetic_field_scale">1.0</param>
      <state_interface name="magnetic_field.x"/>
      <state_interface name="magnetic_field.y"/>
      <state_interface name="magnetic_field.z"/>
    </sensor>
+
+MuJoCo does not define physical units for the model's global ``magnetic`` vector, while the ROS
+``magnetic_field`` interfaces use tesla. Set ``magnetic_field_scale`` to the number of tesla per
+MuJoCo unit. For example, use ``0.0001`` when the model values represent gauss. If the model values
+represent magnetic flux in webers through a known sensor area, use the reciprocal of that area in
+square metres because :math:`1\,\mathrm{T} = 1\,\mathrm{Wb}/\mathrm{m}^2`.
 
 .. warning::
 
