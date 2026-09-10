@@ -180,6 +180,22 @@ if(BUILD_TESTING)
     "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
     "LINKER:--pop-state"
   )
+
+  ament_add_gtest(test_fts_grav_comp_plugin
+    test/test_fts_grav_comp_plugin.cpp
+  )
+  target_include_directories(test_fts_grav_comp_plugin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(test_fts_grav_comp_plugin
+    mujoco_ros2_control_plugins_impl
+    ${geometry_msgs_TARGETS}
+  )
+  target_link_options(test_fts_grav_comp_plugin PUBLIC
+    "LINKER:--push-state,--no-as-needed"
+    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+    "LINKER:--pop-state"
+  )
 endif()
 
 # Install include directory
