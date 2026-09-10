@@ -340,6 +340,9 @@ def fix_mujoco_description(
     # Inject any default geom classes the user's mujoco inputs did not define themselves
     dom = mrc.ensure_default_classes(dom)
 
+    # Same for the material tinting the collision geoms
+    dom = mrc.ensure_collision_material(dom)
+
     # Add links as sites
     dom = mrc.add_links_as_sites(urdf, dom, request_add_free_joint)
 

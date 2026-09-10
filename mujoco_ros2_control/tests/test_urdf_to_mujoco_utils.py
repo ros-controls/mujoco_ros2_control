@@ -53,6 +53,7 @@ from mujoco_ros2_control import (
     copy_pre_generated_meshes,
     add_missing_collisions,
     ensure_default_classes,
+    ensure_collision_material,
     decompose_threshold,
     mesh_home,
     resolve_pregenerated,
@@ -458,13 +459,74 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             # obj2mjcf's visual sub-geom (whole mesh) is not cloned as a collidable geom
             self.assertNotRegex(result_xml, r'<geom[^>]*mesh="col_mesh"[^>]*class="(decomposed_)?collision"[^>]*>')
 
-            # decomposed collision pieces get the explicit collision separation attributes
-            # (group 3, contype/conaffinity 1) ...
-            self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*group="3"[^>]*>')
+            # decomposed collision pieces collide (explicit contype/conaffinity 1) but sit in
+            # their own viewer group (4), separate from whole-mesh/primitive collisions (3) ...
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*group="4"[^>]*>')
             self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*contype="1"[^>]*>')
-            # ... but are NOT tinted bright_orange - they keep obj2mjcf's own decomposition
-            # materials, and no bright_orange material is injected for them.
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="col_mesh_collision_0"[^>]*conaffinity="1"[^>]*>')
+            # ... and are NOT tinted bright_orange - they keep obj2mjcf's own decomposition
+            # materials/rgba so the individual hulls stay distinguishable.
             self.assertNotIn('material="bright_orange"', result_xml)
+
+    def _write_plain_mjcf(self, tmpdir, name):
+        # Mimic obj2mjcf --save-mjcf output WITHOUT --decompose: per-material visual
+        # sub-geoms carrying materials, plus a whole-mesh collision sub-geom with an rgba
+        # that must not override the tint. Layout: full/<name>/<name>.xml
+        mesh_dir = os.path.join(tmpdir, "assets", COMPOSED_PATH_NAME, name)
+        os.makedirs(mesh_dir)
+        with open(os.path.join(mesh_dir, f"{name}.xml"), "w") as f:
+            f.write(
+                "<mujoco><asset>"
+                '<material name="material_{n}_0" rgba="0.3 0.3 0.3 1"/>'
+                '<mesh file="{n}_0.obj"/>'
+                "</asset>"
+                "<worldbody><body>"
+                '<geom mesh="{n}_0" material="material_{n}_0" class="visual"/>'
+                '<geom mesh="{n}_0" rgba="0.5 0.5 0.5 1" class="collision"/>'
+                "</body></worldbody></mujoco>".format(n=name)
+            )
+
+    def test_update_obj_assets_plain_mesh_tints_collision_keeps_visual_material(self):
+        # A shared mesh that is NOT decomposed: the whole-mesh collision sub-geom is a
+        # regular collision (group 3, tinted bright_orange, rgba dropped so the tint shows)
+        # while the visual sub-geom keeps its obj2mjcf material and gets the explicit
+        # render-only attributes.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_plain_mjcf(tmpdir, "plain")
+            xml_string = (
+                '<?xml version="1.0"?><mujoco><asset>'
+                '<mesh name="plain" file="full/plain.obj"/>'
+                '</asset><worldbody><body name="test">'
+                '<geom type="mesh" contype="0" conaffinity="0" group="1" density="0" '
+                'rgba="1 0 0 1" mesh="plain" pos="0 0 0" quat="1 0 0 0"/>'
+                '<geom type="mesh" mesh="plain" pos="0 0 0" quat="1 0 0 0"/>'
+                "</body></worldbody></mujoco>"
+            )
+            dom = minidom.parseString(xml_string)
+            mesh_info_dict = {
+                "plain": {"scale": "1 1 1", "used_as_visual": True, "used_as_collision": True},
+            }
+            result_xml = update_obj_assets(dom, tmpdir + "/", mesh_info_dict).toxml()
+            geoms = {
+                g.getAttribute("class"): g
+                for g in minidom.parseString(result_xml).getElementsByTagName("geom")
+                if g.getAttribute("mesh") == "plain_0"
+            }
+            self.assertEqual(set(geoms), {"visual", "collision"})
+
+            visual = geoms["visual"]
+            self.assertEqual(visual.getAttribute("material"), "material_plain_0")
+            self.assertEqual(visual.getAttribute("contype"), "0")
+            self.assertEqual(visual.getAttribute("conaffinity"), "0")
+            self.assertEqual(visual.getAttribute("group"), "2")
+            self.assertEqual(visual.getAttribute("density"), "0")
+
+            collision = geoms["collision"]
+            self.assertEqual(collision.getAttribute("material"), "bright_orange")
+            self.assertFalse(collision.hasAttribute("rgba"))
+            self.assertEqual(collision.getAttribute("contype"), "1")
+            self.assertEqual(collision.getAttribute("conaffinity"), "1")
+            self.assertEqual(collision.getAttribute("group"), "3")
 
     def test_update_obj_assets_visual_only_untouched(self):
         # A visual-only mesh (not in the decomposed dir) is a plain reference: its geom
@@ -512,9 +574,12 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             self.assertEqual(result_xml.count('name="shared"'), 1)
             self.assertNotIn("shared/shared/shared.obj", result_xml)
             # the visual geom is replaced by obj2mjcf's render geom, still referencing the
-            # whole mesh (this is what carries the obj2mjcf material instead of a flat rgba)
+            # whole mesh (this is what carries the obj2mjcf material instead of a flat rgba),
+            # with explicit render-only attributes instead of the raw import ones
             self.assertRegex(result_xml, r'<geom[^>]*mesh="shared"[^>]*class="visual"[^>]*>')
-            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="shared"[^>]*contype[^>]*>')
+            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="shared"[^>]*rgba="1 0 0 1"[^>]*>')
+            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="shared"[^>]*group="1"[^>]*>')
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="shared"[^>]*contype="0"[^>]*>')
             # the collision geom was expanded into decomposed pieces in their own class
             self.assertRegex(result_xml, r'<geom[^>]*mesh="shared_collision_0"[^>]*class="decomposed_collision"[^>]*>')
 
@@ -564,12 +629,40 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         assert 'contype="1"' in result_xml
         assert 'conaffinity="1"' in result_xml
         assert 'material="bright_orange"' in result_xml
-        # the referenced material is auto-defined so the MJCF still loads
-        self.assertRegex(result_xml, r'<material[^>]*name="bright_orange"')
 
-    def test_update_non_obj_assets_keeps_existing_bright_orange_material(self):
-        # If the user already defines a bright_orange material, the converter must not add a
-        # duplicate (MuJoCo errors on repeated names).
+    def test_ensure_collision_material_adds_when_referenced(self):
+        # A geom references the tint material, so it is auto-defined (creating the <asset>
+        # element when there is none) so the MJCF still loads.
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="test">
+      <geom type="box" size="1 1 1" class="collision" material="bright_orange"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        result_xml = ensure_collision_material(dom).toxml()
+        self.assertRegex(result_xml, r'<asset><material[^>]*name="bright_orange"')
+
+    def test_ensure_collision_material_noop_when_unreferenced(self):
+        # No geom uses the tint (e.g. a mesh-less or collision-less model): nothing is added.
+        xml_string = """<?xml version="1.0"?>
+<mujoco>
+  <worldbody>
+    <body name="test">
+      <geom type="box" size="1 1 1" class="visual"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+        dom = minidom.parseString(xml_string)
+        result_xml = ensure_collision_material(dom).toxml()
+        self.assertNotIn("bright_orange", result_xml)
+        self.assertNotIn("<asset", result_xml)
+
+    def test_ensure_collision_material_keeps_existing(self):
+        # If the user already defines a bright_orange material (e.g. via mujoco_inputs), the
+        # converter must not add a duplicate (MuJoCo errors on repeated names).
         xml_string = """<?xml version="1.0"?>
 <mujoco>
   <asset>
@@ -577,12 +670,12 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
   </asset>
   <worldbody>
     <body name="test">
-      <geom type="box" size="1 1 1"/>
+      <geom type="box" size="1 1 1" class="collision" material="bright_orange"/>
     </body>
   </worldbody>
 </mujoco>"""
         dom = minidom.parseString(xml_string)
-        result_xml = update_non_obj_assets(dom, "/tmp/output/").toxml()
+        result_xml = ensure_collision_material(dom).toxml()
         self.assertEqual(result_xml.count('name="bright_orange"'), 1)
         # the user's definition is preserved, not overwritten
         assert 'rgba="0.9 0.4 0.1 1"' in result_xml

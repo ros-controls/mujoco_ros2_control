@@ -46,9 +46,15 @@ DEFAULT_DECOMPOSE_THRESHOLD = "0.05"
 
 # Explicit attributes written onto classified geoms so visual/collision separation does not
 # depend on the user supplying a <default class="..."> block via mujoco_inputs.
-# Visuals are render-only (contype=0 -> never collide) and live in group 2; collisions do the
-# colliding (contype/conaffinity=1), live in group 3, and are tinted COLLISION_MATERIAL_NAME
-# so they can be inspected in the viewer.
+#
+# - Visuals are render-only: they never collide and keep their own material/rgba.
+# - Whole-mesh and primitive collisions do the colliding and are tinted
+#   COLLISION_MATERIAL_NAME so the collision shape can be inspected in the viewer.
+# - Decomposed collision pieces collide the same way but live in their own viewer group,
+#   so the convex decomposition can be toggled independently of the other collisions,
+#   and are NOT tinted: they keep obj2mjcf's per-piece rgba so the hulls stay
+#   distinguishable from one another.
+# The groups match the default classes injected by ensure_default_classes.
 COLLISION_MATERIAL_NAME = "bright_orange"
 VISUAL_GEOM_ATTRS = {"contype": "0", "conaffinity": "0", "group": "2", "density": "0"}
 COLLISION_GEOM_ATTRS = {
@@ -57,6 +63,7 @@ COLLISION_GEOM_ATTRS = {
     "conaffinity": "1",
     "material": COLLISION_MATERIAL_NAME,
 }
+DECOMPOSED_COLLISION_GEOM_ATTRS = {"group": "4", "contype": "1", "conaffinity": "1"}
 
 
 def add_mujoco_info(raw_xml, output_filepath, publish_topic, fuse=True):
@@ -620,8 +627,12 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
         obj2mjcf's class="visual" sub-geoms for a URDF visual (which carries a contype marker
         from the import), the rest for a URDF collision.
 
-        When ``collision_class`` is given it overrides the class on the collision sub-geoms.
-        This is used to route decomposed pieces into their own class/viewer group.
+        Every clone gets the explicit visual/collision attributes, the same way
+        update_non_obj_assets classifies the geoms MuJoCo imported directly.
+
+        When ``collision_class`` is given the collision sub-geoms are decomposed pieces: they
+        are routed into that class and get DECOMPOSED_COLLISION_GEOM_ATTRS (own viewer group,
+        no tint) instead of COLLISION_GEOM_ATTRS.
         """
         for geom_element in list(worldbody_element.getElementsByTagName("geom")):
             if geom_element.getAttribute("mesh") != mesh_name:
@@ -640,17 +651,18 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                     sub_geom_local.setAttribute("pos", pos)
                 if quat:
                     sub_geom_local.setAttribute("quat", quat)
-                if not is_visual:
-                    if collision_class:
-                        sub_geom_local.setAttribute("class", collision_class)
-                    # Give decomposed pieces the same collision-separation attributes as plain
-                    # collisions (group 3, contype/conaffinity 1), but NOT the bright_orange
-                    # material: decomposed meshes keep obj2mjcf's own materials/rgba so the
-                    # individual convex pieces stay distinguishable.
-                    for attribute, value in COLLISION_GEOM_ATTRS.items():
-                        if attribute == "material":
-                            continue
-                        sub_geom_local.setAttribute(attribute, value)
+                if is_visual:
+                    attributes = VISUAL_GEOM_ATTRS
+                elif collision_class:
+                    sub_geom_local.setAttribute("class", collision_class)
+                    attributes = DECOMPOSED_COLLISION_GEOM_ATTRS
+                else:
+                    attributes = COLLISION_GEOM_ATTRS
+                    # a geom rgba would override the tint material
+                    if sub_geom_local.hasAttribute("rgba"):
+                        sub_geom_local.removeAttribute("rgba")
+                for attribute, value in attributes.items():
+                    sub_geom_local.setAttribute(attribute, value)
                 parent.appendChild(sub_geom_local)
 
     for mesh in list(asset_element.getElementsByTagName("mesh")):
@@ -729,7 +741,6 @@ def update_non_obj_assets(dom, output_filepath, mesh_info_dict=None):
     # get all of the geom elements in the worldbody element
     worldbody_geoms = worldbody_element.getElementsByTagName("geom")
 
-    used_collision_material = False
     for geom in worldbody_geoms:
         # already classified upstream (e.g. obj-decomposed meshes); leave as is
         if geom.hasAttribute("class"):
@@ -758,25 +769,25 @@ def update_non_obj_assets(dom, output_filepath, mesh_info_dict=None):
                 geom.removeAttribute("rgba")
             for attribute, value in COLLISION_GEOM_ATTRS.items():
                 geom.setAttribute(attribute, value)
-            used_collision_material = True
-
-    # Collision geoms reference COLLISION_MATERIAL_NAME, so it must exist or MuJoCo fails to
-    # load. Add it only when absent to avoid a repeated-name clash with a user-defined one.
-    if used_collision_material:
-        _ensure_collision_material(dom)
 
     return dom
 
 
-def _ensure_collision_material(dom):
+def ensure_collision_material(dom):
     """
-    Ensures an ``<asset>`` ``<material>`` named COLLISION_MATERIAL_NAME exists in ``dom``.
+    Ensures the ``<material>`` named COLLISION_MATERIAL_NAME exists in an ``<asset>`` of
+    ``dom`` whenever a geom references it, since MuJoCo fails to load a model referencing an
+    undefined material.
 
     Collision geoms are tinted with this material so the collision geometry can be inspected
     in the MuJoCo viewer. If the material is already defined (e.g. supplied via mujoco_inputs)
     it is left untouched; otherwise a default orange material is created. Creates the
-    ``<asset>`` element if the document has none.
+    ``<asset>`` element if the document has none. Meant to run after add_mujoco_inputs so a
+    user-defined material is seen before a default one is added.
     """
+    if not any(g.getAttribute("material") == COLLISION_MATERIAL_NAME for g in dom.getElementsByTagName("geom")):
+        return dom
+
     assets = dom.getElementsByTagName("asset")
     if assets:
         asset = assets[0]
@@ -803,13 +814,18 @@ def ensure_default_classes(dom):
     requiring every robot config to declare the classes itself.
     """
     required = {
-        # render-only geoms: never collide, viewer group 2
-        "visual": {"group": "2", "type": "mesh", "contype": "0", "conaffinity": "0"},
-        # authored / whole-mesh collision geoms: viewer group 3
-        "collision": {"group": "3", "type": "mesh"},
+        # render-only geoms: never collide
+        "visual": {
+            "group": VISUAL_GEOM_ATTRS["group"],
+            "type": "mesh",
+            "contype": VISUAL_GEOM_ATTRS["contype"],
+            "conaffinity": VISUAL_GEOM_ATTRS["conaffinity"],
+        },
+        # authored / whole-mesh / primitive collision geoms
+        "collision": {"group": COLLISION_GEOM_ATTRS["group"], "type": "mesh"},
         # obj2mjcf convex decomposition pieces: same physics as collision, but their own
-        # viewer group (4) so the decomposition can be toggled on for inspection
-        "decomposed_collision": {"group": "4", "type": "mesh"},
+        # viewer group so the decomposition can be toggled on for inspection
+        "decomposed_collision": {"group": DECOMPOSED_COLLISION_GEOM_ATTRS["group"], "type": "mesh"},
     }
     existing = {d.getAttribute("class") for d in dom.getElementsByTagName("default")}
     missing = {name: attrs for name, attrs in required.items() if name not in existing}
