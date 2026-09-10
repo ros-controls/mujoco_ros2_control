@@ -640,16 +640,17 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                     sub_geom_local.setAttribute("pos", pos)
                 if quat:
                     sub_geom_local.setAttribute("quat", quat)
-                if not is_visual and collision_class:
-                    sub_geom_local.setAttribute("class", collision_class)
-	            # Give decomposed pieces the same collision-separation attributes as plain
-	            # collisions (group 3, contype/conaffinity 1), but NOT the bright_orange
-	            # material: decomposed meshes keep obj2mjcf's own materials/rgba so the
-	            # individual convex pieces stay distinguishable.
-	            for attribute, value in COLLISION_GEOM_ATTRS.items():
-	                if attribute == "material":
-	                    continue
-	                sub_geom_local.setAttribute(attribute, value)
+                if not is_visual:
+                    if collision_class:
+                        sub_geom_local.setAttribute("class", collision_class)
+                    # Give decomposed pieces the same collision-separation attributes as plain
+                    # collisions (group 3, contype/conaffinity 1), but NOT the bright_orange
+                    # material: decomposed meshes keep obj2mjcf's own materials/rgba so the
+                    # individual convex pieces stay distinguishable.
+                    for attribute, value in COLLISION_GEOM_ATTRS.items():
+                        if attribute == "material":
+                            continue
+                        sub_geom_local.setAttribute(attribute, value)
                 parent.appendChild(sub_geom_local)
 
     for mesh in list(asset_element.getElementsByTagName("mesh")):

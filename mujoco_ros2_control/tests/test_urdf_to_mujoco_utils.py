@@ -514,7 +514,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             # the visual geom is replaced by obj2mjcf's render geom, still referencing the
             # whole mesh (this is what carries the obj2mjcf material instead of a flat rgba)
             self.assertRegex(result_xml, r'<geom[^>]*mesh="shared"[^>]*class="visual"[^>]*>')
-            self.assertNotRegex(result_xml, r"<geom[^>]*contype[^>]*>")
+            self.assertNotRegex(result_xml, r'<geom[^>]*mesh="shared"[^>]*contype[^>]*>')
             # the collision geom was expanded into decomposed pieces in their own class
             self.assertRegex(result_xml, r'<geom[^>]*mesh="shared_collision_0"[^>]*class="decomposed_collision"[^>]*>')
 
