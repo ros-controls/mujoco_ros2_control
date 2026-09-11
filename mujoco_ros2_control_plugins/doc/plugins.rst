@@ -521,7 +521,6 @@ See the example configuration below for more details.
    * - ``frame_id``
      - ``string``
      - Name of the mujoco site that the center of mass is represented in.
-       This should probably correspond to a link in the URDF.
    * - ``CoG.pos``
      - ``double[]``
      - Position in meters w.r.t. the `frame_id` site of the center of gravity.
