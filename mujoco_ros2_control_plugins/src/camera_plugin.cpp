@@ -88,7 +88,37 @@ void CameraPlugin::update(const mjModel* model_arg, mjData* data)
 
   bool any_selected = false;
   {
-    std::lock_guard<std::mutex> lock(data_mutex_);
+    std::unique_lock<std::mutex> lock(data_mutex_);
+
+    // The rendering thread is still working on the previous snapshot. Touching
+    // mj_camera_data_ or render_pending now would corrupt the frame it is rendering, so
+    // give up this slot instead. See CameraPlugin::render_in_flight_.
+    if (render_in_flight_)
+    {
+      // A poll trigger must survive the skip. poll_pending_ was already consumed by the
+      // exchange above, but the per-camera poll_requested flag is still set, so re-arm the
+      // wakeup hint and the request is merely deferred rather than lost.
+      if (poll_due)
+      {
+        poll_pending_.store(true);
+      }
+      if (stream_due)
+      {
+        // Consume the slot so the next attempt is a full interval away. Without this, every
+        // control cycle for the rest of the render would re-enter here and the counter
+        // would report attempts (thousands per second at a 2 kHz control rate) rather than
+        // lost frames.
+        last_publish_time_ = now;
+        ++dropped_frames_;
+        RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 5000,
+                             "Camera rendering cannot keep up: %llu streaming frame(s) dropped so far. "
+                             "Reduce mujoco_plugins.mujoco_camera_plugin.camera_publish_rate, the camera "
+                             "resolution, or the number of streaming cameras; or lower sim_speed_factor, which "
+                             "keeps the sim-time image rate and gives each pass more wall-clock time.",
+                             static_cast<unsigned long long>(dropped_frames_.load()));
+      }
+      return;
+    }
 
     // Flag streaming cameras when their interval is due and any polled cameras that have a
     // pending trigger (consuming the one-shot request so they render exactly once).
@@ -117,6 +147,10 @@ void CameraPlugin::update(const mjModel* model_arg, mjData* data)
     {
       mjv_copyData(mj_camera_data_, model_arg, data);
       new_data_ = true;
+      // Hand ownership of the snapshot to the rendering thread; it is released again once
+      // update_cameras() has published. Set under the lock so the flag can never be
+      // observed as false while new_data_ is already true.
+      render_in_flight_ = true;
     }
   }
 
@@ -523,6 +557,14 @@ void CameraPlugin::update_loop()
     lock.unlock();
 
     update_cameras();
+
+    // Release the snapshot so `update` may fill it again. This has to happen after
+    // update_cameras() returns, because that call is what reads mj_camera_data_ and the
+    // per-camera render_pending flags without holding the lock.
+    {
+      std::lock_guard<std::mutex> release_lock(data_mutex_);
+      render_in_flight_ = false;
+    }
   }
   publish_images_ = false;
 
