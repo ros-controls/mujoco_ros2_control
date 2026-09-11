@@ -98,6 +98,50 @@ void write_intvelocity_test_model()
   file.close();
 }
 
+// Builds a ros2_control magnetometer ComponentInfo mapped to `mujoco_sensor_name`, with the standard
+// magnetic_field.{x,y,z} state interfaces. `extra_params` are merged in on top of the required ones
+// (e.g. "noise_distribution").
+hardware_interface::ComponentInfo
+make_magnetometer_sensor(const std::string& name, const std::string& mujoco_sensor_name,
+                         const std::unordered_map<std::string, std::string>& extra_params = {})
+{
+  hardware_interface::ComponentInfo sensor_info;
+  sensor_info.name = name;
+  sensor_info.parameters[mujoco_ros2_control::MUJOCO_TYPE_PARAM] = mujoco_ros2_control::MUJOCO_TYPE_MAGNETOMETER;
+  sensor_info.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = mujoco_sensor_name;
+  for (const auto& [key, value] : extra_params)
+  {
+    sensor_info.parameters[key] = value;
+  }
+  for (const auto* interface_name : { "magnetic_field.x", "magnetic_field.y", "magnetic_field.z" })
+  {
+    hardware_interface::InterfaceInfo interface_info;
+    interface_info.name = interface_name;
+    sensor_info.state_interfaces.push_back(interface_info);
+  }
+  return sensor_info;
+}
+
+struct NoiseStats
+{
+  double mean;
+  double stddev;
+};
+
+// Computes the sample mean and (population) standard deviation of `samples`.
+NoiseStats compute_stats(const std::vector<double>& samples)
+{
+  const double count = static_cast<double>(samples.size());
+  const double mean = std::accumulate(samples.begin(), samples.end(), 0.0) / count;
+  double variance = 0.0;
+  for (const double sample : samples)
+  {
+    variance += (sample - mean) * (sample - mean);
+  }
+  variance /= count;
+  return { mean, std::sqrt(variance) };
+}
+
 }  // namespace
 
 class MujocoSystemInterfaceTest : public ::testing::Test
@@ -183,6 +227,16 @@ protected:
       std::this_thread::sleep_for(poll_interval);
     }
     return condition();
+  }
+
+  // Reads a state interface's current value, abstracting the ROS-distro-specific accessor.
+  static double get_value(const hardware_interface::StateInterface& state_interface)
+  {
+#if ROS_DISTRO_HUMBLE
+    return state_interface.get_value();
+#else
+    return state_interface.get_optional().value();
+#endif
   }
 
   std::shared_ptr<mujoco_ros2_control::MujocoSystemInterface> interface_;
@@ -363,24 +417,9 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseIsApplied)
   // call, so every reading's (noisy - raw) delta is a pure noise sample with no risk of racing a stepping sim.
   constexpr double kNoiseStdDev = 0.05;  // must match magnetometer_sensor_noisy's noise="0.05" in kTestModel
   auto hardware_info = create_hardware_info();
-
-  hardware_interface::ComponentInfo raw_sensor_info;
-  raw_sensor_info.name = "magnetometer_sensor_raw";
-  raw_sensor_info.parameters[mujoco_ros2_control::MUJOCO_TYPE_PARAM] = mujoco_ros2_control::MUJOCO_TYPE_MAGNETOMETER;
-  raw_sensor_info.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = "magnetometer_sensor";
-  for (const auto* interface_name : { "magnetic_field.x", "magnetic_field.y", "magnetic_field.z" })
-  {
-    hardware_interface::InterfaceInfo interface_info;
-    interface_info.name = interface_name;
-    raw_sensor_info.state_interfaces.push_back(interface_info);
-  }
-
-  hardware_interface::ComponentInfo noisy_sensor_info = raw_sensor_info;
-  noisy_sensor_info.name = "magnetometer_sensor_noisy_iface";
-  noisy_sensor_info.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = "magnetometer_sensor_noisy";
-
-  hardware_info.sensors.push_back(raw_sensor_info);
-  hardware_info.sensors.push_back(noisy_sensor_info);
+  hardware_info.sensors.push_back(make_magnetometer_sensor("magnetometer_sensor_raw", "magnetometer_sensor"));
+  hardware_info.sensors.push_back(
+      make_magnetometer_sensor("magnetometer_sensor_noisy_iface", "magnetometer_sensor_noisy"));
 
   ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
 
@@ -394,14 +433,6 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseIsApplied)
 
   const auto state_interfaces = interface_->export_state_interfaces();
   ASSERT_EQ(state_interfaces.size(), 6u);
-
-  auto get_value = [](const hardware_interface::StateInterface& si) {
-#if ROS_DISTRO_HUMBLE
-    return si.get_value();
-#else
-    return si.get_optional().value();
-#endif
-  };
 
   constexpr int kSamples = 2000;
   std::vector<double> noise_samples;
@@ -417,20 +448,12 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseIsApplied)
     }
   }
 
-  const double sample_count = static_cast<double>(noise_samples.size());
-  const double mean = std::accumulate(noise_samples.begin(), noise_samples.end(), 0.0) / sample_count;
-  double variance = 0.0;
-  for (const double sample : noise_samples)
-  {
-    variance += (sample - mean) * (sample - mean);
-  }
-  variance /= sample_count;
-  const double sample_stddev = std::sqrt(variance);
+  const auto stats = compute_stats(noise_samples);
 
   // Generous bounds: tight enough to catch "noise not applied" (stddev ~ 0) or a badly mis-scaled
   // implementation, loose enough to avoid flaking on the randomness itself.
-  EXPECT_NEAR(mean, 0.0, 0.01);
-  EXPECT_NEAR(sample_stddev, kNoiseStdDev, kNoiseStdDev * 0.2);
+  EXPECT_NEAR(stats.mean, 0.0, 0.01);
+  EXPECT_NEAR(stats.stddev, kNoiseStdDev, kNoiseStdDev * 0.2);
 }
 
 TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseUsesIndependentRngPerSensor)
@@ -439,24 +462,8 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseUsesIndependentRngPerSe
   // see magnetometer_sensor_noisy). Each should draw from its own independently-seeded RNG, so their noise
   // sequences diverge even though the underlying clean signal (and configured noise stddev) is identical.
   auto hardware_info = create_hardware_info();
-
-  hardware_interface::ComponentInfo sensor_template;
-  sensor_template.parameters[mujoco_ros2_control::MUJOCO_TYPE_PARAM] = mujoco_ros2_control::MUJOCO_TYPE_MAGNETOMETER;
-  sensor_template.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = "magnetometer_sensor_noisy";
-  for (const auto* interface_name : { "magnetic_field.x", "magnetic_field.y", "magnetic_field.z" })
-  {
-    hardware_interface::InterfaceInfo interface_info;
-    interface_info.name = interface_name;
-    sensor_template.state_interfaces.push_back(interface_info);
-  }
-
-  hardware_interface::ComponentInfo sensor_a = sensor_template;
-  sensor_a.name = "magnetometer_sensor_a";
-  hardware_interface::ComponentInfo sensor_b = sensor_template;
-  sensor_b.name = "magnetometer_sensor_b";
-
-  hardware_info.sensors.push_back(sensor_a);
-  hardware_info.sensors.push_back(sensor_b);
+  hardware_info.sensors.push_back(make_magnetometer_sensor("magnetometer_sensor_a", "magnetometer_sensor_noisy"));
+  hardware_info.sensors.push_back(make_magnetometer_sensor("magnetometer_sensor_b", "magnetometer_sensor_noisy"));
 
   ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
 
@@ -470,14 +477,6 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseUsesIndependentRngPerSe
 
   const auto state_interfaces = interface_->export_state_interfaces();
   ASSERT_EQ(state_interfaces.size(), 6u);
-
-  auto get_value = [](const hardware_interface::StateInterface& si) {
-#if ROS_DISTRO_HUMBLE
-    return si.get_value();
-#else
-    return si.get_optional().value();
-#endif
-  };
 
   bool saw_divergence = false;
   for (int i = 0; i < 20 && !saw_divergence; ++i)
@@ -505,25 +504,9 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseSupportsUniformDistribu
   constexpr double kNoiseStdDev = 0.05;  // must match magnetometer_sensor_noisy's noise="0.05" in kTestModel
   const double bound = kNoiseStdDev * std::sqrt(3.0);
   auto hardware_info = create_hardware_info();
-
-  hardware_interface::ComponentInfo raw_sensor_info;
-  raw_sensor_info.name = "magnetometer_sensor_raw";
-  raw_sensor_info.parameters[mujoco_ros2_control::MUJOCO_TYPE_PARAM] = mujoco_ros2_control::MUJOCO_TYPE_MAGNETOMETER;
-  raw_sensor_info.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = "magnetometer_sensor";
-  for (const auto* interface_name : { "magnetic_field.x", "magnetic_field.y", "magnetic_field.z" })
-  {
-    hardware_interface::InterfaceInfo interface_info;
-    interface_info.name = interface_name;
-    raw_sensor_info.state_interfaces.push_back(interface_info);
-  }
-
-  hardware_interface::ComponentInfo uniform_sensor_info = raw_sensor_info;
-  uniform_sensor_info.name = "magnetometer_sensor_uniform";
-  uniform_sensor_info.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = "magnetometer_sensor_noisy";
-  uniform_sensor_info.parameters["noise_distribution"] = "uniform";
-
-  hardware_info.sensors.push_back(raw_sensor_info);
-  hardware_info.sensors.push_back(uniform_sensor_info);
+  hardware_info.sensors.push_back(make_magnetometer_sensor("magnetometer_sensor_raw", "magnetometer_sensor"));
+  hardware_info.sensors.push_back(make_magnetometer_sensor("magnetometer_sensor_uniform", "magnetometer_sensor_noisy",
+                                                            { { "noise_distribution", "uniform" } }));
 
   ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
 
@@ -537,14 +520,6 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseSupportsUniformDistribu
 
   const auto state_interfaces = interface_->export_state_interfaces();
   ASSERT_EQ(state_interfaces.size(), 6u);
-
-  auto get_value = [](const hardware_interface::StateInterface& si) {
-#if ROS_DISTRO_HUMBLE
-    return si.get_value();
-#else
-    return si.get_optional().value();
-#endif
-  };
 
   constexpr int kSamples = 2000;
   std::vector<double> noise_samples;
@@ -563,19 +538,11 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseSupportsUniformDistribu
     }
   }
 
-  const double sample_count = static_cast<double>(noise_samples.size());
-  const double mean = std::accumulate(noise_samples.begin(), noise_samples.end(), 0.0) / sample_count;
-  double variance = 0.0;
-  for (const double sample : noise_samples)
-  {
-    variance += (sample - mean) * (sample - mean);
-  }
-  variance /= sample_count;
-  const double sample_stddev = std::sqrt(variance);
+  const auto stats = compute_stats(noise_samples);
 
   // The uniform range is scaled by sqrt(3) so its true stddev should still match the configured MJCF value.
-  EXPECT_NEAR(mean, 0.0, 0.01);
-  EXPECT_NEAR(sample_stddev, kNoiseStdDev, kNoiseStdDev * 0.2);
+  EXPECT_NEAR(stats.mean, 0.0, 0.01);
+  EXPECT_NEAR(stats.stddev, kNoiseStdDev, kNoiseStdDev * 0.2);
 }
 
 TEST(GetNoiseDistributionTest, DefaultsToGaussianWhenParamAbsent)

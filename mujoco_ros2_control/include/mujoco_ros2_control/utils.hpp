@@ -73,26 +73,48 @@ inline NoiseDistribution get_noise_distribution(const hardware_interface::Compon
              NoiseDistribution::kGaussian;
 }
 
+/**
+ * @brief Sets a flat, row-major 3x3 covariance's diagonal to `stddev * stddev`, leaving off-diagonal terms
+ * untouched (0 for a freshly-`resize()`d vector, matching the "independent per-axis noise" assumption).
+ */
+inline void set_diagonal_covariance(std::vector<double>& covariance, double stddev)
+{
+  covariance[0] = covariance[4] = covariance[8] = stddev * stddev;
+}
+
 namespace detail
 {
 
 /**
- * @brief Draws a single zero-mean noise sample with the given standard deviation and shape.
+ * @brief Fills an N-vector with independent zero-mean noise samples of the given standard deviation and
+ * shape, constructing the underlying distribution once and drawing all N samples from it.
  *
  * Uniform noise is drawn from `[-stddev*sqrt(3), stddev*sqrt(3)]` (the range of a uniform distribution
  * whose own standard deviation is `stddev`), so switching a sensor's `noise_distribution` doesn't change
  * the magnitude implied by its MJCF `noise` value.
  */
-inline double sample_noise(double stddev, NoiseDistribution distribution, std::mt19937& rng)
+template <int N>
+inline Eigen::Matrix<double, N, 1> sample_noise(double stddev, NoiseDistribution distribution, std::mt19937& rng)
 {
+  Eigen::Matrix<double, N, 1> samples;
   if (distribution == NoiseDistribution::kUniform)
   {
     const double bound = stddev * std::sqrt(3.0);
     std::uniform_real_distribution<double> dist(-bound, bound);
-    return dist(rng);
+    for (int i = 0; i < N; ++i)
+    {
+      samples[i] = dist(rng);
+    }
   }
-  std::normal_distribution<double> dist(0.0, stddev);
-  return dist(rng);
+  else
+  {
+    std::normal_distribution<double> dist(0.0, stddev);
+    for (int i = 0; i < N; ++i)
+    {
+      samples[i] = dist(rng);
+    }
+  }
+  return samples;
 }
 
 }  // namespace detail
@@ -108,9 +130,7 @@ inline void add_sensor_noise(Eigen::Vector3d& value, double stddev, NoiseDistrib
   {
     return;
   }
-  value.x() += detail::sample_noise(stddev, distribution, rng);
-  value.y() += detail::sample_noise(stddev, distribution, rng);
-  value.z() += detail::sample_noise(stddev, distribution, rng);
+  value += detail::sample_noise<3>(stddev, distribution, rng);
 }
 
 /**
@@ -127,11 +147,22 @@ inline void add_sensor_noise(Eigen::Quaterniond& value, double stddev, NoiseDist
   {
     return;
   }
-  value.coeffs() += Eigen::Vector4d(detail::sample_noise(stddev, distribution, rng),
-                                    detail::sample_noise(stddev, distribution, rng),
-                                    detail::sample_noise(stddev, distribution, rng),
-                                    detail::sample_noise(stddev, distribution, rng));
+  value.coeffs() += detail::sample_noise<4>(stddev, distribution, rng);
   value.normalize();
+}
+
+/**
+ * @brief Convenience overloads taking a sensor's bundled NoiseState instead of a separate
+ * distribution/rng pair.
+ */
+inline void add_sensor_noise(Eigen::Vector3d& value, double stddev, NoiseState& noise)
+{
+  add_sensor_noise(value, stddev, noise.distribution, noise.rng);
+}
+
+inline void add_sensor_noise(Eigen::Quaterniond& value, double stddev, NoiseState& noise)
+{
+  add_sensor_noise(value, stddev, noise.distribution, noise.rng);
 }
 
 }  // namespace mujoco_ros2_control

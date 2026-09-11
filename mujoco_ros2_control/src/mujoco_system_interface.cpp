@@ -956,11 +956,9 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.linear_acceleration.data.y() = control_state_.sensordata[data.linear_acceleration.mj_sensor_index + 1];
     data.linear_acceleration.data.z() = control_state_.sensordata[data.linear_acceleration.mj_sensor_index + 2];
 
-    add_sensor_noise(data.orientation.data, data.orientation_noise_stddev, data.noise_distribution, data.noise_rng);
-    add_sensor_noise(data.angular_velocity.data, data.angular_velocity_noise_stddev, data.noise_distribution,
-                     data.noise_rng);
-    add_sensor_noise(data.linear_acceleration.data, data.linear_acceleration_noise_stddev, data.noise_distribution,
-                     data.noise_rng);
+    add_sensor_noise(data.orientation.data, data.orientation_noise_stddev, data.noise);
+    add_sensor_noise(data.angular_velocity.data, data.angular_velocity_noise_stddev, data.noise);
+    add_sensor_noise(data.linear_acceleration.data, data.linear_acceleration_noise_stddev, data.noise);
   }
 
   // FT Sensor data
@@ -974,8 +972,8 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.torque.data.y() = -control_state_.sensordata[data.torque.mj_sensor_index + 1];
     data.torque.data.z() = -control_state_.sensordata[data.torque.mj_sensor_index + 2];
 
-    add_sensor_noise(data.force.data, data.force_noise_stddev, data.noise_distribution, data.noise_rng);
-    add_sensor_noise(data.torque.data, data.torque_noise_stddev, data.noise_distribution, data.noise_rng);
+    add_sensor_noise(data.force.data, data.force_noise_stddev, data.noise);
+    add_sensor_noise(data.torque.data, data.torque_noise_stddev, data.noise);
   }
 
   // pose sensor data
@@ -990,8 +988,8 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.orientation.data.y() = control_state_.sensordata[data.orientation.mj_sensor_index + 2];
     data.orientation.data.z() = control_state_.sensordata[data.orientation.mj_sensor_index + 3];
 
-    add_sensor_noise(data.position.data, data.position_noise_stddev, data.noise_distribution, data.noise_rng);
-    add_sensor_noise(data.orientation.data, data.orientation_noise_stddev, data.noise_distribution, data.noise_rng);
+    add_sensor_noise(data.position.data, data.position_noise_stddev, data.noise);
+    add_sensor_noise(data.orientation.data, data.orientation_noise_stddev, data.noise);
   }
 
   // Magnetometer sensor data
@@ -1001,8 +999,7 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.magnetic_field.data.y() = control_state_.sensordata[data.magnetic_field.mj_sensor_index + 1];
     data.magnetic_field.data.z() = control_state_.sensordata[data.magnetic_field.mj_sensor_index + 2];
 
-    add_sensor_noise(data.magnetic_field.data, data.magnetic_field_noise_stddev, data.noise_distribution,
-                     data.noise_rng);
+    add_sensor_noise(data.magnetic_field.data, data.magnetic_field_noise_stddev, data.noise);
   }
 
   // Publish Odometry
@@ -1959,11 +1956,10 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.force.mj_sensor_index = simulation_->model()->sensor_adr[force_sensor_id];
       sensor_data.torque.mj_sensor_index = simulation_->model()->sensor_adr[torque_sensor_id];
 
-      // Sourced from the MJCF sensors' own `noise` attribute (mjModel::sensor_noise), not a ros2_control param:
-      // MuJoCo compiles it in but does not apply it itself (mj_step leaves sensordata noise-free), so we do.
+      // Noise magnitude sourced from the MJCF sensors' own `noise` attribute; see register_sensors() doc.
       sensor_data.force_noise_stddev = simulation_->model()->sensor_noise[force_sensor_id];
       sensor_data.torque_noise_stddev = simulation_->model()->sensor_noise[torque_sensor_id];
-      sensor_data.noise_distribution = get_noise_distribution(sensor);
+      sensor_data.noise.distribution = get_noise_distribution(sensor);
 
       ft_sensor_data_.push_back(sensor_data);
     }
@@ -2006,25 +2002,19 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.angular_velocity.mj_sensor_index = simulation_->model()->sensor_adr[gyro_id];
       sensor_data.linear_acceleration.mj_sensor_index = simulation_->model()->sensor_adr[accel_id];
 
-      // Sourced from the MJCF sensors' own `noise` attribute (mjModel::sensor_noise), not a ros2_control param:
-      // MuJoCo compiles it in but does not apply it itself (mj_step leaves sensordata noise-free), so we do.
+      // Noise magnitude sourced from the MJCF sensors' own `noise` attribute; see register_sensors() doc.
       sensor_data.orientation_noise_stddev = simulation_->model()->sensor_noise[quat_id];
       sensor_data.angular_velocity_noise_stddev = simulation_->model()->sensor_noise[gyro_id];
       sensor_data.linear_acceleration_noise_stddev = simulation_->model()->sensor_noise[accel_id];
-      sensor_data.noise_distribution = get_noise_distribution(sensor);
+      sensor_data.noise.distribution = get_noise_distribution(sensor);
 
       // Surface the configured noise as diagonal covariance for consumers that expect an uncertainty
       // estimate (off-diagonal terms stay 0, i.e. axes are assumed independent). Stays all-zero, as before
       // noise support existed, when the corresponding *_noise_stddev is left at its 0 default.
-      sensor_data.orientation_covariance[0] = sensor_data.orientation_covariance[4] =
-          sensor_data.orientation_covariance[8] = sensor_data.orientation_noise_stddev *
-                                                  sensor_data.orientation_noise_stddev;
-      sensor_data.angular_velocity_covariance[0] = sensor_data.angular_velocity_covariance[4] =
-          sensor_data.angular_velocity_covariance[8] = sensor_data.angular_velocity_noise_stddev *
-                                                        sensor_data.angular_velocity_noise_stddev;
-      sensor_data.linear_acceleration_covariance[0] = sensor_data.linear_acceleration_covariance[4] =
-          sensor_data.linear_acceleration_covariance[8] = sensor_data.linear_acceleration_noise_stddev *
-                                                          sensor_data.linear_acceleration_noise_stddev;
+      set_diagonal_covariance(sensor_data.orientation_covariance, sensor_data.orientation_noise_stddev);
+      set_diagonal_covariance(sensor_data.angular_velocity_covariance, sensor_data.angular_velocity_noise_stddev);
+      set_diagonal_covariance(sensor_data.linear_acceleration_covariance,
+                              sensor_data.linear_acceleration_noise_stddev);
 
       imu_sensor_data_.push_back(sensor_data);
     }
@@ -2057,11 +2047,10 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.position.mj_sensor_index = simulation_->model()->sensor_adr[pos_id];
       sensor_data.orientation.mj_sensor_index = simulation_->model()->sensor_adr[quat_id];
 
-      // Sourced from the MJCF sensors' own `noise` attribute (mjModel::sensor_noise), not a ros2_control param:
-      // MuJoCo compiles it in but does not apply it itself (mj_step leaves sensordata noise-free), so we do.
+      // Noise magnitude sourced from the MJCF sensors' own `noise` attribute; see register_sensors() doc.
       sensor_data.position_noise_stddev = simulation_->model()->sensor_noise[pos_id];
       sensor_data.orientation_noise_stddev = simulation_->model()->sensor_noise[quat_id];
-      sensor_data.noise_distribution = get_noise_distribution(sensor);
+      sensor_data.noise.distribution = get_noise_distribution(sensor);
 
       pose_sensor_data_.push_back(sensor_data);
     }
@@ -2083,10 +2072,9 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
 
       sensor_data.magnetic_field.mj_sensor_index = simulation_->model()->sensor_adr[magnetometer_id];
 
-      // Sourced from the MJCF sensor's own `noise` attribute (mjModel::sensor_noise), not a ros2_control param:
-      // MuJoCo compiles it in but does not apply it itself (mj_step leaves sensordata noise-free), so we do.
+      // Noise magnitude sourced from the MJCF sensor's own `noise` attribute; see register_sensors() doc.
       sensor_data.magnetic_field_noise_stddev = simulation_->model()->sensor_noise[magnetometer_id];
-      sensor_data.noise_distribution = get_noise_distribution(sensor);
+      sensor_data.noise.distribution = get_noise_distribution(sensor);
 
       magnetometer_sensor_data_.push_back(sensor_data);
     }

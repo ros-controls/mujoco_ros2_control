@@ -209,14 +209,23 @@ enum class NoiseDistribution
 };
 
 /**
+ * Per-sensor noise shape + RNG, shared by every noise-bearing field of a sensor. Bundled together since a
+ * sensor's fields are always sampled with the same distribution and draw from the same RNG stream.
+ */
+struct NoiseState
+{
+  NoiseDistribution distribution = NoiseDistribution::kGaussian;
+  std::mt19937 rng{ std::random_device{}() };
+};
+
+/**
  * @param force_noise_stddev Standard deviation (N) of zero-mean Gaussian noise added to `force` on read; taken
  * from the underlying MJCF `<force>` sensor's `noise` attribute (0 by default, which disables it).
  * @param torque_noise_stddev Standard deviation (N*m) of zero-mean Gaussian noise added to `torque` on read;
  * taken from the underlying MJCF `<torque>` sensor's `noise` attribute (0 by default, which disables it).
- * @param noise_distribution Shape of the noise applied to both fields above; ros2_control `noise_distribution`
- * parameter, defaults to Gaussian.
- * @param noise_rng RNG shared by both noise fields, seeded from `std::random_device` (noise is
- * non-deterministic across runs).
+ * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG shared by
+ * both noise fields above; the RNG is seeded from `std::random_device` (noise is non-deterministic across
+ * runs).
  */
 struct FTSensorData
 {
@@ -226,8 +235,7 @@ struct FTSensorData
 
   double force_noise_stddev = 0.0;
   double torque_noise_stddev = 0.0;
-  NoiseDistribution noise_distribution = NoiseDistribution::kGaussian;
-  std::mt19937 noise_rng{ std::random_device{}() };
+  NoiseState noise;
 };
 
 /**
@@ -238,10 +246,9 @@ struct FTSensorData
  * @param linear_acceleration_noise_stddev Standard deviation (m/s^2) of zero-mean Gaussian noise added to
  * `linear_acceleration` on read; taken from the underlying MJCF `<accelerometer>` sensor's `noise` attribute
  * (0 by default).
- * @param noise_distribution Shape of the noise applied to all three fields above; ros2_control
- * `noise_distribution` parameter, defaults to Gaussian.
- * @param noise_rng RNG shared by the noise fields above, seeded from `std::random_device` (noise is
- * non-deterministic across runs).
+ * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG shared by
+ * all three noise fields above; the RNG is seeded from `std::random_device` (noise is non-deterministic
+ * across runs).
  */
 struct IMUSensorData
 {
@@ -253,8 +260,7 @@ struct IMUSensorData
   double orientation_noise_stddev = 0.0;
   double angular_velocity_noise_stddev = 0.0;
   double linear_acceleration_noise_stddev = 0.0;
-  NoiseDistribution noise_distribution = NoiseDistribution::kGaussian;
-  std::mt19937 noise_rng{ std::random_device{}() };
+  NoiseState noise;
 
   // Diagonal-only (independent per-axis noise) covariance, derived from the *_noise_stddev fields above at
   // registration time. Left at all-zero (as before noise support existed) when noise is not configured.
@@ -268,10 +274,9 @@ struct IMUSensorData
  * taken from the underlying MJCF `<framepos>` sensor's `noise` attribute (0 by default).
  * @param orientation_noise_stddev Standard deviation of zero-mean Gaussian noise added to `orientation` on
  * read; taken from the underlying MJCF `<framequat>` sensor's `noise` attribute (0 by default).
- * @param noise_distribution Shape of the noise applied to both fields above; ros2_control `noise_distribution`
- * parameter, defaults to Gaussian.
- * @param noise_rng RNG shared by both noise fields, seeded from `std::random_device` (noise is
- * non-deterministic across runs).
+ * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG shared by
+ * both noise fields above; the RNG is seeded from `std::random_device` (noise is non-deterministic across
+ * runs).
  */
 struct SitePoseData
 {
@@ -281,16 +286,14 @@ struct SitePoseData
 
   double position_noise_stddev = 0.0;
   double orientation_noise_stddev = 0.0;
-  NoiseDistribution noise_distribution = NoiseDistribution::kGaussian;
-  std::mt19937 noise_rng{ std::random_device{}() };
+  NoiseState noise;
 };
 
 /**
  * @param magnetic_field_noise_stddev Standard deviation of zero-mean Gaussian noise added to `magnetic_field`
  * on read; taken from the underlying MJCF `<magnetometer>` sensor's `noise` attribute (0 by default).
- * @param noise_distribution Shape of the noise applied above; ros2_control `noise_distribution` parameter,
- * defaults to Gaussian.
- * @param noise_rng Seeded from `std::random_device` (noise is non-deterministic across runs).
+ * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG, seeded from
+ * `std::random_device` (noise is non-deterministic across runs).
  */
 struct MagnetometerSensorData
 {
@@ -298,8 +301,7 @@ struct MagnetometerSensorData
   SensorData<Eigen::Vector3d> magnetic_field;
 
   double magnetic_field_noise_stddev = 0.0;
-  NoiseDistribution noise_distribution = NoiseDistribution::kGaussian;
-  std::mt19937 noise_rng{ std::random_device{}() };
+  NoiseState noise;
 };
 
 }  // namespace mujoco_ros2_control
