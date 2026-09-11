@@ -498,7 +498,7 @@ FtsGravCompPlugin
 
 Performs gravity compensation for a force torque sensor based on provided parameters.
 
-This is intended to mock hardware configurations that have a way to do run gravity compensation on the force torque sensor data based on the weight and center of gravity of your end effector.
+This is intended to mock hardware configurations that have a way to perform gravity compensation on the force torque sensor data based on the weight and center of gravity of your end effector.
 One example of this is with the `Universal Robot Set Payload <https://www.universal-robots.com/manuals/EN/HTML/SW5_22/Content/prod-usr-man/software/PolyScope/content/BasicProgNodes/commandtab_set_payload_en.htm>`_ command.
 
 FtsGravCompPlugin Parameters
