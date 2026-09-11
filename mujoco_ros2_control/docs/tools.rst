@@ -148,6 +148,20 @@ Rough outline of the automated conversion process
     correct per link even when MuJoCo fuses fixed-jointed bodies together. A mesh shared by a visual
     and a collision is converted once and reused for both (and, if that link requests decomposition,
     the whole mesh renders while its decomposed pieces collide).
+  - Both kinds of geom get explicit attributes written directly onto them, so visual/collision
+    separation does not depend on a user-supplied ``<default class="...">`` block:
+
+    - **Visual** geoms (``class="visual"``) are render-only: they never collide and keep
+      their own material or ``rgba``.
+    - **Collision** geoms (``class="collision"``), i.e. primitives and whole meshes, do the
+      colliding and are tinted with the ``bright_orange`` material so they are easy to spot in
+      the viewer by toggling their group. The material is added to the ``<asset>`` automatically
+      when not already defined (an existing definition, e.g. from ``mujoco_inputs``, is left
+      untouched).
+    - **Decomposed collision** pieces (``class="decomposed_collision"``) collide like any other
+      collision geom but live in their own viewer group, so the convex decomposition can be
+      toggled independently of the other collisions. They are not tinted: they keep obj2mjcf's
+      per-piece colors so the individual convex hulls stay distinguishable.
 
 - Handles visual and collision geometry independently:
 

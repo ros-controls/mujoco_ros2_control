@@ -25,6 +25,7 @@ from .urdf_to_mujoco_utils import (
     update_non_obj_assets,
     add_mujoco_inputs,
     ensure_default_classes,
+    ensure_collision_material,
     decompose_threshold,
     mesh_home,
     resolve_pregenerated,
@@ -49,6 +50,7 @@ from .urdf_to_mujoco_utils import (
     COMPOSED_PATH_NAME,
     VISUAL_PATH_NAME,
     DEFAULT_DECOMPOSE_THRESHOLD,
+    COLLISION_MATERIAL_NAME,
 )
 
 __all__ = [
@@ -64,6 +66,7 @@ __all__ = [
     "update_non_obj_assets",
     "add_mujoco_inputs",
     "ensure_default_classes",
+    "ensure_collision_material",
     "decompose_threshold",
     "mesh_home",
     "resolve_pregenerated",
@@ -88,4 +91,5 @@ __all__ = [
     COMPOSED_PATH_NAME,
     VISUAL_PATH_NAME,
     DEFAULT_DECOMPOSE_THRESHOLD,
+    COLLISION_MATERIAL_NAME,
 ]
