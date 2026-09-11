@@ -24,6 +24,7 @@
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include "control_toolbox/pid_ros.hpp"
 
+#include <random>
 #include <string>
 #include <vector>
 
@@ -196,13 +197,59 @@ struct SensorData
   int mj_sensor_index;
 };
 
+/**
+ * Selects the shape of the noise sampled by `add_sensor_noise()`. Chosen per ros2_control sensor via the
+ * `noise_distribution` parameter ("gaussian" (default) or "uniform"); MJCF's `noise` attribute has no
+ * equivalent concept, since MuJoCo only ever means "standard deviation of a zero-mean Gaussian" by it.
+ */
+enum class NoiseDistribution
+{
+  kGaussian,
+  kUniform,
+};
+
+/**
+ * Per-sensor noise shape + RNG, shared by every noise-bearing field of a sensor. Bundled together since a
+ * sensor's fields are always sampled with the same distribution and draw from the same RNG stream.
+ */
+struct NoiseState
+{
+  NoiseDistribution distribution = NoiseDistribution::kGaussian;
+  std::mt19937 rng{ std::random_device{}() };
+};
+
+/**
+ * @param force_noise_stddev Standard deviation (N) of zero-mean Gaussian noise added to `force` on read; taken
+ * from the underlying MJCF `<force>` sensor's `noise` attribute (0 by default, which disables it).
+ * @param torque_noise_stddev Standard deviation (N*m) of zero-mean Gaussian noise added to `torque` on read;
+ * taken from the underlying MJCF `<torque>` sensor's `noise` attribute (0 by default, which disables it).
+ * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG shared by
+ * both noise fields above; the RNG is seeded from `std::random_device` (noise is non-deterministic across
+ * runs).
+ */
 struct FTSensorData
 {
   std::string name;
   SensorData<Eigen::Vector3d> force;
   SensorData<Eigen::Vector3d> torque;
+
+  double force_noise_stddev = 0.0;
+  double torque_noise_stddev = 0.0;
+  NoiseState noise;
 };
 
+/**
+ * @param orientation_noise_stddev Standard deviation of zero-mean Gaussian noise added to `orientation` on
+ * read; taken from the underlying MJCF `<framequat>` sensor's `noise` attribute (0 by default).
+ * @param angular_velocity_noise_stddev Standard deviation (rad/s) of zero-mean Gaussian noise added to
+ * `angular_velocity` on read; taken from the underlying MJCF `<gyro>` sensor's `noise` attribute (0 by default).
+ * @param linear_acceleration_noise_stddev Standard deviation (m/s^2) of zero-mean Gaussian noise added to
+ * `linear_acceleration` on read; taken from the underlying MJCF `<accelerometer>` sensor's `noise` attribute
+ * (0 by default).
+ * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG shared by
+ * all three noise fields above; the RNG is seeded from `std::random_device` (noise is non-deterministic
+ * across runs).
+ */
 struct IMUSensorData
 {
   std::string name;
@@ -210,23 +257,51 @@ struct IMUSensorData
   SensorData<Eigen::Vector3d> angular_velocity;
   SensorData<Eigen::Vector3d> linear_acceleration;
 
-  // These are currently unused but added to support controllers that require them.
+  double orientation_noise_stddev = 0.0;
+  double angular_velocity_noise_stddev = 0.0;
+  double linear_acceleration_noise_stddev = 0.0;
+  NoiseState noise;
+
+  // Diagonal-only (independent per-axis noise) covariance, derived from the *_noise_stddev fields above at
+  // registration time. Left at all-zero (as before noise support existed) when noise is not configured.
   std::vector<double> orientation_covariance;
   std::vector<double> angular_velocity_covariance;
   std::vector<double> linear_acceleration_covariance;
 };
 
+/**
+ * @param position_noise_stddev Standard deviation (m) of zero-mean Gaussian noise added to `position` on read;
+ * taken from the underlying MJCF `<framepos>` sensor's `noise` attribute (0 by default).
+ * @param orientation_noise_stddev Standard deviation of zero-mean Gaussian noise added to `orientation` on
+ * read; taken from the underlying MJCF `<framequat>` sensor's `noise` attribute (0 by default).
+ * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG shared by
+ * both noise fields above; the RNG is seeded from `std::random_device` (noise is non-deterministic across
+ * runs).
+ */
 struct SitePoseData
 {
   std::string name;
   SensorData<Eigen::Vector3d> position;
   SensorData<Eigen::Quaterniond> orientation;
+
+  double position_noise_stddev = 0.0;
+  double orientation_noise_stddev = 0.0;
+  NoiseState noise;
 };
 
+/**
+ * @param magnetic_field_noise_stddev Standard deviation of zero-mean Gaussian noise added to `magnetic_field`
+ * on read; taken from the underlying MJCF `<magnetometer>` sensor's `noise` attribute (0 by default).
+ * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG, seeded from
+ * `std::random_device` (noise is non-deterministic across runs).
+ */
 struct MagnetometerSensorData
 {
   std::string name;
   SensorData<Eigen::Vector3d> magnetic_field;
+
+  double magnetic_field_noise_stddev = 0.0;
+  NoiseState noise;
 };
 
 }  // namespace mujoco_ros2_control
