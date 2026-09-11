@@ -2,6 +2,9 @@
 Changelog for package mujoco_ros2_control_demos
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.1.2 (2026-09-07)
+------------------
+
 0.1.1 (2026-08-25)
 ------------------
 * Fix the generate changelog of 0.1.0 (`#288 <https://github.com/pal-robotics-forks/mujoco_ros2_control/issues/288>`_)

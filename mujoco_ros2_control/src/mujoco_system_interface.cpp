@@ -18,6 +18,7 @@
  */
 
 #include "mujoco_ros2_control/mujoco_system_interface.hpp"
+#include "mujoco_ros2_control/utils.hpp"
 
 #include <fmt/compile.h>
 #include <fmt/ranges.h>
@@ -954,6 +955,10 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.linear_acceleration.data.x() = control_state_.sensordata[data.linear_acceleration.mj_sensor_index];
     data.linear_acceleration.data.y() = control_state_.sensordata[data.linear_acceleration.mj_sensor_index + 1];
     data.linear_acceleration.data.z() = control_state_.sensordata[data.linear_acceleration.mj_sensor_index + 2];
+
+    add_sensor_noise(data.orientation.data, data.orientation_noise_stddev, data.noise);
+    add_sensor_noise(data.angular_velocity.data, data.angular_velocity_noise_stddev, data.noise);
+    add_sensor_noise(data.linear_acceleration.data, data.linear_acceleration_noise_stddev, data.noise);
   }
 
   // FT Sensor data
@@ -966,6 +971,9 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.torque.data.x() = -control_state_.sensordata[data.torque.mj_sensor_index];
     data.torque.data.y() = -control_state_.sensordata[data.torque.mj_sensor_index + 1];
     data.torque.data.z() = -control_state_.sensordata[data.torque.mj_sensor_index + 2];
+
+    add_sensor_noise(data.force.data, data.force_noise_stddev, data.noise);
+    add_sensor_noise(data.torque.data, data.torque_noise_stddev, data.noise);
   }
 
   // pose sensor data
@@ -979,6 +987,9 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.orientation.data.x() = control_state_.sensordata[data.orientation.mj_sensor_index + 1];
     data.orientation.data.y() = control_state_.sensordata[data.orientation.mj_sensor_index + 2];
     data.orientation.data.z() = control_state_.sensordata[data.orientation.mj_sensor_index + 3];
+
+    add_sensor_noise(data.position.data, data.position_noise_stddev, data.noise);
+    add_sensor_noise(data.orientation.data, data.orientation_noise_stddev, data.noise);
   }
 
   // Magnetometer sensor data
@@ -987,6 +998,8 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
     data.magnetic_field.data.x() = control_state_.sensordata[data.magnetic_field.mj_sensor_index];
     data.magnetic_field.data.y() = control_state_.sensordata[data.magnetic_field.mj_sensor_index + 1];
     data.magnetic_field.data.z() = control_state_.sensordata[data.magnetic_field.mj_sensor_index + 2];
+
+    add_sensor_noise(data.magnetic_field.data, data.magnetic_field_noise_stddev, data.noise);
   }
 
   // Publish Odometry
@@ -1943,6 +1956,11 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.force.mj_sensor_index = simulation_->model()->sensor_adr[force_sensor_id];
       sensor_data.torque.mj_sensor_index = simulation_->model()->sensor_adr[torque_sensor_id];
 
+      // Noise magnitude sourced from the MJCF sensors' own `noise` attribute; see register_sensors() doc.
+      sensor_data.force_noise_stddev = simulation_->model()->sensor_noise[force_sensor_id];
+      sensor_data.torque_noise_stddev = simulation_->model()->sensor_noise[torque_sensor_id];
+      sensor_data.noise.distribution = get_noise_distribution(sensor);
+
       ft_sensor_data_.push_back(sensor_data);
     }
     else if (mujoco_type == MUJOCO_TYPE_IMU)
@@ -1984,6 +2002,19 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.angular_velocity.mj_sensor_index = simulation_->model()->sensor_adr[gyro_id];
       sensor_data.linear_acceleration.mj_sensor_index = simulation_->model()->sensor_adr[accel_id];
 
+      // Noise magnitude sourced from the MJCF sensors' own `noise` attribute; see register_sensors() doc.
+      sensor_data.orientation_noise_stddev = simulation_->model()->sensor_noise[quat_id];
+      sensor_data.angular_velocity_noise_stddev = simulation_->model()->sensor_noise[gyro_id];
+      sensor_data.linear_acceleration_noise_stddev = simulation_->model()->sensor_noise[accel_id];
+      sensor_data.noise.distribution = get_noise_distribution(sensor);
+
+      // Surface the configured noise as diagonal covariance for consumers that expect an uncertainty
+      // estimate (off-diagonal terms stay 0, i.e. axes are assumed independent). Stays all-zero, as before
+      // noise support existed, when the corresponding *_noise_stddev is left at its 0 default.
+      set_diagonal_covariance(sensor_data.orientation_covariance, sensor_data.orientation_noise_stddev);
+      set_diagonal_covariance(sensor_data.angular_velocity_covariance, sensor_data.angular_velocity_noise_stddev);
+      set_diagonal_covariance(sensor_data.linear_acceleration_covariance, sensor_data.linear_acceleration_noise_stddev);
+
       imu_sensor_data_.push_back(sensor_data);
     }
     else if (mujoco_type == MUJOCO_TYPE_POSE)
@@ -2015,6 +2046,11 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.position.mj_sensor_index = simulation_->model()->sensor_adr[pos_id];
       sensor_data.orientation.mj_sensor_index = simulation_->model()->sensor_adr[quat_id];
 
+      // Noise magnitude sourced from the MJCF sensors' own `noise` attribute; see register_sensors() doc.
+      sensor_data.position_noise_stddev = simulation_->model()->sensor_noise[pos_id];
+      sensor_data.orientation_noise_stddev = simulation_->model()->sensor_noise[quat_id];
+      sensor_data.noise.distribution = get_noise_distribution(sensor);
+
       pose_sensor_data_.push_back(sensor_data);
     }
     else if (mujoco_type == MUJOCO_TYPE_MAGNETOMETER)
@@ -2034,6 +2070,10 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       }
 
       sensor_data.magnetic_field.mj_sensor_index = simulation_->model()->sensor_adr[magnetometer_id];
+
+      // Noise magnitude sourced from the MJCF sensor's own `noise` attribute; see register_sensors() doc.
+      sensor_data.magnetic_field_noise_stddev = simulation_->model()->sensor_noise[magnetometer_id];
+      sensor_data.noise.distribution = get_noise_distribution(sensor);
 
       magnetometer_sensor_data_.push_back(sensor_data);
     }
@@ -2208,6 +2248,13 @@ void MujocoSystemInterface::reset_simulation_state(bool /*fill_initial_state*/)
     joint.velocity_interface.command_ = 0.0;
     joint.effort_interface.command_ = 0.0;
   }
+
+  // Notify plugins: they own runtime state that the world reset has invalidated.
+  // eq_active has already been restored to MJCF defaults.
+  for (auto& plugin : plugin_instances_)
+  {
+    plugin->on_reset(simulation_->data());
+  }
 }
 
 void MujocoSystemInterface::get_model(mjModel*& dest)
@@ -2352,20 +2399,6 @@ bool MujocoSystemInterface::auto_register_plugin_if_needed(const std::string& pl
   }
 
   return true;
-}
-
-inline std::optional<hardware_interface::ComponentInfo>
-get_sensor_from_info(const hardware_interface::HardwareInfo& hardware_info, const std::string& name)
-{
-  for (size_t sensor_index = 0; sensor_index < hardware_info.sensors.size(); sensor_index++)
-  {
-    const auto& sensor = hardware_info.sensors.at(sensor_index);
-    if (hardware_info.sensors.at(sensor_index).name == name)
-    {
-      return sensor;
-    }
-  }
-  return std::nullopt;
 }
 
 void MujocoSystemInterface::load_legacy_cameras(const std::vector<std::string>& plugins_ns)

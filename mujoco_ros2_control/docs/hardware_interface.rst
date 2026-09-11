@@ -178,13 +178,15 @@ MuJoCo does not model complete FTS and IMUs natively, so we combine supported MJ
 Force-Torque Sensors
 ~~~~~~~~~~~~~~~~~~~~
 
-Model ``force`` and ``torque`` sensors separately in the MJCF, suffixed with ``_force`` and ``_torque``:
+Model ``force`` and ``torque`` sensors separately in the MJCF, suffixed with ``_force`` and ``_torque``.
+Each optionally takes a ``noise`` attribute (standard deviation, in N / N*m) to add zero-mean Gaussian noise
+to its readings, see :ref:`Sensor Noise <sensor_noise>` below:
 
 .. code-block:: xml
 
    <sensor>
-     <force name="fts_sensor_force" site="ft_frame"/>
-     <torque name="fts_sensor_torque" site="ft_frame"/>
+     <force name="fts_sensor_force" site="ft_frame" noise="0.0"/>
+     <torque name="fts_sensor_torque" site="ft_frame" noise="0.0"/>
    </sensor>
 
 Map them to a single ``ros2_control`` sensor:
@@ -209,14 +211,16 @@ Map them to a single ``ros2_control`` sensor:
 IMU
 ~~~
 
-Simulate a ``framequat``, ``gyro``, and ``accelerometer`` as a single IMU:
+Simulate a ``framequat``, ``gyro``, and ``accelerometer`` as a single IMU. Each optionally takes a ``noise``
+attribute (standard deviation) to add zero-mean Gaussian noise to its readings, see
+:ref:`Sensor Noise <sensor_noise>` below:
 
 .. code-block:: xml
 
    <sensor>
-     <framequat name="imu_sensor_quat" objtype="site" objname="imu_sensor"/>
-     <gyro name="imu_sensor_gyro" site="imu_sensor"/>
-     <accelerometer name="imu_sensor_accel" site="imu_sensor"/>
+     <framequat name="imu_sensor_quat" objtype="site" objname="imu_sensor" noise="0.0"/>
+     <gyro name="imu_sensor_gyro" site="imu_sensor" noise="0.0"/>
+     <accelerometer name="imu_sensor_accel" site="imu_sensor" noise="0.0"/>
    </sensor>
 
 Map to the corresponding ``ros2_control`` sensor:
@@ -248,12 +252,13 @@ These sensor state interfaces work out of the box with the standard ROS 2 broadc
 Magnetometer
 ~~~~~~~~~~~~
 
-Model a MuJoCo ``magnetometer`` sensor in the MJCF:
+Model a MuJoCo ``magnetometer`` sensor in the MJCF. It optionally takes a ``noise`` attribute (standard
+deviation) to add zero-mean Gaussian noise to its readings, see :ref:`Sensor Noise <sensor_noise>` below:
 
 .. code-block:: xml
 
    <sensor>
-     <magnetometer name="magnetometer_sensor" site="imu_sensor"/>
+     <magnetometer name="magnetometer_sensor" site="imu_sensor" noise="0.0"/>
    </sensor>
 
 Map it to the corresponding ``ros2_control`` sensor:
@@ -268,6 +273,53 @@ Map it to the corresponding ``ros2_control`` sensor:
      <state_interface name="magnetic_field.y"/>
      <state_interface name="magnetic_field.z"/>
    </sensor>
+
+.. _sensor_noise:
+
+Sensor Noise
+~~~~~~~~~~~~
+
+Every MJCF sensor element used above (``force``, ``torque``, ``framequat``, ``gyro``, ``accelerometer``,
+``framepos``, ``magnetometer``) accepts MuJoCo's native ``noise`` attribute: the standard deviation, in the
+sensor's native units, of the noise added to its reading. It defaults to ``0`` (no noise). Noise magnitude is
+entirely driven by the MJCF, e.g.:
+
+.. code-block:: xml
+
+   <sensor>
+     <force name="fts_sensor_force" site="ft_frame" noise="0.5"/>
+     <torque name="fts_sensor_torque" site="ft_frame" noise="0.05"/>
+   </sensor>
+
+.. note::
+
+   MuJoCo compiles ``noise`` into ``mjModel::sensor_noise`` but does not apply it itself (``mj_step`` leaves
+   ``sensordata`` noise-free) — it's normally left for tools like the ``simulate`` GUI to apply for display.
+   This hardware interface applies it on every ``read()``, using its own RNG per ``ros2_control`` sensor
+   (seeded from ``std::random_device``, so the noise sequence differs between runs; there is no seed
+   parameter).
+
+MJCF has no concept of noise *shape* though — ``noise`` only ever means "standard deviation of zero-mean
+noise". Choose the shape with the ``ros2_control`` ``noise_distribution`` parameter, applying to every field
+of that sensor:
+
+.. code-block:: xml
+
+   <sensor name="fts_sensor">
+     <param name="mujoco_type">fts</param>
+     <param name="mujoco_sensor_name">fts_sensor</param>
+     <!-- "gaussian" (default) or "uniform" -->
+     <param name="noise_distribution">gaussian</param>
+     ...
+   </sensor>
+
+``uniform`` draws from ``[-stddev*sqrt(3), stddev*sqrt(3)]``, so its actual standard deviation still matches
+the configured MJCF ``noise`` value — switching distributions doesn't change the noise magnitude, only its
+shape (bounded vs. unbounded tails).
+
+For an IMU, the configured ``noise`` values are also surfaced as the diagonal of that field's (previously
+always-zero) covariance state interfaces (e.g. ``orientation_covariance.0``), for controllers that consume a
+covariance estimate.
 
 .. warning::
 

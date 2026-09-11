@@ -2,6 +2,14 @@
 Changelog for package mujoco_ros2_control
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.1.2 (2026-09-07)
+------------------
+* Add world_reset plugin hook and restore eq_active on world reset (`#294 <https://github.com/ros-controls/mujoco_ros2_control/issues/294>`_)
+* Re-add conditional tinyxml2_vendor dependency (`#293 <https://github.com/ros-controls/mujoco_ros2_control/issues/293>`_)
+* Remove deprecated tinyxml2_vendor dependency (`#286 <https://github.com/ros-controls/mujoco_ros2_control/issues/286>`_)
+* Shut down ROS when the MuJoCo UI closes (`#285 <https://github.com/ros-controls/mujoco_ros2_control/issues/285>`_)
+* Contributors: Bilal Gill, Dylan Gallagher, Erik Holum, Sai Kishor Kothakota
+
 0.1.1 (2026-08-25)
 ------------------
 * Fix the generate changelog of 0.1.0 (`#288 <https://github.com/pal-robotics-forks/mujoco_ros2_control/issues/288>`_)

@@ -2,6 +2,9 @@
 Changelog for package mujoco_3d_lidar
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.1.2 (2026-09-07)
+------------------
+
 0.1.1 (2026-08-25)
 ------------------
 * Fix compilation on MuJoCo 3.12.0 (`#290 <https://github.com/pal-robotics-forks/mujoco_ros2_control/issues/290>`_)
