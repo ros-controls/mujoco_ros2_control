@@ -102,7 +102,7 @@ protected:
     // Use two executor threads so a blocking service callback (sleeping for
     // its wrench duration) does not prevent other callbacks (e.g. subscription
     // delivery) from being dispatched.
-    executor_ = std::make_unique<rclcpp::executors::MultiThreadedExecutor>(rclcpp::ExecutorOptions{}, 2);
+    executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
     executor_->add_node(node_);
     spin_thread_ = std::thread([this]() { executor_->spin(); });
     char error[1024] = { 0 };
@@ -207,7 +207,7 @@ protected:
   rclcpp::Node::SharedPtr plugin_node_;
 
 private:
-  std::unique_ptr<rclcpp::executors::MultiThreadedExecutor> executor_;
+  std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
   std::thread spin_thread_;
 };
 
