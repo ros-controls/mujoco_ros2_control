@@ -22,11 +22,14 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <hardware_interface/hardware_info.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 #include "mujoco_ros2_control/data.hpp"
 
+#include <cassert>
 #include <cmath>
 #include <random>
+#include <string>
 
 namespace mujoco_ros2_control
 {
@@ -64,12 +67,20 @@ inline std::string get_sensor_parameter_or(const hardware_interface::ComponentIn
 
 /**
  * @brief Reads the sensor's `noise_distribution` parameter ("gaussian" (default) or "uniform").
- * Anything other than exactly "uniform" (including an absent parameter) is treated as Gaussian.
+ * A value that is neither (including a typo) logs a warning and is treated as Gaussian; an absent
+ * parameter is treated as Gaussian silently.
  */
 inline NoiseDistribution get_noise_distribution(const hardware_interface::ComponentInfo& sensor)
 {
-  return get_sensor_parameter_or(sensor, "noise_distribution", "gaussian") == "uniform" ? NoiseDistribution::kUniform :
-                                                                                          NoiseDistribution::kGaussian;
+  const std::string value = get_sensor_parameter_or(sensor, "noise_distribution", "gaussian");
+  if (value != "gaussian" && value != "uniform")
+  {
+    RCLCPP_WARN(rclcpp::get_logger("mujoco_ros2_control"),
+                "Only noise distributions of 'gaussian' or 'uniform' are allowed, but you selected '%s'. "
+                "Defaulting to 'gaussian'.",
+                value.c_str());
+  }
+  return value == "uniform" ? NoiseDistribution::kUniform : NoiseDistribution::kGaussian;
 }
 
 /**
@@ -78,6 +89,7 @@ inline NoiseDistribution get_noise_distribution(const hardware_interface::Compon
  */
 inline void set_diagonal_covariance(std::vector<double>& covariance, double stddev)
 {
+  assert(covariance.size() == 9 && "covariance must be a flat 3x3 (9-element) matrix");
   covariance[0] = covariance[4] = covariance[8] = stddev * stddev;
 }
 
