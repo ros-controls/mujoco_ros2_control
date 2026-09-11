@@ -30,18 +30,22 @@ namespace mujoco_ros2_control_plugins
 /**
  * @brief Per-FTS bookkeeping -
  *
- * One instance exists per camera registered by CameraPlugin::register_cameras(). Buffers and
- * messages are reused across renders to avoid reallocating on every publish.
+ * One instance exists per FTS registered by FtsGravCompPlugin::register_fts().
  */
 struct FtsData
 {
+  // sensor name of FTS. Mujoco should have sensors <sensor_name>_force and <sensor_name>_torque
   std::string sensor_name;
+  // mujoco sensor address for the force and torque sensors
   int sensor_adr_force{ -1 };
   int sensor_adr_torque{ -1 };
+  // site id of the site used for center of gravity reference
   int cog_site_id;
+  // array of doubles of the center of gravity w.r.t. cog_site_it in meters for [x, y, z]
   mjtNum cog_pos[3];
+  // mass that is being compensated in kg
   mjtNum cog_mass;
-  geometry_msgs::msg::Wrench wrench;
+  // site id of the site used for the mujoco force and torque sensors
   int fts_site_id{ -1 };
 };
 
