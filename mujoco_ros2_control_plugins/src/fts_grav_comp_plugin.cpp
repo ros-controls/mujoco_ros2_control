@@ -119,7 +119,7 @@ bool FtsGravCompPlugin::register_fts(const mjModel* model)
     fts_data.sensor_name = sensor_name;
     fts_data.sensor_adr_force = model->sensor_adr[sensor_id_force];
     fts_data.sensor_adr_torque = model->sensor_adr[sensor_id_torque];
-    fts_data.cog_site_id = mj_name2id(model, mjOBJ_SITE, frame_id_param.c_str());
+    fts_data.cog_site_id = cog_site_id;
     fts_data.cog_mass = cog_mass_param;
     fts_data.cog_pos[0] = cog_pos_param[0];
     fts_data.cog_pos[1] = cog_pos_param[1];

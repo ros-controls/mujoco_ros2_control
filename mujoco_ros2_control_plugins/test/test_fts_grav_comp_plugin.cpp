@@ -29,8 +29,9 @@
 
 namespace
 {
-// A simple representative FTS suite
-// Body orientation is identity so body-frame and world-frame forces coincide.
+// A simple representative FTS testing suite
+// Note here that the FTS is attached to the child body, which agrees with
+// the standard that the FTS is attached to the child body
 constexpr const char* kMjcf = R"(
 <mujoco model="fts_grav_comp_test">
   <option gravity="0 0 -9.81"/>
@@ -40,19 +41,19 @@ constexpr const char* kMjcf = R"(
       <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
       <geom type="box" size="0.05 0.05 0.05" rgba="0.5 0.5 0.5 0.5"/>
 
-      <!-- Site 1: Primary FT sensor location -->
-      <site name="ft_sensor_site" pos="0.05 0 0"/>
+      <!-- Child body with 10kg mass attached -->
+      <body name="mass_body" pos="0 0 0">
+        <!-- Site 1: Primary FT sensor location -->
+        <site name="ft_sensor_site" pos="0.05 0 0"/>
 
-      <!-- Site 2: Offset by 0.1m in Z direction, same orientation -->
-      <site name="offset_site" pos="0.05 0 0.1"/>
+        <!-- Site 2: Offset by 0.1m in Y direction, same orientation -->
+        <site name="offset_site" pos="0.05 0.1 0.0"/>
 
-      <!-- Site 3: Offset by 0.05m in X direction, and rotated 90 degrees
-           around Y-axis the mass is now purely in the z dimension -->
-      <site name="offset_rotated_site" pos="0.1 0 0" euler="0 90 0"/>
+        <!-- Site 3: Offset by 0.05m in X direction, and rotated 90 degrees
+            around Y-axis the mass is now purely in the z dimension -->
+        <site name="offset_rotated_site" pos="0.1 0 0" euler="0 90 0"/>
 
-      <!-- Child body with 10kg mass attached at sensor site -->
-      <body name="mass_body" pos="0.15 0 0">
-        <inertial pos="0 0 0" mass="10" diaginertia="0.1 0.1 0.1"/>
+        <inertial pos="0.15 0 0" mass="10" diaginertia="0.1 0.1 0.1"/>
         <geom type="sphere" size="0.05" pos="0 0 0" rgba="1 0 0 0.2"/>
       </body>
     </body>
@@ -179,6 +180,22 @@ protected:
     setParam("or_fts_sensor.CoG.mass", double{ 10.0 });
   }
 
+  std::vector<double> get_ft_data(mujoco_ros2_control_plugins::FtsData fts)
+  {
+    std::vector<double> ft_data(6, 0);
+    const mjtNum* sensordata_force = data_->sensordata + fts.sensor_adr_force;
+    const mjtNum* sensordata_torque = data_->sensordata + fts.sensor_adr_torque;
+    // everything must be negated to handle the way force and torque sensors are set up
+    ft_data[0] = -sensordata_force[0];   // force x
+    ft_data[1] = -sensordata_force[1];   // force y
+    ft_data[2] = -sensordata_force[2];   // force z
+    ft_data[3] = -sensordata_torque[0];  // torque x
+    ft_data[4] = -sensordata_torque[1];  // torque y
+    ft_data[5] = -sensordata_torque[2];  // torque z
+
+    return ft_data;
+  }
+
   mjModel* model_{ nullptr };
   mjData* data_{ nullptr };
   rclcpp::Node::SharedPtr node_;
@@ -230,6 +247,121 @@ TEST_F(FtsGravCompPluginTest, FailOnNonExistentSensor)
   setParam("nonexistent_fts_sensor.CoG.mass", double{ 10.0 });
   mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
   ASSERT_FALSE(plugin.init(plugin_node_, model_, data_));
+
+  plugin.cleanup();
+}
+
+// verifies that the final wrench data is 0 after gravity compensation
+TEST_F(FtsGravCompPluginTest, GravityIsComped)
+{
+  set_plugin_params();
+
+  mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  plugin.update(model_, data_);
+
+  // expected that the FT data should be 0 after gravity compensation
+  std::vector<double> expected_data = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+
+  // check the first FT sensor
+  std::vector<double> real_data_0 = get_ft_data(plugin.get_fts_data()[0]);
+  EXPECT_NEAR(real_data_0[0], expected_data[0], 1e-9);
+  EXPECT_NEAR(real_data_0[1], expected_data[1], 1e-9);
+  EXPECT_NEAR(real_data_0[2], expected_data[2], 1e-9);
+  EXPECT_NEAR(real_data_0[3], expected_data[3], 1e-9);
+  EXPECT_NEAR(real_data_0[4], expected_data[4], 1e-9);
+  EXPECT_NEAR(real_data_0[5], expected_data[5], 1e-9);
+
+  // check the second FT sensor
+  std::vector<double> real_data_1 = get_ft_data(plugin.get_fts_data()[1]);
+  EXPECT_NEAR(real_data_1[0], expected_data[0], 1e-9);
+  EXPECT_NEAR(real_data_1[1], expected_data[1], 1e-9);
+  EXPECT_NEAR(real_data_1[2], expected_data[2], 1e-9);
+  EXPECT_NEAR(real_data_1[3], expected_data[3], 1e-9);
+  EXPECT_NEAR(real_data_1[4], expected_data[4], 1e-9);
+  EXPECT_NEAR(real_data_1[5], expected_data[5], 1e-9);
+
+  plugin.cleanup();
+}
+
+// verifies that the the same data sees the real weight after gravity compensation mass is 0
+TEST_F(FtsGravCompPluginTest, GravityIsNotComped)
+{
+  set_plugin_params();
+  setParam("fts_sensor.CoG.mass", double{ 0.0 });
+  setParam("or_fts_sensor.CoG.mass", double{ 0.0 });
+  mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  plugin.update(model_, data_);
+
+  // force FTS 0 (negative z direction)
+  // mass * gravity
+  double force_0 = 10.0 * -9.81;
+  // torque FTS 1 (positive y direction)
+  // mass * gravity * distance
+  double torque_0 = 10.0 * 9.81 * 0.1;
+
+  // check the first FT sensor
+  std::vector<double> real_data_0 = get_ft_data(plugin.get_fts_data()[0]);
+  EXPECT_NEAR(real_data_0[0], 0.0, 1e-9);
+  EXPECT_NEAR(real_data_0[1], 0.0, 1e-9);
+  EXPECT_NEAR(real_data_0[2], force_0, 1e-9);
+  EXPECT_NEAR(real_data_0[3], 0.0, 1e-9);
+  EXPECT_NEAR(real_data_0[4], torque_0, 1e-9);
+  EXPECT_NEAR(real_data_0[5], 0.0, 1e-9);
+
+  // force FTS 0 (positive x direction)
+  // mass * gravity
+  double force_1 = 10.0 * 9.81;
+  // torque FTS 1 (positive y direction)
+  // mass * gravity * distance
+  double torque_1 = 10.0 * 9.81 * 0.05;
+
+  // check the second FT sensor
+  std::vector<double> real_data_1 = get_ft_data(plugin.get_fts_data()[1]);
+  EXPECT_NEAR(real_data_1[0], force_1, 1e-9);
+  EXPECT_NEAR(real_data_1[1], 0.0, 1e-9);
+  EXPECT_NEAR(real_data_1[2], 0.0, 1e-9);
+  EXPECT_NEAR(real_data_1[3], 0.0, 1e-9);
+  EXPECT_NEAR(real_data_1[4], torque_1, 1e-9);
+  EXPECT_NEAR(real_data_1[5], 0.0, 1e-9);
+
+  plugin.cleanup();
+}
+
+// verifies that the final wrench data is 0 after gravity compensation
+TEST_F(FtsGravCompPluginTest, GravityIsCompedWithFrameIdDifferentFromSensorId)
+{
+  set_plugin_params();
+  setParam("fts_sensor.frame_id", std::string("offset_site"));
+  setParam("fts_sensor.CoG.pos", std::vector<double>{ 0.1, -0.1, 0.0 });
+  setParam("or_fts_sensor.frame_id", std::string("offset_site"));
+  setParam("or_fts_sensor.CoG.pos", std::vector<double>{ 0.1, -0.1, 0.0 });
+
+  mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+  plugin.update(model_, data_);
+
+  // expected that the FT data should be 0 after gravity compensation
+  std::vector<double> expected_data = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+
+  // check the first FT sensor
+  std::vector<double> real_data_0 = get_ft_data(plugin.get_fts_data()[0]);
+  EXPECT_NEAR(real_data_0[0], expected_data[0], 1e-9);
+  EXPECT_NEAR(real_data_0[1], expected_data[1], 1e-9);
+  EXPECT_NEAR(real_data_0[2], expected_data[2], 1e-9);
+  EXPECT_NEAR(real_data_0[3], expected_data[3], 1e-9);
+  EXPECT_NEAR(real_data_0[4], expected_data[4], 1e-9);
+  EXPECT_NEAR(real_data_0[5], expected_data[5], 1e-9);
+
+  // check the second FT sensor
+  std::vector<double> real_data_1 = get_ft_data(plugin.get_fts_data()[1]);
+  EXPECT_NEAR(real_data_1[0], expected_data[0], 1e-9);
+  EXPECT_NEAR(real_data_1[1], expected_data[1], 1e-9);
+  EXPECT_NEAR(real_data_1[2], expected_data[2], 1e-9);
+  EXPECT_NEAR(real_data_1[3], expected_data[3], 1e-9);
+  EXPECT_NEAR(real_data_1[4], expected_data[4], 1e-9);
+  EXPECT_NEAR(real_data_1[5], expected_data[5], 1e-9);
 
   plugin.cleanup();
 }
