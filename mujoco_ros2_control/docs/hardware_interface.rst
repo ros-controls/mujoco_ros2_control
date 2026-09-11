@@ -281,8 +281,8 @@ Sensor Noise
 
 Every MJCF sensor element used above (``force``, ``torque``, ``framequat``, ``gyro``, ``accelerometer``,
 ``framepos``, ``magnetometer``) accepts MuJoCo's native ``noise`` attribute: the standard deviation, in the
-sensor's native units, of zero-mean Gaussian noise. It defaults to ``0`` (no noise). There is no separate
-``ros2_control``-side noise configuration; noise is entirely driven by the MJCF, e.g.:
+sensor's native units, of the noise added to its reading. It defaults to ``0`` (no noise). Noise magnitude is
+entirely driven by the MJCF, e.g.:
 
 .. code-block:: xml
 
@@ -298,6 +298,24 @@ sensor's native units, of zero-mean Gaussian noise. It defaults to ``0`` (no noi
    This hardware interface applies it on every ``read()``, using its own RNG per ``ros2_control`` sensor
    (seeded from ``std::random_device``, so the noise sequence differs between runs; there is no seed
    parameter).
+
+MJCF has no concept of noise *shape* though — ``noise`` only ever means "standard deviation of zero-mean
+noise". Choose the shape with the ``ros2_control`` ``noise_distribution`` parameter, applying to every field
+of that sensor:
+
+.. code-block:: xml
+
+   <sensor name="fts_sensor">
+     <param name="mujoco_type">fts</param>
+     <param name="mujoco_sensor_name">fts_sensor</param>
+     <!-- "gaussian" (default) or "uniform" -->
+     <param name="noise_distribution">gaussian</param>
+     ...
+   </sensor>
+
+``uniform`` draws from ``[-stddev*sqrt(3), stddev*sqrt(3)]``, so its actual standard deviation still matches
+the configured MJCF ``noise`` value — switching distributions doesn't change the noise magnitude, only its
+shape (bounded vs. unbounded tails).
 
 For an IMU, the configured ``noise`` values are also surfaced as the diagonal of that field's (previously
 always-zero) covariance state interfaces (e.g. ``orientation_covariance.0``), for controllers that consume a

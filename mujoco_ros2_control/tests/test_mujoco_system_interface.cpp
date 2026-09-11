@@ -497,43 +497,182 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseUsesIndependentRngPerSe
                                   "(their noise sequences should diverge)";
 }
 
-TEST(AddGaussianNoiseTest, ZeroStdDevIsNoOp)
+TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseSupportsUniformDistribution)
+{
+  // magnetometer_sensor_noisy sets noise="0.05" in the MJCF; pairing it with a `noise_distribution=uniform`
+  // ros2_control sensor here confirms the distribution choice is honored end-to-end (bounded samples with
+  // stddev matching the MJCF value), not just in the add_sensor_noise() unit tests below.
+  constexpr double kNoiseStdDev = 0.05;  // must match magnetometer_sensor_noisy's noise="0.05" in kTestModel
+  const double bound = kNoiseStdDev * std::sqrt(3.0);
+  auto hardware_info = create_hardware_info();
+
+  hardware_interface::ComponentInfo raw_sensor_info;
+  raw_sensor_info.name = "magnetometer_sensor_raw";
+  raw_sensor_info.parameters[mujoco_ros2_control::MUJOCO_TYPE_PARAM] = mujoco_ros2_control::MUJOCO_TYPE_MAGNETOMETER;
+  raw_sensor_info.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = "magnetometer_sensor";
+  for (const auto* interface_name : { "magnetic_field.x", "magnetic_field.y", "magnetic_field.z" })
+  {
+    hardware_interface::InterfaceInfo interface_info;
+    interface_info.name = interface_name;
+    raw_sensor_info.state_interfaces.push_back(interface_info);
+  }
+
+  hardware_interface::ComponentInfo uniform_sensor_info = raw_sensor_info;
+  uniform_sensor_info.name = "magnetometer_sensor_uniform";
+  uniform_sensor_info.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = "magnetometer_sensor_noisy";
+  uniform_sensor_info.parameters["noise_distribution"] = "uniform";
+
+  hardware_info.sensors.push_back(raw_sensor_info);
+  hardware_info.sensors.push_back(uniform_sensor_info);
+
+  ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
+
+  mjModel* model = nullptr;
+  mjData* data = nullptr;
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_model(model);
+    interface_->get_data(data);
+    return model != nullptr && data != nullptr && data->time > 0.0;
+  })) << "Simulation did not start stepping";
+
+  const auto state_interfaces = interface_->export_state_interfaces();
+  ASSERT_EQ(state_interfaces.size(), 6u);
+
+  auto get_value = [](const hardware_interface::StateInterface& si) {
+#if ROS_DISTRO_HUMBLE
+    return si.get_value();
+#else
+    return si.get_optional().value();
+#endif
+  };
+
+  constexpr int kSamples = 2000;
+  std::vector<double> noise_samples;
+  noise_samples.reserve(kSamples * 3);
+  for (int i = 0; i < kSamples; ++i)
+  {
+    interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      const double raw_value = get_value(state_interfaces[axis]);
+      const double uniform_value = get_value(state_interfaces[3 + axis]);
+      const double sample = uniform_value - raw_value;
+      ASSERT_LE(sample, bound + 1e-9) << "Uniform noise must never exceed its scaled bound";
+      ASSERT_GE(sample, -bound - 1e-9) << "Uniform noise must never exceed its scaled bound";
+      noise_samples.push_back(sample);
+    }
+  }
+
+  const double sample_count = static_cast<double>(noise_samples.size());
+  const double mean = std::accumulate(noise_samples.begin(), noise_samples.end(), 0.0) / sample_count;
+  double variance = 0.0;
+  for (const double sample : noise_samples)
+  {
+    variance += (sample - mean) * (sample - mean);
+  }
+  variance /= sample_count;
+  const double sample_stddev = std::sqrt(variance);
+
+  // The uniform range is scaled by sqrt(3) so its true stddev should still match the configured MJCF value.
+  EXPECT_NEAR(mean, 0.0, 0.01);
+  EXPECT_NEAR(sample_stddev, kNoiseStdDev, kNoiseStdDev * 0.2);
+}
+
+TEST(GetNoiseDistributionTest, DefaultsToGaussianWhenParamAbsent)
+{
+  hardware_interface::ComponentInfo sensor;
+  EXPECT_EQ(mujoco_ros2_control::get_noise_distribution(sensor), mujoco_ros2_control::NoiseDistribution::kGaussian);
+}
+
+TEST(GetNoiseDistributionTest, ReturnsUniformWhenParamSetToUniform)
+{
+  hardware_interface::ComponentInfo sensor;
+  sensor.parameters["noise_distribution"] = "uniform";
+  EXPECT_EQ(mujoco_ros2_control::get_noise_distribution(sensor), mujoco_ros2_control::NoiseDistribution::kUniform);
+}
+
+TEST(GetNoiseDistributionTest, ReturnsGaussianWhenParamExplicitlySetToGaussian)
+{
+  hardware_interface::ComponentInfo sensor;
+  sensor.parameters["noise_distribution"] = "gaussian";
+  EXPECT_EQ(mujoco_ros2_control::get_noise_distribution(sensor), mujoco_ros2_control::NoiseDistribution::kGaussian);
+}
+
+TEST(AddSensorNoiseTest, GaussianZeroStdDevIsNoOp)
 {
   std::mt19937 rng(1);
   Eigen::Vector3d value(1.0, 2.0, 3.0);
-  mujoco_ros2_control::add_gaussian_noise(value, 0.0, rng);
+  mujoco_ros2_control::add_sensor_noise(value, 0.0, mujoco_ros2_control::NoiseDistribution::kGaussian, rng);
   EXPECT_DOUBLE_EQ(value.x(), 1.0);
   EXPECT_DOUBLE_EQ(value.y(), 2.0);
   EXPECT_DOUBLE_EQ(value.z(), 3.0);
 }
 
-TEST(AddGaussianNoiseTest, NonZeroStdDevChangesValue)
+TEST(AddSensorNoiseTest, GaussianNonZeroStdDevChangesValue)
 {
   std::mt19937 rng(1);
   Eigen::Vector3d value(1.0, 2.0, 3.0);
-  mujoco_ros2_control::add_gaussian_noise(value, 0.1, rng);
+  mujoco_ros2_control::add_sensor_noise(value, 0.1, mujoco_ros2_control::NoiseDistribution::kGaussian, rng);
   EXPECT_NE(value.x(), 1.0);
   EXPECT_NE(value.y(), 2.0);
   EXPECT_NE(value.z(), 3.0);
 }
 
-TEST(AddGaussianNoiseTest, SameSeedProducesSameNoise)
+TEST(AddSensorNoiseTest, GaussianSameSeedProducesSameNoise)
 {
   std::mt19937 rng_a(7);
   std::mt19937 rng_b(7);
   Eigen::Vector3d value_a(0.0, 0.0, 0.0);
   Eigen::Vector3d value_b(0.0, 0.0, 0.0);
-  mujoco_ros2_control::add_gaussian_noise(value_a, 1.0, rng_a);
-  mujoco_ros2_control::add_gaussian_noise(value_b, 1.0, rng_b);
+  mujoco_ros2_control::add_sensor_noise(value_a, 1.0, mujoco_ros2_control::NoiseDistribution::kGaussian, rng_a);
+  mujoco_ros2_control::add_sensor_noise(value_b, 1.0, mujoco_ros2_control::NoiseDistribution::kGaussian, rng_b);
   EXPECT_TRUE(value_a.isApprox(value_b));
 }
 
-TEST(AddGaussianNoiseTest, QuaternionRemainsNormalized)
+TEST(AddSensorNoiseTest, GaussianQuaternionRemainsNormalized)
 {
   std::mt19937 rng(3);
   Eigen::Quaterniond value(1.0, 0.0, 0.0, 0.0);
-  mujoco_ros2_control::add_gaussian_noise(value, 0.2, rng);
+  mujoco_ros2_control::add_sensor_noise(value, 0.2, mujoco_ros2_control::NoiseDistribution::kGaussian, rng);
   EXPECT_NEAR(value.norm(), 1.0, 1e-9);
+}
+
+TEST(AddSensorNoiseTest, UniformZeroStdDevIsNoOp)
+{
+  std::mt19937 rng(1);
+  Eigen::Vector3d value(1.0, 2.0, 3.0);
+  mujoco_ros2_control::add_sensor_noise(value, 0.0, mujoco_ros2_control::NoiseDistribution::kUniform, rng);
+  EXPECT_DOUBLE_EQ(value.x(), 1.0);
+  EXPECT_DOUBLE_EQ(value.y(), 2.0);
+  EXPECT_DOUBLE_EQ(value.z(), 3.0);
+}
+
+TEST(AddSensorNoiseTest, UniformQuaternionRemainsNormalized)
+{
+  std::mt19937 rng(3);
+  Eigen::Quaterniond value(1.0, 0.0, 0.0, 0.0);
+  mujoco_ros2_control::add_sensor_noise(value, 0.2, mujoco_ros2_control::NoiseDistribution::kUniform, rng);
+  EXPECT_NEAR(value.norm(), 1.0, 1e-9);
+}
+
+TEST(AddSensorNoiseTest, UniformStaysWithinScaledBounds)
+{
+  // Uniform noise is drawn from [-stddev*sqrt(3), stddev*sqrt(3)] so its true stddev matches `stddev`,
+  // unlike Gaussian noise, which has unbounded tails. This also distinguishes it from a mis-wired Gaussian.
+  constexpr double kStdDev = 0.1;
+  const double bound = kStdDev * std::sqrt(3.0);
+  std::mt19937 rng(11);
+  for (int i = 0; i < 5000; ++i)
+  {
+    Eigen::Vector3d value(0.0, 0.0, 0.0);
+    mujoco_ros2_control::add_sensor_noise(value, kStdDev, mujoco_ros2_control::NoiseDistribution::kUniform, rng);
+    ASSERT_LE(value.x(), bound);
+    ASSERT_GE(value.x(), -bound);
+    ASSERT_LE(value.y(), bound);
+    ASSERT_GE(value.y(), -bound);
+    ASSERT_LE(value.z(), bound);
+    ASSERT_GE(value.z(), -bound);
+  }
 }
 
 int main(int argc, char** argv)

@@ -242,10 +242,14 @@ private:
    *
    * Each underlying MJCF sensor element (`force`, `torque`, `framequat`, `gyro`, `accelerometer`, `framepos`,
    * `magnetometer`) may set its own `noise` attribute (standard deviation, in the sensor's native units).
-   * MuJoCo compiles this into `mjModel::sensor_noise` but does not apply it itself, so `read()` adds it as
-   * zero-mean Gaussian noise on every cycle, using an RNG seeded from `std::random_device` (so noise differs
-   * between runs). There is no ros2_control-side noise configuration; setting `noise="0"` (the MJCF default)
-   * keeps a sensor noise-free.
+   * MuJoCo compiles this into `mjModel::sensor_noise` but does not apply it itself, so `read()` adds it on
+   * every cycle, using an RNG seeded from `std::random_device` (so noise differs between runs). Setting
+   * `noise="0"` (the MJCF default) keeps a sensor noise-free.
+   *
+   * The noise *magnitude* thus comes entirely from the MJCF; MJCF has no concept of distribution shape
+   * though, so a ros2_control `<param name="noise_distribution">` ("gaussian" (default) or "uniform"),
+   * applying to every field of that sensor, selects it. Uniform noise is drawn from
+   * `[-stddev*sqrt(3), stddev*sqrt(3)]`, so its actual standard deviation still matches the MJCF value.
    */
   void register_sensors(const hardware_interface::HardwareInfo& info);
 
