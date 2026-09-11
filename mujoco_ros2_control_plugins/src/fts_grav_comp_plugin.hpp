@@ -85,18 +85,11 @@ public:
    * @brief getter for fts data used for testing
    */
   std::vector<FtsData> get_fts_data() const
-  {
-    return fts_;
-  }
+  { return fts_; }
 
 private:
-  rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr fts_wrench_publisher_;
-  rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr fts_comped_wrench_publisher_;
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_ = rclcpp::get_logger("FtsGravCompPlugin");
-  rclcpp::Time last_publish_time_;
-  rclcpp::Duration publish_period_{ 1, 0 };  // Publish every 1 second
-  uint64_t message_count_{ 0 };
 
   std::vector<FtsData> fts_;
 };

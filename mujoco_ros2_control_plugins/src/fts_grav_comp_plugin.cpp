@@ -156,39 +156,11 @@ bool FtsGravCompPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model,
     return true;
   }
 
-  fts_wrench_publisher_ = node_->create_publisher<geometry_msgs::msg::Wrench>("fts_wrench", 10);
-  fts_comped_wrench_publisher_ = node_->create_publisher<geometry_msgs::msg::Wrench>("fts_comped_wrench", 10);
-
-  // Initialize the last publish time
-  last_publish_time_ = node_->get_clock()->now();
-
-  RCLCPP_INFO(logger_, "FtsGravCompPlugin initialized. Publishing to topic 'fts_wrench' every %.3f second(s).",
-              publish_period_.seconds());
-
   return true;
 }
 
 void FtsGravCompPlugin::update(const mjModel* model, mjData* data)
 {
-  auto current_time = node_->get_clock()->now();
-  auto elapsed = current_time - last_publish_time_;
-
-  // TODO - this is just here for troubleshooting for now, will come out in final version
-  if (elapsed >= publish_period_)
-  {
-    const mjtNum* sensordata_force = data->sensordata + fts_[0].sensor_adr_force;
-    const mjtNum* sensordata_torque = data->sensordata + fts_[0].sensor_adr_torque;
-    // everything must be negated to handle the way force and torque sensors are set up
-    fts_[0].wrench.force.x = -sensordata_force[0];
-    fts_[0].wrench.force.y = -sensordata_force[1];
-    fts_[0].wrench.force.z = -sensordata_force[2];
-    fts_[0].wrench.torque.x = -sensordata_torque[0];
-    fts_[0].wrench.torque.y = -sensordata_torque[1];
-    fts_[0].wrench.torque.z = -sensordata_torque[2];
-
-    fts_wrench_publisher_->publish(fts_[0].wrench);
-  }
-
   // run gravity compensation for each force torque sensor
   for (auto& fts : fts_)
   {
@@ -234,33 +206,10 @@ void FtsGravCompPlugin::update(const mjModel* model, mjData* data)
     mju_copy3(sensordata_force, comped_force_in_fts_frame);
     mju_copy3(sensordata_torque, comped_torque_in_fts_frame);
   }
-
-  // TODO - this is just here for troubleshooting for now, will come out in final version
-  if (elapsed >= publish_period_)
-  {
-    const mjtNum* sensordata_force = data->sensordata + fts_[0].sensor_adr_force;
-    const mjtNum* sensordata_torque = data->sensordata + fts_[0].sensor_adr_torque;
-    // everything must be negated to handle the way force and torque sensors are set up
-    fts_[0].wrench.force.x = -sensordata_force[0];
-    fts_[0].wrench.force.y = -sensordata_force[1];
-    fts_[0].wrench.force.z = -sensordata_force[2];
-    fts_[0].wrench.torque.x = -sensordata_torque[0];
-    fts_[0].wrench.torque.y = -sensordata_torque[1];
-    fts_[0].wrench.torque.z = -sensordata_torque[2];
-
-    fts_comped_wrench_publisher_->publish(fts_[0].wrench);
-
-    last_publish_time_ = current_time;
-  }
 }
 
 void FtsGravCompPlugin::cleanup()
-{
-  RCLCPP_INFO(logger_, "FtsGravCompPlugin cleanup. Published %lu messages total.", message_count_);
-
-  fts_wrench_publisher_.reset();
-  node_.reset();
-}
+{ node_.reset(); }
 
 }  // namespace mujoco_ros2_control_plugins
 
