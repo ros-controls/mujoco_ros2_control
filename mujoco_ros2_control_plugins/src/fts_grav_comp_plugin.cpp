@@ -26,8 +26,11 @@ namespace mujoco_ros2_control_plugins
 std::vector<std::string> FtsGravCompPlugin::get_sensor_names_from_parameters()
 {
   const std::string param_namespace = "mujoco_plugins." + node_->get_sub_namespace();
-  // List all parameters under mujoco_plugins.<plugin_name> with depth 2
-  auto param_names = node_->list_parameters({ param_namespace }, 2).names;
+  // List all parameters under mujoco_plugins.<plugin_name> recursively. A finite depth is not
+  // used here because rclcpp's depth counting is off-by-one on Humble (fixed in Jazzy), so a
+  // fixed depth value does not behave consistently across distros.
+  auto param_names =
+      node_->list_parameters({ param_namespace }, rcl_interfaces::srv::ListParameters::Request::DEPTH_RECURSIVE).names;
 
   // Use a set to store unique sensor names
   std::set<std::string> sensor_names_set;
