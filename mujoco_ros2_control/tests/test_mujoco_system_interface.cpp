@@ -493,7 +493,7 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseUsesIndependentRngPerSe
   }
 
   EXPECT_TRUE(saw_divergence) << "Two sensors mapped to the same noisy MJCF sensor should not share an RNG "
-                                  "(their noise sequences should diverge)";
+                                 "(their noise sequences should diverge)";
 }
 
 TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseSupportsUniformDistribution)
@@ -506,7 +506,7 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseSupportsUniformDistribu
   auto hardware_info = create_hardware_info();
   hardware_info.sensors.push_back(make_magnetometer_sensor("magnetometer_sensor_raw", "magnetometer_sensor"));
   hardware_info.sensors.push_back(make_magnetometer_sensor("magnetometer_sensor_uniform", "magnetometer_sensor_noisy",
-                                                            { { "noise_distribution", "uniform" } }));
+                                                           { { "noise_distribution", "uniform" } }));
 
   ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
 

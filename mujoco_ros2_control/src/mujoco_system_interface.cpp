@@ -2013,8 +2013,7 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       // noise support existed, when the corresponding *_noise_stddev is left at its 0 default.
       set_diagonal_covariance(sensor_data.orientation_covariance, sensor_data.orientation_noise_stddev);
       set_diagonal_covariance(sensor_data.angular_velocity_covariance, sensor_data.angular_velocity_noise_stddev);
-      set_diagonal_covariance(sensor_data.linear_acceleration_covariance,
-                              sensor_data.linear_acceleration_noise_stddev);
+      set_diagonal_covariance(sensor_data.linear_acceleration_covariance, sensor_data.linear_acceleration_noise_stddev);
 
       imu_sensor_data_.push_back(sensor_data);
     }

@@ -68,9 +68,8 @@ inline std::string get_sensor_parameter_or(const hardware_interface::ComponentIn
  */
 inline NoiseDistribution get_noise_distribution(const hardware_interface::ComponentInfo& sensor)
 {
-  return get_sensor_parameter_or(sensor, "noise_distribution", "gaussian") == "uniform" ?
-             NoiseDistribution::kUniform :
-             NoiseDistribution::kGaussian;
+  return get_sensor_parameter_or(sensor, "noise_distribution", "gaussian") == "uniform" ? NoiseDistribution::kUniform :
+                                                                                          NoiseDistribution::kGaussian;
 }
 
 /**
@@ -123,8 +122,7 @@ inline Eigen::Matrix<double, N, 1> sample_noise(double stddev, NoiseDistribution
  * @brief Adds zero-mean noise, independently sampled per axis, to a 3D vector in place.
  * No-op if `stddev` is not positive, so a disabled (default) sensor pays no sampling cost.
  */
-inline void add_sensor_noise(Eigen::Vector3d& value, double stddev, NoiseDistribution distribution,
-                              std::mt19937& rng)
+inline void add_sensor_noise(Eigen::Vector3d& value, double stddev, NoiseDistribution distribution, std::mt19937& rng)
 {
   if (stddev <= 0.0)
   {
@@ -140,8 +138,7 @@ inline void add_sensor_noise(Eigen::Vector3d& value, double stddev, NoiseDistrib
  * configuration is expected to use, but not a proper noise model on SO(3) for large values.
  * No-op if `stddev` is not positive.
  */
-inline void add_sensor_noise(Eigen::Quaterniond& value, double stddev, NoiseDistribution distribution,
-                              std::mt19937& rng)
+inline void add_sensor_noise(Eigen::Quaterniond& value, double stddev, NoiseDistribution distribution, std::mt19937& rng)
 {
   if (stddev <= 0.0)
   {
