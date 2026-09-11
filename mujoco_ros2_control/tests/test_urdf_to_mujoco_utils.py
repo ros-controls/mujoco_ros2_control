@@ -612,13 +612,15 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             # the mirrored sibling's whole-mesh collision geom is gone ...
             self.assertNotRegex(result_xml, r'<geom[^>]*mesh="leg1"[^>]*class="collision"[^>]*>')
             # ... replaced by scaled decomposed pieces referencing per-sibling piece meshes
-            self.assertRegex(result_xml, r'<geom[^>]*mesh="leg_collision_0__leg1"[^>]*class="collision"[^>]*>')
+            self.assertRegex(
+                result_xml, r'<geom[^>]*mesh="leg_collision_0__leg1"[^>]*class="decomposed_collision"[^>]*>'
+            )
             # a scaled piece mesh asset exists, carrying the sibling's mirror scale
             self.assertRegex(result_xml, r'<mesh name="leg_collision_0__leg1"[^>]*scale="1 -1 1"[^>]*>')
             # the whole sibling mesh asset is dropped (no visual references it)
             self.assertNotRegex(result_xml, r'<mesh name="leg1"[ />]')
             # the unscaled (left) side still expands as before
-            self.assertRegex(result_xml, r'<geom[^>]*mesh="leg_collision_0"[^>]*class="collision"[^>]*>')
+            self.assertRegex(result_xml, r'<geom[^>]*mesh="leg_collision_0"[^>]*class="decomposed_collision"[^>]*>')
 
     def test_update_non_obj_assets_visual_geom(self):
         # A geom with contype is a MuJoCo-imported <visual>; it is classified as visual and
