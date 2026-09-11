@@ -19,7 +19,11 @@
 
 #pragma once
 
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <hardware_interface/hardware_info.hpp>
+
+#include <random>
 
 namespace mujoco_ros2_control
 {
@@ -39,6 +43,40 @@ get_sensor_from_info(const hardware_interface::HardwareInfo& hardware_info, cons
     }
   }
   return std::nullopt;
+}
+
+/**
+ * @brief Adds zero-mean Gaussian noise, independently sampled per axis, to a 3D vector in place.
+ * No-op if `stddev` is not positive, so a disabled (default) sensor pays no sampling cost.
+ */
+inline void add_gaussian_noise(Eigen::Vector3d& value, double stddev, std::mt19937& rng)
+{
+  if (stddev <= 0.0)
+  {
+    return;
+  }
+  std::normal_distribution<double> dist(0.0, stddev);
+  value.x() += dist(rng);
+  value.y() += dist(rng);
+  value.z() += dist(rng);
+}
+
+/**
+ * @brief Adds zero-mean Gaussian noise to a quaternion's coefficients, then renormalizes.
+ *
+ * This is a small-angle approximation of orientation noise: accurate for the small stddev values noise
+ * configuration is expected to use, but not a proper noise model on SO(3) for large values.
+ * No-op if `stddev` is not positive.
+ */
+inline void add_gaussian_noise(Eigen::Quaterniond& value, double stddev, std::mt19937& rng)
+{
+  if (stddev <= 0.0)
+  {
+    return;
+  }
+  std::normal_distribution<double> dist(0.0, stddev);
+  value.coeffs() += Eigen::Vector4d(dist(rng), dist(rng), dist(rng), dist(rng));
+  value.normalize();
 }
 
 }  // namespace mujoco_ros2_control

@@ -239,6 +239,13 @@ private:
    *    <state_interface name="linear_acceleration.y"/>
    *    <state_interface name="linear_acceleration.z"/>
    *  </sensor>
+   *
+   * Each underlying MJCF sensor element (`force`, `torque`, `framequat`, `gyro`, `accelerometer`, `framepos`,
+   * `magnetometer`) may set its own `noise` attribute (standard deviation, in the sensor's native units).
+   * MuJoCo compiles this into `mjModel::sensor_noise` but does not apply it itself, so `read()` adds it as
+   * zero-mean Gaussian noise on every cycle, using an RNG seeded from `std::random_device` (so noise differs
+   * between runs). There is no ros2_control-side noise configuration; setting `noise="0"` (the MJCF default)
+   * keeps a sensor noise-free.
    */
   void register_sensors(const hardware_interface::HardwareInfo& info);
 

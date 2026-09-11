@@ -24,6 +24,8 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <numeric>
+#include <random>
 #include <thread>
 
 #include <hardware_interface/version.h>
@@ -32,6 +34,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <mujoco_ros2_control/mujoco_system_interface.hpp>
+#include <mujoco_ros2_control/utils.hpp>
 
 #define ROS_DISTRO_HUMBLE (HARDWARE_INTERFACE_VERSION_MAJOR < 3)
 
@@ -55,6 +58,7 @@ constexpr const char* kTestModel = R"(<?xml version="1.0"?>
     <framepos name="pose_sensor_pos" objtype="site" objname="pendulum_site"/>
     <framequat name="pose_sensor_quat" objtype="site" objname="pendulum_site"/>
     <magnetometer name="magnetometer_sensor" site="pendulum_site"/>
+    <magnetometer name="magnetometer_sensor_noisy" site="pendulum_site" noise="0.05"/>
   </sensor>
 </mujoco>
 )";
@@ -349,6 +353,187 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorStateInterfacesRead)
   EXPECT_NEAR(magnetic_field_x, data->sensordata[magnetometer_data_index], tol);
   EXPECT_NEAR(magnetic_field_y, data->sensordata[magnetometer_data_index + 1], tol);
   EXPECT_NEAR(magnetic_field_z, data->sensordata[magnetometer_data_index + 2], tol);
+}
+
+TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseIsApplied)
+{
+  // Register the underlying MJCF magnetometer twice: once via the plain sensor (no `noise` attribute) as a
+  // noise-free baseline, and once via `magnetometer_sensor_noisy`, which sets noise="0.05" directly in the
+  // MJCF (see kTestModel). Both are read from the exact same control_state_ snapshot within a single read()
+  // call, so every reading's (noisy - raw) delta is a pure noise sample with no risk of racing a stepping sim.
+  constexpr double kNoiseStdDev = 0.05;  // must match magnetometer_sensor_noisy's noise="0.05" in kTestModel
+  auto hardware_info = create_hardware_info();
+
+  hardware_interface::ComponentInfo raw_sensor_info;
+  raw_sensor_info.name = "magnetometer_sensor_raw";
+  raw_sensor_info.parameters[mujoco_ros2_control::MUJOCO_TYPE_PARAM] = mujoco_ros2_control::MUJOCO_TYPE_MAGNETOMETER;
+  raw_sensor_info.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = "magnetometer_sensor";
+  for (const auto* interface_name : { "magnetic_field.x", "magnetic_field.y", "magnetic_field.z" })
+  {
+    hardware_interface::InterfaceInfo interface_info;
+    interface_info.name = interface_name;
+    raw_sensor_info.state_interfaces.push_back(interface_info);
+  }
+
+  hardware_interface::ComponentInfo noisy_sensor_info = raw_sensor_info;
+  noisy_sensor_info.name = "magnetometer_sensor_noisy_iface";
+  noisy_sensor_info.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = "magnetometer_sensor_noisy";
+
+  hardware_info.sensors.push_back(raw_sensor_info);
+  hardware_info.sensors.push_back(noisy_sensor_info);
+
+  ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
+
+  mjModel* model = nullptr;
+  mjData* data = nullptr;
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_model(model);
+    interface_->get_data(data);
+    return model != nullptr && data != nullptr && data->time > 0.0;
+  })) << "Simulation did not start stepping";
+
+  const auto state_interfaces = interface_->export_state_interfaces();
+  ASSERT_EQ(state_interfaces.size(), 6u);
+
+  auto get_value = [](const hardware_interface::StateInterface& si) {
+#if ROS_DISTRO_HUMBLE
+    return si.get_value();
+#else
+    return si.get_optional().value();
+#endif
+  };
+
+  constexpr int kSamples = 2000;
+  std::vector<double> noise_samples;
+  noise_samples.reserve(kSamples * 3);
+  for (int i = 0; i < kSamples; ++i)
+  {
+    interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      const double raw_value = get_value(state_interfaces[axis]);
+      const double noisy_value = get_value(state_interfaces[3 + axis]);
+      noise_samples.push_back(noisy_value - raw_value);
+    }
+  }
+
+  const double sample_count = static_cast<double>(noise_samples.size());
+  const double mean = std::accumulate(noise_samples.begin(), noise_samples.end(), 0.0) / sample_count;
+  double variance = 0.0;
+  for (const double sample : noise_samples)
+  {
+    variance += (sample - mean) * (sample - mean);
+  }
+  variance /= sample_count;
+  const double sample_stddev = std::sqrt(variance);
+
+  // Generous bounds: tight enough to catch "noise not applied" (stddev ~ 0) or a badly mis-scaled
+  // implementation, loose enough to avoid flaking on the randomness itself.
+  EXPECT_NEAR(mean, 0.0, 0.01);
+  EXPECT_NEAR(sample_stddev, kNoiseStdDev, kNoiseStdDev * 0.2);
+}
+
+TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseUsesIndependentRngPerSensor)
+{
+  // Two ros2_control sensors both mapped to the same noisy MJCF magnetometer (noise="0.05" in kTestModel,
+  // see magnetometer_sensor_noisy). Each should draw from its own independently-seeded RNG, so their noise
+  // sequences diverge even though the underlying clean signal (and configured noise stddev) is identical.
+  auto hardware_info = create_hardware_info();
+
+  hardware_interface::ComponentInfo sensor_template;
+  sensor_template.parameters[mujoco_ros2_control::MUJOCO_TYPE_PARAM] = mujoco_ros2_control::MUJOCO_TYPE_MAGNETOMETER;
+  sensor_template.parameters[mujoco_ros2_control::MUJOCO_SENSOR_NAME_PARAM] = "magnetometer_sensor_noisy";
+  for (const auto* interface_name : { "magnetic_field.x", "magnetic_field.y", "magnetic_field.z" })
+  {
+    hardware_interface::InterfaceInfo interface_info;
+    interface_info.name = interface_name;
+    sensor_template.state_interfaces.push_back(interface_info);
+  }
+
+  hardware_interface::ComponentInfo sensor_a = sensor_template;
+  sensor_a.name = "magnetometer_sensor_a";
+  hardware_interface::ComponentInfo sensor_b = sensor_template;
+  sensor_b.name = "magnetometer_sensor_b";
+
+  hardware_info.sensors.push_back(sensor_a);
+  hardware_info.sensors.push_back(sensor_b);
+
+  ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
+
+  mjModel* model = nullptr;
+  mjData* data = nullptr;
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_model(model);
+    interface_->get_data(data);
+    return model != nullptr && data != nullptr && data->time > 0.0;
+  })) << "Simulation did not start stepping";
+
+  const auto state_interfaces = interface_->export_state_interfaces();
+  ASSERT_EQ(state_interfaces.size(), 6u);
+
+  auto get_value = [](const hardware_interface::StateInterface& si) {
+#if ROS_DISTRO_HUMBLE
+    return si.get_value();
+#else
+    return si.get_optional().value();
+#endif
+  };
+
+  bool saw_divergence = false;
+  for (int i = 0; i < 20 && !saw_divergence; ++i)
+  {
+    interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      if (std::abs(get_value(state_interfaces[axis]) - get_value(state_interfaces[3 + axis])) > 1e-9)
+      {
+        saw_divergence = true;
+        break;
+      }
+    }
+  }
+
+  EXPECT_TRUE(saw_divergence) << "Two sensors mapped to the same noisy MJCF sensor should not share an RNG "
+                                  "(their noise sequences should diverge)";
+}
+
+TEST(AddGaussianNoiseTest, ZeroStdDevIsNoOp)
+{
+  std::mt19937 rng(1);
+  Eigen::Vector3d value(1.0, 2.0, 3.0);
+  mujoco_ros2_control::add_gaussian_noise(value, 0.0, rng);
+  EXPECT_DOUBLE_EQ(value.x(), 1.0);
+  EXPECT_DOUBLE_EQ(value.y(), 2.0);
+  EXPECT_DOUBLE_EQ(value.z(), 3.0);
+}
+
+TEST(AddGaussianNoiseTest, NonZeroStdDevChangesValue)
+{
+  std::mt19937 rng(1);
+  Eigen::Vector3d value(1.0, 2.0, 3.0);
+  mujoco_ros2_control::add_gaussian_noise(value, 0.1, rng);
+  EXPECT_NE(value.x(), 1.0);
+  EXPECT_NE(value.y(), 2.0);
+  EXPECT_NE(value.z(), 3.0);
+}
+
+TEST(AddGaussianNoiseTest, SameSeedProducesSameNoise)
+{
+  std::mt19937 rng_a(7);
+  std::mt19937 rng_b(7);
+  Eigen::Vector3d value_a(0.0, 0.0, 0.0);
+  Eigen::Vector3d value_b(0.0, 0.0, 0.0);
+  mujoco_ros2_control::add_gaussian_noise(value_a, 1.0, rng_a);
+  mujoco_ros2_control::add_gaussian_noise(value_b, 1.0, rng_b);
+  EXPECT_TRUE(value_a.isApprox(value_b));
+}
+
+TEST(AddGaussianNoiseTest, QuaternionRemainsNormalized)
+{
+  std::mt19937 rng(3);
+  Eigen::Quaterniond value(1.0, 0.0, 0.0, 0.0);
+  mujoco_ros2_control::add_gaussian_noise(value, 0.2, rng);
+  EXPECT_NEAR(value.norm(), 1.0, 1e-9);
 }
 
 int main(int argc, char** argv)
