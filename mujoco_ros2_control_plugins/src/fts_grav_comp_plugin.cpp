@@ -209,7 +209,9 @@ void FtsGravCompPlugin::update(const mjModel* model, mjData* data)
 }
 
 void FtsGravCompPlugin::cleanup()
-{ node_.reset(); }
+{
+  node_.reset();
+}
 
 }  // namespace mujoco_ros2_control_plugins
 

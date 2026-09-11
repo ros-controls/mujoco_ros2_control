@@ -89,7 +89,9 @@ public:
    * @brief getter for fts data used for testing
    */
   std::vector<FtsData> get_fts_data() const
-  { return fts_; }
+  {
+    return fts_;
+  }
 
 private:
   rclcpp::Node::SharedPtr node_;
