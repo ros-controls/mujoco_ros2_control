@@ -593,7 +593,7 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
                 '<?xml version="1.0"?><mujoco><asset>'
                 '<mesh name="leg" file="decomposed/leg/leg.obj"/>'
                 '<mesh name="leg1" file="decomposed/leg/leg.obj" scale="1 -1 1"/>'
-                '</asset><worldbody>'
+                "</asset><worldbody>"
                 '<body name="left">'
                 '<geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="leg"/>'
                 '<geom type="mesh" mesh="leg"/>'
