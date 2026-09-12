@@ -665,6 +665,61 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
                     sub_geom_local.setAttribute(attribute, value)
                 parent.appendChild(sub_geom_local)
 
+    def expand_sibling_collisions(mesh_name, source_file, collision_class, collision_sub_geoms):
+        """
+        Handles MuJoCo's auto-renamed scaled siblings of ``mesh_name`` (same source file,
+        e.g. a mirrored link's mesh re-emitted as "leg1" with scale="1 -1 1"): they have no
+        entry of their own in mesh_info_dict, so the main loop skips them entirely. Their
+        collision geoms must still be decomposed - each convex piece gets its own
+        sibling-scaled copy (name "<piece>__<sibling>") instead of leaving the sibling as a
+        single whole-mesh collider. The whole sibling <mesh> asset is dropped afterwards since
+        nothing but its own (now-replaced) collision geom referenced it.
+        """
+        for sibling in list(asset_element.getElementsByTagName("mesh")):
+            sibling_name = sibling.getAttribute("name")
+            if not sibling_name or sibling_name == mesh_name or sibling_name in mesh_info_dict:
+                continue
+            if sibling.getAttribute("file") != source_file:
+                continue
+            sibling_scale = sibling.getAttribute("scale")
+
+            for geom_element in list(worldbody_element.getElementsByTagName("geom")):
+                if geom_element.getAttribute("mesh") != sibling_name or geom_element.hasAttribute("contype"):
+                    continue
+                pos = geom_element.getAttribute("pos")
+                quat = geom_element.getAttribute("quat")
+                parent = geom_element.parentNode
+                parent.removeChild(geom_element)
+                for sub_geom in collision_sub_geoms:
+                    piece_name = sub_geom.getAttribute("mesh")
+                    scaled_name = f"{piece_name}__{sibling_name}"
+                    if scaled_name not in existing_mesh_names:
+                        piece_mesh = next(
+                            m
+                            for m in asset_element.getElementsByTagName("mesh")
+                            if effective_mesh_name(m) == piece_name
+                        )
+                        scaled_mesh = dom.createElement("mesh")
+                        scaled_mesh.setAttribute("name", scaled_name)
+                        scaled_mesh.setAttribute("file", piece_mesh.getAttribute("file"))
+                        if sibling_scale:
+                            scaled_mesh.setAttribute("scale", sibling_scale)
+                        asset_element.appendChild(scaled_mesh)
+                        existing_mesh_names.add(scaled_name)
+                    sub_geom_local = sub_geom.cloneNode(False)
+                    sub_geom_local.setAttribute("mesh", scaled_name)
+                    if pos:
+                        sub_geom_local.setAttribute("pos", pos)
+                    if quat:
+                        sub_geom_local.setAttribute("quat", quat)
+                    sub_geom_local.setAttribute("class", collision_class)
+                    for attribute, value in DECOMPOSED_COLLISION_GEOM_ATTRS.items():
+                        sub_geom_local.setAttribute(attribute, value)
+                    parent.appendChild(sub_geom_local)
+
+            asset_element.removeChild(sibling)
+            existing_mesh_names.discard(sibling_name)
+
     for mesh in list(asset_element.getElementsByTagName("mesh")):
         mesh_name = mesh.getAttribute("name")
 
@@ -673,6 +728,7 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
         if mesh_name not in mesh_info_dict:
             continue
 
+        source_file = mesh.getAttribute("file")
         decomposed_prefix = f"{DECOMPOSED_PATH_NAME}/{mesh_name}/{mesh_name}"
         plain_prefixes = (f"{COMPOSED_PATH_NAME}/{mesh_name}", f"{VISUAL_PATH_NAME}/{mesh_name}")
         if os.path.exists(f"{output_filepath}assets/{decomposed_prefix}/{mesh_name}.xml"):
@@ -702,6 +758,10 @@ def update_obj_assets(dom, output_filepath, mesh_info_dict):
         merge_sub_assets(sub_asset_element, path_prefix, mesh_info_dict[mesh_name]["scale"])
         sub_geoms = sub_dom.getElementsByTagName("body")[0].getElementsByTagName("geom")
         replace_geoms(mesh_name, sub_geoms, collision_class)
+
+        if collision_class:
+            collision_sub_geoms = [g for g in sub_geoms if g.getAttribute("class") != "visual"]
+            expand_sibling_collisions(mesh_name, source_file, collision_class, collision_sub_geoms)
 
     return dom
 
