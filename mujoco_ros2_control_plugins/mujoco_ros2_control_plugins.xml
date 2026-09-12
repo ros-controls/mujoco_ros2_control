@@ -40,6 +40,14 @@
       unset.
     </description>
   </class>
+  <class name="mujoco_ros2_control_plugins/FtsGravCompPlugin"
+         type="mujoco_ros2_control_plugins::FtsGravCompPlugin"
+         base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
+    <description>
+      Runs gravity compensation on the wrench found by the force torque sensor as specified in
+      the params file.
+    </description>
+  </class>
   <class name="mujoco_ros2_control_plugins/Mujoco3dLidarPlugin"
          type="mujoco_ros2_control_plugins::Mujoco3dLidarPlugin"
          base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
