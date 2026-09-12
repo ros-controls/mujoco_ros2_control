@@ -508,10 +508,9 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_state_interfaces()
+void MujocoSystemInterface::enumerate_state_interfaces(
+    const std::function<void(const std::string&, const std::string&, double*)>& add)
 {
-  std::vector<hardware_interface::StateInterface> new_state_interfaces;
-
   // Joint state interfaces
   for (auto& joint : urdf_joint_data_)
   {
@@ -522,18 +521,16 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
       {
         if (state_if.name == hardware_interface::HW_IF_POSITION)
         {
-          new_state_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_POSITION,
-                                            &joint.position_interface.state_);
+          add(joint.name, hardware_interface::HW_IF_POSITION, &joint.position_interface.state_);
         }
         else if (state_if.name == hardware_interface::HW_IF_VELOCITY)
         {
-          new_state_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_VELOCITY,
-                                            &joint.velocity_interface.state_);
+          add(joint.name, hardware_interface::HW_IF_VELOCITY, &joint.velocity_interface.state_);
         }
         else if (state_if.name == hardware_interface::HW_IF_EFFORT ||
                  state_if.name == hardware_interface::HW_IF_TORQUE || state_if.name == hardware_interface::HW_IF_FORCE)
         {
-          new_state_interfaces.emplace_back(joint.name, state_if.name, &joint.effort_interface.state_);
+          add(joint.name, state_if.name, &joint.effort_interface.state_);
         }
       }
     }
@@ -552,27 +549,27 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
       {
         if (state_if.name == "force.x")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.force.data.x());
+          add(sensor.name, state_if.name, &sensor.force.data.x());
         }
         else if (state_if.name == "force.y")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.force.data.y());
+          add(sensor.name, state_if.name, &sensor.force.data.y());
         }
         else if (state_if.name == "force.z")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.force.data.z());
+          add(sensor.name, state_if.name, &sensor.force.data.z());
         }
         else if (state_if.name == "torque.x")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.torque.data.x());
+          add(sensor.name, state_if.name, &sensor.torque.data.x());
         }
         else if (state_if.name == "torque.y")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.torque.data.y());
+          add(sensor.name, state_if.name, &sensor.torque.data.y());
         }
         else if (state_if.name == "torque.z")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.torque.data.z());
+          add(sensor.name, state_if.name, &sensor.torque.data.z());
         }
       }
     }
@@ -591,43 +588,43 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
       {
         if (state_if.name == "orientation.x")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.x());
+          add(sensor.name, state_if.name, &sensor.orientation.data.x());
         }
         else if (state_if.name == "orientation.y")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.y());
+          add(sensor.name, state_if.name, &sensor.orientation.data.y());
         }
         else if (state_if.name == "orientation.z")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.z());
+          add(sensor.name, state_if.name, &sensor.orientation.data.z());
         }
         else if (state_if.name == "orientation.w")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.w());
+          add(sensor.name, state_if.name, &sensor.orientation.data.w());
         }
         else if (state_if.name == "angular_velocity.x")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.angular_velocity.data.x());
+          add(sensor.name, state_if.name, &sensor.angular_velocity.data.x());
         }
         else if (state_if.name == "angular_velocity.y")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.angular_velocity.data.y());
+          add(sensor.name, state_if.name, &sensor.angular_velocity.data.y());
         }
         else if (state_if.name == "angular_velocity.z")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.angular_velocity.data.z());
+          add(sensor.name, state_if.name, &sensor.angular_velocity.data.z());
         }
         else if (state_if.name == "linear_acceleration.x")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.linear_acceleration.data.x());
+          add(sensor.name, state_if.name, &sensor.linear_acceleration.data.x());
         }
         else if (state_if.name == "linear_acceleration.y")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.linear_acceleration.data.y());
+          add(sensor.name, state_if.name, &sensor.linear_acceleration.data.y());
         }
         else if (state_if.name == "linear_acceleration.z")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.linear_acceleration.data.z());
+          add(sensor.name, state_if.name, &sensor.linear_acceleration.data.z());
         }
         // Add covariance interfaces, these aren't currently used but some controllers require them.
         // TODO: Is there MuJoCo covariance data we could use?
@@ -637,7 +634,7 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
           size_t idx = std::stoul(state_if.name.substr(23));
           if (idx < sensor.orientation_covariance.size())
           {
-            new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation_covariance[idx]);
+            add(sensor.name, state_if.name, &sensor.orientation_covariance[idx]);
           }
         }
         else if (state_if.name.find("angular_velocity_covariance") == 0)
@@ -646,7 +643,7 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
           size_t idx = std::stoul(state_if.name.substr(28));
           if (idx < sensor.angular_velocity_covariance.size())
           {
-            new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.angular_velocity_covariance[idx]);
+            add(sensor.name, state_if.name, &sensor.angular_velocity_covariance[idx]);
           }
         }
         else if (state_if.name.find("linear_acceleration_covariance") == 0)
@@ -655,7 +652,7 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
           size_t idx = std::stoul(state_if.name.substr(31));
           if (idx < sensor.linear_acceleration_covariance.size())
           {
-            new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.linear_acceleration_covariance[idx]);
+            add(sensor.name, state_if.name, &sensor.linear_acceleration_covariance[idx]);
           }
         }
       }
@@ -675,31 +672,31 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
       {
         if (state_if.name == "position.x")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.position.data.x());
+          add(sensor.name, state_if.name, &sensor.position.data.x());
         }
         else if (state_if.name == "position.y")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.position.data.y());
+          add(sensor.name, state_if.name, &sensor.position.data.y());
         }
         else if (state_if.name == "position.z")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.position.data.z());
+          add(sensor.name, state_if.name, &sensor.position.data.z());
         }
         else if (state_if.name == "orientation.x")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.x());
+          add(sensor.name, state_if.name, &sensor.orientation.data.x());
         }
         else if (state_if.name == "orientation.y")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.y());
+          add(sensor.name, state_if.name, &sensor.orientation.data.y());
         }
         else if (state_if.name == "orientation.z")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.z());
+          add(sensor.name, state_if.name, &sensor.orientation.data.z());
         }
         else if (state_if.name == "orientation.w")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.orientation.data.w());
+          add(sensor.name, state_if.name, &sensor.orientation.data.w());
         }
       }
     }
@@ -718,27 +715,24 @@ std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_st
       {
         if (state_if.name == "magnetic_field.x")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.magnetic_field.data.x());
+          add(sensor.name, state_if.name, &sensor.magnetic_field.data.x());
         }
         else if (state_if.name == "magnetic_field.y")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.magnetic_field.data.y());
+          add(sensor.name, state_if.name, &sensor.magnetic_field.data.y());
         }
         else if (state_if.name == "magnetic_field.z")
         {
-          new_state_interfaces.emplace_back(sensor.name, state_if.name, &sensor.magnetic_field.data.z());
+          add(sensor.name, state_if.name, &sensor.magnetic_field.data.z());
         }
       }
     }
   }
-
-  return new_state_interfaces;
 }
 
-std::vector<hardware_interface::CommandInterface> MujocoSystemInterface::export_command_interfaces()
+void MujocoSystemInterface::enumerate_command_interfaces(
+    const std::function<void(const std::string&, const std::string&, double*)>& add)
 {
-  std::vector<hardware_interface::CommandInterface> new_command_interfaces;
-
   // Joint command interfaces
   for (auto& joint : urdf_joint_data_)
   {
@@ -749,26 +743,70 @@ std::vector<hardware_interface::CommandInterface> MujocoSystemInterface::export_
       {
         if (command_if.name.find(hardware_interface::HW_IF_POSITION) != std::string::npos)
         {
-          new_command_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_POSITION,
-                                              &joint.position_interface.command_);
+          add(joint.name, hardware_interface::HW_IF_POSITION, &joint.position_interface.command_);
         }
         else if (command_if.name.find(hardware_interface::HW_IF_VELOCITY) != std::string::npos)
         {
-          new_command_interfaces.emplace_back(joint.name, hardware_interface::HW_IF_VELOCITY,
-                                              &joint.velocity_interface.command_);
+          add(joint.name, hardware_interface::HW_IF_VELOCITY, &joint.velocity_interface.command_);
         }
         else if (command_if.name == hardware_interface::HW_IF_EFFORT ||
                  command_if.name == hardware_interface::HW_IF_TORQUE ||
                  command_if.name == hardware_interface::HW_IF_FORCE)
         {
-          new_command_interfaces.emplace_back(joint.name, command_if.name, &joint.effort_interface.command_);
+          add(joint.name, command_if.name, &joint.effort_interface.command_);
         }
       }
     }
   }
+}
 
+#if HARDWARE_INTERFACE_VERSION_GTE(5, 6, 0)
+std::vector<hardware_interface::StateInterface::ConstSharedPtr> MujocoSystemInterface::on_export_state_interfaces()
+{
+  std::vector<hardware_interface::StateInterface::ConstSharedPtr> new_state_interfaces;
+  enumerate_state_interfaces(
+      [this, &new_state_interfaces](const std::string& name, const std::string& interface_name, double* value_ptr) {
+        auto handle = std::make_shared<hardware_interface::StateInterface>(name, interface_name);
+        (void)handle->set_value(*value_ptr, true);
+        state_interface_sync_.emplace_back(handle, value_ptr);
+        new_state_interfaces.push_back(handle);
+      });
+  return new_state_interfaces;
+}
+
+std::vector<hardware_interface::CommandInterface::SharedPtr> MujocoSystemInterface::on_export_command_interfaces()
+{
+  std::vector<hardware_interface::CommandInterface::SharedPtr> new_command_interfaces;
+  enumerate_command_interfaces(
+      [this, &new_command_interfaces](const std::string& name, const std::string& interface_name, double* value_ptr) {
+        auto handle = std::make_shared<hardware_interface::CommandInterface>(name, interface_name);
+        (void)handle->set_value(*value_ptr, true);
+        command_interface_sync_.emplace_back(handle, value_ptr);
+        new_command_interfaces.push_back(handle);
+      });
   return new_command_interfaces;
 }
+#else
+std::vector<hardware_interface::StateInterface> MujocoSystemInterface::export_state_interfaces()
+{
+  std::vector<hardware_interface::StateInterface> new_state_interfaces;
+  enumerate_state_interfaces(
+      [&new_state_interfaces](const std::string& name, const std::string& interface_name, double* value_ptr) {
+        new_state_interfaces.emplace_back(name, interface_name, value_ptr);
+      });
+  return new_state_interfaces;
+}
+
+std::vector<hardware_interface::CommandInterface> MujocoSystemInterface::export_command_interfaces()
+{
+  std::vector<hardware_interface::CommandInterface> new_command_interfaces;
+  enumerate_command_interfaces(
+      [&new_command_interfaces](const std::string& name, const std::string& interface_name, double* value_ptr) {
+        new_command_interfaces.emplace_back(name, interface_name, value_ptr);
+      });
+  return new_command_interfaces;
+}
+#endif
 
 hardware_interface::CallbackReturn MujocoSystemInterface::on_activate(const rclcpp_lifecycle::State& /*previous_state*/)
 {
@@ -1035,12 +1073,29 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
 #endif
   }
 
+#if HARDWARE_INTERFACE_VERSION_GTE(5, 6, 0)
+  // Push the freshly-computed internal state doubles into the handles the resource manager holds.
+  for (auto& [handle, value_ptr] : state_interface_sync_)
+  {
+    (void)handle->set_value(*value_ptr, true);
+  }
+#endif
+
   return hardware_interface::return_type::OK;
 }
 
 hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time& /*time*/,
                                                              const rclcpp::Duration& period)
 {
+#if HARDWARE_INTERFACE_VERSION_GTE(5, 6, 0)
+  // Pull the controller-written command values out of the handles into the internal command_
+  // doubles, before any of the code below reads them.
+  for (auto& [handle, value_ptr] : command_interface_sync_)
+  {
+    (void)handle->get_value(*value_ptr, true);
+  }
+#endif
+
   // Update mimic joints
   for (auto& joint : urdf_joint_data_)
   {

@@ -19,9 +19,11 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <hardware_interface/version.h>
@@ -99,8 +101,17 @@ public:
 #else
   on_init(const hardware_interface::HardwareComponentInterfaceParams& params) override;
 #endif
+// hardware_interface 5.6+ deprecates the raw-pointer Handle constructor and the by-value
+// export_state_interfaces()/export_command_interfaces() overrides in favor of shared handles
+// returned from on_export_state_interfaces()/on_export_command_interfaces(). Older distros
+// (humble/jazzy/kilted) only have the by-value overrides.
+#if HARDWARE_INTERFACE_VERSION_GTE(5, 6, 0)
+  std::vector<hardware_interface::StateInterface::ConstSharedPtr> on_export_state_interfaces() override;
+  std::vector<hardware_interface::CommandInterface::SharedPtr> on_export_command_interfaces() override;
+#else
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
+#endif
 
   hardware_interface::CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
   hardware_interface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State& previous_state) override;
@@ -254,6 +265,22 @@ private:
   void register_sensors(const hardware_interface::HardwareInfo& info);
 
   /**
+   * @brief Walks joints and sensors, calling `add` once per exported state interface with its
+   * name, interface name, and a pointer to the internal double backing it.
+   *
+   * Shared between the pre- and post-5.6 export_state_interfaces()/on_export_state_interfaces()
+   * implementations so the interface-enumeration logic isn't duplicated.
+   */
+  void enumerate_state_interfaces(
+      const std::function<void(const std::string&, const std::string&, double*)>& add);
+
+  /**
+   * @brief Same as enumerate_state_interfaces(), for command interfaces.
+   */
+  void enumerate_command_interfaces(
+      const std::function<void(const std::string&, const std::string&, double*)>& add);
+
+  /**
    * @brief Sets the initial simulation conditions (pos, vel, ctrl) values from provided filepath.
    *
    * @param override_start_position_file filepath that contains starting positions
@@ -338,6 +365,12 @@ private:
   // Data containers for the HW interface
   std::unordered_map<std::string, hardware_interface::ComponentInfo> joint_hw_info_;
   std::unordered_map<std::string, std::vector<hardware_interface::ComponentInfo>> sensors_hw_info_;
+
+  // hardware_interface >= 5.6 only: (handle, internal double it mirrors) pairs, populated by
+  // on_export_state_interfaces()/on_export_command_interfaces(), consumed each read()/write() to
+  // keep the exported handles in sync with the existing internal state_/command_ doubles.
+  std::vector<std::pair<hardware_interface::StateInterface::SharedPtr, double*>> state_interface_sync_;
+  std::vector<std::pair<hardware_interface::CommandInterface::SharedPtr, double*>> command_interface_sync_;
 
   // Container for interacting with the underlying physics sim's data.
   // Handed to plugins during `write` and used to stage control inputs.

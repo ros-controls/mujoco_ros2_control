@@ -27,6 +27,7 @@
 #include <numeric>
 #include <random>
 #include <thread>
+#include <vector>
 
 #include <hardware_interface/version.h>
 #include <mujoco/mujoco.h>
@@ -273,12 +274,21 @@ TEST_F(MujocoSystemInterfaceTest, IntVelocityActuatorSupportsVelocityCommandInte
   ASSERT_NE(actuator_id, -1);
   EXPECT_EQ(model->actuator_dyntype[actuator_id], mjDYN_INTEGRATOR);
 
+#if HARDWARE_INTERFACE_VERSION_GTE(5, 6, 0)
+  auto command_interfaces = interface_->on_export_command_interfaces();
+  ASSERT_EQ(command_interfaces.size(), 1u);
+  EXPECT_EQ(command_interfaces.front()->get_name(), "wheel_joint/velocity");
+
+  constexpr double velocity_command = 2.0;
+  command_interfaces.front()->set_value(velocity_command);
+#else
   auto command_interfaces = interface_->export_command_interfaces();
   ASSERT_EQ(command_interfaces.size(), 1u);
   EXPECT_EQ(command_interfaces.front().get_name(), "wheel_joint/velocity");
 
   constexpr double velocity_command = 2.0;
   command_interfaces.front().set_value(velocity_command);
+#endif
   ASSERT_EQ(interface_->write(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002)),
             hardware_interface::return_type::OK);
 
@@ -325,7 +335,17 @@ TEST_F(MujocoSystemInterfaceTest, PoseSensorStateInterfacesRead)
 
   // The pose sensor is the only component registered, so its interfaces are exported
   // in registration order: position.x/y/z, orientation.x/y/z/w.
+#if HARDWARE_INTERFACE_VERSION_GTE(5, 6, 0)
+  auto exported_state_interfaces = interface_->on_export_state_interfaces();
+  std::vector<hardware_interface::StateInterface> state_interfaces;
+  state_interfaces.reserve(exported_state_interfaces.size());
+  for (const auto& handle : exported_state_interfaces)
+  {
+    state_interfaces.push_back(*handle);
+  }
+#else
   const auto state_interfaces = interface_->export_state_interfaces();
+#endif
   ASSERT_EQ(state_interfaces.size(), 7u);
   ASSERT_EQ(state_interfaces[0].get_name(), "pose_sensor/position.x");
   ASSERT_EQ(state_interfaces[1].get_name(), "pose_sensor/position.y");
@@ -383,7 +403,17 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorStateInterfacesRead)
 
   interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
 
+#if HARDWARE_INTERFACE_VERSION_GTE(5, 6, 0)
+  auto exported_state_interfaces = interface_->on_export_state_interfaces();
+  std::vector<hardware_interface::StateInterface> state_interfaces;
+  state_interfaces.reserve(exported_state_interfaces.size());
+  for (const auto& handle : exported_state_interfaces)
+  {
+    state_interfaces.push_back(*handle);
+  }
+#else
   const auto state_interfaces = interface_->export_state_interfaces();
+#endif
   ASSERT_EQ(state_interfaces.size(), 3u);
   ASSERT_EQ(state_interfaces[0].get_name(), "magnetometer_sensor/magnetic_field.x");
   ASSERT_EQ(state_interfaces[1].get_name(), "magnetometer_sensor/magnetic_field.y");
