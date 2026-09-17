@@ -189,6 +189,71 @@ TEST_F(CameraPluginTest, InitSucceedsWithNoCameras)
   plugin.cleanup();
 }
 
+TEST_F(CameraPluginTest, CameraWithoutResolutionIsRejected)
+{
+  load_model(R"(<?xml version="1.0"?>
+  <mujoco model="camera_no_resolution">
+    <worldbody>
+      <body name="box" pos="0 0 0.1">
+        <freejoint/>
+        <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+        <geom type="box" size="0.05 0.05 0.05"/>
+      </body>
+      <camera name="track_cam" pos="-1 0 0.5" xyaxes="0 -1 0 1 0 2" mode="trackcom"/>
+    </worldbody>
+  </mujoco>
+  )");
+
+
+  ASSERT_EQ(model_->ncam, 1);
+  ASSERT_EQ(model_->cam_resolution[0],1)<< "MuJoCo no longer defaults camera resolution to 1x1";
+  ASSERT_EQ(model_->cam_resolution[1],1);
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  EXPECT_FALSE(plugin.init(plugin_node_, model_, data_,[](){return 0;}));
+  plugin.cleanup();
+}
+// the plugin config can supply the resolution for a camera that does not set it in mjcf
+TEST_F(CameraPluginTest, ResolutionCanBeSetFromParams)
+  {
+    plugin_node_->declare_parameter("mujoco_plugins.mujoco_camera_plugin.track_cam.width", 64);
+    plugin_node_->declare_parameter("mujoco_plugins.mujoco_camera_plugin.track_cam.height", 48);
+      load_model(R"(<?xml version="1.0"?>
+    <mujoco model="camera_no_resolution">
+      <worldbody>
+        <body name="box" pos="0 0 0.1">
+          <freejoint/>
+          <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+          <geom type="box" size="0.05 0.05 0.05"/>
+        </body>
+        <camera name="track_cam" pos="-1 0 0.5" xyaxes="0 -1 0 1 0 2" mode="trackcom"/>
+      </worldbody>
+    </mujoco>
+    )");
+
+    mujoco_ros2_control_plugins::CameraPlugin plugin;
+    ASSERT_TRUE(plugin.init(plugin_node_, model_, data_, []() { return 0; }));
+    wait_for_rendering(plugin);
+
+    std::atomic<bool> got_expected_size{ false };
+    auto image_sub = node_->create_subscription<sensor_msgs::msg::Image>(
+        "/camera_plugin/track_cam/color", 1, [&](sensor_msgs::msg::Image::SharedPtr msg) {
+          got_expected_size = (msg->width == 64u && msg->height == 48u);
+        });
+    wait_for_subscriber_match(image_sub);
+
+    const auto deadline = std::chrono::steady_clock::now() + WAIT_TIMEOUT;
+    while (!got_expected_size && std::chrono::steady_clock::now() < deadline)
+    {
+      plugin.trigger_update();
+      std::this_thread::sleep_for(POLL_INTERVAL);
+    }
+    EXPECT_TRUE(got_expected_size) << "Published image did not use the configured resolution";
+
+    plugin.cleanup();
+  }
+
+
 // Verify init finds cameras and returns true, ensure the egl context does the rendering.
 TEST_F(CameraPluginTest, InitAndPublish)
 {

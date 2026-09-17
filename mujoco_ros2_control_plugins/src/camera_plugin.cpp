@@ -174,11 +174,39 @@ bool CameraPlugin::register_cameras()
     camera.name = cam_name;
     camera.mjv_cam.type = mjCAMERA_FIXED;
     camera.mjv_cam.fixedcamid = i;
-    camera.width = static_cast<uint32_t>(cam_resolution[0]);
-    camera.height = static_cast<uint32_t>(cam_resolution[1]);
-    camera.viewport = { 0, 0, cam_resolution[0], cam_resolution[1] };
-
     const std::string param_ns = param_prefix + cam_name + ".";
+
+    const std::string width_param = param_ns + "width";
+    if (!node_->has_parameter(width_param))
+    {
+      node_->declare_parameter(width_param,cam_resolution[0]);
+
+    }
+
+    const std::string height_param = param_ns +"height";
+    if(!node_->has_parameter(height_param))
+    {
+      node_->declare_parameter(height_param,cam_resolution[1]);
+
+    }
+
+    const int64_t width = node_->get_parameter(width_param).as_int();
+    const int64_t height = node_->get_parameter(height_param).as_int();
+
+    if(width<=1 || height<=1)
+    {
+      RCLCPP_ERROR(node_->get_logger(), 
+                  "Camera '%s' has resolution %ldx%ld.Set a 'resolution' attribute on the <camera> element "
+                    "in the MJCF, or 'width'/'height' for this camera in the plugin config.",
+                     cam_name, static_cast<long>(width), static_cast<long>(height));
+        return false;
+
+    }
+    camera.width = static_cast<uint32_t>(width);
+    camera.height = static_cast<uint32_t>(height);
+    camera.viewport = { 0, 0, static_cast<int>(width), static_cast<int>(height) };
+
+
 
     const std::string policy_param = param_ns + "policy";
     if (!node_->has_parameter(policy_param))
@@ -205,6 +233,8 @@ bool CameraPlugin::register_cameras()
     }
 
     const std::string frame_param = param_ns + "frame_name";
+    RCLCPP_INFO(node_->get_logger(), "    resolution: %ux%u", camera.width, camera.height);
+
     if (!node_->has_parameter(frame_param))
     {
       node_->declare_parameter(frame_param, camera.name + "_frame");
