@@ -167,7 +167,11 @@ TEST_F(HeadlessInitTest, HeadlessInitialization)
   ASSERT_NE(test_data, nullptr) << "Model failed to initialize within timeout";
 
   // Test that we can export state interfaces without crashing
+#if ROS_DISTRO_HUMBLE
   auto state_interfaces = interface_->export_state_interfaces();
+#else
+  auto state_interfaces = interface_->on_export_state_interfaces();
+#endif
   EXPECT_GE(state_interfaces.size(), 0);
 }
 
