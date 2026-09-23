@@ -81,6 +81,13 @@ Note that any number of cameras can be configured in the plugin configuration.
       type: "mujoco_ros2_control_plugins/CameraPlugin"
       # Note all cameras are published at the same rate
       camera_publish_rate: 5.0
+      # Depth sensor model, see "Depth Sensor Model" below
+      depth_sensor_model: true
+      depth_min_range: 0.28
+      depth_max_range: 3.0
+      depth_stereo_baseline: 0.05
+      depth_subpixel_error: 0.15
+      depth_dropout_fraction: 0.02
       camera:
         frame_name: camera_color_optical_frame
         info_topic: /camera_topic/color/camera_info
@@ -92,6 +99,71 @@ Note that any number of cameras can be configured in the plugin configuration.
 
    MuJoCo's camera coordinate conventions differ from ROS.
    Refer to the MuJoCo documentation for details.
+
+Depth Sensor Model
+^^^^^^^^^^^^^^^^^^
+
+MuJoCo reports the exact geometric distance at every pixel: no noise, no invalid returns, and
+values below the Min-Z of any real device. Anything built on that stream -- an elevation map, a
+visual odometry front end, an obstacle check -- is tuned against a sensor that does not exist,
+and the discrepancy only appears on hardware.
+
+With ``depth_sensor_model`` enabled the published ``32FC1`` depth image is passed through a
+stereo depth model instead. Three effects, each with a parameter because the right value depends
+on the device:
+
+* **Usable range.** Outside ``[depth_min_range, depth_max_range]`` the pixel is ``NaN``, the ROS
+  convention for "no data" in a ``32FC1`` image. Returning a number instead is what lets a
+  consumer trust geometry the sensor could never have supplied.
+* **Triangulation error.** Stereo depth error grows with the *square* of range, because depth is
+  inversely proportional to disparity:
+
+  .. math::
+
+     \sigma(Z) = \frac{Z^2 \cdot \texttt{depth\_subpixel\_error}}
+                       {f_x \cdot \texttt{depth\_stereo\_baseline}}
+
+  It is derived from the geometry rather than fixed as a percentage, so it stays correct if the
+  resolution or field of view changes, and it uses the very :math:`f_x` published in
+  ``camera_info`` so the noise matches what the consumer reprojects with.
+* **Dropouts.** ``depth_dropout_fraction`` of pixels return ``NaN``. Real depth drops out on
+  low-texture, specular and occluded surfaces in *patches*; this reproduces their frequency but
+  not their spatial structure.
+
+The defaults describe an Intel RealSense D435i. At the 0.15 px default with a 50 mm baseline the
+error is about 1 % of range at 2 m, the figure usually reported for that device; raise
+``depth_subpixel_error`` to roughly 0.3 px to sit on the datasheet's "< 2 % at 2 m" bound instead.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   * - Parameter
+     - Default
+     - Meaning
+   * - ``depth_sensor_model``
+     - ``true``
+     - Enable the model. ``false`` publishes MuJoCo's exact depth.
+   * - ``depth_min_range``
+     - ``0.28``
+     - [m] Min-Z; below this the pixel is ``NaN``.
+   * - ``depth_max_range``
+     - ``3.0``
+     - [m] beyond the ideal range; above this the pixel is ``NaN``.
+   * - ``depth_stereo_baseline``
+     - ``0.05``
+     - [m] separation of the IR pair, used by the error model.
+   * - ``depth_subpixel_error``
+     - ``0.15``
+     - [px] disparity matching error.
+   * - ``depth_dropout_fraction``
+     - ``0.02``
+     - Fraction of pixels returning ``NaN``.
+
+.. note::
+   The noise is seeded deterministically, so a recording made from the simulation is
+   reproducible. Set ``depth_sensor_model: false`` to recover the previous exact-depth
+   behaviour.
 
 Headless Rendering
 ^^^^^^^^^^^^^^^^^^
