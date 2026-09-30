@@ -308,6 +308,7 @@ def fix_mujoco_description(
     cameras_dict,
     modify_element_dict,
     lidar_dict,
+    replace_collision_dict,
     request_add_free_joint,
 ):
     """
@@ -333,6 +334,9 @@ def fix_mujoco_description(
     # Update and add the new fixed assets
     dom = mrc.update_obj_assets(dom, output_filepath, mesh_info_dict)
     dom = mrc.update_non_obj_assets(dom, output_filepath, mesh_info_dict)
+
+    # Insert any user-authored collision replacement fragments (replace_collision tags)
+    dom = mrc.add_replaced_collisions(dom, replace_collision_dict)
 
     # Add the MuJoCo input elements
     dom = mrc.add_mujoco_inputs(dom, raw_inputs, scene_inputs)
@@ -488,7 +492,9 @@ def main(args=None):
         mrc.write_mujoco_scene(scene_inputs, output_filepath)
         scene_inputs = None
 
-    decompose_dict, cameras_dict, modify_element_dict, lidar_dict = mrc.get_processed_mujoco_inputs(processed_inputs)
+    decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict = (
+        mrc.get_processed_mujoco_inputs(processed_inputs)
+    )
 
     if parsed_args.asset_dir:
         assets_filepath = parsed_args.asset_dir
@@ -514,7 +520,12 @@ def main(args=None):
     if not parsed_args.use_collision_tags:
         xml_data = mrc.remove_tag(xml_data, "collision")
 
-    xml_data = mrc.add_missing_collisions(xml_data)
+    # Links with a replace_collision input get their collision(s) fully replaced by a
+    # user-authored fragment (see add_replaced_collisions), so they are excluded here:
+    # any collision they ended up with (authored or otherwise) is dropped and none is
+    # synthesized from their visuals, keeping their original collision mesh out of
+    # mesh_info_dict entirely.
+    xml_data = mrc.add_missing_collisions(xml_data, exclude_links=replace_collision_dict.keys())
 
     xml_data = mrc.replace_package_names(xml_data)
     mesh_info_dict, xml_data = mrc.extract_mesh_info(xml_data, parsed_args.asset_dir, decompose_dict)
@@ -541,6 +552,7 @@ def main(args=None):
         cameras_dict,
         modify_element_dict,
         lidar_dict,
+        replace_collision_dict,
         request_add_free_joint,
     )
 

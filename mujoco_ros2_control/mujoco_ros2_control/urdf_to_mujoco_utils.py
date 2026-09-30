@@ -113,7 +113,7 @@ def remove_tag(xml_string, tag_to_remove):
     return xmldoc.toprettyxml()
 
 
-def add_missing_collisions(xml_string):
+def add_missing_collisions(xml_string, exclude_links=None):
     """
     Ensures every link that can be rendered can also collide, while respecting any
     collision geometry the URDF author already provided.
@@ -129,13 +129,24 @@ def add_missing_collisions(xml_string):
     when present, copied from the visual otherwise) is used for physics.
 
     :param xml_string: the URDF as a string
+    :param exclude_links: optional iterable of link names to leave collision-free - e.g.
+        links whose collision will be replaced by a user-authored fragment (the
+        replace_collision processed_inputs tag). Any collision already present on such a
+        link (authored or otherwise) is stripped, and none is synthesized from its
+        visuals, so its original collision mesh never enters mesh_info_dict.
     :returns: the URDF string with synthesized collisions added where they were missing
     """
+    exclude_links = set(exclude_links) if exclude_links else set()
     dom = minidom.parseString(xml_string)
 
     for link in dom.getElementsByTagName("link"):
         visuals = [c for c in link.childNodes if c.nodeType == c.ELEMENT_NODE and c.tagName == "visual"]
         collisions = [c for c in link.childNodes if c.nodeType == c.ELEMENT_NODE and c.tagName == "collision"]
+
+        if link.getAttribute("name") in exclude_links:
+            for collision in collisions:
+                link.removeChild(collision)
+            continue
 
         # Respect authored collisions and skip links with nothing to render.
         if collisions or not visuals:
@@ -949,9 +960,10 @@ def get_processed_mujoco_inputs(processed_inputs_element):
     cameras_dict = dict()
     modify_element_dict = dict()
     lidar_dict = dict()
+    replace_collision_dict = dict()
 
     if not processed_inputs_element:
-        return decompose_dict, cameras_dict, modify_element_dict, lidar_dict
+        return decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict
 
     for child in processed_inputs_element.childNodes:
         if child.nodeType != child.ELEMENT_NODE:
@@ -1049,7 +1061,25 @@ def get_processed_mujoco_inputs(processed_inputs_element):
             for key_attr, value in attr_dict.items():
                 print(f"  {key_attr}: {value}")
 
-    return decompose_dict, cameras_dict, modify_element_dict, lidar_dict
+        # Grab collision-replacement fragments
+        if child.tagName == "replace_collision":
+            link_name = child.getAttribute("link")
+            if not link_name:
+                raise ValueError("'link' must be in the attributes of a 'replace_collision' tag!")
+            if link_name in replace_collision_dict:
+                raise ValueError(f"Multiple 'replace_collision' tags found for link '{link_name}'")
+
+            fragment = [c for c in child.childNodes if c.nodeType == c.ELEMENT_NODE]
+            if not fragment:
+                raise ValueError(
+                    f"'replace_collision' tag for link '{link_name}' must contain at least one "
+                    "child element (geom or body)!"
+                )
+
+            replace_collision_dict[link_name] = fragment
+            print(f"Will replace collision(s) on link '{link_name}' with {len(fragment)} element(s)")
+
+    return decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict
 
 
 def parse_inputs_xml(filename=None):
@@ -1500,6 +1530,47 @@ def add_lidar_from_sites(dom, lidar_dict):
     unmatched = set(lidar_dict.keys()) - matched_sites
     if unmatched:
         raise ValueError(f"Lidar site(s) not found in the MJCF: {', '.join(sorted(unmatched))}")
+
+    return dom
+
+
+def add_replaced_collisions(dom, replace_collision_dict):
+    """
+    Inserts each link's replace_collision fragment (one or more <geom>/<body> elements,
+    parsed by get_processed_mujoco_inputs) into that link's <body> in the MJCF, verbatim.
+
+    The fragment's elements are deep-imported as-is (name/type/size/fromto/pos/nested
+    <body>/... all preserved exactly as authored). The one default applied: any <geom> in
+    the fragment that does not already carry a class attribute is given class="collision",
+    so it still picks up sane group/contype/conaffinity defaults.
+
+    Raises ValueError if a link named in replace_collision_dict has no matching <body>.
+    """
+    if not replace_collision_dict:
+        return dom
+
+    matched_links = set()
+
+    for body in dom.getElementsByTagName("body"):
+        link_name = body.getAttribute("name")
+        fragment = replace_collision_dict.get(link_name)
+        if fragment is None:
+            continue
+        matched_links.add(link_name)
+
+        for element in fragment:
+            imported = dom.importNode(element, True)
+            body.appendChild(imported)
+
+            # a <geom> can't have child geoms, so these two cases are mutually exclusive
+            geoms = [imported] if imported.tagName == "geom" else imported.getElementsByTagName("geom")
+            for geom in geoms:
+                if not geom.hasAttribute("class"):
+                    geom.setAttribute("class", "collision")
+
+    unmatched = set(replace_collision_dict.keys()) - matched_links
+    if unmatched:
+        raise ValueError(f"replace_collision link(s) not found in the MJCF: {', '.join(sorted(unmatched))}")
 
     return dom
 

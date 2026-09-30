@@ -43,6 +43,13 @@
     <!-- Specifying decompose_mesh will set the `decompose` flag when using obj2mjcf -->
     <!-- <decompose_mesh mesh_name="forearm" threshold="0.05"/> -->
 
+    <!-- replace_collision drops ALL of a link's collision geometry and replaces it with -->
+    <!-- one or more user-authored MJCF primitives (geom/body elements), copied verbatim. -->
+    <!-- Handy for swapping an expensive collision mesh for cheap capsules. -->
+    <!-- <replace_collision link="forearm"> -->
+    <!--   <geom type="capsule" fromto="0 0 0 0 0 0.3" size="0.04"/> -->
+    <!-- </replace_collision> -->
+
     <!-- The camera with the specified values will be added at the specified site name. -->
     <!-- The position and quaterinion will be filled in by the converter -->
     <camera site="camera_color_optical_frame" name="camera" fovy="58" mode="fixed" resolution="640 480"/>

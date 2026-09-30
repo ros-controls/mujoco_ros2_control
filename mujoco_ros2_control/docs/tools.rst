@@ -148,6 +148,10 @@ Rough outline of the automated conversion process
     correct per link even when MuJoCo fuses fixed-jointed bodies together. A mesh shared by a visual
     and a collision is converted once and reused for both (and, if that link requests decomposition,
     the whole mesh renders while its decomposed pieces collide).
+  - A link named in a ``replace_collision`` input skips all of the above: its collision geometry
+    (authored or synthesized) is dropped entirely and never converted, and a user-authored MJCF
+    fragment (one or more primitives, optionally grouped under nested sub-bodies) is inserted in
+    its place. See the :ref:`replace_collision attribute reference <threshold-attribute>`.
   - Both kinds of geom get explicit attributes written directly onto them, so visual/collision
     separation does not depend on a user-supplied ``<default class="...">`` block:
 
@@ -231,6 +235,12 @@ Main sub-elements
      For ``geom`` type, elements are identified by ``mesh`` and ``class`` instead of ``name``.
      Useful to tweak physics properties like ``frictionloss``, ``stiffness``, ``damping``,
      ``gravcomp``, etc.
+   - ``replace_collision`` (attribute: ``link``; children: one or more ``geom``/``body`` elements)
+     — drops **all** of the named link's collision geometry (authored or synthesized from its
+     visual) and replaces it with the given MJCF fragment, copied verbatim into that link's
+     ``<body>``. Useful for swapping an expensive collision mesh for cheap primitives (for
+     example capsules), including several primitives, or grouping them under nested named
+     sub-bodies. See the :ref:`replace_collision attribute reference <threshold-attribute>` below.
 
 
 
@@ -381,3 +391,36 @@ attributes the demo converter recognizes; converters may extend this list.
 - Additional attributes: any MJCF attributes you want to set or overwrite (for example ``frictionloss``, ``damping``, ``gravcomp``, ``solimp``, ``solref``, ...).
 - Example: ``<modify_element type="joint" name="joint1" frictionloss="1.0" damping="2.0"/>``.
 - Example: ``<modify_element type="geom" mesh="link1_mesh" class="collision" friction = "0.1 0.005 0.0001"/>``
+
+``replace_collision``
+
+- Required: ``link`` (string) — the URDF link name whose collision geometry should be replaced.
+- Required: one or more child ``geom`` and/or ``body`` elements, using plain MJCF attribute
+  syntax (``type``, ``size``, ``pos``/``quat``, or ``fromto`` for capsules/cylinders). A nested
+  ``body`` is a fixed sub-body used to group its own geoms under a name; it is copied verbatim,
+  including any ``joint`` it contains.
+- Every child ``geom`` (including those inside a nested ``body``) is copied into the link's
+  MJCF ``<body>`` exactly as written; the only attribute the converter injects is
+  ``class="collision"``, and only when the ``geom`` does not already specify a ``class``.
+- All of the link's original collision geometry (authored ``<collision>`` tags, or one
+  synthesized from its ``<visual>``) is dropped and never converted, regardless of
+  ``--use_collision_tags``.
+- Example — replace a link's collision with two capsules:
+
+  .. code-block:: xml
+
+     <replace_collision link="forearm">
+       <geom type="capsule" fromto="0 0 0 0 0 0.3" size="0.04"/>
+       <geom type="capsule" fromto="0 0 0.3 0.1 0 0.3" size="0.03"/>
+     </replace_collision>
+
+- Example — group geoms under a named nested sub-body:
+
+  .. code-block:: xml
+
+     <replace_collision link="leg_left_1_link">
+       <geom name="left_foot6_collision" class="foot_capsule" fromto="-0.0985 0.007 0 0.122 0.0065 0"/>
+       <body name="leg_left_ankle_link">
+         <geom name="leg_left_ankle_collision" class="collision" size="0.03" fromto="-0.04 0 0.03 0.02 0 0.03"/>
+       </body>
+     </replace_collision>

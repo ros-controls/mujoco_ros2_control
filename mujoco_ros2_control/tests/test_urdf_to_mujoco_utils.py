@@ -52,6 +52,7 @@ from mujoco_ros2_control import (
     extract_mesh_info,
     copy_pre_generated_meshes,
     add_missing_collisions,
+    add_replaced_collisions,
     ensure_default_classes,
     ensure_collision_material,
     decompose_threshold,
@@ -62,6 +63,20 @@ from mujoco_ros2_control import (
 
 def get_child_elements(dom) -> list:
     return [node.nodeName for node in dom.childNodes if node.nodeType == node.ELEMENT_NODE]
+
+
+def make_single_body_dom(body_name):
+    """A minimal MJCF dom with one <body name="..."/> in its worldbody."""
+    return minidom.parseString(
+        f'<?xml version="1.0"?><mujoco><worldbody><body name="{body_name}"/></worldbody></mujoco>'
+    )
+
+
+def make_replace_collision_fragment(inner_xml):
+    """Parses inner_xml as the children of a <replace_collision> tag into an element list,
+    the same shape get_processed_mujoco_inputs hands add_replaced_collisions."""
+    fragment_dom = minidom.parseString(f"<replace_collision>{inner_xml}</replace_collision>")
+    return list(fragment_dom.documentElement.childNodes)
 
 
 class TestUrdfToMjcfUtils(unittest.TestCase):
@@ -821,12 +836,13 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
 
     def test_get_processed_mujoco_inputs_none_element(self):
         result = get_processed_mujoco_inputs(None)
-        self.assertEqual(len(result), 4)
-        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = result
+        self.assertEqual(len(result), 5)
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict = result
         self.assertEqual(decompose_dict, {})
         self.assertEqual(cameras_dict, {})
         self.assertEqual(modify_element_dict, {})
         self.assertEqual(lidar_dict, {})
+        self.assertEqual(replace_collision_dict, {})
 
     def test_get_processed_mujoco_inputs_decompose_mesh(self):
         xml_string = """<?xml version="1.0"?>
@@ -836,7 +852,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         processed_element = dom.getElementsByTagName("processed_inputs")[0]
 
-        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict = (
+            get_processed_mujoco_inputs(processed_element)
+        )
         assert "test_mesh" in decompose_dict
         self.assertEqual(decompose_dict["test_mesh"], "0.03")
 
@@ -848,7 +866,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         processed_element = dom.getElementsByTagName("processed_inputs")[0]
 
-        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict = (
+            get_processed_mujoco_inputs(processed_element)
+        )
         self.assertEqual(decompose_dict["test_mesh"], "0.05")
 
     def test_get_processed_mujoco_inputs_camera(self):
@@ -859,7 +879,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         processed_element = dom.getElementsByTagName("processed_inputs")[0]
 
-        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict = (
+            get_processed_mujoco_inputs(processed_element)
+        )
         assert "camera_site" in cameras_dict
         self.assertEqual(cameras_dict["camera_site"].getAttribute("name"), "test_camera")
 
@@ -871,7 +893,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         processed_element = dom.getElementsByTagName("processed_inputs")[0]
 
-        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict = (
+            get_processed_mujoco_inputs(processed_element)
+        )
         assert "lidar_site" in lidar_dict
 
     def test_get_processed_mujoco_inputs_lidar_zero_angle_increment(self):
@@ -894,7 +918,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         processed_element = dom.getElementsByTagName("processed_inputs")[0]
 
-        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict = (
+            get_processed_mujoco_inputs(processed_element)
+        )
         key = ("body", "test_body")
         assert key in modify_element_dict
         self.assertEqual(modify_element_dict[key]["pos"], "1 2 3")
@@ -907,7 +933,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         processed_element = dom.getElementsByTagName("processed_inputs")[0]
 
-        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict = (
+            get_processed_mujoco_inputs(processed_element)
+        )
         key = ("geom", ("test_mesh", "test_class"))
         assert key in modify_element_dict
         self.assertEqual(modify_element_dict[key]["friction"], "1 0.005 0.0001")
@@ -960,6 +988,103 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             get_processed_mujoco_inputs(processed_element)
         assert "'class'" in str(context.exception)
 
+    def test_get_processed_mujoco_inputs_replace_collision(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <replace_collision link="forearm">
+    <geom type="capsule" fromto="0 0 0 0 0 0.3" size="0.04"/>
+  </replace_collision>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        _, _, _, _, replace_collision_dict = get_processed_mujoco_inputs(processed_element)
+        assert "forearm" in replace_collision_dict
+        fragment = replace_collision_dict["forearm"]
+        self.assertEqual(len(fragment), 1)
+        self.assertEqual(fragment[0].tagName, "geom")
+        self.assertEqual(fragment[0].getAttribute("type"), "capsule")
+
+    def test_get_processed_mujoco_inputs_replace_collision_multiple_geoms(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <replace_collision link="forearm">
+    <geom name="cap1" type="capsule" fromto="0 0 0 0 0 0.3" size="0.04"/>
+    <geom name="cap2" type="capsule" fromto="0 0 0.3 0.1 0 0.3" size="0.03"/>
+  </replace_collision>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        _, _, _, _, replace_collision_dict = get_processed_mujoco_inputs(processed_element)
+        fragment = replace_collision_dict["forearm"]
+        self.assertEqual(len(fragment), 2)
+        self.assertEqual([g.getAttribute("name") for g in fragment], ["cap1", "cap2"])
+
+    def test_get_processed_mujoco_inputs_replace_collision_nested_body(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <replace_collision link="leg_left_1_link">
+    <geom name="left_foot6_collision" class="foot_capsule" fromto="-0.0985 0.007 0 0.122 0.0065 0"/>
+    <body name="leg_left_ankle_link">
+      <geom name="leg_left_ankle_collision" class="collision" size="0.03" fromto="-0.04 0 0.03 0.02 0 0.03"/>
+    </body>
+  </replace_collision>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        _, _, _, _, replace_collision_dict = get_processed_mujoco_inputs(processed_element)
+        fragment = replace_collision_dict["leg_left_1_link"]
+        self.assertEqual(len(fragment), 2)
+        self.assertEqual(fragment[0].tagName, "geom")
+        self.assertEqual(fragment[1].tagName, "body")
+        nested_geoms = fragment[1].getElementsByTagName("geom")
+        self.assertEqual(len(nested_geoms), 1)
+
+    def test_get_processed_mujoco_inputs_replace_collision_missing_link(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <replace_collision>
+    <geom type="capsule" fromto="0 0 0 0 0 0.3" size="0.04"/>
+  </replace_collision>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        with self.assertRaises(ValueError) as context:
+            get_processed_mujoco_inputs(processed_element)
+        assert "'link'" in str(context.exception)
+
+    def test_get_processed_mujoco_inputs_replace_collision_no_children(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <replace_collision link="forearm"/>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        with self.assertRaises(ValueError) as context:
+            get_processed_mujoco_inputs(processed_element)
+        assert "forearm" in str(context.exception)
+
+    def test_get_processed_mujoco_inputs_replace_collision_duplicate_link_raises(self):
+        xml_string = """<?xml version="1.0"?>
+<processed_inputs>
+  <replace_collision link="forearm">
+    <geom type="capsule" fromto="0 0 0 0 0 0.3" size="0.04"/>
+  </replace_collision>
+  <replace_collision link="forearm">
+    <geom type="box" size="0.1 0.1 0.1"/>
+  </replace_collision>
+</processed_inputs>"""
+        dom = minidom.parseString(xml_string)
+        processed_element = dom.getElementsByTagName("processed_inputs")[0]
+
+        with self.assertRaises(ValueError) as context:
+            get_processed_mujoco_inputs(processed_element)
+        assert "forearm" in str(context.exception)
+
     def test_get_processed_mujoco_inputs_multiple_elements(self):
         xml_string = """<?xml version="1.0"?>
 <processed_inputs>
@@ -971,7 +1096,9 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         dom = minidom.parseString(xml_string)
         processed_element = dom.getElementsByTagName("processed_inputs")[0]
 
-        decompose_dict, cameras_dict, modify_element_dict, lidar_dict = get_processed_mujoco_inputs(processed_element)
+        decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict = (
+            get_processed_mujoco_inputs(processed_element)
+        )
         self.assertEqual(len(decompose_dict), 2)
         assert "mesh1" in decompose_dict
         assert "mesh2" in decompose_dict
@@ -1362,6 +1489,112 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         result_dom = add_modifiers(dom, {})
         result_xml = result_dom.toxml()
         self.assertEqual(result_xml, dom.toxml())
+
+    def test_add_replaced_collisions_defaults_class(self):
+        # A geom in the fragment with no class attribute gets class="collision".
+        dom = make_single_body_dom("forearm")
+        fragment = make_replace_collision_fragment('<geom type="capsule" fromto="0 0 0 0 0 0.3" size="0.04"/>')
+        result_dom = add_replaced_collisions(dom, {"forearm": fragment})
+
+        body = result_dom.getElementsByTagName("body")[0]
+        geoms = body.getElementsByTagName("geom")
+        self.assertEqual(len(geoms), 1)
+        self.assertEqual(geoms[0].getAttribute("type"), "capsule")
+        self.assertEqual(geoms[0].getAttribute("fromto"), "0 0 0 0 0 0.3")
+        self.assertEqual(geoms[0].getAttribute("class"), "collision")
+
+    def test_add_replaced_collisions_preserves_explicit_class(self):
+        # A geom that already carries a class is left untouched.
+        dom = make_single_body_dom("leg_left_1_link")
+        fragment = make_replace_collision_fragment('<geom class="foot_capsule" fromto="0 0 0 0.1 0 0"/>')
+        result_dom = add_replaced_collisions(dom, {"leg_left_1_link": fragment})
+
+        geom = result_dom.getElementsByTagName("geom")[0]
+        self.assertEqual(geom.getAttribute("class"), "foot_capsule")
+
+    def test_add_replaced_collisions_multiple_geoms(self):
+        dom = make_single_body_dom("forearm")
+        fragment = make_replace_collision_fragment(
+            '<geom name="cap1" type="capsule" fromto="0 0 0 0 0 0.3" size="0.04"/>'
+            '<geom name="cap2" type="capsule" fromto="0 0 0.3 0.1 0 0.3" size="0.03"/>'
+        )
+        result_dom = add_replaced_collisions(dom, {"forearm": fragment})
+
+        geoms = result_dom.getElementsByTagName("geom")
+        self.assertEqual(len(geoms), 2)
+        self.assertEqual([g.getAttribute("name") for g in geoms], ["cap1", "cap2"])
+
+    def test_add_replaced_collisions_nested_body(self):
+        # A nested <body> in the fragment is inserted as-is, and its own geoms are also
+        # defaulted to class="collision" when they don't already carry a class.
+        dom = make_single_body_dom("leg_left_1_link")
+        fragment = make_replace_collision_fragment(
+            '<geom name="left_foot6_collision" class="foot_capsule" fromto="-0.0985 0.007 0 0.122 0.0065 0"/>'
+            '<body name="leg_left_ankle_link">'
+            '<geom name="leg_left_ankle_collision" size="0.03" fromto="-0.04 0 0.03 0.02 0 0.03"/>'
+            "</body>"
+        )
+        result_dom = add_replaced_collisions(dom, {"leg_left_1_link": fragment})
+
+        outer_body = result_dom.getElementsByTagName("body")[0]
+        nested_bodies = outer_body.getElementsByTagName("body")
+        self.assertEqual(len(nested_bodies), 1)
+        self.assertEqual(nested_bodies[0].getAttribute("name"), "leg_left_ankle_link")
+        nested_geom = nested_bodies[0].getElementsByTagName("geom")[0]
+        self.assertEqual(nested_geom.getAttribute("class"), "collision")
+
+    def test_add_replaced_collisions_unmatched_link_raises(self):
+        dom = make_single_body_dom("base_link")
+        fragment = make_replace_collision_fragment('<geom type="capsule"/>')
+
+        with self.assertRaises(ValueError) as context:
+            add_replaced_collisions(dom, {"nonexistent_link": fragment})
+        assert "nonexistent_link" in str(context.exception)
+
+    def test_add_replaced_collisions_empty_dict(self):
+        dom = make_single_body_dom("base_link")
+        result_dom = add_replaced_collisions(dom, {})
+        self.assertEqual(result_dom.toxml(), dom.toxml())
+
+    def test_add_replaced_collisions_multiple_geoms_and_multiple_nested_bodies(self):
+        # Several top-level geoms interleaved with several nested <body> siblings, each
+        # with their own geoms (e.g. capsules around a foot plus two grouped sub-bodies),
+        # all copied verbatim as siblings under the link's body.
+        fragment = make_replace_collision_fragment(
+            '<geom name="left_foot0_collision" class="foot_capsule" fromto="-0.083 -0.035 0 0.11 -0.033 0"/>'
+            '<geom name="left_foot2_collision" class="foot_capsule" fromto="-0.0975 -0.021 0 0.12 -0.0215 0"/>'
+            '<body name="leg_left_ankle_link">'
+            '<geom name="leg_left_ankle_collision" class="collision" size="0.03" fromto="-0.04 0 0.03 0.02 0 0.03"/>'
+            '<geom name="leg_left_ankle_bar_collision" class="collision" size="0.03" '
+            'fromto="-0.045 -0.035 0.05 -0.045 0.035 0.05"/>'
+            "</body>"
+            '<body name="leg_left_foot_collision_avoidance_capsule_link">'
+            '<geom name="left_foot_avoidance_collision_0" class="foot_capsule" size="0.03" '
+            'fromto="-0.088 -0.055 0.02 0.112 -0.055 0.02"/>'
+            '<geom name="left_foot_avoidance_collision_1" class="foot_capsule" size="0.03" '
+            'fromto="-0.088 0.055 0.02 0.112 0.055 0.02"/>'
+            "</body>"
+        )
+
+        dom = make_single_body_dom("leg_left_1_link")
+        result_dom = add_replaced_collisions(dom, {"leg_left_1_link": fragment})
+
+        top_body = result_dom.getElementsByTagName("body")[0]
+        direct_geoms = [c for c in top_body.childNodes if c.nodeType == c.ELEMENT_NODE and c.tagName == "geom"]
+        direct_bodies = [c for c in top_body.childNodes if c.nodeType == c.ELEMENT_NODE and c.tagName == "body"]
+        self.assertEqual(len(direct_geoms), 2)
+        self.assertEqual(len(direct_bodies), 2)
+        self.assertEqual(
+            [b.getAttribute("name") for b in direct_bodies],
+            ["leg_left_ankle_link", "leg_left_foot_collision_avoidance_capsule_link"],
+        )
+        self.assertEqual(len(direct_bodies[0].getElementsByTagName("geom")), 2)
+        self.assertEqual(len(direct_bodies[1].getElementsByTagName("geom")), 2)
+        # every geom (2 direct + 4 nested) already carried a class, so none were overwritten
+        all_geoms = top_body.getElementsByTagName("geom")
+        self.assertEqual(len(all_geoms), 6)
+        for geom in all_geoms:
+            self.assertIn(geom.getAttribute("class"), ("foot_capsule", "collision"))
 
     def test_add_lidar_from_sites_basic(self):
         xml_string = """<?xml version="1.0"?>
@@ -2181,6 +2414,66 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         link = dom.getElementsByTagName("link")[0]
         collisions = link.getElementsByTagName("collision")
         self.assertEqual(len(collisions), 2)
+
+    def test_add_missing_collisions_exclude_links_removes_existing_and_skips_synthesis(self):
+        # An excluded link's existing collisions are stripped, even when there are several,
+        # and none is re-synthesized from its visual.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="forearm">
+    <visual><geometry><box size="1 1 1"/></geometry></visual>
+    <collision><geometry><box size="1 1 1"/></geometry></collision>
+    <collision><geometry><sphere radius="0.5"/></geometry></collision>
+  </link>
+</robot>"""
+        result = add_missing_collisions(urdf, exclude_links={"forearm"})
+        dom = minidom.parseString(result)
+        link = dom.getElementsByTagName("link")[0]
+        self.assertEqual(len(link.getElementsByTagName("collision")), 0)
+        # the visual is untouched
+        self.assertEqual(len(link.getElementsByTagName("visual")), 1)
+
+    def test_add_missing_collisions_exclude_links_skips_synthesis_for_visual_only_link(self):
+        # An excluded link with a visual but no collision does NOT get one synthesized.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="forearm">
+    <visual><geometry><box size="1 1 1"/></geometry></visual>
+  </link>
+</robot>"""
+        result = add_missing_collisions(urdf, exclude_links={"forearm"})
+        dom = minidom.parseString(result)
+        link = dom.getElementsByTagName("link")[0]
+        self.assertEqual(len(link.getElementsByTagName("collision")), 0)
+
+    def test_add_missing_collisions_exclude_links_leaves_other_links(self):
+        # A link not named in exclude_links keeps its collision untouched.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="forearm">
+    <collision><geometry><box size="1 1 1"/></geometry></collision>
+  </link>
+  <link name="upperarm">
+    <collision><geometry><sphere radius="0.5"/></geometry></collision>
+  </link>
+</robot>"""
+        result = add_missing_collisions(urdf, exclude_links={"forearm"})
+        dom = minidom.parseString(result)
+        links = {link.getAttribute("name"): link for link in dom.getElementsByTagName("link")}
+        self.assertEqual(len(links["forearm"].getElementsByTagName("collision")), 0)
+        self.assertEqual(len(links["upperarm"].getElementsByTagName("collision")), 1)
+
+    def test_add_missing_collisions_exclude_links_none_is_noop(self):
+        # The default (no exclude_links) behaves exactly as before.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="forearm">
+    <collision><geometry><box size="1 1 1"/></geometry></collision>
+  </link>
+</robot>"""
+        result = add_missing_collisions(urdf)
+        dom = minidom.parseString(result)
+        self.assertEqual(len(dom.getElementsByTagName("collision")), 1)
 
     def test_extract_mesh_info_basic(self):
         urdf = """<?xml version="1.0"?>
