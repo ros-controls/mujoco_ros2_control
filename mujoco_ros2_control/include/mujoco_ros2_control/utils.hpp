@@ -84,15 +84,6 @@ inline NoiseDistribution get_noise_distribution(const hardware_interface::Compon
 }
 
 /**
- * @brief Returns "gaussian" or "uniform" for the given distribution, matching the `noise_distribution`
- * parameter spelling accepted by get_noise_distribution().
- */
-inline const char* to_string(NoiseDistribution distribution)
-{
-  return distribution == NoiseDistribution::kUniform ? "uniform" : "gaussian";
-}
-
-/**
  * @brief Logs, at INFO level, the noise distribution and standard deviation configured for each of a
  * sensor's noise-bearing components (e.g. an IMU's `orientation`, `angular_velocity`, and
  * `linear_acceleration` fields), identified by their underlying MJCF sensor names. Called once per sensor
@@ -101,7 +92,7 @@ inline const char* to_string(NoiseDistribution distribution)
 inline void log_sensor_components_noise(const rclcpp::Logger& logger, NoiseDistribution distribution,
                                         std::initializer_list<std::pair<const std::string&, double>> components)
 {
-  const char* distribution_name = to_string(distribution);
+  const char* distribution_name = (distribution == NoiseDistribution::kUniform ? "uniform" : "gaussian");
   for (const auto& [component_name, noise_stddev] : components)
   {
     RCLCPP_INFO(logger, "Sensor component '%s' is using '%s' noise with stddev: %f", component_name.c_str(),
