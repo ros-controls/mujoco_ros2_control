@@ -51,7 +51,7 @@ std::vector<std::string> FtsGravCompPlugin::get_sensor_names_from_parameters()
         std::string sensor_name = relative_path.substr(0, dot_pos);
 
         // Skip "type" parameter
-        if (sensor_name != "type")
+        if (relative_path.compare(dot_pos + 1, std::string::npos, "frame_id") == 0)
         {
           sensor_names_set.insert(sensor_name);
         }
