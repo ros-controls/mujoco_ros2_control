@@ -143,7 +143,7 @@ public:
    * running headless). It also sets up required publishers and services using the provided node.
    */
   bool initialize(rclcpp::Node::SharedPtr node, const std::string& model_path, const std::string& mujoco_model_topic,
-                  double sim_speed_factor, bool headless);
+                  double sim_speed_factor, bool headless, const std::string& camera_tracked_body);
 
   /**
    * @brief Apply a keyframe to the simulation by name.
@@ -202,6 +202,16 @@ public:
   mjData* data()
   {
     return mj_data_;
+  }
+
+  /**
+   * @brief Accessor for the viewer camera.
+   *
+   * The Simulate app holds a reference to this camera, so it reflects the live view state.
+   */
+  const mjvCamera& camera() const
+  {
+    return cam_;
   }
 
   /**
@@ -354,6 +364,15 @@ private:
    * @brief Loops the physics simulation until asked to terminate.
    */
   void physics_loop();
+
+  /**
+   * @brief Point the viewer camera at `camera_tracked_body_`, if one was requested.
+   *
+   * Must run after the model has been handed to the Simulate app: `LoadOnRenderThread` calls
+   * `AlignAndScaleView`, which resets the camera to the default free camera on every new model.
+   * Leaves the free camera in place if the body name does not resolve.
+   */
+  void apply_tracking_camera();
 
   /**
    * @brief Publish the current sim time to /clock.
@@ -518,6 +537,9 @@ private:
   mjvCamera cam_;
   mjvOption opt_;
   mjvPerturb pert_;
+
+  // Name of the body the viewer camera tracks at startup. Empty leaves the default free camera.
+  std::string camera_tracked_body_;
 
   // Speed scaling parameter. if set to >0 then we ignore the value set in the simulate app and instead
   // attempt to loop at whatever this is set to. If this is <0, then we use the value from the app.
