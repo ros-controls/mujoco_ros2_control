@@ -49,6 +49,12 @@
     <!-- <replace_collision link="forearm">
       <geom type="capsule" fromto="0 0 0 0 0 0.3" size="0.04"/>
     </replace_collision> -->
+    <!-- With stage="urdf" the children are URDF <collision> elements instead, swapped into the -->
+    <!-- link before conversion (meshes are converted, fixed links fuse normally). Needs -->
+    <!-- use_collision_tags, otherwise it is ignored. -->
+    <!-- <replace_collision link="forearm" stage="urdf">
+      <collision><geometry><cylinder radius="0.04" length="0.3"/></geometry></collision>
+    </replace_collision> -->
 
     <!-- The camera with the specified values will be added at the specified site name. -->
     <!-- The position and quaterinion will be filled in by the converter -->
