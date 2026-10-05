@@ -148,10 +148,13 @@ Rough outline of the automated conversion process
     correct per link even when MuJoCo fuses fixed-jointed bodies together. A mesh shared by a visual
     and a collision is converted once and reused for both (and, if that link requests decomposition,
     the whole mesh renders while its decomposed pieces collide).
-  - A link named in a ``replace_collision`` input skips all of the above: its collision geometry
-    (authored or synthesized) is dropped entirely and never converted, and a user-authored MJCF
-    fragment (one or more primitives, optionally grouped under nested sub-bodies) is inserted in
-    its place. See the :ref:`replace_collision attribute reference <threshold-attribute>`.
+  - A link named in a ``replace_collision`` input (default ``stage="mjcf"``) skips all of the
+    above: its collision geometry (authored or synthesized) is dropped entirely and never
+    converted, and a user-authored MJCF fragment (one or more primitives, optionally grouped under
+    nested sub-bodies) is inserted in its place. With ``stage="urdf"`` the link's ``<collision>``
+    tags are instead swapped for user-authored URDF ones before any of the above runs, so they are
+    converted and fused like authored collisions. See the
+    :ref:`replace_collision attribute reference <threshold-attribute>`.
   - Both kinds of geom get explicit attributes written directly onto them, so visual/collision
     separation does not depend on a user-supplied ``<default class="...">`` block:
 
@@ -235,10 +238,11 @@ Main sub-elements
      For ``geom`` type, elements are identified by ``mesh`` and ``class`` instead of ``name``.
      Useful to tweak physics properties like ``frictionloss``, ``stiffness``, ``damping``,
      ``gravcomp``, etc.
-   - ``replace_collision`` (attribute: ``link``; children: one or more ``geom``/``body`` elements)
+   - ``replace_collision`` (attributes: ``link``, optional ``stage``; children: one or more
+     ``geom``/``body`` elements, or ``collision`` elements with ``stage="urdf"``)
      — drops **all** of the named link's collision geometry (authored or synthesized from its
      visual) and replaces it with the given MJCF fragment, copied verbatim into that link's
-     ``<body>``. Useful for swapping an expensive collision mesh for cheap primitives (for
+     ``<body>`` (or, with ``stage="urdf"``, with the given URDF collisions before conversion). Useful for swapping an expensive collision mesh for cheap primitives (for
      example capsules), including several primitives, or grouping them under nested named
      sub-bodies. See the :ref:`replace_collision attribute reference <threshold-attribute>` below.
 
@@ -395,16 +399,30 @@ attributes the demo converter recognizes; converters may extend this list.
 ``replace_collision``
 
 - Required: ``link`` (string) — the URDF link name whose collision geometry should be replaced.
-- Required: one or more child ``geom`` and/or ``body`` elements, using plain MJCF attribute
+- Optional: ``stage`` (``mjcf`` | ``urdf``, default ``mjcf``) — when the replacement happens:
+
+  - ``mjcf``: after the MJCF is generated. Children are MJCF ``geom``/``body`` elements (see
+    below). The link must still exist as its own ``<body>``, so a link on a fixed joint that
+    MuJoCo fuses into its parent can't be targeted unless converting with ``--no-fuse``.
+  - ``urdf``: directly in the URDF, before any further processing. Children are one or more URDF
+    ``<collision>`` elements (``origin`` + ``geometry`` with ``box``/``sphere``/``cylinder``/
+    ``mesh``) that replace all of the link's ``<collision>`` tags. Meshes are converted like any
+    authored collision, and fixed links are fused normally. Only applies with
+    ``--use_collision_tags``; without it the tag is ignored (a note is printed), since all
+    authored collisions are dropped anyway.
+
+  A tag never mixes the two: every child must match its ``stage``, otherwise conversion fails.
+  A link can appear in only one ``replace_collision`` tag.
+- Required (``stage="mjcf"``): one or more child ``geom`` and/or ``body`` elements, using plain MJCF attribute
   syntax (``type``, ``size``, ``pos``/``quat``, or ``fromto`` for capsules/cylinders). A nested
   ``body`` is a fixed sub-body used to group its own geoms under a name; it is copied verbatim,
   including any ``joint`` it contains.
 - Every child ``geom`` (including those inside a nested ``body``) is copied into the link's
   MJCF ``<body>`` exactly as written; the only attribute the converter injects is
   ``class="collision"``, and only when the ``geom`` does not already specify a ``class``.
-- All of the link's original collision geometry (authored ``<collision>`` tags, or one
-  synthesized from its ``<visual>``) is dropped and never converted, regardless of
-  ``--use_collision_tags``.
+- With ``stage="mjcf"``, all of the link's original collision geometry (authored
+  ``<collision>`` tags, or one synthesized from its ``<visual>``) is dropped and never
+  converted, regardless of ``--use_collision_tags``.
 - Example — replace a link's collision with two capsules:
 
   .. code-block:: xml
@@ -423,4 +441,18 @@ attributes the demo converter recognizes; converters may extend this list.
        <body name="leg_left_ankle_link">
          <geom name="leg_left_ankle_collision" class="collision" size="0.03" fromto="-0.04 0 0.03 0.02 0 0.03"/>
        </body>
+     </replace_collision>
+
+- Example — replace a link's collisions at the URDF stage (requires ``--use_collision_tags``):
+
+  .. code-block:: xml
+
+     <replace_collision link="forearm" stage="urdf">
+       <collision>
+         <origin xyz="0 0 0.15"/>
+         <geometry><cylinder radius="0.04" length="0.3"/></geometry>
+       </collision>
+       <collision>
+         <geometry><mesh filename="package://my_robot/meshes/forearm_simple.stl"/></geometry>
+       </collision>
      </replace_collision>
