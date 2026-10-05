@@ -1612,6 +1612,70 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
             add_replaced_collisions(dom, {"nonexistent_link": fragment})
         assert "nonexistent_link" in str(context.exception)
 
+    # child_link hangs off arm_link on a fixed joint rotated 90 deg about z, 1 m along x.
+    FUSED_URDF = """<robot name="t">
+  <link name="base_link"/><link name="arm_link"/><link name="child_link"/>
+  <joint name="j" type="continuous">
+    <parent link="base_link"/><child link="arm_link"/><axis xyz="0 0 1"/>
+  </joint>
+  <joint name="fixed" type="fixed">
+    <parent link="arm_link"/><child link="child_link"/>
+    <origin xyz="1 0 0" rpy="0 0 1.5707963267948966"/>
+  </joint>
+</robot>"""
+
+    # What mujoco.mj_saveLastXML produced for FUSED_URDF with fusing on: child_link is gone.
+    FUSED_MJCF = """<mujoco model="t">
+  <compiler angle="radian" meshdir="assets/" texturedir="assets/"/>
+  <worldbody>
+    <body name="arm_link">
+      <inertial pos="0.5 0 0" quat="0.5 0.5 0.5 0.5" mass="2" diaginertia="2.5 2.5 2"/>
+      <joint name="j"/>
+    </body>
+  </worldbody>
+</mujoco>"""
+
+    def test_add_replaced_collisions_fused_link_attaches_to_parent(self):
+        # The fragment goes into the body that absorbed the link, wrapped in a body named after
+        # the link, so geoms stay authored in the link's own frame.
+        dom = minidom.parseString(self.FUSED_MJCF)
+        fragment = make_replace_collision_fragment('<geom type="capsule" fromto="0 0 0 0 0 0.3" size="0.04"/>')
+        result_dom = add_replaced_collisions(dom, {"child_link": fragment}, self.FUSED_URDF)
+
+        wrapper = [b for b in result_dom.getElementsByTagName("body") if b.getAttribute("name") == "child_link"][0]
+        self.assertEqual(wrapper.parentNode.getAttribute("name"), "arm_link")
+        geom = wrapper.getElementsByTagName("geom")[0]
+        self.assertEqual(geom.getAttribute("fromto"), "0 0 0 0 0 0.3")
+        self.assertEqual(geom.getAttribute("class"), "collision")
+
+    def test_add_replaced_collisions_fused_link_rotated_pose(self):
+        # Compiling this result in real MuJoCo put the geom at world (1, 0.1, 0); check the same
+        # placement with PyKDL so the test doesn't need the mujoco python module.
+        dom = minidom.parseString(self.FUSED_MJCF)
+        fragment = make_replace_collision_fragment('<geom type="sphere" size="0.01" pos="0.1 0 0"/>')
+        result_dom = add_replaced_collisions(dom, {"child_link": fragment}, self.FUSED_URDF)
+
+        wrapper = [b for b in result_dom.getElementsByTagName("body") if b.getAttribute("name") == "child_link"][0]
+        w, x, y, z = (float(v) for v in wrapper.getAttribute("quat").split())
+        frame = PyKDL.Frame(
+            PyKDL.Rotation.Quaternion(x, y, z, w),
+            PyKDL.Vector(*(float(v) for v in wrapper.getAttribute("pos").split())),
+        )
+        geom_pos = frame * PyKDL.Vector(0.1, 0, 0)
+        for actual, expected in zip(geom_pos, (1.0, 0.1, 0.0)):
+            self.assertAlmostEqual(actual, expected, places=6)
+
+    def test_add_replaced_collisions_root_fused_into_world_raises(self):
+        # A root link fused into the world has no parent body to attach to.
+        urdf = '<robot name="t"><link name="base_link"/></robot>'
+        dom = minidom.parseString("<mujoco><worldbody/></mujoco>")
+        fragment = make_replace_collision_fragment('<geom type="sphere" size="0.1"/>')
+
+        with self.assertRaises(ValueError) as context:
+            add_replaced_collisions(dom, {"base_link": fragment}, urdf)
+        assert "base_link" in str(context.exception)
+        assert "--no-fuse" in str(context.exception)
+
     def test_add_replaced_collisions_empty_dict(self):
         dom = make_single_body_dom("base_link")
         result_dom = add_replaced_collisions(dom, {})

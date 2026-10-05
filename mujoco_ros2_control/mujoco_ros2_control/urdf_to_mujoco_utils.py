@@ -1608,7 +1608,7 @@ def add_lidar_from_sites(dom, lidar_dict):
     return dom
 
 
-def add_replaced_collisions(dom, replace_collision_dict):
+def add_replaced_collisions(dom, replace_collision_dict, urdf=None):
     """
     Inserts each link's replace_collision fragment (one or more <geom>/<body> elements,
     parsed by get_processed_mujoco_inputs) into that link's <body> in the MJCF, verbatim.
@@ -1618,23 +1618,44 @@ def add_replaced_collisions(dom, replace_collision_dict):
     the fragment that does not already carry a class attribute is given class="collision",
     so it still picks up sane group/contype/conaffinity defaults.
 
-    Raises ValueError if a link named in replace_collision_dict has no matching <body>.
+    A link on a fixed joint is fused by MuJoCo into its parent (unless --no-fuse) and has no
+    <body> of its own. When urdf is given, such a link's fragment is wrapped in a <body> named
+    after the link, carrying the accumulated fixed-joint pose (the same transform used to place
+    link sites), and added to the body that absorbed it, so the fragment stays authored in the
+    link's own frame.
+
+    :param dom: the MJCF as a minidom document
+    :param replace_collision_dict: link name -> list of fragment elements
+    :param urdf: optional URDF string, used to place fragments of fused links
+    :returns: the modified dom
+    :raises ValueError: if a link has no <body> and no parent body to attach to, e.g. urdf not
+        given, or a root link fused into the world.
     """
     if not replace_collision_dict:
         return dom
 
-    matched_links = set()
+    bodies = {b.getAttribute("name"): b for b in dom.getElementsByTagName("body")}
+    tfs = get_urdf_transforms(urdf) if urdf else {}
+    unmatched = []
 
-    for body in dom.getElementsByTagName("body"):
-        link_name = body.getAttribute("name")
-        fragment = replace_collision_dict.get(link_name)
-        if fragment is None:
+    for link_name, fragment in replace_collision_dict.items():
+        target = bodies.get(link_name)
+        if target is None and link_name in tfs:
+            parent, tf, _ = tfs[link_name]
+            if parent != link_name and parent in bodies:
+                target = dom.createElement("body")
+                target.setAttribute("name", link_name)
+                target.setAttribute("pos", " ".join(map(str, tf.p)))
+                x, y, z, w = tf.M.GetQuaternion()  # MuJoCo wants w x y z
+                target.setAttribute("quat", f"{w} {x} {y} {z}")
+                bodies[parent].appendChild(target)
+        if target is None:
+            unmatched.append(link_name)
             continue
-        matched_links.add(link_name)
 
         for element in fragment:
             imported = dom.importNode(element, True)
-            body.appendChild(imported)
+            target.appendChild(imported)
 
             # a <geom> can't have child geoms, so these two cases are mutually exclusive
             geoms = [imported] if imported.tagName == "geom" else imported.getElementsByTagName("geom")
@@ -1642,9 +1663,12 @@ def add_replaced_collisions(dom, replace_collision_dict):
                 if not geom.hasAttribute("class"):
                     geom.setAttribute("class", "collision")
 
-    unmatched = set(replace_collision_dict.keys()) - matched_links
     if unmatched:
-        raise ValueError(f"replace_collision link(s) not found in the MJCF: {', '.join(sorted(unmatched))}")
+        raise ValueError(
+            f"replace_collision link(s) not found in the MJCF: {', '.join(sorted(unmatched))}. "
+            "A root link fused into the world has no body to attach to; "
+            "use --no-fuse (or a free joint) to keep it as its own body."
+        )
 
     return dom
 
