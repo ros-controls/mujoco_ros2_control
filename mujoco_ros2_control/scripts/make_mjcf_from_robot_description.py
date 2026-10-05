@@ -336,7 +336,7 @@ def fix_mujoco_description(
     dom = mrc.update_non_obj_assets(dom, output_filepath, mesh_info_dict)
 
     # Insert any user-authored collision replacement fragments (replace_collision tags)
-    dom = mrc.add_replaced_collisions(dom, replace_collision_dict)
+    dom = mrc.add_replaced_collisions(dom, replace_collision_dict, urdf)
 
     # Add the MuJoCo input elements
     dom = mrc.add_mujoco_inputs(dom, raw_inputs, scene_inputs)

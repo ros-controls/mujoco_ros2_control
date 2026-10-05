@@ -402,8 +402,11 @@ attributes the demo converter recognizes; converters may extend this list.
 - Optional: ``stage`` (``mjcf`` | ``urdf``, default ``mjcf``) — when the replacement happens:
 
   - ``mjcf``: after the MJCF is generated. Children are MJCF ``geom``/``body`` elements (see
-    below). The link must still exist as its own ``<body>``, so a link on a fixed joint that
-    MuJoCo fuses into its parent can't be targeted unless converting with ``--no-fuse``.
+    below). A link on a fixed joint that MuJoCo fused into its parent (the default ``--fuse``)
+    is still supported: the fragment is wrapped in a ``<body>`` named after the link, placed at
+    the fixed-joint pose inside the body that absorbed it, so it stays authored in the link's own
+    frame. Only a root link fused into the world (no free joint) can't be targeted; use
+    ``--no-fuse`` for that.
   - ``urdf``: directly in the URDF, before any further processing. Children are one or more URDF
     ``<collision>`` elements (``origin`` + ``geometry`` with ``box``/``sphere``/``cylinder``/
     ``mesh``) that replace all of the link's ``<collision>`` tags. Meshes are converted like any
