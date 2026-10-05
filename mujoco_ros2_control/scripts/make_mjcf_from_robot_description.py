@@ -492,9 +492,14 @@ def main(args=None):
         mrc.write_mujoco_scene(scene_inputs, output_filepath)
         scene_inputs = None
 
-    decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict = (
-        mrc.get_processed_mujoco_inputs(processed_inputs)
-    )
+    (
+        decompose_dict,
+        cameras_dict,
+        modify_element_dict,
+        lidar_dict,
+        replace_collision_dict,
+        replace_collision_urdf_dict,
+    ) = mrc.get_processed_mujoco_inputs(processed_inputs)
 
     if parsed_args.asset_dir:
         assets_filepath = parsed_args.asset_dir
@@ -519,8 +524,17 @@ def main(args=None):
     # legacy behavior, and the default).
     if not parsed_args.use_collision_tags:
         xml_data = mrc.remove_tag(xml_data, "collision")
+        # URDF-stage replacements are collision tags themselves, so they follow the same flag
+        # and are skipped (not an error) when collision tags aren't being used.
+        if replace_collision_urdf_dict:
+            print(
+                "Ignoring stage='urdf' replace_collision for link(s) "
+                f"{', '.join(sorted(replace_collision_urdf_dict))}: --use_collision_tags not given"
+            )
+    else:
+        xml_data = mrc.replace_urdf_collisions(xml_data, replace_collision_urdf_dict)
 
-    # Links with a replace_collision input get their collision(s) fully replaced by a
+    # Links with a stage="mjcf" replace_collision input get their collision(s) fully replaced by a
     # user-authored fragment (see add_replaced_collisions), so they are excluded here:
     # any collision they ended up with (authored or otherwise) is dropped and none is
     # synthesized from their visuals, keeping their original collision mesh out of
