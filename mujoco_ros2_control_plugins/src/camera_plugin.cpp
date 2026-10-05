@@ -401,10 +401,37 @@ bool CameraPlugin::init_egl_context()
     return false;
   }
 
-  // Make the context current
-  if (!eglMakeCurrent(egl_display_, egl_surface_, egl_surface_, egl_context_))
+  // Make the context current.
+  //
+  // The PBuffer above is requested for drivers that need a real draw surface, but the
+  // surfaceless platform does not require one, and at least the NVIDIA driver refuses to bind
+  // a PBuffer here once the process already holds a GLX context (as it does whenever the
+  // MuJoCo viewer is open): eglMakeCurrent returns false while eglGetError reports success.
+  // MuJoCo only ever renders into its own offscreen framebuffer, so binding with no surface
+  // at all is equivalent, and it is what the surfaceless platform is for. Try the PBuffer
+  // first so drivers that do want one keep working, then fall back.
+  if (!egl_make_current_(egl_display_, egl_surface_, egl_surface_, egl_context_))
   {
-    RCLCPP_ERROR(node_->get_logger(), "EGL: Failed to make context current (error: 0x%x)", eglGetError());
+    RCLCPP_WARN(node_->get_logger(),
+                "EGL: Could not bind the PBuffer surface (error: 0x%x). Retrying surfaceless, which is "
+                "sufficient because rendering targets an offscreen framebuffer.",
+                eglGetError());
+    if (egl_surface_ != EGL_NO_SURFACE)
+    {
+      eglDestroySurface(egl_display_, egl_surface_);
+      egl_surface_ = EGL_NO_SURFACE;
+    }
+    if (egl_make_current_(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, egl_context_))
+    {
+      RCLCPP_INFO(node_->get_logger(), "EGL: Successfully initialized headless OpenGL context (surfaceless)");
+      return true;
+    }
+    RCLCPP_ERROR(node_->get_logger(),
+                 "EGL: Failed to make context current (error: 0x%x). If the MuJoCo viewer is open, that is "
+                 "the likely cause: this driver refuses to bind an EGL context in a process that already "
+                 "holds a GLX one, and eglGetError misreports it as success. Use render_backend=egl only "
+                 "together with headless operation, or render through GLFW.",
+                 eglGetError());
     cleanup_egl_context();
     return false;
   }
