@@ -113,6 +113,39 @@ def remove_tag(xml_string, tag_to_remove):
     return xmldoc.toprettyxml()
 
 
+def replace_urdf_collisions(xml_string, replace_collision_urdf_dict):
+    """
+    Replaces every <collision> of each named URDF link with the user-authored <collision>
+    elements of a stage="urdf" replace_collision tag.
+
+    Running on the URDF (before MuJoCo compiles it) means replacement meshes go through the
+    normal mesh conversion, and links on fixed joints are fused by MuJoCo like any other.
+
+    :param xml_string: the URDF as a string
+    :param replace_collision_urdf_dict: link name -> list of <collision> elements
+    :returns: the URDF string with the collisions replaced (unchanged if the dict is empty)
+    :raises ValueError: if a named link is not in the URDF
+    """
+    if not replace_collision_urdf_dict:
+        return xml_string
+
+    dom = minidom.parseString(xml_string)
+    links = {lnk.getAttribute("name"): lnk for lnk in dom.getElementsByTagName("link")}
+
+    unmatched = sorted(set(replace_collision_urdf_dict) - set(links))
+    if unmatched:
+        raise ValueError(f"replace_collision link(s) not found in the URDF: {', '.join(unmatched)}")
+
+    for link_name, fragment in replace_collision_urdf_dict.items():
+        link = links[link_name]
+        for collision in [c for c in link.childNodes if c.nodeType == c.ELEMENT_NODE and c.tagName == "collision"]:
+            link.removeChild(collision)
+        for element in fragment:
+            link.appendChild(dom.importNode(element, True))
+
+    return dom.toxml()
+
+
 def add_missing_collisions(xml_string, exclude_links=None):
     """
     Ensures every link that can be rendered can also collide, while respecting any
@@ -954,6 +987,16 @@ def get_processed_mujoco_inputs(processed_inputs_element):
     Returns the processed inputs as dictionaries from the specified processed_inputs_element.
 
     Right now this supports tags for decomposing meshes and attaching cameras or lidar sensors to sites.
+
+    replace_collision tags are split by their optional stage attribute: stage="mjcf" (default)
+    entries hold <geom>/<body> elements and go to replace_collision_dict, stage="urdf" entries
+    hold <collision> elements and go to replace_collision_urdf_dict. Both map link name to the
+    list of child elements.
+
+    :returns: (decompose_dict, cameras_dict, modify_element_dict, lidar_dict,
+        replace_collision_dict, replace_collision_urdf_dict)
+    :raises ValueError: on malformed tags, e.g. a replace_collision with an unknown stage,
+        children that don't match its stage, or a link named in more than one such tag.
     """
 
     decompose_dict = dict()
@@ -961,9 +1004,17 @@ def get_processed_mujoco_inputs(processed_inputs_element):
     modify_element_dict = dict()
     lidar_dict = dict()
     replace_collision_dict = dict()
+    replace_collision_urdf_dict = dict()
 
     if not processed_inputs_element:
-        return decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict
+        return (
+            decompose_dict,
+            cameras_dict,
+            modify_element_dict,
+            lidar_dict,
+            replace_collision_dict,
+            replace_collision_urdf_dict,
+        )
 
     for child in processed_inputs_element.childNodes:
         if child.nodeType != child.ELEMENT_NODE:
@@ -1066,20 +1117,43 @@ def get_processed_mujoco_inputs(processed_inputs_element):
             link_name = child.getAttribute("link")
             if not link_name:
                 raise ValueError("'link' must be in the attributes of a 'replace_collision' tag!")
-            if link_name in replace_collision_dict:
+            if link_name in replace_collision_dict or link_name in replace_collision_urdf_dict:
                 raise ValueError(f"Multiple 'replace_collision' tags found for link '{link_name}'")
+
+            stage = child.getAttribute("stage") or "mjcf"
+            allowed_tags = {"mjcf": {"geom", "body"}, "urdf": {"collision"}}.get(stage)
+            if allowed_tags is None:
+                raise ValueError(
+                    f"'replace_collision' tag for link '{link_name}' has invalid stage '{stage}' "
+                    "(expected 'mjcf' or 'urdf')"
+                )
 
             fragment = [c for c in child.childNodes if c.nodeType == c.ELEMENT_NODE]
             if not fragment:
                 raise ValueError(
                     f"'replace_collision' tag for link '{link_name}' must contain at least one "
-                    "child element (geom or body)!"
+                    f"child element ({' or '.join(sorted(allowed_tags))})!"
+                )
+            # One tag is either all URDF or all MJCF, never a mix
+            wrong = sorted({c.tagName for c in fragment} - allowed_tags)
+            if wrong:
+                raise ValueError(
+                    f"'replace_collision' tag for link '{link_name}' with stage '{stage}' only accepts "
+                    f"{' or '.join(sorted(allowed_tags))} children, got: {', '.join(wrong)}"
                 )
 
-            replace_collision_dict[link_name] = fragment
-            print(f"Will replace collision(s) on link '{link_name}' with {len(fragment)} element(s)")
+            target = replace_collision_urdf_dict if stage == "urdf" else replace_collision_dict
+            target[link_name] = fragment
+            print(f"Will replace collision(s) on link '{link_name}' at {stage} stage with {len(fragment)} element(s)")
 
-    return decompose_dict, cameras_dict, modify_element_dict, lidar_dict, replace_collision_dict
+    return (
+        decompose_dict,
+        cameras_dict,
+        modify_element_dict,
+        lidar_dict,
+        replace_collision_dict,
+        replace_collision_urdf_dict,
+    )
 
 
 def parse_inputs_xml(filename=None):
