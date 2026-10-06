@@ -89,6 +89,16 @@ void write_test_model()
 constexpr double TEST_TOLERANCE = 1e-9;
 }  // namespace
 
+TEST(PhysicsLoopSleep, IsTwentyPercentOfTimestepCappedAtOneMillisecond)
+{
+  using mujoco_ros2_control::physics_loop_sleep_duration;
+  using std::chrono::microseconds;
+  EXPECT_EQ(physics_loop_sleep_duration(0.0005), microseconds(100));
+  EXPECT_EQ(physics_loop_sleep_duration(0.002), microseconds(400));
+  EXPECT_EQ(physics_loop_sleep_duration(0.005), microseconds(1000));
+  EXPECT_EQ(physics_loop_sleep_duration(0.01), microseconds(1000));
+}
+
 TEST(RenderLoopExitHandler, RequestsSimulationExitAndShutsOwningContext)
 {
   auto context = std::make_shared<rclcpp::Context>();

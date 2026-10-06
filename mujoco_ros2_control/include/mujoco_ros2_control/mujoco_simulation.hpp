@@ -19,7 +19,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <functional>
 #include <memory>
@@ -50,6 +53,21 @@
 
 namespace mujoco_ros2_control
 {
+
+/**
+ * @brief Idle sleep used by the physics loop between iterations when not busy-waiting.
+ *
+ * Scales with the model timestep so small timesteps aren't starved by a fixed sleep:
+ * 20% of @p timestep, capped at 1 ms.
+ *
+ * @param timestep MuJoCo model timestep (mjModel::opt.timestep) in seconds.
+ * @return Sleep duration in microseconds.
+ */
+inline std::chrono::microseconds physics_loop_sleep_duration(double timestep)
+{
+  return std::min(std::chrono::microseconds(1000),
+                  std::chrono::microseconds(static_cast<int64_t>(std::llround(timestep * 0.2 * 1e6))));
+}
 
 /**
  * @brief ROS 2-based container for the mujoco Simulate application.
