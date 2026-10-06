@@ -729,6 +729,19 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
       refresh_data_snapshot();
       publish_control_state();
     }
+
+    // if there is an id set in the global settings, use that as the initial fixed camera
+    if (mj_model_->vis.global.cameraid >= 0 && mj_model_->vis.global.cameraid < mj_model_->ncam)
+    {
+      sim_->cam.fixedcamid = mj_model_->vis.global.cameraid;
+      sim_->cam.type = mjCAMERA_FIXED;
+    }
+
+    // otherwise use default free camera
+    else
+    {
+      mjv_defaultFreeCamera(mj_model_, &sim_->cam);
+    }
   }
   if (!mj_data_ || !snapshot_write_ || !snapshot_read_)
   {

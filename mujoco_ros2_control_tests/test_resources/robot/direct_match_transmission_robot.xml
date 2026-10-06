@@ -1,0 +1,19 @@
+<mujoco model="direct_match_transmission_robot">
+  <compiler angle="radian"/>
+  <!-- Gravity off: the servo must settle exactly on the command so the test can assert an
+       exact 1:2 mapping rather than a tolerance that could hide a reduction factor. -->
+  <option gravity="0 0 0" timestep="0.001"/>
+
+  <worldbody>
+    <body name="link1" pos="0 0 0">
+      <inertial pos="0 0 0" mass="0.2" diaginertia="0.001 0.001 0.001"/>
+      <joint name="direct_joint" type="slide" axis="1 0 0" range="-0.5 0.5" damping="1.0"/>
+      <geom name="link1_geom" type="box" size="0.02 0.02 0.02" rgba="0.8 0.4 0.1 1"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <!-- Named after the joint it drives, so it also direct-matches (see the URDF). -->
+    <position name="direct_joint" joint="direct_joint" kp="2000" dampratio="1" ctrlrange="-0.5 0.5"/>
+  </actuator>
+</mujoco>

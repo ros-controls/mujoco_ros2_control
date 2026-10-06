@@ -73,6 +73,8 @@ Joints
 ------
 
 Joints in the ``ros2_control`` interface are mapped to actuators defined in the MJCF, either directly or as transmission interfaces.
+If a joint is listed in a ``<transmission>`` and also has an MJCF actuator driving a joint of the same name, the transmission is applied to both commands and states.
+For example, a ``SimpleTransmission`` with ``mechanical_reduction`` 2.0 drives the actuator to twice the joint command and reports half the actuator position as the joint state.
 The system supports different joint control modes based on the actuator type and available command interfaces.
 
 MuJoCo's PD-level ``ctrl`` input is used for direct position, velocity, or effort control.
