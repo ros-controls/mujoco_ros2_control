@@ -1430,7 +1430,7 @@ void MujocoSimulation::physics_loop()
   // run until asked to exit
   while (!sim_->exitrequest.load())
   {
-    // sleep for 1 ms or yield, to let main thread run
+    // sleep for 20% of the timestep (max 1 ms) or yield, to let main thread run
     //  yield results in busy wait - which has better timing but kills battery life
     if (sim_->run && sim_->busywait)
     {
@@ -1438,7 +1438,7 @@ void MujocoSimulation::physics_loop()
     }
     else
     {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      std::this_thread::sleep_for(physics_loop_sleep_duration(mj_model_->opt.timestep));
     }
 
     {

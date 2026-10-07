@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<!--
+  Regression fixture: joint 'direct_joint' is both driven by a same-named MuJoCo actuator and
+  listed in a <transmission> below. See direct_match_transmission_launch_test.py.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="direct_match_transmission_robot">
+  <xacro:arg name="headless" default="true"/>
+
+  <link name="world"/>
+
+  <link name="link1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.2"/>
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="0.04 0.04 0.04"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="direct_joint" type="prismatic">
+    <parent link="world"/>
+    <child link="link1"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.5" upper="0.5" velocity="1.0" effort="100.0"/>
+  </joint>
+
+  <ros2_control name="MujocoSystem" type="system">
+    <hardware>
+      <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+      <param name="mujoco_model">
+        $(find mujoco_ros2_control_tests)/test_resources/scenes/direct_match_transmission_scene.xml
+      </param>
+      <param name="sim_speed_factor">1.0</param>
+      <param name="headless">$(arg headless)</param>
+    </hardware>
+
+    <joint name="direct_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <!-- A non-unity reduction, so that applying the transmission would be plainly visible. -->
+    <transmission name="direct_joint_trans">
+      <plugin>transmission_interface/SimpleTransmission</plugin>
+      <joint name="direct_joint" role="joint1">
+        <mechanical_reduction>2.0</mechanical_reduction>
+        <offset>0.0</offset>
+      </joint>
+      <actuator name="direct_joint" role="actuator1"/>
+    </transmission>
+  </ros2_control>
+</robot>
