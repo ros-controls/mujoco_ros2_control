@@ -83,6 +83,10 @@ def add_mujoco_info(raw_xml, output_filepath, publish_topic, fuse=True):
     compiler_element.setAttribute("discardvisual", "false")
     compiler_element.setAttribute("strippath", "false")
 
+    # Take mass only from the URDF <inertial> tags. Otherwise MuJoCo adds mass at its
+    # default density for the collision geoms synthesized below on links without one.
+    compiler_element.setAttribute("inertiafromgeom", "false")
+
     if not fuse:
         # Prevents merging of static bodies (like the fixed root link)
         compiler_element.setAttribute("fusestatic", "false")
