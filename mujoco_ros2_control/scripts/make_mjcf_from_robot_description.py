@@ -519,6 +519,14 @@ def main(args=None):
     # Add required MuJoCo tags to the starting URDF
     xml_data = mrc.add_mujoco_info(urdf, output_filepath, parsed_args.publish_topic, parsed_args.fuse)
 
+    # Take mass only from the URDF <inertial> tags. Otherwise MuJoCo adds mass at its
+    # default density for the collision geoms synthesized below on links without one.
+    dom = minidom.parseString(xml_data)
+    for compiler in dom.getElementsByTagName("compiler"):
+        if compiler.parentNode.tagName == "mujoco":
+            compiler.setAttribute("inertiafromgeom", "false")
+    xml_data = dom.toxml()
+
     # Unless --use_collision_tags is given, drop the URDF's authored collision geometry
     # first so every link falls back to a collision synthesized from its visuals (the
     # legacy behavior, and the default).
