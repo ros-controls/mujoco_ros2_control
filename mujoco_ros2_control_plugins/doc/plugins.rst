@@ -93,6 +93,18 @@ Note that any number of cameras can be configured in the plugin configuration.
    MuJoCo's camera coordinate conventions differ from ROS.
    Refer to the MuJoCo documentation for details.
 
+.. note::
+   Rendering happens on its own thread, so a render pass can outlast the publish interval.
+   When that happens the due slot is skipped rather than overwriting the frame being
+   rendered, and a throttled warning reports how many streaming frames have been lost::
+
+      Camera rendering cannot keep up: 12 streaming frame(s) dropped so far.
+
+   Lower ``camera_publish_rate``, the camera resolution, or the number of streaming
+   cameras; or lower ``sim_speed_factor``, which keeps the image rate in sim time while
+   giving each pass more wall-clock time. Polled triggers are never lost this way, only
+   deferred to the next pass.
+
 Headless Rendering
 ^^^^^^^^^^^^^^^^^^
 
