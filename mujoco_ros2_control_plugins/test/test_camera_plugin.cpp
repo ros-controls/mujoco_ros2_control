@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -358,6 +359,87 @@ TEST_F(CameraPluginTest, PolledCameraPublishesOncePerTrigger)
   }
   EXPECT_EQ(image_count.load(), 1);
 
+  plugin.cleanup();
+}
+
+// ---------------------------------------------------------------------------------------
+// EGL surfaceless fallback
+//
+// Some drivers (NVIDIA among them) refuse to bind a PBuffer surface in a process that
+// already holds a GLX context, and report success from eglGetError while doing so. The
+// eglMakeCurrent seam lets that be reproduced without such a driver.
+// ---------------------------------------------------------------------------------------
+
+namespace
+{
+constexpr const char* EGL_TEST_MODEL = R"(<?xml version="1.0"?>
+<mujoco model="egl_fallback">
+  <worldbody>
+    <body name="box" pos="0 0 0.1">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+      <geom type="box" size="0.05 0.05 0.05"/>
+    </body>
+    <camera name="cam" pos="0 -1 0.2" mode="fixed"/>
+  </worldbody>
+</mujoco>
+)";
+}  // namespace
+
+// The PBuffer bind fails, exactly as the driver behaves with a viewer open, and the
+// surfaceless retry is delegated to the real entry point so a genuine context is produced.
+TEST_F(CameraPluginTest, EglFallsBackToSurfacelessWhenPbufferBindFails)
+{
+  load_model(EGL_TEST_MODEL);
+
+  std::atomic<int> pbuffer_attempts{ 0 };
+  std::atomic<int> surfaceless_attempts{ 0 };
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  plugin.set_egl_make_current(
+      [&](EGLDisplay display, EGLSurface draw, EGLSurface read, EGLContext context) -> EGLBoolean {
+        if (draw != EGL_NO_SURFACE)
+        {
+          ++pbuffer_attempts;
+          return EGL_FALSE;  // what the driver does when a GLX context already exists
+        }
+        ++surfaceless_attempts;
+        return eglMakeCurrent(display, draw, read, context);
+      });
+
+  // GLFW reported unavailable, so the EGL path is taken.
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_, []() { return 0; }));
+  wait_for_rendering(plugin);
+
+  EXPECT_EQ(pbuffer_attempts.load(), 1);
+  EXPECT_EQ(surfaceless_attempts.load(), 1) << "the surfaceless retry should have been attempted once";
+  plugin.cleanup();
+}
+
+// When neither bind works there is nothing to fall back to: rendering stays unavailable
+// rather than the plugin pretending it has a context.
+TEST_F(CameraPluginTest, EglGivesUpWhenSurfacelessAlsoFails)
+{
+  load_model(EGL_TEST_MODEL);
+
+  std::atomic<int> attempts{ 0 };
+
+  mujoco_ros2_control_plugins::CameraPlugin plugin;
+  plugin.set_egl_make_current([&](EGLDisplay, EGLSurface, EGLSurface, EGLContext) -> EGLBoolean {
+    ++attempts;
+    return EGL_FALSE;
+  });
+
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_, []() { return 0; }));
+
+  // Give the rendering thread time to try and fail; it must not report itself available.
+  const auto deadline = std::chrono::steady_clock::now() + WAIT_TIMEOUT;
+  while (attempts.load() < 2 && std::chrono::steady_clock::now() < deadline)
+  {
+    std::this_thread::sleep_for(POLL_INTERVAL);
+  }
+  EXPECT_EQ(attempts.load(), 2) << "both the PBuffer and the surfaceless bind should be tried";
+  EXPECT_FALSE(plugin.is_rendering_available());
   plugin.cleanup();
 }
 
