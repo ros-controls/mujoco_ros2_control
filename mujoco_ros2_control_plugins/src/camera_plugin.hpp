@@ -125,6 +125,8 @@ struct CameraData
  *     policy: <policy>  # "disabled", "polled", or "streaming"
  *     frame_name: <camera_name>_frame
  *     info_topic: <camera_name>/camera_info
+ *     width: <pixels> # defaults to the MJCF <camera resolution="..."> width
+ *     height: <pixels> # defaults to the MJCF <camera resolution="..."> height
  *     image_topic: <camera_name>/color
  *     depth_topic: <camera_name>/depth
  *     trigger_service_name: <camera_name>/trigger  # only used for polling camera policy
