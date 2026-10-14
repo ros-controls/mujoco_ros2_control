@@ -99,8 +99,15 @@ public:
 #else
   on_init(const hardware_interface::HardwareComponentInterfaceParams& params) override;
 #endif
+// Jazzy+ handles own their value instead of aliasing a double*, so we build our own handles
+// and export them via on_export_*(); read()/write() sync those handles against the doubles below.
+#if ROS_DISTRO_HUMBLE
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
+#else
+  std::vector<hardware_interface::StateInterface::ConstSharedPtr> on_export_state_interfaces() override;
+  std::vector<hardware_interface::CommandInterface::SharedPtr> on_export_command_interfaces() override;
+#endif
 
   hardware_interface::CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
   hardware_interface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State& previous_state) override;
@@ -162,6 +169,47 @@ protected:
   rclcpp::Logger get_logger() const;
 
 private:
+  /// One exported interface: the double it mirrors, and where it comes from.
+  struct InterfaceBinding
+  {
+    std::string prefix;          ///< joint or sensor name
+    std::string interface_name;  ///< exported interface name, e.g. hardware_interface::HW_IF_POSITION
+    double* value;               ///< storage inside urdf_joint_data_ / *_sensor_data_
+  };
+
+  /// Enumerates every state interface to export, in export order.
+  std::vector<InterfaceBinding> collect_state_interface_bindings();
+
+  /// Enumerates every command interface to export, in export order.
+  std::vector<InterfaceBinding> collect_command_interface_bindings();
+
+#if !ROS_DISTRO_HUMBLE
+  /// A live handle paired with the double it mirrors; built once in on_init and kept alive here.
+  template <typename InterfaceT>
+  struct HandleBinding
+  {
+    typename InterfaceT::SharedPtr handle;
+    double* value;
+  };
+
+  std::vector<HandleBinding<hardware_interface::StateInterface>> state_bindings_;
+  std::vector<HandleBinding<hardware_interface::CommandInterface>> command_bindings_;
+
+  /// Builds one HandleBinding per InterfaceBinding, seeding each handle from the current double.
+  template <typename InterfaceT>
+  static std::vector<HandleBinding<InterfaceT>> build_bindings(const std::vector<InterfaceBinding>& bindings);
+
+  /// Builds state_bindings_/command_bindings_ from collect_*_interface_bindings().
+  void build_interface_handles();
+
+  /// Pushes the mirrored doubles into their exported handles; wait_for_lock controls blocking.
+  template <typename InterfaceT>
+  static void push_bindings_to_interfaces(const std::vector<HandleBinding<InterfaceT>>& bindings, bool wait_for_lock);
+
+  /// Pulls commands from the exported CommandInterface handles into their mirrored doubles.
+  void pull_commands_from_interfaces();
+#endif
+
   /**
    * @brief Loads actuator information from MuJoCo model into the SystemInterface.
    *
