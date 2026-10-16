@@ -42,6 +42,7 @@ ros-jazzy-mujoco-3d-lidar = { path = "./mujoco_extensions/mujoco_3d_lidar/packag
 python = ">=3.11,<3.13"
 pytest = ">=7,<8"
 cmake = ">=4.1.2,<5"
+cxx-compiler = ">=2.0.0,<3"
 ninja = ">=1.13.1,<2"
 sccache = ">=0.11.0,<0.12"
 mold = ">=2.40.2,<3"
@@ -56,7 +57,6 @@ ros-jazzy-urdfdom-py = "*"
 
 # Not necessary for building, but for tests/running in isolated environments
 ros-jazzy-ros-base = "*"
-cxx-compiler = ">=2.0.0,<3"
 
 [pypi-dependencies]
 xacro = ">=2.1.1, <3"
