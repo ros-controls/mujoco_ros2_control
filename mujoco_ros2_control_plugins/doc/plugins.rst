@@ -704,7 +704,7 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
      // Called on the physics thread, immediately before every mj_step.
    }
 
-   void on_reset(mjData* /*data*/)
+   void MyCustomPlugin::on_reset(mjData* /*data*/)
    {
      // Called after a world reset (ResetWorld service or UI reset).
    }
