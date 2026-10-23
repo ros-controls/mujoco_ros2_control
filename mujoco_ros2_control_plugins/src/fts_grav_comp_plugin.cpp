@@ -167,12 +167,22 @@ bool FtsGravCompPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model,
 
 void FtsGravCompPlugin::update(const mjModel* model, mjData* data)
 {
+  compensate(model, data, data->sensordata);
+}
+
+void FtsGravCompPlugin::process_sensor_data(const mjModel* model, const mjData* data, mjtNum* sensordata)
+{
+  compensate(model, data, sensordata);
+}
+
+void FtsGravCompPlugin::compensate(const mjModel* model, const mjData* data, mjtNum* sensordata) const
+{
   // run gravity compensation for each force torque sensor
-  for (auto& fts : fts_)
+  for (const auto& fts : fts_)
   {
     // Get the FTS data locally
-    mjtNum* sensordata_force = data->sensordata + fts.sensor_adr_force;
-    mjtNum* sensordata_torque = data->sensordata + fts.sensor_adr_torque;
+    mjtNum* sensordata_force = sensordata + fts.sensor_adr_force;
+    mjtNum* sensordata_torque = sensordata + fts.sensor_adr_torque;
     // pre-processed force and torque
     mjtNum raw_force_in_fts_frame[3];
     mjtNum raw_torque_in_fts_frame[3];

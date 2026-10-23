@@ -794,6 +794,17 @@ void MujocoSimulation::set_pre_step_callback(PreStepCallback callback)
   pre_step_callback_ = std::move(next);
 }
 
+void MujocoSimulation::set_sensor_data_callback(SensorDataCallback callback)
+{
+  SensorDataCallback next =
+      callback ? std::move(callback) :
+                 SensorDataCallback([](const mjModel* /*model*/, const mjData* /*data*/, mjtNum* /*sensordata*/) {});
+
+  // Same as the pre-step callback: the physics thread may already be publishing the control state.
+  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+  sensor_data_callback_ = std::move(next);
+}
+
 void MujocoSimulation::start_physics_thread()
 {
   // Disable the rangefinder flag at startup so that we don't get the yellow lines.
@@ -1395,6 +1406,11 @@ void MujocoSimulation::publish_control_state()
   control_state_.act.assign(mj_data_->act, mj_data_->act + mj_model_->na);
   control_state_.qfrc_actuator.assign(mj_data_->qfrc_actuator, mj_data_->qfrc_actuator + mj_model_->nv);
   control_state_.sensordata.assign(mj_data_->sensordata, mj_data_->sensordata + mj_model_->nsensordata);
+  if (mj_model_->nsensordata > 0)
+  {
+    // Post-process the copy read by the HW interface (e.g. FTS gravity compensation), not mj_data_
+    sensor_data_callback_(mj_model_, mj_data_, control_state_.sensordata.data());
+  }
   control_state_.ctrl.assign(mj_data_->ctrl, mj_data_->ctrl + mj_model_->nu);
 }
 

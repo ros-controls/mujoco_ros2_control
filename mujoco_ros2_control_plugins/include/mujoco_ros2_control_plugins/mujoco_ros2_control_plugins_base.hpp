@@ -40,6 +40,10 @@ namespace mujoco_ros2_control_plugins
  * - `on_reset()` runs immediately after a world reset, with the live `mj_data_` in its
  *   post-reset state. Use this to clear plugin state that refers to the pre-reset world,
  *   e.g. a latched command.
+ * - `process_sensor_data()` runs on the physics thread every time the sensor values read by the
+ *   hardware interface are published. It modifies that copy of the sensor data (not `mj_data_`),
+ *   so it is what ros2_control sees. Use this to post-process sensors, e.g. compensating a
+ *   force/torque sensor.
  *
  * @note All hooks must avoid blocking or the control loop or simulation itself will be held up!
  */
@@ -86,6 +90,21 @@ public:
    * @param data Pointer to the live MuJoCo data in its post-reset state.
    */
   virtual void on_reset(mjData* /*data*/)
+  {
+  }
+
+  /**
+   * @brief Called on the physics thread when the sensor values for the hardware interface are
+   * published (after every step, reset or state change). Default does nothing.
+   *
+   * Must be idempotent: it can run more than once on the same physics state (e.g. while paused).
+   *
+   * @param model Pointer to the MuJoCo model
+   * @param data Pointer to the live MuJoCo data, read only
+   * @param sensordata Copy of `data->sensordata` (size `model->nsensordata`) that ros2_control
+   *        reads; modify it in place.
+   */
+  virtual void process_sensor_data(const mjModel* /*model*/, const mjData* /*data*/, mjtNum* /*sensordata*/)
   {
   }
 

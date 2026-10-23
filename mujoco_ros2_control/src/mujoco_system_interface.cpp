@@ -2493,6 +2493,14 @@ void MujocoSystemInterface::load_mujoco_plugins()
       plugin->pre_step(data);
     }
   });
+
+  // Let plugins post-process the sensor data read by this hardware interface.
+  simulation_->set_sensor_data_callback([this](const mjModel* model, const mjData* data, mjtNum* sensordata) {
+    for (auto& plugin : plugin_instances_)
+    {
+      plugin->process_sensor_data(model, data, sensordata);
+    }
+  });
 }
 
 ///

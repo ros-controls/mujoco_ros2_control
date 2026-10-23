@@ -124,6 +124,11 @@ inline std::chrono::microseconds physics_loop_sleep_duration(double timestep)
  * environment and can break, slow down, or otherwise damage the simulation. This should also
  * be used with caution.
  *
+ * `set_sensor_data_callback(...)` registers a callback which is triggered every time the control
+ * state read by the hardware interface is published. It receives the copy of the sensor data
+ * that the hardware interface will read, so it can post-process sensors without touching
+ * `mj_data_`.
+ *
  * Thread safety is still somewhat messy, as callers are provided with a simulation mutex that
  * locks the model and data while the actual mujoco engine moves the sim forward. Callers
  * need to be wary of locking that mutex external to this class, as it can have significant
@@ -153,6 +158,17 @@ public:
    * @param data The data from the physics simulation, under thread lock.
    */
   using PreStepCallback = std::function<void(mjData* data)>;
+
+  /**
+   * @brief Callback function type for the `set_sensor_data_callback` hook.
+   *
+   * Called in `publish_control_state()`, under the simulation lock.
+   *
+   * @param model The physics model.
+   * @param data The physics data (read only).
+   * @param sensordata The copy of `data->sensordata` read by the hardware interface, modified in place.
+   */
+  using SensorDataCallback = std::function<void(const mjModel* model, const mjData* data, mjtNum* sensordata)>;
 
   /**
    * @brief Construct a new Mujoco Simulation object. This is a no-op until initialization.
@@ -198,6 +214,13 @@ public:
    * the simulation mutex and block the physics loop. Use with care.
    */
   void set_pre_step_callback(PreStepCallback callback);
+
+  /**
+   * @brief Register the callback that post-processes the sensor data read by the hardware interface.
+   *
+   * See the class documentation for more information. It runs on the physics thread and must not block.
+   */
+  void set_sensor_data_callback(SensorDataCallback callback);
 
   /**
    * @brief Start the physics thread. Must be called after load_model().
@@ -606,6 +629,10 @@ private:
 
   // Callback run immediately before every mj_step(), defaults to nothing.
   PreStepCallback pre_step_callback_{ [](mjData* /*data*/) {} };
+
+  // Callback post-processing the sensor data published to the HW interface, defaults to nothing.
+  SensorDataCallback sensor_data_callback_{ [](const mjModel* /*model*/, const mjData* /*data*/,
+                                               mjtNum* /*sensordata*/) {} };
 };
 
 }  // namespace mujoco_ros2_control

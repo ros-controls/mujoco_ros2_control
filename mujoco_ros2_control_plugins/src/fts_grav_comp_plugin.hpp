@@ -76,9 +76,14 @@ public:
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
 
   /**
-   * @brief Update the plugin (called every simulation step)
+   * @brief Compensate the snapshot used on the control thread (kept for plugins reading it)
    */
   void update(const mjModel* model, mjData* data) override;
+
+  /**
+   * @brief Compensate the sensor data read by the hardware interface (what ros2_control publishes)
+   */
+  void process_sensor_data(const mjModel* model, const mjData* data, mjtNum* sensordata) override;
 
   /**
    * @brief Cleanup the plugin
@@ -94,6 +99,12 @@ public:
   }
 
 private:
+  /**
+   * @brief Remove the end effector weight from the force/torque values in sensordata, using the
+   * kinematics in data. sensordata can be data->sensordata or a copy of it.
+   */
+  void compensate(const mjModel* model, const mjData* data, mjtNum* sensordata) const;
+
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_ = rclcpp::get_logger("FtsGravCompPlugin");
 
