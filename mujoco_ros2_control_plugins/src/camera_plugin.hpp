@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <mutex>
 #include <queue>
@@ -184,6 +185,42 @@ public:
     return publish_images_.load();
   }
 
+  /**
+   * @brief Number of streaming slots skipped because the renderer was still busy.
+   *
+   * Counted per slot rather than per attempt, so it reads as "frames lost" rather than
+   * "times we looked": at a 2 kHz control rate the latter would report thousands per second
+   * for the duration of a single slow render.
+   */
+  [[nodiscard]] uint64_t dropped_frames() const
+  {
+    return dropped_frames_.load();
+  }
+
+  /// Wall-clock cost of the most recent render pass, in seconds, split by stage.
+  struct RenderPassTiming
+  {
+    double gl_seconds{ 0.0 };       ///< Draw call plus pixel readback.
+    double convert_seconds{ 0.0 };  ///< Depth linearisation and row flipping.
+    double publish_seconds{ 0.0 };  ///< Handing the messages to the middleware.
+
+    [[nodiscard]] double total_seconds() const
+    {
+      return gl_seconds + convert_seconds + publish_seconds;
+    }
+  };
+
+  /**
+   * @brief Cost of the most recent render pass.
+   *
+   * Reset at the start of every pass and summed over the cameras rendered in it, so this is
+   * the cost of one pass rather than a running total. All zero until a pass has completed.
+   */
+  [[nodiscard]] RenderPassTiming render_pass_timing() const
+  {
+    return { pass_gl_seconds_, pass_convert_seconds_, pass_publish_seconds_ };
+  }
+
 private:
   // ROS interfaces
   rclcpp::Logger logger_{ rclcpp::get_logger("CameraPlugin") };
@@ -266,6 +303,32 @@ private:
   std::mutex data_mutex_;
   std::condition_variable data_cv_;
   bool new_data_{ false };
+
+  // True from the moment `update` hands a snapshot to the rendering thread until that
+  // thread has finished rendering and publishing it.
+  //
+  // `update_cameras` deliberately runs WITHOUT holding data_mutex_ (rendering is slow and
+  // must not block the control loop), so it reads mj_camera_data_ and CameraData::
+  // render_pending unlocked. Without this flag the control thread could mjv_copyData into
+  // that same snapshot mid-render, producing an image blended from two different sim
+  // times: corruption that still looks like a valid frame. Guarding on it makes `update`
+  // skip the slot instead, turning a silent race into a countable dropped frame.
+  bool render_in_flight_{ false };
+
+  // Number of streaming slots skipped because the renderer was still busy. Counted per
+  // slot rather than per attempt, so it reads as "frames lost", not "times we looked".
+  // Atomic so the counter can be read for diagnostics from a thread other than the sim one.
+  std::atomic<uint64_t> dropped_frames_{ 0 };
+
+  // Value of dropped_frames_ at the last cost report, so a pass can tell whether anything
+  // was actually lost since then.
+  uint64_t reported_drops_{ 0 };
+
+  // Wall-clock cost of the last render pass, split by stage and summed over the cameras
+  // rendered in it. Only ever touched by the rendering thread, so no synchronisation.
+  double pass_gl_seconds_{ 0.0 };
+  double pass_convert_seconds_{ 0.0 };
+  double pass_publish_seconds_{ 0.0 };
 
   // EGL context for headless rendering (used when GLFW is unavailable)
   EGLDisplay egl_display_{ EGL_NO_DISPLAY };
