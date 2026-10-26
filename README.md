@@ -35,9 +35,11 @@ or install prebuilt binaries (if available for your distribution).
 
   ```bash
   # from workspace root (this repository is typically inside a ROS 2 workspace)
-  colcon build --symlink-install --packages-select mujoco_ros2_control* \
+  colcon build --symlink-install --packages-up-to mujoco_ros2_control_demos \
     --cmake-args -DCMAKE_BUILD_TYPE=Release
   ```
+
+  This builds the demo package and its dependencies available in the workspace.
 
   3. Source the workspace and run a demo:
 
