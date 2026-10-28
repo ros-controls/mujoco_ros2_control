@@ -105,8 +105,7 @@ public:
    * @param model Pointer to the MuJoCo model
    * @param data Pointer to a recent snapshot (not the live `mj_data_`)
    */
-  [[deprecated("Override update_write() instead.")]] virtual void update(const mjModel* /*model*/,
-                                                                          mjData* /*data*/)
+  [[deprecated("Override update_write() instead.")]] virtual void update(const mjModel* /*model*/, mjData* /*data*/)
   {
   }
 
