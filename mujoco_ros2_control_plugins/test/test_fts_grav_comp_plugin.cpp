@@ -263,7 +263,7 @@ TEST_F(FtsGravCompPluginTest, GravityIsComped)
 
   mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
-  plugin.update(model_, data_);
+  plugin.update_read(model_, data_);
 
   // expected that the FT data should be 0 after gravity compensation
   std::vector<double> expected_data = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
@@ -297,7 +297,7 @@ TEST_F(FtsGravCompPluginTest, GravityIsNotComped)
   setParam("or_fts_sensor.CoG.mass", double{ 0.0 });
   mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
-  plugin.update(model_, data_);
+  plugin.update_read(model_, data_);
 
   // force FTS 0 (negative z direction)
   // mass * gravity
@@ -345,7 +345,7 @@ TEST_F(FtsGravCompPluginTest, GravityIsCompedWithFrameIdDifferentFromSensorId)
 
   mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
-  plugin.update(model_, data_);
+  plugin.update_read(model_, data_);
 
   // expected that the FT data should be 0 after gravity compensation
   std::vector<double> expected_data = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
@@ -367,6 +367,33 @@ TEST_F(FtsGravCompPluginTest, GravityIsCompedWithFrameIdDifferentFromSensorId)
   EXPECT_NEAR(real_data_1[3], expected_data[3], 1e-9);
   EXPECT_NEAR(real_data_1[4], expected_data[4], 1e-9);
   EXPECT_NEAR(real_data_1[5], expected_data[5], 1e-9);
+
+  plugin.cleanup();
+}
+
+// update_read() only gets the per-step control state (qpos, sensordata, ...), not the kinematics,
+// so the plugin must recompute the sensor frames from qpos itself.
+TEST_F(FtsGravCompPluginTest, UpdateReadCompensatesFromControlStateOnly)
+{
+  set_plugin_params();
+
+  mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+
+  mjData* read_data = mj_makeData(model_);
+  mju_copy(read_data->qpos, data_->qpos, static_cast<int>(model_->nq));
+  mju_copy(read_data->sensordata, data_->sensordata, static_cast<int>(model_->nsensordata));
+  plugin.update_read(model_, read_data);
+  mju_copy(data_->sensordata, read_data->sensordata, static_cast<int>(model_->nsensordata));
+  mj_deleteData(read_data);
+
+  for (const auto& fts : plugin.get_fts_data())
+  {
+    for (const double value : get_ft_data(fts))
+    {
+      EXPECT_NEAR(value, 0.0, 1e-9);
+    }
+  }
 
   plugin.cleanup();
 }
