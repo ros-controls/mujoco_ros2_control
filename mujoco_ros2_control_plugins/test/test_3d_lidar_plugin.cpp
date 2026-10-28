@@ -152,7 +152,7 @@ TEST_F(Mujoco3dLidarPluginTest, InitSucceedsWithNoLidar)
 )");
   mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
   EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
-  plugin.update(model_, data_);
+  plugin.update_write(model_, data_);
   plugin.cleanup();
 }
 
@@ -204,7 +204,7 @@ TEST_F(Mujoco3dLidarPluginTest, Test2dLidar)
   for (int i = 0; i < 20; ++i)
   {
     mj_step(model_, data_);
-    plugin.update(model_, data_);
+    plugin.update_write(model_, data_);
     if (got_scan)
       break;
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -276,7 +276,7 @@ TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSyncAsync)
     for (int i = 0; i < 60; ++i)
     {
       mj_step(model_, data_);
-      plugin.update(model_, data_);
+      plugin.update_write(model_, data_);
       if (got_cloud)
         break;
       std::this_thread::sleep_for(std::chrono::milliseconds(100));

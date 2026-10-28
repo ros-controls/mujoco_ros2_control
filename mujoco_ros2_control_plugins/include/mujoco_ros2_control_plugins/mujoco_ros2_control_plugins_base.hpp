@@ -34,7 +34,7 @@ namespace mujoco_ros2_control_plugins
  *   `qvel`, `act`, `qfrc_actuator`, `sensordata`, `ctrl`); everything else is stale. Plugins run in
  *   order and each sees the previous one's changes. Use this to post-process states or sensors,
  *   e.g. compensating a force/torque sensor.
- * - `update()` runs on the ros2_control control thread, once per `write()` cycle. `data` is a
+ * - `update_write()` runs on the ros2_control control thread, once per `write()` cycle. `data` is a
  *   recent snapshot, not the live `mj_data_`. Use this for anything that doesn't need to run on
  *   exactly one physics step, e.g. publishing sensor data or servicing a trigger.
  * - `pre_step()` runs on the physics thread, immediately before every `mj_step()`, with direct
@@ -82,11 +82,31 @@ public:
   }
 
   /**
-   * @brief Called once per control cycle, on the control thread. Default does nothing.
+   * @brief Called once per `write()` cycle, on the control thread, after the hardware interface
+   * has staged the controller commands and right before they are sent to the simulation.
+   *
+   * Plugins run in order and can read and rewrite `ctrl`/`qfrc_applied`. The default forwards to
+   * the deprecated `update()` so plugins that still override it keep working.
+   *
    * @param model Pointer to the MuJoCo model
    * @param data Pointer to a recent snapshot (not the live `mj_data_`)
    */
-  virtual void update(const mjModel* /*model*/, mjData* /*data*/)
+  virtual void update_write(const mjModel* model, mjData* data)
+  {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    update(model, data);
+#pragma GCC diagnostic pop
+  }
+
+  /**
+   * @brief Same as `update_write()`. Default does nothing.
+   * @deprecated Override `update_write()` instead, to keep it distinct from `update_read()`.
+   * @param model Pointer to the MuJoCo model
+   * @param data Pointer to a recent snapshot (not the live `mj_data_`)
+   */
+  [[deprecated("Override update_write() instead.")]] virtual void update(const mjModel* /*model*/,
+                                                                          mjData* /*data*/)
   {
   }
 

@@ -57,7 +57,7 @@ public:
   ~FreeJointStatePublisherPlugin() override = default;
 
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
-  void update(const mjModel* model, mjData* data) override;
+  void update_write(const mjModel* model, mjData* data) override;
   void cleanup() override;
 
 private:
@@ -96,7 +96,7 @@ private:
   rclcpp::Duration publish_period_{ 0, 0 };
   rclcpp::Time last_publish_time_{ 0, 0, RCL_ROS_TIME };
 
-  /// Reused across update() calls to avoid reallocating the entries vector every publish.
+  /// Reused across update_write() calls to avoid reallocating the entries vector every publish.
   FreeJointStateArray message_;
 };
 

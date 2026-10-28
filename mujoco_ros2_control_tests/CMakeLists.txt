@@ -31,7 +31,7 @@ if(BUILD_TESTING)
     mujoco_ros2_control_plugins src/test_plugin.xml
   )
 
-  # End-to-end check that reset_world and read() dispatch on_reset()/update_read() to loaded plugins.
+  # End-to-end check that reset_world and read() dispatch on_reset()/update_read()/update_write() to loaded plugins.
   ament_add_gtest(test_world_reset_dispatch test/test_world_reset_dispatch.cpp)
   target_link_libraries(test_world_reset_dispatch
     ${mujoco_ros2_control_TARGETS}

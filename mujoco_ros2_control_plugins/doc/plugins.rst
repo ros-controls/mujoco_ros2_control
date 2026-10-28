@@ -663,7 +663,7 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
 
      // Override whichever of these you need -- all have a no-op default, see
      // "Plugin Lifecycle" below for how they differ.
-     void update(const mjModel* model, mjData* data) override;
+     void update_write(const mjModel* model, mjData* data) override;
      void pre_step(mjData* data) override;
      void on_reset(mjData* /*data*/)
 
@@ -695,7 +695,7 @@ Create a header that inherits from ``MuJoCoROS2ControlPluginBase``:
      return true;
    }
 
-   void MyCustomPlugin::update(const mjModel* model, mjData* data)
+   void MyCustomPlugin::update_write(const mjModel* model, mjData* data)
    {
      // Called once per ros2_control write() cycle, on the control thread.
    }
@@ -774,11 +774,15 @@ Plugin Lifecycle
    ``site_xpos`` are stale, so call ``mj_kinematics()`` on ``data`` if you need them. Plugins run
    in order, each sees the previous one's changes, and the result is what the state interfaces
    report. ``FtsGravCompPlugin`` uses this hook.
-3. **Update** (``update``, optional): Called once per ``ros2_control`` ``write()`` cycle, on the
-   control thread. ``data`` is a recent snapshot, not the live simulation data. Use this for
-   anything that doesn't need to run on exactly one physics step: publishing sensor data,
-   servicing a trigger, etc. Most plugins in this package (``CameraPlugin``, the lidar plugins,
+3. **Update write** (``update_write``, optional): Called once per ``ros2_control`` ``write()``
+   cycle, on the control thread, right before the commands are sent to the simulation, so it can
+   read and rewrite ``ctrl``/``qfrc_applied``. ``data`` is a recent snapshot, not the live
+   simulation data. Use this for anything that doesn't need to run on exactly one physics step:
+   publishing sensor data, servicing a trigger, etc. Most plugins in this package (``CameraPlugin``, the lidar plugins,
    ``HeartbeatPublisherPlugin``, ``FreeJointStatePublisherPlugin``) use only this hook.
+   ``update`` is deprecated: it is what ``update_write`` used to be called, and the default
+   ``update_write`` still forwards to it, so existing plugins keep working. Rename the override
+   to ``update_write``.
 4. **Pre-step** (``pre_step``, optional): Called on the physics thread, immediately before every
    ``mj_step`` -- including multiple times per outer iteration when the loop batches steps to
    catch up. ``data`` is the live simulation data: read and write it directly, with no separate

@@ -15,7 +15,7 @@
 // End-to-end check of the on_reset plugin hook: the out-of-package TestPlugin is loaded
 // through the `mujoco_plugins` parameter namespace and must have its on_reset() called
 // when the reset_world service resets the simulation, and its update_read() changes must reach
-// the states published by read().
+// the states published by read(), and write() must dispatch update_write().
 
 #include <gtest/gtest.h>
 
@@ -209,4 +209,19 @@ TEST_F(WorldResetDispatchTest, ReadDispatchesUpdateReadAndPublishesItsChanges)
     interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.01));
     return hinge_position.load() == 42.0;
   })) << "update_read() changes did not reach the published actuator states";
+}
+
+TEST_F(WorldResetDispatchTest, WriteDispatchesUpdateWrite)
+{
+  ASSERT_EQ(initialize_interface(), hardware_interface::CallbackReturn::SUCCESS);
+
+  std::atomic<uint32_t> update_write_count{ 0 };
+  auto count_sub = node_->create_subscription<std_msgs::msg::UInt32>(
+      "/test_plugin/update_write_count", rclcpp::QoS(1).transient_local(),
+      [&update_write_count](const std_msgs::msg::UInt32& msg) { update_write_count = msg.data; });
+
+  interface_->write(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.01));
+
+  EXPECT_TRUE(wait_until([&]() { return update_write_count.load() == 1u; }))
+      << "update_write() was not dispatched to the loaded plugin on write()";
 }

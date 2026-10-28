@@ -1243,7 +1243,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   // immediately before they are sent to the simulation.
   for (auto& plugin : plugin_instances_)
   {
-    plugin->update(simulation_->model(), control_data);
+    plugin->update_write(simulation_->model(), control_data);
   }
 
   // Trigger to simulation to update its control inputs (this locks)
