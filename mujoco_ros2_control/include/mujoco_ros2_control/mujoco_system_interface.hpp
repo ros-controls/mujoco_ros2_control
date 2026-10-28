@@ -391,6 +391,8 @@ private:
   // Handed to plugins during `write` and used to stage control inputs.
   // Its full-data refresh is skipped when no plugins are loaded.
   mjData* mj_data_control_{ nullptr };
+  // Scratch data handed to the plugins' update_read() in read(), only allocated with plugins.
+  mjData* mj_data_read_{ nullptr };
 
   // Per-step robot state snapshot used by `read` and `write`.
   MujocoSimulation::ControlState control_state_;

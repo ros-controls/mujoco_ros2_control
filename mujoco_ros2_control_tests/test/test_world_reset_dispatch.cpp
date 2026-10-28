@@ -14,7 +14,8 @@
 
 // End-to-end check of the on_reset plugin hook: the out-of-package TestPlugin is loaded
 // through the `mujoco_plugins` parameter namespace and must have its on_reset() called
-// when the reset_world service resets the simulation.
+// when the reset_world service resets the simulation, and its update_read() changes must reach
+// the states published by read().
 
 #include <gtest/gtest.h>
 
@@ -29,6 +30,7 @@
 #include <hardware_interface/version.h>
 #include <hardware_interface/hardware_info.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/u_int32.hpp>
 
 #include <mujoco_ros2_control/mujoco_system_interface.hpp>
@@ -187,4 +189,24 @@ TEST_F(WorldResetDispatchTest, ResetWorldServiceDispatchesWorldResetToPlugins)
 
   EXPECT_TRUE(wait_until([&]() { return world_reset_count.load() == 1u; }))
       << "on_reset() was not dispatched to the loaded plugin on reset_world";
+}
+
+TEST_F(WorldResetDispatchTest, ReadDispatchesUpdateReadAndPublishesItsChanges)
+{
+  ASSERT_EQ(initialize_interface(), hardware_interface::CallbackReturn::SUCCESS);
+
+  std::atomic<double> hinge_position{ 0.0 };
+  auto state_sub = node_->create_subscription<sensor_msgs::msg::JointState>(
+      "/mujoco_actuators_states", 10, [&hinge_position](const sensor_msgs::msg::JointState& msg) {
+        if (!msg.position.empty())
+        {
+          hinge_position = msg.position[0];
+        }
+      });
+
+  // TestPlugin::update_read() overwrites qpos[0] with 42; read() must hand that value over.
+  EXPECT_TRUE(wait_until([&]() {
+    interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.01));
+    return hinge_position.load() == 42.0;
+  })) << "update_read() changes did not reach the published actuator states";
 }

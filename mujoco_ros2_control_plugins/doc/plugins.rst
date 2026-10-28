@@ -766,25 +766,32 @@ Plugin Lifecycle
 
 1. **Initialization** (``init``): Called once when the plugin is loaded. Use this to read
    parameters and set up publishers, subscribers, and services.
-2. **Update** (``update``, optional): Called once per ``ros2_control`` ``write()`` cycle, on the
+2. **Update read** (``update_read``, optional): Called once per ``ros2_control`` ``read()``
+   cycle, on the control thread, before the state is handed to ``ros2_control``. ``data`` holds
+   only the latest control state (``time``, ``qpos``, ``qvel``, ``act``, ``qfrc_actuator``,
+   ``sensordata``, ``ctrl``), all from the same physics step; derived quantities such as
+   ``site_xpos`` are stale, so call ``mj_kinematics()`` on ``data`` if you need them. Plugins run
+   in order, each sees the previous one's changes, and the result is what the state interfaces
+   report. ``FtsGravCompPlugin`` uses this hook.
+3. **Update** (``update``, optional): Called once per ``ros2_control`` ``write()`` cycle, on the
    control thread. ``data`` is a recent snapshot, not the live simulation data. Use this for
    anything that doesn't need to run on exactly one physics step: publishing sensor data,
    servicing a trigger, etc. Most plugins in this package (``CameraPlugin``, the lidar plugins,
    ``HeartbeatPublisherPlugin``, ``FreeJointStatePublisherPlugin``) use only this hook.
-3. **Pre-step** (``pre_step``, optional): Called on the physics thread, immediately before every
+4. **Pre-step** (``pre_step``, optional): Called on the physics thread, immediately before every
    ``mj_step`` -- including multiple times per outer iteration when the loop batches steps to
    catch up. ``data`` is the live simulation data: read and write it directly, with no separate
    command buffer, so an untouched entry keeps its last value. Use this for anything that must
    hold for exactly one physics step, such as ``BaseVelocityPlugin``'s kinematic velocity
    override. Runs with the simulation mutex held, so blocking here stalls the physics loop and
    native viewer too.
-4. **On Reset** (``on_reset``, optional): Called when the simulation is "reset", either from
+5. **On Reset** (``on_reset``, optional): Called when the simulation is "reset", either from
    the ResetWorld service from the UI. This lets plugins know that the state of the world has
    been reset and they can take appropriate action.
-5. **Cleanup** (``cleanup``): Called when shutting down. Release any resources acquired in
+6. **Cleanup** (``cleanup``): Called when shutting down. Release any resources acquired in
    ``init``.
 
-Both hooks default to doing nothing, so implement whichever fits (or both, or neither). See
+All optional hooks default to doing nothing, so implement whichever fits (or both, or neither). See
 ``MuJoCoROS2ControlPluginBase``'s class doc comment in ``mujoco_ros2_control_plugins_base.hpp``
 for the authoritative reference.
 

@@ -18,6 +18,12 @@ public:
   void update(const mjModel*, mjData*) override
   {
   }
+  // Overwrites the first joint position so tests can check it reaches the state interfaces.
+  void update_read(const mjModel*, mjData* data) override
+  {
+    data->qpos[0] = kReadOverride;
+  }
+  static constexpr double kReadOverride = 42.0;
   void on_reset(mjData*) override
   {
     std_msgs::msg::UInt32 msg;
