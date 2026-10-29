@@ -76,9 +76,9 @@ public:
   bool init(rclcpp::Node::SharedPtr node, const mjModel* model, mjData* data) override;
 
   /**
-   * @brief Update the plugin (called every simulation step)
+   * @brief Compensate the force/torque sensors in the state read by ros2_control
    */
-  void update(const mjModel* model, mjData* data) override;
+  void update_read(const mjModel* model, mjData* data) override;
 
   /**
    * @brief Cleanup the plugin

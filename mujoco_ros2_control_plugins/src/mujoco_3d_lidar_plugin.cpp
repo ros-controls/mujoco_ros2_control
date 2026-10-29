@@ -301,7 +301,7 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   return true;
 }
 
-void Mujoco3dLidarPlugin::update(const mjModel* /* model */, mjData* data)
+void Mujoco3dLidarPlugin::update_write(const mjModel* /* model */, mjData* data)
 {
   for (Lidar3dConfig& lidar : lidar_sensors_)
   {

@@ -191,7 +191,7 @@ bool RangefinderLidarPlugin::register_sensor(const std::string& lidar_name, cons
   return true;
 }
 
-void RangefinderLidarPlugin::update(const mjModel* /*model*/, mjData* data)
+void RangefinderLidarPlugin::update_write(const mjModel* /*model*/, mjData* data)
 {
   if (lidar_sensors_.empty())
   {

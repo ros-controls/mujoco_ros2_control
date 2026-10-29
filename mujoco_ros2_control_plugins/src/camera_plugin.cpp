@@ -64,7 +64,7 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
   return true;
 }
 
-void CameraPlugin::update(const mjModel* model_arg, mjData* data)
+void CameraPlugin::update_write(const mjModel* model_arg, mjData* data)
 {
   if (!publish_images_)
   {
@@ -558,7 +558,7 @@ void CameraPlugin::update_cameras()
     return;
   }
 
-  // Rendering is done offscreen using the data snapshot taken in `update`.
+  // Rendering is done offscreen using the data snapshot taken in `update_write`.
   mjr_setBuffer(mjFB_OFFSCREEN, &mjr_con_);
 
   camera_near_distance_ = static_cast<float>(mj_model_->vis.map.znear * mj_model_->stat.extent);
@@ -625,7 +625,7 @@ void CameraPlugin::handle_trigger(const std::shared_ptr<std_srvs::srv::Trigger::
     std::lock_guard<std::mutex> lock(data_mutex_);
     cameras_.at(camera_idx).poll_requested = true;
   }
-  // Wake the fast path in `update()` so the request is picked up on the next sim step.
+  // Wake the fast path in `update_write()` so the request is picked up on the next sim step.
   poll_pending_.store(true);
   response->success = true;
 }

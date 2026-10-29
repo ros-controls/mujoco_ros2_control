@@ -185,7 +185,7 @@ TEST_F(CameraPluginTest, InitSucceedsWithNoCameras)
 
   mujoco_ros2_control_plugins::CameraPlugin plugin;
   EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
-  plugin.update(model_, data_);
+  plugin.update_write(model_, data_);
   plugin.cleanup();
 }
 

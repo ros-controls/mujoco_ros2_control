@@ -36,7 +36,7 @@ bool HeartbeatPublisherPlugin::init(rclcpp::Node::SharedPtr node, const mjModel*
   return true;
 }
 
-void HeartbeatPublisherPlugin::update(const mjModel* /*model*/, mjData* data)
+void HeartbeatPublisherPlugin::update_write(const mjModel* /*model*/, mjData* data)
 {
   auto current_time = node_->get_clock()->now();
   auto elapsed = current_time - last_publish_time_;

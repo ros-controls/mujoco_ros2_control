@@ -9,6 +9,7 @@ if(BUILD_TESTING)
   find_package(hardware_interface REQUIRED)
   find_package(pluginlib REQUIRED)
   find_package(rclcpp REQUIRED)
+  find_package(sensor_msgs REQUIRED)
   find_package(std_msgs REQUIRED)
   find_package(mujoco_ros2_control REQUIRED)
   find_package(mujoco_ros2_control_msgs REQUIRED)
@@ -30,11 +31,12 @@ if(BUILD_TESTING)
     mujoco_ros2_control_plugins src/test_plugin.xml
   )
 
-  # End-to-end check that reset_world dispatches on_reset() to loaded plugins.
+  # End-to-end check that reset_world and read() dispatch on_reset()/update_read()/update_write() to loaded plugins.
   ament_add_gtest(test_world_reset_dispatch test/test_world_reset_dispatch.cpp)
   target_link_libraries(test_world_reset_dispatch
     ${mujoco_ros2_control_TARGETS}
     ${mujoco_ros2_control_msgs_TARGETS}
+    ${sensor_msgs_TARGETS}
     ${std_msgs_TARGETS}
     rclcpp::rclcpp
     hardware_interface::hardware_interface
