@@ -29,6 +29,7 @@
 #include <cassert>
 #include <cmath>
 #include <random>
+#include <stdexcept>
 #include <string>
 
 namespace mujoco_ros2_control
@@ -81,6 +82,37 @@ inline NoiseDistribution get_noise_distribution(const hardware_interface::Compon
                 value.c_str());
   }
   return value == "uniform" ? NoiseDistribution::kUniform : NoiseDistribution::kGaussian;
+}
+
+/**
+ * @brief Reads the sensor's `update_rate` parameter (Hz) and returns the matching refresh period in seconds.
+ * Returns 0 (refresh on every read()) when the parameter is absent; a non-numeric or non-positive value
+ * logs a warning and also returns 0.
+ */
+inline double get_sensor_update_period(const hardware_interface::ComponentInfo& sensor)
+{
+  if (sensor.parameters.count("update_rate") == 0)
+  {
+    return 0.0;
+  }
+  const std::string& value = sensor.parameters.at("update_rate");
+  double rate = 0.0;
+  try
+  {
+    rate = std::stod(value);
+  }
+  catch (const std::exception&)
+  {
+  }
+  if (!(rate > 0.0) || !std::isfinite(rate))
+  {
+    RCLCPP_WARN(rclcpp::get_logger("mujoco_ros2_control"),
+                "Sensor '%s' has an invalid update_rate '%s', it must be a positive number in Hz. "
+                "Updating at the simulation rate instead.",
+                sensor.name.c_str(), value.c_str());
+    return 0.0;
+  }
+  return 1.0 / rate;
 }
 
 /**

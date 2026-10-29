@@ -323,6 +323,34 @@ For an IMU, the configured ``noise`` values are also surfaced as the diagonal of
 always-zero) covariance state interfaces (e.g. ``orientation_covariance.0``), for controllers that consume a
 covariance estimate.
 
+Sensor update rate
+~~~~~~~~~~~~~~~~~~
+
+By default every sensor (FTS, IMU, pose, magnetometer) is refreshed on every ``read()``, i.e. at the
+controller manager rate. Set the ``ros2_control`` ``update_rate`` parameter (Hz) to emulate a slower sensor:
+the state interfaces are then only refreshed once per ``1/update_rate`` seconds of simulation time, and hold
+their last value (noise included) in between.
+
+This exists because real sensors are often limited by their own sampling rate or communication bandwidth
+(e.g. an IMU or force/torque sensor streaming over a slow bus). When the control loop runs faster than such
+a sensor, the controller keeps seeing the same reading for several cycles. Setting ``update_rate`` to the
+real sensor's rate reproduces this in simulation, so controllers are tested against stale data as they would
+be on hardware.
+
+.. code-block:: xml
+
+   <sensor name="imu_sensor">
+     <param name="mujoco_type">imu</param>
+     <!-- Refreshed at 20 Hz: with a 200 Hz controller manager the value changes every 10 cycles -->
+     <param name="update_rate">20</param>
+     ...
+   </sensor>
+
+Rates that don't divide the controller manager rate keep their average frequency (e.g. 30 Hz at 200 Hz
+alternates between 6 and 7 cycle holds). A missing, non-numeric or non-positive ``update_rate`` refreshes on
+every ``read()``; invalid values also log a warning. After a simulation reset the sensor refreshes
+immediately.
+
 .. warning::
 
    Cameras and lidar sensors are no longer supported in the base interface, they are now provided as ``mujoco_ros2_control_plugins``.

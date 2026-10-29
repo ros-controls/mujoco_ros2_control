@@ -198,6 +198,50 @@ struct SensorData
 };
 
 /**
+ * Gates how often a sensor's state interfaces are refreshed, set per ros2_control sensor via the
+ * `update_rate` parameter (Hz). Between refreshes the last value (noise included) is held, so e.g. a 20 Hz
+ * IMU read by a 200 Hz controller manager changes once every 10 cycles.
+ * @param period Seconds between refreshes; 0 (the default, `update_rate` unset) refreshes on every read().
+ * @param next_update_time Simulation time at or after which the next refresh is due.
+ */
+struct SensorUpdateRate
+{
+  double period = 0.0;
+  double next_update_time = -std::numeric_limits<double>::infinity();
+
+  /**
+   * @brief Returns whether the sensor should be refreshed at simulation time @p time, and if so schedules
+   * the next refresh. Must be called once per read().
+   */
+  bool is_update_due(double time)
+  {
+    if (period <= 0.0)
+    {
+      return true;
+    }
+    // Absorbs floating point drift from accumulated timesteps (e.g. 10 * 0.005 landing just below 0.05).
+    constexpr double kEpsilon = 1e-9;
+    // Time went backwards (simulation reset): drop the stale schedule so the sensor doesn't freeze.
+    if (time + kEpsilon < next_update_time - period)
+    {
+      next_update_time = time;
+    }
+    if (time + kEpsilon < next_update_time)
+    {
+      return false;
+    }
+    // Advance by whole periods so rates that don't divide the loop rate keep their average frequency, but
+    // resync instead of bursting if samples were missed (e.g. on the first call or after a long stall).
+    next_update_time += period;
+    if (next_update_time <= time + kEpsilon)
+    {
+      next_update_time = time + period;
+    }
+    return true;
+  }
+};
+
+/**
  * Selects the shape of the noise sampled by `add_sensor_noise()`. Chosen per ros2_control sensor via the
  * `noise_distribution` parameter ("gaussian" (default) or "uniform"); MJCF's `noise` attribute has no
  * equivalent concept, since MuJoCo only ever means "standard deviation of a zero-mean Gaussian" by it.
@@ -226,6 +270,7 @@ struct NoiseState
  * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG shared by
  * both noise fields above; the RNG is seeded from `std::random_device` (noise is non-deterministic across
  * runs).
+ * @param update_rate Refresh-rate gate from the ros2_control `update_rate` parameter; see SensorUpdateRate.
  */
 struct FTSensorData
 {
@@ -236,6 +281,7 @@ struct FTSensorData
   double force_noise_stddev = 0.0;
   double torque_noise_stddev = 0.0;
   NoiseState noise;
+  SensorUpdateRate update_rate;
 };
 
 /**
@@ -249,6 +295,7 @@ struct FTSensorData
  * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG shared by
  * all three noise fields above; the RNG is seeded from `std::random_device` (noise is non-deterministic
  * across runs).
+ * @param update_rate Refresh-rate gate from the ros2_control `update_rate` parameter; see SensorUpdateRate.
  */
 struct IMUSensorData
 {
@@ -261,6 +308,7 @@ struct IMUSensorData
   double angular_velocity_noise_stddev = 0.0;
   double linear_acceleration_noise_stddev = 0.0;
   NoiseState noise;
+  SensorUpdateRate update_rate;
 
   // Diagonal-only (independent per-axis noise) covariance, derived from the *_noise_stddev fields above at
   // registration time. Left at all-zero (as before noise support existed) when noise is not configured.
@@ -277,6 +325,7 @@ struct IMUSensorData
  * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG shared by
  * both noise fields above; the RNG is seeded from `std::random_device` (noise is non-deterministic across
  * runs).
+ * @param update_rate Refresh-rate gate from the ros2_control `update_rate` parameter; see SensorUpdateRate.
  */
 struct SitePoseData
 {
@@ -287,6 +336,7 @@ struct SitePoseData
   double position_noise_stddev = 0.0;
   double orientation_noise_stddev = 0.0;
   NoiseState noise;
+  SensorUpdateRate update_rate;
 };
 
 /**
@@ -294,6 +344,7 @@ struct SitePoseData
  * on read; taken from the underlying MJCF `<magnetometer>` sensor's `noise` attribute (0 by default).
  * @param noise Shape (ros2_control `noise_distribution` parameter, defaults to Gaussian) and RNG, seeded from
  * `std::random_device` (noise is non-deterministic across runs).
+ * @param update_rate Refresh-rate gate from the ros2_control `update_rate` parameter; see SensorUpdateRate.
  */
 struct MagnetometerSensorData
 {
@@ -302,6 +353,7 @@ struct MagnetometerSensorData
 
   double magnetic_field_noise_stddev = 0.0;
   NoiseState noise;
+  SensorUpdateRate update_rate;
 };
 
 }  // namespace mujoco_ros2_control
