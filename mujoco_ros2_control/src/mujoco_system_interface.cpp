@@ -23,6 +23,7 @@
 #include <fmt/compile.h>
 #include <fmt/ranges.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -284,6 +285,10 @@ MujocoSystemInterface::~MujocoSystemInterface()
   if (mj_data_control_)
   {
     mj_deleteData(mj_data_control_);
+  }
+  if (mj_data_read_)
+  {
+    mj_deleteData(mj_data_read_);
   }
 
   // Tear down the actual simulation
@@ -1007,6 +1012,34 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // Snapshot the per-step control state to avoid having to copy the whole scene data.
   simulation_->copy_control_state(control_state_);
 
+  // Let plugins rewrite the state, in order, before anything below reads it.
+  if (mj_data_read_)
+  {
+    const auto to_data = [](mjtNum* dst, const std::vector<mjtNum>& src) {
+      mju_copy(dst, src.data(), static_cast<int>(src.size()));
+    };
+    const auto from_data = [](std::vector<mjtNum>& dst, const mjtNum* src) {
+      std::copy(src, src + dst.size(), dst.begin());
+    };
+    mj_data_read_->time = control_state_.time;
+    to_data(mj_data_read_->qpos, control_state_.qpos);
+    to_data(mj_data_read_->qvel, control_state_.qvel);
+    to_data(mj_data_read_->act, control_state_.act);
+    to_data(mj_data_read_->qfrc_actuator, control_state_.qfrc_actuator);
+    to_data(mj_data_read_->sensordata, control_state_.sensordata);
+    to_data(mj_data_read_->ctrl, control_state_.ctrl);
+    for (auto& plugin : plugin_instances_)
+    {
+      plugin->update_read(simulation_->model(), mj_data_read_);
+    }
+    from_data(control_state_.qpos, mj_data_read_->qpos);
+    from_data(control_state_.qvel, mj_data_read_->qvel);
+    from_data(control_state_.act, mj_data_read_->act);
+    from_data(control_state_.qfrc_actuator, mj_data_read_->qfrc_actuator);
+    from_data(control_state_.sensordata, mj_data_read_->sensordata);
+    from_data(control_state_.ctrl, mj_data_read_->ctrl);
+  }
+
   // Joint states
   actuator_state_msg_.header.stamp = time;
   actuator_state_msg_.position.clear();
@@ -1210,7 +1243,7 @@ hardware_interface::return_type MujocoSystemInterface::write(const rclcpp::Time&
   // immediately before they are sent to the simulation.
   for (auto& plugin : plugin_instances_)
   {
-    plugin->update(simulation_->model(), control_data);
+    plugin->update_write(simulation_->model(), control_data);
   }
 
   // Trigger to simulation to update its control inputs (this locks)
@@ -2484,6 +2517,11 @@ void MujocoSystemInterface::load_mujoco_plugins()
   catch (const pluginlib::PluginlibException& ex)
   {
     RCLCPP_ERROR(get_logger(), "Failed to create plugin loader: %s", ex.what());
+  }
+
+  if (!plugin_instances_.empty())
+  {
+    mj_data_read_ = mj_makeData(simulation_->model());
   }
 
   // Connect plugin pre-step callbacks directly to the physics simulation.

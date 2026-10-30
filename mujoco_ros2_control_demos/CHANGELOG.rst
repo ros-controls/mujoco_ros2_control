@@ -2,6 +2,9 @@
 Changelog for package mujoco_ros2_control_demos
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.1.4 (2026-10-29)
+------------------
+
 0.1.3 (2026-10-08)
 ------------------
 * Add a way to replace collision meshes upon MJCF conversion (`#310 <https://github.com/pal-robotics-forks/mujoco_ros2_control/issues/310>`_)

@@ -2,6 +2,12 @@
 Changelog for package mujoco_ros2_control_plugins
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.1.4 (2026-10-29)
+------------------
+* Add update_read/update_write plugin hooks and fix FTS gravity compensation (`#328 <https://github.com/ros-controls/mujoco_ros2_control/issues/328>`_)
+* Fix typo in plugins on_reset() docs (`#325 <https://github.com/ros-controls/mujoco_ros2_control/issues/325>`_)
+* Contributors: Sai Kishor Kothakota, Sebastian Castro
+
 0.1.3 (2026-10-08)
 ------------------
 * Require frame_id to identify sensors in FTS grav comp pluggin (`#315 <https://github.com/pal-robotics-forks/mujoco_ros2_control/issues/315>`_)

@@ -92,6 +92,9 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_index_cpp REQUIRED)
 
+  ament_add_gtest(test_plugin_base test/test_plugin_base.cpp)
+  target_link_libraries(test_plugin_base ${PROJECT_NAME})
+
   ament_add_gtest(test_external_wrench_plugin
     test/test_external_wrench_plugin.cpp
   )

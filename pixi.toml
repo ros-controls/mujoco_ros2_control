@@ -6,7 +6,7 @@ channels = [
 ]
 name = "mujoco_ros2_control_ws"
 platforms = ["linux-aarch64", "linux-64"]
-version = "0.1.3"
+version = "0.1.4"
 preview = ["pixi-build"]
 
 [activation.env]

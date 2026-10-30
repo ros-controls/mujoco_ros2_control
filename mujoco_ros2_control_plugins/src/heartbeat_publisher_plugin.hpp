@@ -39,7 +39,7 @@ public:
   /**
    * @brief Update the plugin (called every simulation step)
    */
-  void update(const mjModel* model, mjData* data) override;
+  void update_write(const mjModel* model, mjData* data) override;
 
   /**
    * @brief Cleanup the plugin

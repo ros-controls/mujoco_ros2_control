@@ -165,8 +165,11 @@ bool FtsGravCompPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model,
   return true;
 }
 
-void FtsGravCompPlugin::update(const mjModel* model, mjData* data)
+void FtsGravCompPlugin::update_read(const mjModel* model, mjData* data)
 {
+  // Only qpos and sensordata are valid here: recompute the site frames for the same step.
+  mj_kinematics(model, data);
+
   // run gravity compensation for each force torque sensor
   for (auto& fts : fts_)
   {
