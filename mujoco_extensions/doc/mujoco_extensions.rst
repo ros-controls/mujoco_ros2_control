@@ -10,10 +10,15 @@ To build custom extensions, follow the guide in the upstream documentation.
 Adding Extensions
 -----------------
 
-``mujoco_ros2_control`` automatically discovers and loads MuJoCo plugin libraries at runtime using two mechanisms:
+``mujoco_ros2_control`` automatically discovers and loads MuJoCo plugin libraries at runtime using the following mechanisms, in order:
 
-1. **Vendor plugins**: Any ``.so`` files in the ``mujoco_plugin/`` directory next to the ``ros2_control_node`` executable (these come from ``mujoco_vendor``).
-2. **Ament resource index**: Any ROS 2 package that registers itself as a ``mujoco_plugins`` resource provider.
+1. **Executable plugins**: Any ``.so`` files in the ``mujoco_plugin/`` directory next to the ``ros2_control_node`` executable.
+2. **MUJOCO_PLUGIN_PATH**: Any directory in the colon-separated ``MUJOCO_PLUGIN_PATH`` environment variable.
+3. **Ament resource index**: Any ROS 2 package that registers itself as a ``mujoco_plugins`` resource provider.
+4. **Stock MuJoCo plugins**: Any ``.so`` files in ``mujoco_plugin/`` next to ``libmujoco.so`` or in ``../bin/mujoco_plugin/`` relative to it.
+
+A library is only loaded once, so a plugin with the same filename found by an earlier mechanism takes precedence.
+Users should check the launch logs when starting if there are any issues finding plugins.
 
 To add a new MuJoCo plugin to the system, create a standard ament package that builds a shared library and register it with the ament resource index.
 The ``mujoco_ros2_control`` node will find and load it automatically at startup.

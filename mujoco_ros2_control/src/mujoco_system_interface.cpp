@@ -112,6 +112,13 @@ ActuatorType getActuatorType(const mjModel* mj_model, int mujoco_actuator_id)
 {
   // Returns the MuJoCo actuator type based on the compiled actuator settings.
   ActuatorType actuator_type = ActuatorType::UNKNOWN;
+
+  // If it's a plugin then we don't worry about the parameters and use it directly.
+  if (mj_model->actuator_plugin[mujoco_actuator_id] != -1)
+  {
+    return ActuatorType::PLUGIN;
+  }
+
   const int dyntype = mj_model->actuator_dyntype[mujoco_actuator_id];
   const int gaintype = mj_model->actuator_gaintype[mujoco_actuator_id];
   const int biastype = mj_model->actuator_biastype[mujoco_actuator_id];
@@ -1713,9 +1720,11 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
           // Position command interface
           // Direct control for position actuators; position PID required for velocity, motor, or custom actuators.
 
-          if (actuator_it->actuator_type == ActuatorType::POSITION)
+          if (actuator_it->actuator_type == ActuatorType::POSITION || actuator_it->actuator_type == ActuatorType::PLUGIN)
           {
-            RCLCPP_INFO(get_logger(), "Using MuJoCo position actuator for the joint : '%s'", actuator_name.c_str());
+            RCLCPP_INFO(get_logger(), "Using MuJoCo %s actuator for the joint : '%s'",
+                        actuator_it->actuator_type == ActuatorType::PLUGIN ? "plugin (direct ctrl)" : "position",
+                        actuator_name.c_str());
             // Direct position control enabled for position actuator
             actuator_it->is_position_control_enabled = true;
           }
@@ -1754,9 +1763,11 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
               get_logger(), actuator_it->actuator_type == ActuatorType::POSITION,
               "Velocity command interface for the joint : %s is not supported with position actuator",
               actuator_name.c_str());
-          if (actuator_it->actuator_type == ActuatorType::VELOCITY)
+          if (actuator_it->actuator_type == ActuatorType::VELOCITY || actuator_it->actuator_type == ActuatorType::PLUGIN)
           {
-            RCLCPP_INFO(get_logger(), "Using MuJoCo velocity actuator for the joint : '%s'", actuator_name.c_str());
+            RCLCPP_INFO(get_logger(), "Using MuJoCo %s actuator for the joint : '%s'",
+                        actuator_it->actuator_type == ActuatorType::PLUGIN ? "plugin (direct ctrl)" : "velocity",
+                        actuator_name.c_str());
             // Direct velocity control enabled for velocity actuator
             actuator_it->is_velocity_control_enabled = true;
           }
@@ -1797,9 +1808,11 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
               "Effort command interface for the joint : %s is not supported with position or velocity actuator."
               "Skipping it.",
               actuator_name.c_str());
-          if (actuator_it->actuator_type == ActuatorType::MOTOR || actuator_it->actuator_type == ActuatorType::CUSTOM)
+          if (actuator_it->actuator_type == ActuatorType::MOTOR || actuator_it->actuator_type == ActuatorType::CUSTOM ||
+              actuator_it->actuator_type == ActuatorType::PLUGIN)
           {
-            RCLCPP_INFO(get_logger(), "Using MuJoCo motor or custom actuator for the joint : '%s'",
+            RCLCPP_INFO(get_logger(), "Using MuJoCo %s actuator for the joint : '%s'",
+                        actuator_it->actuator_type == ActuatorType::PLUGIN ? "plugin (direct ctrl)" : "motor or custom",
                         actuator_name.c_str());
             // Direct effort control enabled for MOTOR or CUSTOM actuator
             actuator_it->is_effort_control_enabled = true;
@@ -2378,14 +2391,20 @@ void MujocoSystemInterface::reset_simulation_state(bool /*fill_initial_state*/)
 
     if (actuator.actuator_type != ActuatorType::PASSIVE)
     {
-      actuator.is_position_pid_control_enabled = actuator.has_pos_pid;
-      actuator.is_position_control_enabled = !actuator.has_pos_pid && actuator.actuator_type == ActuatorType::POSITION;
-      actuator.is_velocity_pid_control_enabled = !actuator.has_pos_pid && actuator.has_vel_pid;
-      actuator.is_velocity_control_enabled =
-          !actuator.has_pos_pid && !actuator.has_vel_pid && actuator.actuator_type == ActuatorType::VELOCITY;
-      actuator.is_effort_control_enabled =
-          !actuator.has_pos_pid && !actuator.has_vel_pid &&
-          (actuator.actuator_type == ActuatorType::MOTOR || actuator.actuator_type == ActuatorType::CUSTOM);
+      // PLUGIN actuators keep the mode selected from their declared command interface.
+      if (actuator.actuator_type != ActuatorType::PLUGIN)
+      {
+        actuator.is_position_pid_control_enabled = actuator.has_pos_pid;
+        actuator.is_position_control_enabled =
+            !actuator.has_pos_pid && actuator.actuator_type == ActuatorType::POSITION;
+        actuator.is_velocity_pid_control_enabled = !actuator.has_pos_pid && actuator.has_vel_pid;
+        actuator.is_velocity_control_enabled =
+            !actuator.has_pos_pid && !actuator.has_vel_pid && actuator.actuator_type == ActuatorType::VELOCITY;
+        actuator.is_effort_control_enabled =
+            !actuator.has_pos_pid && !actuator.has_vel_pid &&
+            (actuator.actuator_type == ActuatorType::MOTOR || actuator.actuator_type == ActuatorType::CUSTOM);
+      }
+
       // Set command to initial position to maintain position control at reset position
       actuator.position_interface.command_ = actuator.position_interface.state_;
       actuator.velocity_interface.command_ = 0.0;

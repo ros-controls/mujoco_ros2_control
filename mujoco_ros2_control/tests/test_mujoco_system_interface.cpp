@@ -81,13 +81,62 @@ constexpr const char* kIntVelocityTestModel = R"(<?xml version="1.0"?>
 </mujoco>
 )";
 
+// Ensure actuators driven by a plugin are loadable and controllable
+constexpr const char* kPluginActuatorTestModel = R"(<?xml version="1.0"?>
+<mujoco model="plugin_actuator_system_interface">
+  <option timestep="0.002"/>
+
+  <extension>
+    <plugin plugin="mujoco_ros2_control.test_actuator">
+      <instance name="test_actuator_instance"/>
+    </plugin>
+  </extension>
+
+  <worldbody>
+    <body name="arm" pos="0 0 0">
+      <joint name="plugin_joint" type="hinge" axis="0 1 0"/>
+      <geom type="capsule" size="0.02" fromto="0 0 0 0.3 0 0" mass="1"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <plugin name="plugin_joint" joint="plugin_joint" plugin="mujoco_ros2_control.test_actuator"
+            instance="test_actuator_instance" actdim="0"/>
+  </actuator>
+</mujoco>
+)";
+
+void register_test_actuator_plugin()
+{
+  static const bool registered = []() {
+    mjpPlugin plugin;
+    mjp_defaultPlugin(&plugin);
+    plugin.name = "mujoco_ros2_control.test_actuator";
+    plugin.capabilityflags |= mjPLUGIN_ACTUATOR;
+    plugin.nstate = [](const mjModel*, int) { return 0; };
+    plugin.init = [](const mjModel*, mjData*, int) { return 0; };
+    plugin.reset = [](const mjModel*, mjtNum*, void*, int) {};
+    plugin.compute = [](const mjModel*, mjData*, int, int) {};
+    return mjp_registerPlugin(&plugin) >= 0;
+  }();
+  EXPECT_TRUE(registered);
+}
+
 // Write to disk for testing
 const std::string kTestModelPath = "/tmp/test_mujoco_system_interface_model.xml";
 const std::string kIntVelocityTestModelPath = "/tmp/test_mujoco_system_interface_intvelocity_model.xml";
+const std::string kPluginActuatorTestModelPath = "/tmp/test_mujoco_system_interface_plugin_actuator_model.xml";
 void write_test_model()
 {
   std::ofstream file(kTestModelPath);
   file << kTestModel;
+  file.close();
+}
+
+void write_plugin_actuator_test_model()
+{
+  std::ofstream file(kPluginActuatorTestModelPath);
+  file << kPluginActuatorTestModel;
   file.close();
 }
 
@@ -187,6 +236,10 @@ protected:
     if (std::filesystem::exists(kIntVelocityTestModelPath))
     {
       std::filesystem::remove(kIntVelocityTestModelPath);
+    }
+    if (std::filesystem::exists(kPluginActuatorTestModelPath))
+    {
+      std::filesystem::remove(kPluginActuatorTestModelPath);
     }
   }
 
@@ -322,6 +375,79 @@ TEST_F(MujocoSystemInterfaceTest, IntVelocityActuatorSupportsVelocityCommandInte
   mj_deleteData(data);
   mj_deleteModel(model);
 }
+
+// Plugin actuators own their control loop, so the declared ros2_control command interface is written straight to ctrl,
+// whatever interface is declared. Check all three, and that the actuator is accepted with each.
+class PluginActuatorCommandInterfaceTest : public MujocoSystemInterfaceTest,
+                                           public ::testing::WithParamInterface<const char*>
+{
+};
+
+TEST_P(PluginActuatorCommandInterfaceTest, CommandIsWrittenDirectlyToCtrl)
+{
+  register_test_actuator_plugin();
+  write_plugin_actuator_test_model();
+  auto hardware_info = create_hardware_info();
+  hardware_info.hardware_parameters["mujoco_model"] = kPluginActuatorTestModelPath;
+
+  const std::string interface_name = GetParam();
+  hardware_interface::ComponentInfo joint_info;
+  joint_info.name = "plugin_joint";
+
+  hardware_interface::InterfaceInfo command_interface;
+  command_interface.name = interface_name;
+  joint_info.command_interfaces.push_back(command_interface);
+
+  for (const auto* state_name :
+       { hardware_interface::HW_IF_POSITION, hardware_interface::HW_IF_VELOCITY, hardware_interface::HW_IF_EFFORT })
+  {
+    hardware_interface::InterfaceInfo state_interface;
+    state_interface.name = state_name;
+    joint_info.state_interfaces.push_back(state_interface);
+  }
+  hardware_info.joints.push_back(joint_info);
+
+  ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
+
+  mjModel* model = nullptr;
+  interface_->get_model(model);
+  ASSERT_NE(model, nullptr);
+  const int actuator_id = mj_name2id(model, mjOBJ_ACTUATOR, "plugin_joint");
+  ASSERT_NE(actuator_id, -1);
+  EXPECT_NE(model->actuator_plugin[actuator_id], -1);
+
+#if ROS_DISTRO_HUMBLE
+  auto command_interfaces = interface_->export_command_interfaces();
+  auto& exported_command_interface = command_interfaces.front();
+#else
+  auto command_interfaces = interface_->on_export_command_interfaces();
+  auto& exported_command_interface = *command_interfaces.front();
+#endif
+  ASSERT_EQ(command_interfaces.size(), 1u);
+  EXPECT_EQ(exported_command_interface.get_name(), "plugin_joint/" + interface_name);
+
+  constexpr double command = 0.75;
+#if ROS_DISTRO_HUMBLE
+  exported_command_interface.set_value(command);
+#else
+  ASSERT_TRUE(exported_command_interface.set_value(command));
+#endif
+  ASSERT_EQ(interface_->write(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002)),
+            hardware_interface::return_type::OK);
+
+  mjData* data = nullptr;
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_data(data);
+    return data != nullptr && std::abs(data->ctrl[actuator_id] - command) < 1e-9;
+  })) << "Command was not written to the plugin actuator ctrl input";
+
+  mj_deleteData(data);
+  mj_deleteModel(model);
+}
+
+INSTANTIATE_TEST_SUITE_P(Interfaces, PluginActuatorCommandInterfaceTest,
+                         ::testing::Values(hardware_interface::HW_IF_POSITION, hardware_interface::HW_IF_VELOCITY,
+                                           hardware_interface::HW_IF_EFFORT));
 
 // Pins the read()-side handle sync: without it, this would observe NaN instead of qpos/qvel.
 TEST_F(MujocoSystemInterfaceTest, JointStateInterfacesReflectSimulationAfterRead)

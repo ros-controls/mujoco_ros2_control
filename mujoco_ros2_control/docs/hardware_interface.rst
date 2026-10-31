@@ -143,6 +143,37 @@ integrated-velocity dynamics.
 
    The ``torque`` and ``force`` command/state interfaces are semantically equivalent to ``effort`` and map to the same underlying data in the sim.
 
+.. _plugin_actuators:
+
+Plugin Actuators
+~~~~~~~~~~~~~~~~
+
+Actuators driven by a `MuJoCo actuator plugin <https://mujoco.readthedocs.io/en/stable/programming/extension.html>`_ are detected automatically.
+In these instances, the plugin owns the control loop, so the hardware interface does not apply its own PIDs or infer a control mode from the actuator's gain and bias parameters.
+Instead, whichever command interface is declared in the ``ros2_control`` joint is written directly to the actuator's ``ctrl`` input.
+It is entirely up to the plugin to know what to do with the control input.
+
+For instance,
+
+.. code-block:: xml
+
+   <actuator>
+     <plugin joint="joint1" name="joint1" plugin="mujoco.pid" instance="joint1_pid" actdim="2"/>
+   </actuator>
+
+.. code-block:: xml
+
+   <joint name="joint1">
+     <command_interface name="position"/>
+     <state_interface name="position"/>
+     <state_interface name="velocity"/>
+   </joint>
+
+Note that a MuJoCo actuator has a single ``ctrl`` input.
+As with other actuators, several command interfaces may be declared and switched between at runtime, but only one is active at a time.
+However, there is no mechanism to inform the plugin that a command mode has changed!
+Users should understand the limitations and handle their own plugin implementations accordingly.
+
 Grippers and Mimic Joints
 --------------------------
 
