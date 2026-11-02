@@ -51,9 +51,42 @@ Specify it in your URDF and point to a valid MJCF on launch:
 Overriding parameters with ROS parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Every ``<param>`` above (``mujoco_model``, ``headless``, ``sim_speed_factor``, ...) can also be set as a ROS parameter
-on the simulator node, ``mujoco_ros2_control_node``.
+The following ``<hardware><param>`` entries can also be set as a ROS parameter of the same name on the simulator node,
+``mujoco_ros2_control_node``.
 A ROS parameter takes precedence over the URDF value, so the URDF does not need to change per run.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 15 50
+
+   * - Parameter
+     - Type
+     - Default when unset
+   * - ``mujoco_model``
+     - string
+     - none (``mujoco_model_topic`` is used instead)
+   * - ``mujoco_model_topic``
+     - string
+     - ``/mujoco_robot_description``
+   * - ``headless``
+     - bool
+     - ``false``
+   * - ``sim_speed_factor``
+     - double
+     - ``-1`` (use the rate requested from the App window)
+   * - ``initial_keyframe``
+     - string
+     - empty (no keyframe)
+   * - ``override_start_position_file``
+     - string
+     - empty (not used)
+   * - ``odom_free_joint_name``
+     - string
+     - ``floating_base_joint``
+   * - ``odom_topic``
+     - string
+     - ``/simulator/floating_base_state``
+
 Either put it in the parameters file passed to ``ros2_control_node``:
 
 .. code-block:: yaml
@@ -71,7 +104,9 @@ or pass it on the command line:
 
 .. note::
 
-   ``pids_config_file`` is only read from the URDF, because it is used to create the node that holds the ROS parameters.
+   Only the parameters in the table above can be overridden. ``pids_config_file`` is read from the URDF only, because it
+   is used to create the node that holds the ROS parameters. Per-joint, per-sensor and per-actuator ``<param>`` entries
+   (for example ``mujoco_type`` or ``mujoco_sensor_name``) are URDF-only.
    ROS parameters are read once while the hardware is initialised, so they cannot be changed at runtime.
 
 Due to compatibility requirements, a slightly modified ``ros2_control`` node is required.
