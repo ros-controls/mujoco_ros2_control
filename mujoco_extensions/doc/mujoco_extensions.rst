@@ -12,10 +12,9 @@ Adding Extensions
 
 ``mujoco_ros2_control`` automatically discovers and loads MuJoCo plugin libraries at runtime using the following mechanisms, in order:
 
-1. **Executable plugins**: Any ``.so`` files in the ``mujoco_plugin/`` directory next to the ``ros2_control_node`` executable.
-2. **MUJOCO_PLUGIN_PATH**: Any directory in the colon-separated ``MUJOCO_PLUGIN_PATH`` environment variable.
-3. **Ament resource index**: Any ROS 2 package that registers itself as a ``mujoco_plugins`` resource provider.
-4. **Stock MuJoCo plugins**: Any ``.so`` files in ``mujoco_plugin/`` next to ``libmujoco.so`` or in ``../bin/mujoco_plugin/`` relative to it.
+1. **MUJOCO_PLUGIN_PATH**: Any directory in the colon-separated ``MUJOCO_PLUGIN_PATH`` environment variable.
+2. **Ament resource index**: Any ROS 2 package that registers itself as a ``mujoco_plugins`` resource provider.
+3. **Stock MuJoCo plugins**: Any ``.so`` files in ``mujoco_plugin/`` next to ``libmujoco.so`` or in ``../bin/mujoco_plugin/`` relative to it.
 
 A library is only loaded once, so a plugin with the same filename found by an earlier mechanism takes precedence.
 If a later library is skipped because a same-named library was loaded from a different directory, a warning naming both paths is logged.

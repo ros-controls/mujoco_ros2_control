@@ -31,7 +31,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <future>
 #include <iostream>
 #include <memory>
@@ -224,38 +223,6 @@ private:
   std::atomic<bool>& step_requested_;
 };
 
-// return the path to the directory containing the current executable
-// used to determine the location of auto-loaded plugin libraries
-static std::string getExecutableDir()
-{
-  constexpr char kPathSep = '/';
-
-  // Determine the executable location while respecting symlinks, as the plugins are installed
-  // next to the ros2 control node's executable
-  std::string real_path = [&]() -> std::string {
-    std::ifstream f("/proc/self/cmdline");
-    std::string argv0;
-    std::getline(f, argv0, '\0');
-    return argv0;
-  }();
-
-  if (real_path.empty())
-  {
-    return "";
-  }
-
-  for (std::size_t i = real_path.size() - 1; i > 0; --i)
-  {
-    if (real_path.c_str()[i] == kPathSep)
-    {
-      return real_path.substr(0, i);
-    }
-  }
-
-  // don't scan through the entire file system's root
-  return "";
-}
-
 static rclcpp::Logger pluginLogger()
 {
   return rclcpp::get_logger("mujoco_ros2_control.plugin_loader");
@@ -353,17 +320,7 @@ static void scanPluginLibraries()
     }
   }
 
-  // try to open the ${EXECDIR}/MUJOCO_PLUGIN_DIR directory
-  // ${EXECDIR} is the directory containing the simulate binary itself
-  // MUJOCO_PLUGIN_DIR is the MUJOCO_PLUGIN_DIR preprocessor macro
-  const std::string executable_dir = getExecutableDir();
-  if (!executable_dir.empty())
-  {
-    const std::string plugin_dir = executable_dir + "/" + MUJOCO_PLUGIN_DIR;
-    loadPluginsFromDirectory(plugin_dir);
-  }
-
-  // Then scan directories explicitly requested through MUJOCO_PLUGIN_PATH
+  // Scan directories explicitly requested through MUJOCO_PLUGIN_PATH
   if (const char* plugin_path = std::getenv("MUJOCO_PLUGIN_PATH"))
   {
     std::stringstream paths(plugin_path);
