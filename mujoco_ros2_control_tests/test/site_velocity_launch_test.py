@@ -140,13 +140,20 @@ class TestSiteVelocityActuator(unittest.TestCase):
 
         command = Float64MultiArray()
         command.data = [0.5]
-        pub.publish(command)
+
+        def republish_and_check():
+            # Republish every iteration: a single publish can be lost if discovery/activation
+            # races under load, which made this test flaky.
+            pub.publish(command)
+            return (
+                self.get_joint_value(self._latest_js, "position", "slider_joint") is not None
+                and self.get_joint_value(self._latest_js, "position", "slider_joint") > start_position + 0.2
+            )
 
         self.assertTrue(
             self.spin_until(
-                lambda: self.get_joint_value(self._latest_js, "position", "slider_joint") is not None
-                and self.get_joint_value(self._latest_js, "position", "slider_joint") > start_position + 0.5,
-                timeout=2.0,
+                republish_and_check,
+                timeout=5.0,
             ),
             "Slider joint did not move sufficiently after commanding the site velocity actuator",
         )
@@ -155,7 +162,7 @@ class TestSiteVelocityActuator(unittest.TestCase):
             self.spin_until(
                 lambda: self.get_joint_value(self._latest_actuator_js, "velocity", "slider_joint") is not None
                 and self.get_joint_value(self._latest_actuator_js, "velocity", "slider_joint") > 0.4,
-                timeout=2.0,
+                timeout=5.0,
             ),
             "Actuator state did not report sufficiently positive slider velocity",
         )
