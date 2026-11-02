@@ -12,6 +12,7 @@
   </worldbody>
 
   <actuator>
-    <velocity name="slider_joint" site="drive_site" ctrlrange="-1 1"/>
+    <!-- kv=10 so terminal velocity (~0.49 m/s) is close to the command despite joint damping -->
+    <velocity name="slider_joint" site="drive_site" kv="10" ctrlrange="-1 1"/>
   </actuator>
 </mujoco>
