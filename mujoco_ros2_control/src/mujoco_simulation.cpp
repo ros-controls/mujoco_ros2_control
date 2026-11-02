@@ -40,7 +40,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
-#include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 #include <std_msgs/msg/string.hpp>
@@ -270,8 +270,10 @@ static void loadPluginsFromDirectory(const std::string& plugin_dir)
     return;
   }
 
-  // Prevent loading of duplicate libaraies (with the same filename).
-  static std::unordered_set<std::string> loaded_libraries;
+  // Prevent loading of duplicate libraries (with the same filename), remembering where each one came from.
+  // Static because MuJoCo's plugin registry is process-global: a library loaded once stays loaded for every
+  // simulation in this process, so the bookkeeping must outlive a single scan.
+  static std::unordered_map<std::string, std::string> loaded_libraries;
 
   for (const auto& entry : std::filesystem::directory_iterator(plugin_dir, ec))
   {
@@ -285,9 +287,20 @@ static void loadPluginsFromDirectory(const std::string& plugin_dir)
     {
       continue;
     }
-    if (!loaded_libraries.insert(path.filename().string()).second)
+    const auto [loaded_it, inserted] = loaded_libraries.emplace(path.filename().string(), path.string());
+    if (!inserted)
     {
-      RCLCPP_INFO(pluginLogger(), "Skipping already loaded library: '%s'", path.filename().c_str());
+      // Same filename from a different directory is likely a shadowed plugin, so make that visible.
+      if (loaded_it->second != path.string())
+      {
+        RCLCPP_WARN(pluginLogger(),
+                    "Skipping library '%s' because a library with the same filename was already loaded from '%s'",
+                    path.c_str(), loaded_it->second.c_str());
+      }
+      else
+      {
+        RCLCPP_INFO(pluginLogger(), "Skipping already loaded library: '%s'", path.filename().c_str());
+      }
       continue;
     }
 
@@ -318,7 +331,7 @@ static std::vector<std::string> mujocoLibraryPluginDirs()
     return {};
   }
 
-  // Resolves symlinks and relative paths so that the parent bath is the actual location of library
+  // Resolves symlinks and relative paths so that the parent path is the actual location of library
   std::error_code ec;
   const std::filesystem::path lib_path = std::filesystem::weakly_canonical(info.dli_fname, ec);
   const std::filesystem::path lib_dir = (ec ? std::filesystem::path(info.dli_fname) : lib_path).parent_path();

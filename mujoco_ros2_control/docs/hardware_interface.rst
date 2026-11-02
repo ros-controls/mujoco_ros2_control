@@ -169,9 +169,8 @@ For instance,
      <state_interface name="velocity"/>
    </joint>
 
-Note that a MuJoCo actuator has a single ``ctrl`` input.
-As with other actuators, several command interfaces may be declared and switched between at runtime, but only one is active at a time.
-However, there is no mechanism to inform the plugin that a command mode has changed!
+Note that a MuJoCo actuator has a single ``ctrl`` input, and there is no mechanism to inform a plugin that a command mode has changed.
+For this reason a joint driven by a plugin actuator must declare exactly one command interface; declaring more fails initialization with an error.
 Users should understand the limitations and handle their own plugin implementations accordingly.
 
 Grippers and Mimic Joints

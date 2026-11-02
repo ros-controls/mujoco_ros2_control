@@ -1628,6 +1628,18 @@ void MujocoSystemInterface::register_urdf_joints(const hardware_interface::Hardw
                     joint.name.c_str());
       }
     }
+    // A plugin actuator has one ctrl input and no way to be told which command mode is active, so more than one
+    // command interface would be ambiguous. Fail loudly instead of letting the last-registered mode win silently.
+    if (joint.command_interfaces.size() > 1 &&
+        std::any_of(joint_actuators.begin(), joint_actuators.end(),
+                    [](const MuJoCoActuatorData* actuator) { return actuator->actuator_type == ActuatorType::PLUGIN; }))
+    {
+      throw std::runtime_error("Joint '" + joint.name +
+                               "' is driven by a MuJoCo plugin actuator, which supports exactly one command interface, "
+                               "but " +
+                               std::to_string(joint.command_interfaces.size()) + " were declared.");
+    }
+
     const bool actuator_exists = !joint_actuators.empty();
     // This isn't a failure the joint just won't be controllable
     RCLCPP_INFO_EXPRESSION(get_logger(), !actuator_exists && !joint_data.is_mimic,
