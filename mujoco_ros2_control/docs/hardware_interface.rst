@@ -49,7 +49,7 @@ Specify it in your URDF and point to a valid MJCF on launch:
    ...
 
 Overriding parameters with ROS parameters
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Every ``<param>`` above (``mujoco_model``, ``headless``, ``sim_speed_factor``, ...) can also be set as a ROS parameter
 on the simulator node, ``mujoco_ros2_control_node``.
