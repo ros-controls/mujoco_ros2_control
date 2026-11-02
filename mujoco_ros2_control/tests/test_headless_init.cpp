@@ -284,6 +284,10 @@ TEST_F(HeadlessInitTest, RosParameterOverridesUrdfParameter)
 #endif
   EXPECT_EQ(result, hardware_interface::CallbackReturn::SUCCESS);
 
+  rclcpp_lifecycle::State inactive_state(0, "inactive");
+  interface_->on_deactivate(inactive_state);
+  interface_.reset();
+
   // Restore the default context for the remaining tests / teardown.
   rclcpp::shutdown();
   rclcpp::init(0, nullptr);
