@@ -22,6 +22,7 @@
 #include "mujoco_ros2_control/sim_display_text.hpp"
 #include "render_loop_exit.hpp"
 
+#include <dlfcn.h>
 #include <unistd.h>
 #include <cerrno>
 #include <chrono>
@@ -30,14 +31,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <future>
 #include <iostream>
 #include <memory>
 #include <new>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_map>
+#include <vector>
 
 #include <std_msgs/msg/string.hpp>
 
@@ -220,36 +223,9 @@ private:
   std::atomic<bool>& step_requested_;
 };
 
-// return the path to the directory containing the current executable
-// used to determine the location of auto-loaded plugin libraries
-static std::string getExecutableDir()
+static rclcpp::Logger pluginLogger()
 {
-  constexpr char kPathSep = '/';
-
-  // Determine the executable location while respecting symlinks, as the plugins are installed
-  // next to the ros2 control node's executable
-  std::string real_path = [&]() -> std::string {
-    std::ifstream f("/proc/self/cmdline");
-    std::string argv0;
-    std::getline(f, argv0, '\0');
-    return argv0;
-  }();
-
-  if (real_path.empty())
-  {
-    return "";
-  }
-
-  for (std::size_t i = real_path.size() - 1; i > 0; --i)
-  {
-    if (real_path.c_str()[i] == kPathSep)
-    {
-      return real_path.substr(0, i);
-    }
-  }
-
-  // don't scan through the entire file system's root
-  return "";
+  return rclcpp::get_logger("mujoco_ros2_control.plugin_loader");
 }
 
 // Load all .so plugins from a directory, following symlinks, this is different from the upstream
@@ -260,6 +236,11 @@ static void loadPluginsFromDirectory(const std::string& plugin_dir)
   {
     return;
   }
+
+  // Prevent loading of duplicate libraries (with the same filename), remembering where each one came from.
+  // Static because MuJoCo's plugin registry is process-global: a library loaded once stays loaded for every
+  // simulation in this process, so the bookkeeping must outlive a single scan.
+  static std::unordered_map<std::string, std::string> loaded_libraries;
 
   for (const auto& entry : std::filesystem::directory_iterator(plugin_dir, ec))
   {
@@ -273,23 +254,57 @@ static void loadPluginsFromDirectory(const std::string& plugin_dir)
     {
       continue;
     }
+    const auto [loaded_it, inserted] = loaded_libraries.emplace(path.filename().string(), path.string());
+    if (!inserted)
+    {
+      // Same filename from a different directory is likely a shadowed plugin, so make that visible.
+      if (loaded_it->second != path.string())
+      {
+        RCLCPP_WARN(pluginLogger(),
+                    "Skipping library '%s' because a library with the same filename was already loaded from '%s'",
+                    path.c_str(), loaded_it->second.c_str());
+      }
+      else
+      {
+        RCLCPP_INFO(pluginLogger(), "Skipping already loaded library: '%s' in the directory: '%s'",
+                    path.filename().c_str(), path.parent_path().c_str());
+      }
+      continue;
+    }
 
     int before = mjp_pluginCount();
     mj_loadPluginLibrary(path.c_str());
     int after = mjp_pluginCount();
     if (after > before)
     {
-      std::printf("Plugins registered by library '%s':\n", path.filename().c_str());
+      RCLCPP_INFO(pluginLogger(), "Plugins registered by library '%s':", path.filename().c_str());
       for (int i = before; i < after; ++i)
       {
-        std::printf("    %s\n", mjp_getPluginAtSlot(i)->name);
+        RCLCPP_INFO(pluginLogger(), "    %s", mjp_getPluginAtSlot(i)->name);
       }
     }
     else
     {
-      std::printf("No plugins loaded from: '%s':\n", path.filename().c_str());
+      RCLCPP_INFO(pluginLogger(), "No plugins loaded from: '%s'", path.c_str());
     }
   }
+}
+
+// Looks up the installed mujoco simulate application's directory to include upstream mujoco plugins.
+static std::vector<std::string> mujocoLibraryPluginDirs()
+{
+  Dl_info info;
+  if (dladdr(reinterpret_cast<void*>(&mj_loadPluginLibrary), &info) == 0 || info.dli_fname == nullptr)
+  {
+    return {};
+  }
+
+  // Resolves symlinks and relative paths so that the parent path is the actual location of library
+  std::error_code ec;
+  const std::filesystem::path lib_path = std::filesystem::weakly_canonical(info.dli_fname, ec);
+  const std::filesystem::path lib_dir = (ec ? std::filesystem::path(info.dli_fname) : lib_path).parent_path();
+  RCLCPP_INFO(pluginLogger(), "Looking for stock MuJoCo plugins relative to: %s", lib_dir.c_str());
+  return { (lib_dir / MUJOCO_PLUGIN_DIR).string(), (lib_dir / ".." / "bin" / MUJOCO_PLUGIN_DIR).string() };
 }
 
 // scan for libraries in the plugin directory to load additional plugins
@@ -299,21 +314,26 @@ static void scanPluginLibraries()
   int nplugin = mjp_pluginCount();
   if (nplugin)
   {
-    std::printf("Built-in plugins:\n");
+    RCLCPP_INFO(pluginLogger(), "Built-in plugins:");
     for (int i = 0; i < nplugin; ++i)
     {
-      std::printf("    %s\n", mjp_getPluginAtSlot(i)->name);
+      RCLCPP_INFO(pluginLogger(), "    %s", mjp_getPluginAtSlot(i)->name);
     }
   }
 
-  // try to open the ${EXECDIR}/MUJOCO_PLUGIN_DIR directory
-  // ${EXECDIR} is the directory containing the simulate binary itself
-  // MUJOCO_PLUGIN_DIR is the MUJOCO_PLUGIN_DIR preprocessor macro
-  const std::string executable_dir = getExecutableDir();
-  if (!executable_dir.empty())
+  // Scan directories explicitly requested through MUJOCO_PLUGIN_PATH
+  if (const char* plugin_path = std::getenv("MUJOCO_PLUGIN_PATH"))
   {
-    const std::string plugin_dir = executable_dir + "/" + MUJOCO_PLUGIN_DIR;
-    loadPluginsFromDirectory(plugin_dir);
+    std::stringstream paths(plugin_path);
+    std::string plugin_dir;
+    while (std::getline(paths, plugin_dir, ':'))
+    {
+      if (!plugin_dir.empty())
+      {
+        RCLCPP_INFO(pluginLogger(), "Loading MuJoCo plugins from MUJOCO_PLUGIN_PATH entry: %s", plugin_dir.c_str());
+        loadPluginsFromDirectory(plugin_dir);
+      }
+    }
   }
 
   // Then try to find all packages that registered mujoco plugins via the ament resource index
@@ -336,9 +356,16 @@ static void scanPluginLibraries()
     {
       const std::string plugin_dir = prefix + "/" + content;
 #endif
-      std::printf("Loading MuJoCo plugins from package '%s': %s\n", package_name.c_str(), plugin_dir.c_str());
+      RCLCPP_INFO(pluginLogger(), "Loading MuJoCo plugins from package '%s': %s", package_name.c_str(),
+                  plugin_dir.c_str());
       loadPluginsFromDirectory(plugin_dir);
     }
+  }
+
+  // Lastly, include mujoco stock plugins
+  for (const auto& plugin_dir : mujocoLibraryPluginDirs())
+  {
+    loadPluginsFromDirectory(plugin_dir);
   }
 }
 
