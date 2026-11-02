@@ -266,7 +266,8 @@ static void loadPluginsFromDirectory(const std::string& plugin_dir)
       }
       else
       {
-        RCLCPP_INFO(pluginLogger(), "Skipping already loaded library: '%s'", path.filename().c_str());
+        RCLCPP_INFO(pluginLogger(), "Skipping already loaded library: '%s' in the directory: '%s'",
+                    path.filename().c_str(), path.parent_path().c_str());
       }
       continue;
     }
@@ -284,7 +285,7 @@ static void loadPluginsFromDirectory(const std::string& plugin_dir)
     }
     else
     {
-      RCLCPP_INFO(pluginLogger(), "No plugins loaded from: '%s'", path.filename().c_str());
+      RCLCPP_INFO(pluginLogger(), "No plugins loaded from: '%s'", path.c_str());
     }
   }
 }
