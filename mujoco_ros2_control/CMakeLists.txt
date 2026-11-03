@@ -75,7 +75,7 @@ PUBLIC
   ${rosgraph_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
 PRIVATE
-  mujoco::simulate
+  mujoco::libmujoco_simulate
   Threads::Threads
   lodepng::lodepng
   glfw
