@@ -34,6 +34,27 @@ find_package(TinyXML2 REQUIRED)
 # Link MuJoCo via the vendor package
 find_package(mujoco_vendor REQUIRED)
 
+# Conda and upstream MuJoCo export mujoco::libmujoco_simulate and a plain `lodepng` target.
+# However, older versions of mujoco_vendor export mujoco::simulate and lodepng::lodepng.
+# For now we have to accept either, depending on where we are building.
+#
+# TODO: Remove this shim and link mujoco::libmujoco_simulate and lodepng directly once a
+# mujoco_vendor release exporting the upstream names is available in all supported distros
+# See https://github.com/pal-robotics/mujoco_vendor/pull/17/.
+if(TARGET mujoco::libmujoco_simulate)
+  set(MUJOCO_SIMULATE_LIB mujoco::libmujoco_simulate)
+else()
+  set(MUJOCO_SIMULATE_LIB mujoco::simulate)
+endif()
+if(TARGET lodepng::lodepng)
+  set(LODEPNG_LIB lodepng::lodepng)
+elseif(TARGET lodepng)
+  set(LODEPNG_LIB lodepng)
+else()
+  find_package(lodepng REQUIRED)
+  set(LODEPNG_LIB lodepng)
+endif()
+
 # MuJoCo ROS 2 control system interface (this package)
 add_library(mujoco_ros2_control SHARED
     src/mujoco_simulation.cpp
@@ -69,15 +90,15 @@ PUBLIC
   pluginlib::pluginlib
   fmt::fmt
   mujoco::mujoco
+  ${MUJOCO_SIMULATE_LIB}
   control_toolbox::control_toolbox
   Eigen3::Eigen
   realtime_tools::realtime_tools
   ${rosgraph_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
 PRIVATE
-  mujoco::libmujoco_simulate
   Threads::Threads
-  lodepng::lodepng
+  ${LODEPNG_LIB}
   glfw
   ${CMAKE_DL_LIBS}
   ${std_msgs_TARGETS}
