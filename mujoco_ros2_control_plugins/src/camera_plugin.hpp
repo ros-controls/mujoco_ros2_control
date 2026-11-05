@@ -234,6 +234,15 @@ private:
 
   // Image publishing rate (applies to streaming cameras only)
   double camera_publish_rate_{ 5.0 };
+
+  // Which OpenGL backend the rendering thread should use: "auto", "glfw" or "egl".
+  //
+  // This is not only a headless/desktop switch. GLFW renders through the X display, which is
+  // also where the MuJoCo viewer draws, so on a desktop the cameras and the viewer share one
+  // GL queue and the cameras lose frames whenever the viewer is busy. An EGL surfaceless
+  // context does not go through X at all, so selecting it explicitly keeps the viewer open
+  // without putting the camera renders behind it.
+  std::string render_backend_{ "auto" };
   rclcpp::Time last_publish_time_{ 0, 0, RCL_ROS_TIME };
 
   // Whether any streaming camera is registered. This lets the update loop skip the

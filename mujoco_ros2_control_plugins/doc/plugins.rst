@@ -81,6 +81,8 @@ Note that any number of cameras can be configured in the plugin configuration.
       type: "mujoco_ros2_control_plugins/CameraPlugin"
       # Note all cameras are published at the same rate
       camera_publish_rate: 5.0
+      # "auto" (default), "glfw" or "egl"; see "Headless Rendering" below
+      render_backend: auto
       camera:
         frame_name: camera_color_optical_frame
         info_topic: /camera_topic/color/camera_info
@@ -103,6 +105,48 @@ The system automatically detects whether a display is available:
 * Without display: Falls back to EGL for GPU-accelerated headless rendering
 
 This allows camera topics to be published even when running in headless mode (e.g., on a server, in Docker containers, or in CI environments).
+
+Selecting the backend explicitly
+""""""""""""""""""""""""""""""""
+
+``render_backend`` overrides that detection:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 85
+
+   * - Value
+     - Behaviour
+   * - ``auto``
+     - Default, and the behaviour described above: try GLFW, fall back to EGL.
+   * - ``glfw``
+     - Use GLFW. If it cannot be initialized, ``init`` **fails** rather than falling back --
+       an explicit request that silently produced the other backend would be worse than an
+       error.
+   * - ``egl``
+     - Use EGL, without initializing GLFW at all.
+
+Choosing ``egl`` is useful even on a machine that *has* a display. GLFW renders through the X
+display, which is also where the MuJoCo viewer draws, so the cameras and the viewer end up
+sharing a single GL queue and the cameras lose frames whenever the viewer is busy. An EGL
+surfaceless context does not go through X, so the viewer can stay open without the camera
+renders queueing behind it.
+
+.. warning::
+   Some drivers (NVIDIA among them) refuse to bind an EGL context in a process that already
+   holds a GLX context, which is the case whenever the viewer is open -- and ``eglGetError``
+   may report success while ``eglMakeCurrent`` fails. Use ``render_backend: egl`` together
+   with headless operation, or leave it at ``auto``.
+
+When the plugin is loaded through the hardware interface, the value can be set from the
+``ros2_control`` URDF instead of the plugin parameters:
+
+.. code-block:: xml
+
+   <hardware>
+     <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+     <param name="camera_render_backend">egl</param>
+   </hardware>
 
 .. note::
    EGL requires proper GPU drivers and EGL libraries to be installed (e.g., libegl1-mesa on Ubuntu).

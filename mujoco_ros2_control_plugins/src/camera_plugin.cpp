@@ -50,15 +50,36 @@ bool CameraPlugin::init(rclcpp::Node::SharedPtr node, const mjModel* model, mjDa
   }
 
   // Start the rendering thread process
-  // Try GLFW first, fall back to EGL for headless environments
-  if (glfw_init_fn())
+  if (render_backend_ == "egl")
   {
+    // Asked for explicitly, so do not touch GLFW at all: the point of choosing EGL on a
+    // machine that has a display is to stay off the X queue the viewer draws on.
+    RCLCPP_INFO(node_->get_logger(), "Using EGL for camera rendering (render_backend=egl).");
+    use_egl_ = true;
+  }
+  else if (render_backend_ == "glfw")
+  {
+    // Also explicit, so failing is more useful than quietly rendering through something the
+    // caller did not ask for.
+    if (!glfw_init_fn())
+    {
+      RCLCPP_ERROR(node_->get_logger(), "render_backend=glfw was requested but GLFW failed to initialize.");
+      return false;
+    }
     use_egl_ = false;
   }
   else
   {
-    RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Attempting EGL for headless rendering.");
-    use_egl_ = true;
+    // Try GLFW first, fall back to EGL for headless environments
+    if (glfw_init_fn())
+    {
+      use_egl_ = false;
+    }
+    else
+    {
+      RCLCPP_WARN(node_->get_logger(), "Failed to initialize GLFW. Attempting EGL for headless rendering.");
+      use_egl_ = true;
+    }
   }
   rendering_thread_ = std::thread(&CameraPlugin::update_loop, this);
   return true;
@@ -161,6 +182,18 @@ bool CameraPlugin::register_cameras()
 
   camera_publish_rate_ = node_->get_parameter(camera_publish_rate_param).as_double();
   RCLCPP_INFO(node_->get_logger(), "Publishing camera data at rate %f per second.", camera_publish_rate_);
+
+  if (!node_->has_parameter(param_prefix + "render_backend"))
+  {
+    node_->declare_parameter(param_prefix + "render_backend", "auto");
+  }
+  render_backend_ = node_->get_parameter(param_prefix + "render_backend").as_string();
+  if (render_backend_ != "auto" && render_backend_ != "glfw" && render_backend_ != "egl")
+  {
+    RCLCPP_ERROR(node_->get_logger(), "Unknown render_backend '%s'; expected \"auto\", \"glfw\" or \"egl\".",
+                 render_backend_.c_str());
+    return false;
+  }
 
   cameras_.resize(0);
   for (auto i = 0; i < mj_model_->ncam; ++i)
