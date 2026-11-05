@@ -262,6 +262,37 @@ TEST_F(HeadlessInitTest, SpeedFactorParamInitialization)
   EXPECT_GT(test_data->time, 0.0) << "Simulation time did not advance with sim_speed_factor=0.5";
 }
 
+// ROS parameters (e.g. from --ros-args -p or a params file) must take precedence over the
+// URDF <hardware><param> values, so users don't have to edit the URDF to change them.
+TEST_F(HeadlessInitTest, RosParameterOverridesUrdfParameter)
+{
+  // The URDF points at a non-existent model; only the ROS override makes init succeed.
+  hardware_info_.hardware_parameters["mujoco_model"] = "/nonexistent/model.xml";
+
+  // Global ROS args are read at rclcpp::init, so restart the context with the override.
+  rclcpp::shutdown();
+  const std::string override_arg = "mujoco_model:=" + test_model_path_;
+  const char* argv[] = { "test", "--ros-args", "-p", override_arg.c_str() };
+  rclcpp::init(4, argv);
+
+#if ROS_DISTRO_HUMBLE
+  auto result = interface_->on_init(hardware_info_);
+#else
+  hardware_interface::HardwareComponentInterfaceParams params;
+  params.hardware_info = hardware_info_;
+  auto result = interface_->on_init(params);
+#endif
+  EXPECT_EQ(result, hardware_interface::CallbackReturn::SUCCESS);
+
+  rclcpp_lifecycle::State inactive_state(0, "inactive");
+  interface_->on_deactivate(inactive_state);
+  interface_.reset();
+
+  // Restore the default context for the remaining tests / teardown.
+  rclcpp::shutdown();
+  rclcpp::init(0, nullptr);
+}
+
 TEST(SimDisplayTextTest, ComposesAllRowsWhenRunning)
 {
   const auto [title, content] = mujoco_ros2_control::compose_sim_display_text(
