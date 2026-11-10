@@ -75,7 +75,8 @@ public:
 
 private:
   Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNum azimuth_range[2],
-        mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate, bool async);
+        mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate, bool async,
+        int geom_group);
 
   void Raycast(const mjModel* m, mjData* d, const mjtNum* rotated_vecs, mjtNum* output);
 
@@ -94,6 +95,10 @@ private:
   mjtNum update_period_;      // Update period to run
   mjtNum last_compute_time_;  // Sim time of the last reading
   bool async_;                // Whether or not to do raycasting in a background thread
+
+  // Geom group to restrict raycasting to, or -1 to raycast against every group (default).
+  int geom_group_{ -1 };
+  mjtByte geomgroup_mask_[mjNGROUP]{};
 
   // Storage containers for asynchronous raycasting
   mjData* d_copy_{ nullptr };              // mjData snapshot for the worker thread
