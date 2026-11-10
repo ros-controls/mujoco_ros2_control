@@ -332,7 +332,9 @@ void Lidar::Raycast(const mjModel* m, mjData* d, const mjtNum* rotated_vecs, mjt
 
   mjtByte* geom_group = nullptr;
   mjtByte flg_static = -1;
-  int body_exclude = -1;
+  // Exclude the lidar's own body so the sensor doesn't raycast against its own housing geometry,
+  // matching the behavior of MuJoCo's native rangefinder sensor.
+  int body_exclude = m->site_bodyid[site_id_];
 
 #if (mjVERSION_HEADER >= 3005000)
   int* geomid = nullptr;
