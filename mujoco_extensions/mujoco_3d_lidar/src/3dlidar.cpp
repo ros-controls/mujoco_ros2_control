@@ -522,8 +522,8 @@ void Lidar::RegisterPlugin()
   plugin.capabilityflags |= mjPLUGIN_SENSOR;
 
   // Parameterizable attributes
-  const char* attributes[] = { "resolution",  "azimuth_range", "elevation_range", "max_range",  "min_range",
-                               "update_rate", "async",         "geom_group" };
+  const char* attributes[] = { "resolution", "azimuth_range", "elevation_range", "max_range",
+                               "min_range",  "update_rate",   "async",           "geom_group" };
   plugin.nattribute = sizeof(attributes) / sizeof(attributes[0]);
   plugin.attributes = attributes;
 

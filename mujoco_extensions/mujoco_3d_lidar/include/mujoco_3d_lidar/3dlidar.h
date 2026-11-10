@@ -75,8 +75,7 @@ public:
 
 private:
   Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNum azimuth_range[2],
-        mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate, bool async,
-        int geom_group);
+        mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate, bool async, int geom_group);
 
   void Raycast(const mjModel* m, mjData* d, const mjtNum* rotated_vecs, mjtNum* output);
 
