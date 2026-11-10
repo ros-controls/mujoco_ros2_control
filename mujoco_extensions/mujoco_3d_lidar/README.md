@@ -18,8 +18,17 @@ The sensor is parametrizable with the following:
 7. Update Rate. _positive float greater than 0.0 (Hz)_ (Optional, defaults to 0.0)
     * **Note**. This may be removed in future versions after the [interval attribute](https://mujoco.readthedocs.io/en/stable/modeling.html#sensors) is available for sensors.
 8. Async. _boolean int (0 for false, non-zero for true)_ (Optional, defaults to 0)
+9. Geom Group. _integer in [0, 5]_ (Optional, defaults to unset, which raycasts against every group)
+    * If set, only geoms belonging to that geom group are considered. This is useful for
+      restricting the lidar to a model's collision geoms (e.g. `group="3"`) so it ignores
+      visual-only geometry, which both avoids spurious returns and reduces raycasting cost.
 
 Field of view should always be in radians regardless of the compiler options.
+
+The sensor's own body (i.e. the body the sensor's site is attached to) is always excluded from
+raycasting, the same way MuJoCo's native `rangefinder` sensor excludes its own body. This means a
+lidar's site can safely be placed anywhere on or inside its own housing geometry without the
+sensor detecting itself.
 
 The horizontal fov is divided by the horizontal resolution to compute the number of azimuth angles.
 The vertical fov is divided by the vertical resolution to compute the number of elevation angles.
@@ -42,6 +51,7 @@ These parameters are passed as extension config attributes:
       <config key="min_range" value="1.0"/>
       <config key="update_rate" value="1.0"/>
       <config key="async" value="0"/>
+      <config key="geom_group" value="3"/>
     </plugin>
   </sensor>
 </mujoco>
@@ -54,6 +64,9 @@ Note the following:
   site, and the name of the specific site.
 * Field-of-view angles are always in radians.
 * If async is specified, lidar computations are done in the background and data will be delayed.
+* If `geom_group` is omitted, every geom in the model is a raycast candidate (other than the
+  sensor's own body, which is always excluded). Set it to restrict raycasting to a single geom
+  group, e.g. `3` to match a model's `collision` geom class.
 
 ### Example model
 
