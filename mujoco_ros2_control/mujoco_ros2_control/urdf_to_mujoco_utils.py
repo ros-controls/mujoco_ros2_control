@@ -212,10 +212,9 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
     - Different URDF meshes can share a filename stem, so colliding stems get an
       "__N" suffix so each resolves to its own asset directory. For example, if
       running multiple UR types there will be a shoulder/ and shoulder__1/ directory.
-      The same source file reused at two different scales (e.g. two AprilTags that
-      happen to share a placeholder tag image) is likewise treated as two distinct
-      sources - a shared filename only collapses into one entry when the scale (and
-      color) also match.
+      The same source file reused at two different scales or with two different colors
+      is likewise treated as two distinct sources - a shared filename only collapses
+      into one entry when the scale (and color) also match.
     - This happens BEFORE the pregen lookup. So if the asset_dir already
       contains shoulder/ and shoulder__1/ from a prior run, the first source
       will grab shoulder and the second source will grab shoulder__1.
