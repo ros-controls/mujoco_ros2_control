@@ -219,8 +219,9 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
     - This happens BEFORE the pregen lookup. So if the asset_dir already
       contains shoulder/ and shoulder__1/ from a prior run, the first source
       will grab shoulder and the second source will grab shoulder__1.
-    - stem_to_original_uri tracks which (source uri, scale) pair claimed each stem
-      slot, in an effort to avoid unnecessary copying.
+    - stem_to_original_uri tracks which (source uri, scale, color) triple claimed each
+      stem slot, in an effort to avoid unnecessary copying. Color is only part of this
+      for visuals in practice, since collisions always carry the same (white) color.
     - A subset-equality check on (is_pre_generated, filename, scale, color) dedupes
       entries that genuinely match based on those criteria.
 
@@ -230,6 +231,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
     """
 
     robot = URDF.from_xml_string(raw_xml)
+    dom = minidom.parseString(raw_xml)
     mesh_info_dict = {}
     stem_to_original_uri = {}
 
@@ -273,6 +275,12 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
                 file_digests[path] = None
         return file_digests[path]
 
+    # Elements renamed in `dom` so far. Only reserialize `dom` into `raw_xml` when this
+    # is non-empty: a round trip through minidom reformats the whole document (quoting,
+    # the XML declaration, etc.), which would gratuitously alter output that never
+    # needed a rename.
+    renamed_mesh_elements = []
+
     def mark_usage(stem_key, is_collision):
         entry = mesh_info_dict[stem_key]
         if is_collision:
@@ -280,44 +288,71 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
         else:
             entry["used_as_visual"] = True
 
-    def rename_mesh_reference(xml_text, uri, scale, new_filepath):
+    def dom_mesh_color(mesh_element):
         """
-        Replaces the filename inside every <mesh> element that references `uri` at this
-        specific `scale` - including the implicit default scale "1.0 1.0 1.0" when a
-        <mesh> carries no explicit scale attribute at all - leaving <mesh> elements that
-        reference the same uri at a *different* scale untouched.
-
-        A plain xml_text.replace(uri, new_filepath) isn't safe here: when one source
-        file is shared by two catalog entries at different scales (see uri_to_stem
-        above), only one of them is being renamed, and a blind replace would also
-        rewrite the other entry's still-valid reference out from under it.
+        The effective rgba color of a <mesh> DOM element: white for one that lives inside
+        a <collision> (collisions never carry <material>), else its enclosing <visual>'s
+        color - an inline <color rgba="..."/>, or a lookup by name against the top-level
+        <material> definitions (robot_materials) - defaulting to white when neither is
+        present. Mirrors resolve_color() above, but walks `dom` instead of the
+        already-consumed urdf_parser_py objects, since color isn't an attribute of the
+        <mesh> tag itself the way filename and scale are - it has to be read off the
+        enclosing <visual>.
         """
+        visual = mesh_element.parentNode.parentNode  # <mesh> -> <geometry> -> <visual>/<collision>
+        if visual.tagName != "visual":
+            return (1.0, 1.0, 1.0, 1.0)
+        materials = [c for c in visual.childNodes if getattr(c, "tagName", None) == "material"]
+        if not materials:
+            return (1.0, 1.0, 1.0, 1.0)
+        colors = [c for c in materials[0].childNodes if getattr(c, "tagName", None) == "color"]
+        if colors:
+            return tuple(float(v) for v in colors[0].getAttribute("rgba").split())
+        ref = robot_materials.get(materials[0].getAttribute("name"))
+        if ref and ref.color:
+            return tuple(ref.color.rgba)
+        return (1.0, 1.0, 1.0, 1.0)
 
-        def repl(match):
-            tag = match.group(0)
-            if f'"{uri}"' not in tag:
-                return tag
-            scale_match = re.search(r'scale\s*=\s*"([^"]*)"', tag)
-            tag_scale = scale_match.group(1) if scale_match else "1.0 1.0 1.0"
-            if tag_scale != scale:
-                return tag
-            return tag.replace(uri, new_filepath, 1)
+    def rename_mesh_reference(uri, scale, color, new_filepath):
+        """
+        Points every <mesh> element that references `uri` at this specific `scale` and
+        `color` at `new_filepath` instead, leaving <mesh> elements that reference the
+        same uri at a *different* scale or color untouched.
 
-        return re.sub(r"<mesh\b[^>]*/>", repl, xml_text)
+        Mutates `dom` directly rather than text-replacing `uri` in the raw XML: the same
+        source file can be shared by two catalog entries that differ only in scale or
+        only in color (see uri_to_stem and disambiguation_identity above), and neither a
+        blind text replace nor a scale-only check can tell those apart - color in
+        particular isn't even on the <mesh> tag being renamed, so this has to look at
+        its enclosing <visual> too (see dom_mesh_color).
+        """
+        for mesh_element in dom.getElementsByTagName("mesh"):
+            if mesh_element.getAttribute("filename") != uri:
+                continue
+            if (mesh_element.getAttribute("scale") or "1.0 1.0 1.0") != scale:
+                continue
+            if dom_mesh_color(mesh_element) != color:
+                continue
+            mesh_element.setAttribute("filename", new_filepath)
+            renamed_mesh_elements.append(mesh_element)
 
     def process_geometry(element, is_collision):
-        nonlocal raw_xml
         geom = element.geometry
         if not (geom and hasattr(geom, "filename")):
             return
 
         uri = geom.filename  # full URI
         scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
+        # Collision elements carry no <material>, so they default to white.
+        rgba = (1.0, 1.0, 1.0, 1.0) if is_collision else resolve_color(element)
         identity = (uri, scale)
 
         # A collision reusing a visual's mesh file (at the same scale) just records the
         # extra usage on the shared entry (one converted source, reused for both
-        # classes).
+        # classes). This intentionally ignores color: a collision never carries one (it
+        # always defaults to white above), so matching on (uri, scale) alone is correct
+        # here even when the sibling visual it's reusing has a real color - it's only
+        # the shape being reused, not the appearance.
         if is_collision and identity in uri_to_stem:
             mark_usage(uri_to_stem[identity], is_collision)
             return
@@ -332,21 +367,24 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
             if shared_stem is not None:
                 shared = mesh_info_dict[shared_stem]
                 shared_ref = shared["new_filepath"] if shared["source_stem"] != shared_stem else shared["filename"]
-                raw_xml = rename_mesh_reference(raw_xml, uri, scale, shared_ref)
+                rename_mesh_reference(uri, scale, rgba, shared_ref)
                 uri_to_stem.setdefault(identity, shared_stem)
                 mark_usage(shared_stem, is_collision)
                 return
 
+        # Two sources only count as "the same" for stem-naming purposes when uri, scale,
+        # AND color all match. Two visuals sharing a file and scale but differing in
+        # color (e.g. a status-light mesh reused in red and in green) are genuinely
+        # different renderable things; without color here, the second would silently
+        # land on the first's stem and overwrite its catalog entry below.
+        disambiguation_identity = (uri, scale, rgba)
         original_stem = pathlib.Path(uri).stem  # remember original for disambiguation
         stem = original_stem
         counter = 0
-        while stem in stem_to_original_uri and stem_to_original_uri[stem] != identity:
+        while stem in stem_to_original_uri and stem_to_original_uri[stem] != disambiguation_identity:
             counter += 1
             stem = f"{original_stem}__{counter}"
-        stem_to_original_uri[stem] = identity
-
-        # Collision elements carry no <material>, so they default to white.
-        rgba = (1.0, 1.0, 1.0, 1.0) if is_collision else resolve_color(element)
+        stem_to_original_uri[stem] = disambiguation_identity
 
         mesh_dict_value = {
             "filename": uri,
@@ -392,7 +430,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
 
         # if we changed the identifier, make sure we update it in the underlying file
         if stem != original_stem:
-            raw_xml = rename_mesh_reference(raw_xml, uri, scale, new_filepath)
+            rename_mesh_reference(uri, scale, rgba, new_filepath)
 
     # First pass: visual meshes (their material color wins). Second pass: collision
     # meshes, which only add genuinely distinct meshes thanks to processed_uris.
@@ -402,6 +440,9 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
     for link in robot.links:
         for col in link.collisions:
             process_geometry(col, is_collision=True)
+
+    if renamed_mesh_elements:
+        raw_xml = dom.toxml()
 
     # Phase 2: with usage flags final, probe the pregenerated cache at each entry's home
     raw_xml = resolve_pregenerated(mesh_info_dict, raw_xml, asset_dir, decompose_dict)
