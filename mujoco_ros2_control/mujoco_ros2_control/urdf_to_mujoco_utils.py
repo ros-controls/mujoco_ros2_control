@@ -212,11 +212,15 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
     - Different URDF meshes can share a filename stem, so colliding stems get an
       "__N" suffix so each resolves to its own asset directory. For example, if
       running multiple UR types there will be a shoulder/ and shoulder__1/ directory.
+      The same source file reused at two different scales (e.g. two AprilTags that
+      happen to share a placeholder tag image) is likewise treated as two distinct
+      sources - a shared filename only collapses into one entry when the scale (and
+      color) also match.
     - This happens BEFORE the pregen lookup. So if the asset_dir already
       contains shoulder/ and shoulder__1/ from a prior run, the first source
       will grab shoulder and the second source will grab shoulder__1.
-    - stem_to_original_uri tracks which source uri claimed each stem slot, in
-      an effort to avoid unnecessary copying.
+    - stem_to_original_uri tracks which (source uri, scale) pair claimed each stem
+      slot, in an effort to avoid unnecessary copying.
     - A subset-equality check on (is_pre_generated, filename, scale, color) dedupes
       entries that genuinely match based on those criteria.
 
@@ -246,12 +250,12 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
                     return tuple(ref.color.rgba)
         return (1.0, 1.0, 1.0, 1.0)
 
-    # Map each source mesh file to the entry (stem) it produced, so a collision that
-    # reuses a visual's mesh (the fallback case) shares the single converted source
-    # instead of duplicating it. Visuals are processed first so their material color
-    # wins; a shared entry is then flagged for both visual and collision use, and the
-    # downstream pipeline emits a whole visual mesh and decomposed collision pieces from
-    # that one source.
+    # Map each (source mesh file, scale) pair to the entry (stem) it produced, so a
+    # collision that reuses a visual's mesh (the fallback case) shares the single
+    # converted source instead of duplicating it. Visuals are processed first so their
+    # material color wins; a shared entry is then flagged for both visual and collision
+    # use, and the downstream pipeline emits a whole visual mesh and decomposed
+    # collision pieces from that one source.
     uri_to_stem = {}
 
     # Content-addressed lookup so a collision mesh that is a byte-identical copy of an
@@ -276,6 +280,31 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
         else:
             entry["used_as_visual"] = True
 
+    def rename_mesh_reference(xml_text, uri, scale, new_filepath):
+        """
+        Replaces the filename inside every <mesh> element that references `uri` at this
+        specific `scale` - including the implicit default scale "1.0 1.0 1.0" when a
+        <mesh> carries no explicit scale attribute at all - leaving <mesh> elements that
+        reference the same uri at a *different* scale untouched.
+
+        A plain xml_text.replace(uri, new_filepath) isn't safe here: when one source
+        file is shared by two catalog entries at different scales (see uri_to_stem
+        above), only one of them is being renamed, and a blind replace would also
+        rewrite the other entry's still-valid reference out from under it.
+        """
+
+        def repl(match):
+            tag = match.group(0)
+            if f'"{uri}"' not in tag:
+                return tag
+            scale_match = re.search(r'scale\s*=\s*"([^"]*)"', tag)
+            tag_scale = scale_match.group(1) if scale_match else "1.0 1.0 1.0"
+            if tag_scale != scale:
+                return tag
+            return tag.replace(uri, new_filepath, 1)
+
+        return re.sub(r"<mesh\b[^>]*/>", repl, xml_text)
+
     def process_geometry(element, is_collision):
         nonlocal raw_xml
         geom = element.geometry
@@ -283,14 +312,15 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
             return
 
         uri = geom.filename  # full URI
-
-        # A collision reusing a visual's mesh file just records the extra usage on the
-        # shared entry (one converted source, reused for both classes).
-        if is_collision and uri in uri_to_stem:
-            mark_usage(uri_to_stem[uri], is_collision)
-            return
-
         scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
+        identity = (uri, scale)
+
+        # A collision reusing a visual's mesh file (at the same scale) just records the
+        # extra usage on the shared entry (one converted source, reused for both
+        # classes).
+        if is_collision and identity in uri_to_stem:
+            mark_usage(uri_to_stem[identity], is_collision)
+            return
 
         # A collision mesh byte-identical to an already-cataloged file at the same scale
         # also collapses into that entry: identical content means identical converted
@@ -302,18 +332,18 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
             if shared_stem is not None:
                 shared = mesh_info_dict[shared_stem]
                 shared_ref = shared["new_filepath"] if shared["source_stem"] != shared_stem else shared["filename"]
-                raw_xml = raw_xml.replace(uri, shared_ref)
-                uri_to_stem.setdefault(uri, shared_stem)
+                raw_xml = rename_mesh_reference(raw_xml, uri, scale, shared_ref)
+                uri_to_stem.setdefault(identity, shared_stem)
                 mark_usage(shared_stem, is_collision)
                 return
 
         original_stem = pathlib.Path(uri).stem  # remember original for disambiguation
         stem = original_stem
         counter = 0
-        while stem in stem_to_original_uri and stem_to_original_uri[stem] != uri:
+        while stem in stem_to_original_uri and stem_to_original_uri[stem] != identity:
             counter += 1
             stem = f"{original_stem}__{counter}"
-        stem_to_original_uri[stem] = uri
+        stem_to_original_uri[stem] = identity
 
         # Collision elements carry no <material>, so they default to white.
         rgba = (1.0, 1.0, 1.0, 1.0) if is_collision else resolve_color(element)
@@ -333,7 +363,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
 
         # an identical mesh already exists: reuse it and just record this usage
         if existing_identifier is not None:
-            uri_to_stem.setdefault(uri, existing_identifier)
+            uri_to_stem.setdefault(identity, existing_identifier)
             mark_usage(existing_identifier, is_collision)
             return
 
@@ -356,13 +386,13 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
             "used_as_visual": not is_collision,
             "used_as_collision": is_collision,
         }
-        uri_to_stem.setdefault(uri, stem)
+        uri_to_stem.setdefault(identity, stem)
         if digest is not None:
             content_to_stem.setdefault((digest, scale), stem)
 
         # if we changed the identifier, make sure we update it in the underlying file
         if stem != original_stem:
-            raw_xml = raw_xml.replace(uri, new_filepath)
+            raw_xml = rename_mesh_reference(raw_xml, uri, scale, new_filepath)
 
     # First pass: visual meshes (their material color wins). Second pass: collision
     # meshes, which only add genuinely distinct meshes thanks to processed_uris.

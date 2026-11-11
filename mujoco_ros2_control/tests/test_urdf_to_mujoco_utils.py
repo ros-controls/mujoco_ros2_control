@@ -2797,6 +2797,63 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertTrue(result["model"]["used_as_visual"])
         self.assertTrue(result["model"]["used_as_collision"])
 
+    def test_extract_mesh_info_same_file_different_scale_stays_distinct(self):
+        # Two unrelated links can reference the exact same source mesh file at two
+        # different scales (e.g. two AprilTags sharing a placeholder tag image). They
+        # must not collapse into - or overwrite - a single catalog entry: each scale is
+        # a genuinely different render target.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="link_a">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.172 0.172 0.172"/>
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.172 0.172 0.172"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="link_b">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.074456 0.074456 0.074456"/>
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.074456 0.074456 0.074456"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>"""
+        result, updated_xml = extract_mesh_info(urdf, None, {})
+
+        # two distinct entries, one per scale - not one overwriting the other
+        self.assertEqual(len(result), 2)
+        assert "tag" in result
+        assert "tag__1" in result
+        scales = {result["tag"]["scale"], result["tag__1"]["scale"]}
+        self.assertEqual(scales, {"0.172 0.172 0.172", "0.074456 0.074456 0.074456"})
+        # each entry is still shared between its own visual and collision
+        self.assertTrue(result["tag"]["used_as_visual"])
+        self.assertTrue(result["tag"]["used_as_collision"])
+        self.assertTrue(result["tag__1"]["used_as_visual"])
+        self.assertTrue(result["tag__1"]["used_as_collision"])
+
+        # the first-seen scale keeps the original filename untouched; the second is
+        # disambiguated. Both must still be paired with their own correct scale in the
+        # rewritten XML - renaming one must not corrupt the other's reference.
+        dom = minidom.parseString(updated_xml)
+        meshes_by_scale = {
+            mesh.getAttribute("scale"): mesh.getAttribute("filename") for mesh in dom.getElementsByTagName("mesh")
+        }
+        self.assertEqual(meshes_by_scale["0.172 0.172 0.172"], "package://test_package/meshes/tag.dae")
+        self.assertNotEqual(meshes_by_scale["0.074456 0.074456 0.074456"], "package://test_package/meshes/tag.dae")
+        assert "tag__1" in meshes_by_scale["0.074456 0.074456 0.074456"]
+
     def test_extract_mesh_info_with_decompose_dict(self):
         # decomposition applies to collision meshes, so the decompose pregen lookup is
         # exercised through a <collision> mesh.
