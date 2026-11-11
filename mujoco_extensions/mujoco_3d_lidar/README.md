@@ -18,10 +18,11 @@ The sensor is parametrizable with the following:
 7. Update Rate. _positive float greater than 0.0 (Hz)_ (Optional, defaults to 0.0)
     * **Note**. This may be removed in future versions after the [interval attribute](https://mujoco.readthedocs.io/en/stable/modeling.html#sensors) is available for sensors.
 8. Async. _boolean int (0 for false, non-zero for true)_ (Optional, defaults to 0)
-9. Geom Group. _integer in [0, 5]_ (Optional, defaults to unset, which raycasts against every group)
-    * If set, only geoms belonging to that geom group are considered. This is useful for
-      restricting the lidar to a model's collision geoms (e.g. `group="3"`) so it ignores
+9. Geom Group(s). _space-separated list of integers in [0, 5]_ (Optional, defaults to unset, which raycasts against every group)
+    * If set, only geoms belonging to one of the listed groups are considered. This is useful
+      for restricting the lidar to a model's collision geoms (e.g. `group="3"`) so it ignores
       visual-only geometry, which both avoids spurious returns and reduces raycasting cost.
+      Multiple groups may be listed, e.g. `value="2 3"`.
 
 Field of view should always be in radians regardless of the compiler options.
 
@@ -65,8 +66,9 @@ Note the following:
 * Field-of-view angles are always in radians.
 * If async is specified, lidar computations are done in the background and data will be delayed.
 * If `geom_group` is omitted, every geom in the model is a raycast candidate (other than the
-  sensor's own body, which is always excluded). Set it to restrict raycasting to a single geom
-  group, e.g. `3` to match a model's `collision` geom class.
+  sensor's own body, which is always excluded). Set it to restrict raycasting to one or more
+  geom groups, e.g. `3` to match a model's `collision` geom class, or `2 3` to include two
+  groups.
 
 ### Example model
 

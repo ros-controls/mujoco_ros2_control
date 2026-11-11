@@ -75,7 +75,8 @@ public:
 
 private:
   Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNum azimuth_range[2],
-        mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate, bool async, int geom_group);
+        mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate, bool async,
+        const std::vector<int>& geom_groups);
 
   void Raycast(const mjModel* m, mjData* d, const mjtNum* rotated_vecs, mjtNum* output);
 
@@ -95,8 +96,10 @@ private:
   mjtNum last_compute_time_;  // Sim time of the last reading
   bool async_;                // Whether or not to do raycasting in a background thread
 
-  // Geom group to restrict raycasting to, or -1 to raycast against every group (default).
-  int geom_group_{ -1 };
+  // Whether to restrict raycasting to a subset of geom groups. If false, every group is a
+  // raycast candidate (default). If true, only groups with a nonzero entry in geomgroup_mask_
+  // are considered.
+  bool filter_geom_groups_{ false };
   mjtByte geomgroup_mask_[mjNGROUP]{};
 
   // Storage containers for asynchronous raycasting
