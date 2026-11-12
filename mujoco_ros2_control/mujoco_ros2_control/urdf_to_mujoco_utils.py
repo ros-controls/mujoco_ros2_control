@@ -356,7 +356,12 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
         # here even when the sibling visual it's reusing has a real color - it's only
         # the shape being reused, not the appearance.
         if is_collision and identity in uri_to_stem:
-            mark_usage(uri_to_stem[identity], is_collision)
+            stem_key = uri_to_stem[identity]
+            # The visual's rename only matched its own color, so a disambiguated entry
+            # must also be renamed here or this (white) collision keeps the old filename.
+            if mesh_info_dict[stem_key]["source_stem"] != stem_key:
+                rename_mesh_reference(uri, scale, rgba, mesh_info_dict[stem_key]["new_filepath"])
+            mark_usage(stem_key, is_collision)
             return
 
         # A collision mesh byte-identical to an already-cataloged file at the same scale

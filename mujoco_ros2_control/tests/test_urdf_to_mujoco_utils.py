@@ -2951,6 +2951,46 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertEqual(meshes_by_scale["2 2 2"], "package://test_package/meshes/tag.dae")
         self.assertIn("tag__1", meshes_by_scale["1 1 1"])
 
+    def test_extract_mesh_info_renames_collision_sharing_disambiguated_colored_visual(self):
+        # link_b's colored visual is disambiguated to tag__1 (the other scale claimed "tag").
+        # Its collision shares that entry, so its <mesh> must be renamed to tag__1 as well,
+        # even though the collision (white) does not match the visual's color.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="link_a">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.5 0.5 0.5"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="link_b">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.2 0.2 0.2"/>
+      </geometry>
+      <material name="red"><color rgba="1.0 0.0 0.0 1.0"/></material>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.2 0.2 0.2"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>"""
+        result, updated_xml = extract_mesh_info(urdf, None, {})
+        self.assertEqual(len(result), 2)
+        self.assertTrue(result["tag__1"]["used_as_collision"])
+
+        dom = minidom.parseString(updated_xml)
+        filenames = {
+            (mesh.parentNode.parentNode.tagName, mesh.getAttribute("scale")): mesh.getAttribute("filename")
+            for mesh in dom.getElementsByTagName("mesh")
+        }
+        self.assertEqual(filenames[("visual", "0.5 0.5 0.5")], "package://test_package/meshes/tag.dae")
+        self.assertIn("tag__1", filenames[("visual", "0.2 0.2 0.2")])
+        self.assertEqual(filenames[("collision", "0.2 0.2 0.2")], filenames[("visual", "0.2 0.2 0.2")])
+
     def test_extract_mesh_info_with_decompose_dict(self):
         # decomposition applies to collision meshes, so the decompose pregen lookup is
         # exercised through a <collision> mesh.
