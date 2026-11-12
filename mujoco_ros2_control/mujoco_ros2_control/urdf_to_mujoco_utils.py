@@ -298,10 +298,10 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
         <mesh> tag itself the way filename and scale are - it has to be read off the
         enclosing <visual>.
         """
-        visual = mesh_element.parentNode.parentNode  # <mesh> -> <geometry> -> <visual>/<collision>
-        if visual.tagName != "visual":
+        geom_type = mesh_element.parentNode.parentNode  # <mesh> -> <geometry> -> <visual>/<collision>
+        if geom_type.tagName != "visual":
             return (1.0, 1.0, 1.0, 1.0)
-        materials = [c for c in visual.childNodes if getattr(c, "tagName", None) == "material"]
+        materials = [c for c in geom_type.childNodes if getattr(c, "tagName", None) == "material"]
         if not materials:
             return (1.0, 1.0, 1.0, 1.0)
         colors = [c for c in materials[0].childNodes if getattr(c, "tagName", None) == "color"]
