@@ -41,7 +41,7 @@ control_node = Node(
 )
 ```
 
-For the full plugin parameter reference, joint control modes, gripper/mimic joint setup, sensors (FTS, IMU), cameras, and lidar configuration, see the [hardware interface documentation](docs/hardware_interface.rst).
+For the full plugin parameter reference, joint control modes, gripper/mimic joint setup, sensors (FTS, IMU, per-sensor `update_rate`), cameras, and lidar configuration, see the [hardware interface documentation](docs/hardware_interface.rst).
 
 ## Simulation Topics and Services
 
