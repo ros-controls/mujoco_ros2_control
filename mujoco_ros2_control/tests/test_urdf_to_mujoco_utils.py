@@ -2921,6 +2921,36 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertTrue(result["model"]["used_as_visual"])
         self.assertTrue(result["model"]["used_as_collision"])
 
+    def test_extract_mesh_info_renames_integer_formatted_scale(self):
+        # The catalog stores scale as parsed floats ("1.0 1.0 1.0"), but URDFs often write
+        # integers ("1 1 1"). The rename must still find the disambiguated <mesh>.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="link_a">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="2 2 2"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="link_b">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="1 1 1"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>"""
+        result, updated_xml = extract_mesh_info(urdf, None, {})
+        self.assertEqual({result["tag"]["scale"], result["tag__1"]["scale"]}, {"2.0 2.0 2.0", "1.0 1.0 1.0"})
+
+        dom = minidom.parseString(updated_xml)
+        meshes_by_scale = {
+            mesh.getAttribute("scale"): mesh.getAttribute("filename") for mesh in dom.getElementsByTagName("mesh")
+        }
+        self.assertEqual(meshes_by_scale["2 2 2"], "package://test_package/meshes/tag.dae")
+        self.assertIn("tag__1", meshes_by_scale["1 1 1"])
+
     def test_extract_mesh_info_with_decompose_dict(self):
         # decomposition applies to collision meshes, so the decompose pregen lookup is
         # exercised through a <collision> mesh.

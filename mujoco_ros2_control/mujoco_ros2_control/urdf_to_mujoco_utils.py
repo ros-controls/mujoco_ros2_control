@@ -328,7 +328,10 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
         for mesh_element in dom.getElementsByTagName("mesh"):
             if mesh_element.getAttribute("filename") != uri:
                 continue
-            if (mesh_element.getAttribute("scale") or "1.0 1.0 1.0") != scale:
+            # Compare numerically: `scale` is built from parsed floats ("1.0 1.0 1.0"),
+            # while the attribute keeps the URDF's own spelling ("1 1 1", "1e-3", ...).
+            mesh_scale = mesh_element.getAttribute("scale") or "1 1 1"
+            if tuple(map(float, mesh_scale.split())) != tuple(map(float, scale.split())):
                 continue
             if dom_mesh_color(mesh_element) != color:
                 continue
