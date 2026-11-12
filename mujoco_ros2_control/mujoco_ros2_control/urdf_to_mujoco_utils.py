@@ -320,7 +320,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
 
         Mutates `dom` directly rather than text-replacing `uri` in the raw XML: the same
         source file can be shared by two catalog entries that differ only in scale or
-        only in color (see uri_to_stem and disambiguation_identity above), and neither a
+        only in color (see uri_to_stem above and disambiguation_identity in process_geometry), and neither a
         blind text replace nor a scale-only check can tell those apart - color in
         particular isn't even on the <mesh> tag being renamed, so this has to look at
         its enclosing <visual> too (see dom_mesh_color).
