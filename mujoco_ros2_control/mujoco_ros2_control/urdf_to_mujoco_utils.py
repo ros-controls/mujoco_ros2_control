@@ -320,7 +320,7 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
 
         Mutates `dom` directly rather than text-replacing `uri` in the raw XML: the same
         source file can be shared by two catalog entries that differ only in scale or
-        only in color (see uri_to_stem and disambiguation_identity above), and neither a
+        only in color (see uri_to_stem above and disambiguation_identity in process_geometry), and neither a
         blind text replace nor a scale-only check can tell those apart - color in
         particular isn't even on the <mesh> tag being renamed, so this has to look at
         its enclosing <visual> too (see dom_mesh_color).
@@ -328,7 +328,10 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
         for mesh_element in dom.getElementsByTagName("mesh"):
             if mesh_element.getAttribute("filename") != uri:
                 continue
-            if (mesh_element.getAttribute("scale") or "1.0 1.0 1.0") != scale:
+            # Compare numerically: `scale` is built from parsed floats ("1.0 1.0 1.0"),
+            # while the attribute keeps the URDF's own spelling ("1 1 1", "1e-3", ...).
+            mesh_scale = mesh_element.getAttribute("scale") or "1 1 1"
+            if tuple(map(float, mesh_scale.split())) != tuple(map(float, scale.split())):
                 continue
             if dom_mesh_color(mesh_element) != color:
                 continue
@@ -353,7 +356,12 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
         # here even when the sibling visual it's reusing has a real color - it's only
         # the shape being reused, not the appearance.
         if is_collision and identity in uri_to_stem:
-            mark_usage(uri_to_stem[identity], is_collision)
+            stem_key = uri_to_stem[identity]
+            # The visual's rename only matched its own color, so a disambiguated entry
+            # must also be renamed here or this (white) collision keeps the old filename.
+            if mesh_info_dict[stem_key]["source_stem"] != stem_key:
+                rename_mesh_reference(uri, scale, rgba, mesh_info_dict[stem_key]["new_filepath"])
+            mark_usage(stem_key, is_collision)
             return
 
         # A collision mesh byte-identical to an already-cataloged file at the same scale
