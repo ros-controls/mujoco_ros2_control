@@ -11,6 +11,7 @@
                 <config key="min_range" value="1.0"/>
                 <config key="update_rate" value="2.0"/>
                 <config key="async" value="0"/>
+                <config key="geom_group" value="0"/>
             </instance>
         </plugin>
     </extension>
