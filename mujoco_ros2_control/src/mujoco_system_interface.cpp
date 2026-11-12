@@ -54,26 +54,6 @@ using namespace std::chrono_literals;
 
 namespace
 {
-std::optional<std::string> get_hardware_parameter(const hardware_interface::HardwareInfo& hardware_info,
-                                                  const std::string& key)
-{
-  if (auto it = hardware_info.hardware_parameters.find(key); it != hardware_info.hardware_parameters.end())
-  {
-    return it->second;
-  }
-  return std::nullopt;
-}
-
-std::string get_hardware_parameter_or(const hardware_interface::HardwareInfo& hardware_info, const std::string& key,
-                                      const std::string& default_value)
-{
-  if (auto it = hardware_info.hardware_parameters.find(key); it != hardware_info.hardware_parameters.end())
-  {
-    return it->second;
-  }
-  return default_value;
-}
-
 bool is_mimic_joint(const std::string& joint_name, const hardware_interface::HardwareInfo& hardware_info)
 {
   for (const auto& joint : hardware_info.joints)
@@ -316,40 +296,13 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
     return hardware_interface::CallbackReturn::ERROR;
   }
 
-  // Load the model path from hardware parameters
-  const auto model_path_maybe = get_hardware_parameter(get_hardware_info(), "mujoco_model");
-  std::string model_path;
-  if (!model_path_maybe.has_value())
-  {
-    RCLCPP_INFO(get_logger(), "Parameter 'mujoco_model' not found in URDF.");
-    model_path.clear();
-  }
-  else
-  {
-    model_path = model_path_maybe.value();
-    // trim the trailing and leading whitespaces
-    model_path.erase(0, model_path.find_first_not_of(" \t\n\r\f\v"));
-    model_path.erase(model_path.find_last_not_of(" \t\n\r\f\v") + 1);
-    const std::filesystem::path path_to_file(model_path);
-    if (!std::filesystem::exists(path_to_file))
-    {
-      RCLCPP_FATAL(get_logger(), "MuJoCo model file '%s' does not exist!", model_path.c_str());
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-    RCLCPP_INFO(get_logger(), "Loading 'mujoco_model' from: '%s'", model_path.c_str());
-  }
-
-  // Pull the initial speed factor from the hardware parameters, if present
-  const double sim_speed_factor =
-      std::stod(get_hardware_parameter(get_hardware_info(), "sim_speed_factor").value_or("-1"));
-
-  // Check for headless mode
-  const bool headless =
-      hardware_interface::parse_bool(get_hardware_parameter(get_hardware_info(), "headless").value_or("false"));
-
   // Construct and start the ROS node spinning
   /// The PIDs config file
-  const auto pids_config_file = get_hardware_parameter(get_hardware_info(), "pids_config_file");
+  // Read from the URDF only: the node does not exist yet, and this file is what seeds its parameters.
+  const auto pids_config_file =
+      get_hardware_info().hardware_parameters.count("pids_config_file") ?
+          std::optional<std::string>(get_hardware_info().hardware_parameters.at("pids_config_file")) :
+          std::nullopt;
   rclcpp::NodeOptions node_options;
   node_options.append_parameter_override("use_sim_time", rclcpp::ParameterValue(true));
   node_options.automatically_declare_parameters_from_overrides(true);
@@ -382,8 +335,36 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   executor_thread_ = std::thread([this]() { executor_->spin(); });
   RCLCPP_INFO(get_logger(), "Executor thread started.");
 
-  const std::string mujoco_model_topic =
-      get_hardware_parameter_or(get_hardware_info(), "mujoco_model_topic", "/mujoco_robot_description");
+  // Load the model path from hardware parameters
+  const auto model_path_maybe = get_hardware_parameter("mujoco_model");
+  std::string model_path;
+  if (!model_path_maybe.has_value())
+  {
+    RCLCPP_INFO(get_logger(), "Parameter 'mujoco_model' not found in URDF.");
+    model_path.clear();
+  }
+  else
+  {
+    model_path = model_path_maybe.value();
+    // trim the trailing and leading whitespaces
+    model_path.erase(0, model_path.find_first_not_of(" \t\n\r\f\v"));
+    model_path.erase(model_path.find_last_not_of(" \t\n\r\f\v") + 1);
+    const std::filesystem::path path_to_file(model_path);
+    if (!std::filesystem::exists(path_to_file))
+    {
+      RCLCPP_FATAL(get_logger(), "MuJoCo model file '%s' does not exist!", model_path.c_str());
+      return hardware_interface::CallbackReturn::ERROR;
+    }
+    RCLCPP_INFO(get_logger(), "Loading 'mujoco_model' from: '%s'", model_path.c_str());
+  }
+
+  // Pull the initial speed factor from the hardware parameters, if present
+  const double sim_speed_factor = std::stod(get_hardware_parameter("sim_speed_factor").value_or("-1"));
+
+  // Check for headless mode
+  const bool headless = hardware_interface::parse_bool(get_hardware_parameter("headless").value_or("false"));
+
+  const std::string mujoco_model_topic = get_hardware_parameter_or("mujoco_model_topic", "/mujoco_robot_description");
 
   // Construct the simulation wrapper with the loaded parameters.
   simulation_ = std::make_unique<MujocoSimulation>();
@@ -426,8 +407,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   }
 
   // Check for free joint
-  std::string odom_free_joint_name =
-      get_hardware_parameter_or(get_hardware_info(), "odom_free_joint_name", "floating_base_joint");
+  std::string odom_free_joint_name = get_hardware_parameter_or("odom_free_joint_name", "floating_base_joint");
   for (int i = 0; i < simulation_->model()->njnt; ++i)
   {
     const char* joint_name = mj_id2name(simulation_->model(), mjtObj::mjOBJ_JOINT, i);
@@ -453,8 +433,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
   if (free_joint_id_ != -1)
   {
     // Odometry publisher
-    std::string odom_topic_name =
-        get_hardware_parameter_or(get_hardware_info(), "odom_topic", "/simulator/floating_base_state");
+    std::string odom_topic_name = get_hardware_parameter_or("odom_topic", "/simulator/floating_base_state");
     floating_base_publisher_ = get_node()->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name, 100);
     floating_base_realtime_publisher_ =
         std::make_shared<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>>(floating_base_publisher_);
@@ -1333,16 +1312,16 @@ bool MujocoSystemInterface::register_mujoco_actuators()
   // Pull the name of the file to load for starting config, if present. We only override start position if that
   // parameter exists and it is not an empty string
   override_mujoco_actuator_positions_ = false;
-  auto it = get_hardware_info().hardware_parameters.find("override_start_position_file");
-  if (it != get_hardware_info().hardware_parameters.end())
+  const auto override_start_position_file_maybe = get_hardware_parameter("override_start_position_file");
+  if (override_start_position_file_maybe.has_value())
   {
-    override_mujoco_actuator_positions_ = !it->second.empty();
+    override_mujoco_actuator_positions_ = !override_start_position_file_maybe->empty();
   }
 
   // If we have that file present, load the initial positions from that file to the appropriate simulation_->data() structures
   if (override_mujoco_actuator_positions_)
   {
-    std::string override_start_position_file = it->second;
+    const std::string& override_start_position_file = *override_start_position_file_maybe;
     bool success = set_override_start_positions(override_start_position_file);
     if (!success)
     {
@@ -1509,7 +1488,7 @@ bool MujocoSystemInterface::register_mujoco_actuators()
   // Override initial positions with a keyframe if specified
   if (!override_mujoco_actuator_positions_)
   {
-    const std::string keyframe_name = get_hardware_parameter_or(get_hardware_info(), "initial_keyframe", "");
+    const std::string keyframe_name = get_hardware_parameter_or("initial_keyframe", "");
     if (!keyframe_name.empty())
     {
       initial_keyframe_ = keyframe_name;
@@ -2107,10 +2086,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     {
       FTSensorData sensor_data;
       sensor_data.name = sensor_name;
-      sensor_data.force.name =
-          mujoco_sensor_name + get_hardware_parameter_or(get_hardware_info(), "force_mjcf_suffix", "_force");
-      sensor_data.torque.name =
-          mujoco_sensor_name + get_hardware_parameter_or(get_hardware_info(), "torque_mjcf_suffix", "_torque");
+      sensor_data.force.name = mujoco_sensor_name + get_hardware_parameter_or("force_mjcf_suffix", "_force");
+      sensor_data.torque.name = mujoco_sensor_name + get_hardware_parameter_or("torque_mjcf_suffix", "_torque");
 
       int force_sensor_id = mj_name2id(simulation_->model(), mjOBJ_SENSOR, sensor_data.force.name.c_str());
       int torque_sensor_id = mj_name2id(simulation_->model(), mjOBJ_SENSOR, sensor_data.torque.name.c_str());
@@ -2140,13 +2117,11 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     {
       IMUSensorData sensor_data;
       sensor_data.name = sensor_name;
-      sensor_data.orientation.name =
-          mujoco_sensor_name + get_hardware_parameter_or(get_hardware_info(), "orientation_mjcf_suffix", "_quat");
+      sensor_data.orientation.name = mujoco_sensor_name + get_hardware_parameter_or("orientation_mjcf_suffix", "_quat");
       sensor_data.angular_velocity.name =
-          mujoco_sensor_name + get_hardware_parameter_or(get_hardware_info(), "angular_velocity_mjcf_suffix", "_gyro");
+          mujoco_sensor_name + get_hardware_parameter_or("angular_velocity_mjcf_suffix", "_gyro");
       sensor_data.linear_acceleration.name =
-          mujoco_sensor_name +
-          get_hardware_parameter_or(get_hardware_info(), "linear_acceleration_mjcf_suffix", "_accel");
+          mujoco_sensor_name + get_hardware_parameter_or("linear_acceleration_mjcf_suffix", "_accel");
 
       // Initialize to all zeros as we do not use these yet.
       sensor_data.orientation_covariance.resize(9, 0.0);
@@ -2200,10 +2175,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
     {
       SitePoseData sensor_data;
       sensor_data.name = sensor_name;
-      sensor_data.position.name =
-          mujoco_sensor_name + get_hardware_parameter_or(get_hardware_info(), "position_mjcf_suffix", "_pos");
-      sensor_data.orientation.name =
-          mujoco_sensor_name + get_hardware_parameter_or(get_hardware_info(), "orientation_mjcf_suffix", "_quat");
+      sensor_data.position.name = mujoco_sensor_name + get_hardware_parameter_or("position_mjcf_suffix", "_pos");
+      sensor_data.orientation.name = mujoco_sensor_name + get_hardware_parameter_or("orientation_mjcf_suffix", "_quat");
 
       const int pos_id = mj_name2id(simulation_->model(), mjOBJ_SENSOR, sensor_data.position.name.c_str());
       const int quat_id = mj_name2id(simulation_->model(), mjOBJ_SENSOR, sensor_data.orientation.name.c_str());
@@ -2476,6 +2449,27 @@ rclcpp::Logger MujocoSystemInterface::get_logger() const
   return logger_;
 }
 
+std::optional<std::string> MujocoSystemInterface::get_hardware_parameter(const std::string& key) const
+{
+  // ROS parameters on the simulator node take precedence over the URDF <hardware><param> tags.
+  if (mujoco_node_ && mujoco_node_->has_parameter(key))
+  {
+    return mujoco_node_->get_parameter(key).value_to_string();
+  }
+  const auto& params = get_hardware_info().hardware_parameters;
+  if (auto it = params.find(key); it != params.end())
+  {
+    return it->second;
+  }
+  return std::nullopt;
+}
+
+std::string MujocoSystemInterface::get_hardware_parameter_or(const std::string& key,
+                                                             const std::string& default_value) const
+{
+  return get_hardware_parameter(key).value_or(default_value);
+}
+
 rclcpp::Node::SharedPtr MujocoSystemInterface::get_node() const
 {
   return mujoco_node_;
@@ -2616,8 +2610,7 @@ void MujocoSystemInterface::load_legacy_cameras(const std::vector<std::string>& 
 
   // Users using an alternative plugin to the existing CameraPlugin can explicitly set this to avoid plugin
   // registration when they don't want it.
-  const bool auto_cameras =
-      hardware_interface::parse_bool(get_hardware_parameter_or(get_hardware_info(), "auto_register_cameras", "true"));
+  const bool auto_cameras = hardware_interface::parse_bool(get_hardware_parameter_or("auto_register_cameras", "true"));
   if (!auto_cameras)
   {
     return;
@@ -2625,8 +2618,7 @@ void MujocoSystemInterface::load_legacy_cameras(const std::vector<std::string>& 
 
   // Parse and inject legacy parameters into the node before we initialize
   const std::string prefix = "mujoco_plugins.mujoco_camera_plugin.";
-  const double camera_publish_rate =
-      std::stod(get_hardware_parameter_or(get_hardware_info(), "camera_publish_rate", "5.0"));
+  const double camera_publish_rate = std::stod(get_hardware_parameter_or("camera_publish_rate", "5.0"));
   if (!get_node()->has_parameter(prefix + "camera_publish_rate"))
   {
     get_node()->declare_parameter(prefix + "camera_publish_rate", camera_publish_rate);
@@ -2706,7 +2698,7 @@ void MujocoSystemInterface::load_legacy_lidar(const std::vector<std::string>& pl
 
   // Parse and inject legacy parameters into the node before we initialize
   const std::string prefix = "mujoco_plugins.rangefinder_lidar_plugin.";
-  const double publish_rate = std::stod(get_hardware_parameter_or(get_hardware_info(), "lidar_publish_rate", "5.0"));
+  const double publish_rate = std::stod(get_hardware_parameter_or("lidar_publish_rate", "5.0"));
   if (!get_node()->has_parameter(prefix + "publish_rate"))
   {
     get_node()->declare_parameter(prefix + "publish_rate", publish_rate);

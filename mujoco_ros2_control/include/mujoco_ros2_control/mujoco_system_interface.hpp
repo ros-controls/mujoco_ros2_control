@@ -20,6 +20,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -331,6 +332,18 @@ private:
    * \return node of the MuJoCoSystemInterface.
    */
   rclcpp::Node::SharedPtr get_node() const;
+
+  /**
+   * @brief Look up a simulator parameter.
+   *
+   * A ROS parameter named @p key on the simulator node (set via --ros-args, a params file, ...) wins over the
+   * `<param>` of the same name in the URDF `<hardware>` tag. Before the node exists only the URDF is consulted.
+   * @return the value as a string (non-string ROS parameters are stringified), or std::nullopt if unset.
+   */
+  std::optional<std::string> get_hardware_parameter(const std::string& key) const;
+
+  /// Same as get_hardware_parameter() but returns @p default_value when the parameter is unset.
+  std::string get_hardware_parameter_or(const std::string& key, const std::string& default_value) const;
 
   /// Load plugins based on ROS parameters.
   /**
