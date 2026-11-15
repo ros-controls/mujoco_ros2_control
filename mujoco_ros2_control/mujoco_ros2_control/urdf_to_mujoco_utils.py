@@ -301,13 +301,6 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
         Points every <mesh> element that references `uri` at this specific `scale` and
         `color` at `new_filepath` instead, leaving <mesh> elements that reference the
         same uri at a *different* scale or color untouched.
-
-        Mutates `dom` directly rather than text-replacing `uri` in the raw XML: the same
-        source file can be shared by two catalog entries that differ only in scale or
-        only in color (see uri_to_stem above and disambiguation_identity in process_geometry), and neither a
-        blind text replace nor a scale-only check can tell those apart - color in
-        particular isn't even on the <mesh> tag being renamed, so this has to look at
-        its enclosing <visual> too (see dom_mesh_color).
         """
         for mesh_element in dom.getElementsByTagName("mesh"):
             if mesh_element.getAttribute("filename") != uri:
@@ -342,11 +335,8 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
         identity = (uri, scale)
 
         # A collision reusing a visual's mesh file (at the same scale) just records the
-        # extra usage on the shared entry (one converted source, reused for both
-        # classes). This intentionally ignores color: a collision never carries one (it
-        # always defaults to white above), so matching on (uri, scale) alone is correct
-        # here even when the sibling visual it's reusing has a real color - it's only
-        # the shape being reused, not the appearance.
+        # extra usage on the shared entry. Color is ignored here because it is unused
+        # for collisions
         if is_collision and identity in uri_to_stem:
             stem_key = uri_to_stem[identity]
             # The visual's rename only matched its own color, so a disambiguated entry
