@@ -234,22 +234,12 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
     mesh_info_dict = {}
     stem_to_original_uri = {}
 
+    # name->dom link dictionary to use later in process_geometry
+    links_by_name = {link.getAttribute("name"): link for link in dom.getElementsByTagName("link")}
+
     robot_materials = dict()
     for material in robot.materials:
         robot_materials[material.name] = material
-
-    def resolve_color(visual):
-        mat = visual.material
-        if mat is None:
-            return (1.0, 1.0, 1.0, 1.0)
-        if mat.color:
-            return tuple(mat.color.rgba)
-        if mat.name:
-            if mat.name in robot_materials:
-                ref = robot_materials[mat.name]
-                if ref and ref.color:
-                    return tuple(ref.color.rgba)
-        return (1.0, 1.0, 1.0, 1.0)
 
     # Map each (source mesh file, scale) pair to the entry (stem) it produced, so a
     # collision that reuses a visual's mesh (the fallback case) shares the single
@@ -289,14 +279,8 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
 
     def dom_mesh_color(mesh_element):
         """
-        The effective rgba color of a <mesh> DOM element: white for one that lives inside
-        a <collision> (collisions never carry <material>), else its enclosing <visual>'s
-        color - an inline <color rgba="..."/>, or a lookup by name against the top-level
-        <material> definitions (robot_materials) - defaulting to white when neither is
-        present. Mirrors resolve_color() above, but walks `dom` instead of the
-        already-consumed urdf_parser_py objects, since color isn't an attribute of the
-        <mesh> tag itself the way filename and scale are - it has to be read off the
-        enclosing <visual>.
+        The effective rgba color of a <mesh> DOM element - white for collision objects, or the color
+        of the corresponding visual element up two layers from the geom.
         """
         geom_type = mesh_element.parentNode.parentNode  # <mesh> -> <geometry> -> <visual>/<collision>
         if geom_type.tagName != "visual":
@@ -338,15 +322,23 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
             mesh_element.setAttribute("filename", new_filepath)
             renamed_mesh_elements.append(mesh_element)
 
-    def process_geometry(element, is_collision):
+    def process_geometry(element, link, is_collision):
         geom = element.geometry
         if not (geom and hasattr(geom, "filename")):
             return
 
         uri = geom.filename  # full URI
         scale = " ".join(f"{v}" for v in geom.scale) if geom.scale else "1.0 1.0 1.0"
-        # Collision elements carry no <material>, so they default to white.
-        rgba = (1.0, 1.0, 1.0, 1.0) if is_collision else resolve_color(element)
+        if is_collision:
+            rgba = (1.0, 1.0, 1.0, 1.0)
+        else:
+            # get the required dom element <mesh> from the urdf element to use dom_mesh_color on
+            dom_link = links_by_name[link.name]
+            dom_siblings = [c for c in dom_link.childNodes if c.nodeType == c.ELEMENT_NODE and c.tagName == "visual"]
+            element_index = link.visuals.index(element)
+            dom_element = dom_siblings[element_index]
+            mesh_dom = dom_element.getElementsByTagName("mesh")[0]
+            rgba = dom_mesh_color(mesh_dom)
         identity = (uri, scale)
 
         # A collision reusing a visual's mesh file (at the same scale) just records the
@@ -443,10 +435,10 @@ def extract_mesh_info(raw_xml, asset_dir, decompose_dict):
     # meshes, which only add genuinely distinct meshes thanks to processed_uris.
     for link in robot.links:
         for vis in link.visuals:
-            process_geometry(vis, is_collision=False)
+            process_geometry(vis, link, is_collision=False)
     for link in robot.links:
         for col in link.collisions:
-            process_geometry(col, is_collision=True)
+            process_geometry(col, link, is_collision=True)
 
     if renamed_mesh_elements:
         raw_xml = dom.toxml()
