@@ -51,7 +51,7 @@ repos:
 
   # Python hooks
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.17.0
+    rev: v3.22.0
     hooks:
     -   id: pyupgrade
         args: [--py36-plus]
