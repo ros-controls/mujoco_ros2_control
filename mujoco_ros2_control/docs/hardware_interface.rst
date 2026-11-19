@@ -379,7 +379,7 @@ be on hardware.
 Rates that don't divide the controller manager rate keep their average frequency (e.g. 30 Hz at 200 Hz
 alternates between 6 and 7 cycle holds). A missing, non-numeric or non-positive ``update_rate`` falls back to
 the MJCF sensor's ``interval`` (see below), or to refreshing on every ``read()`` if that is unset too; invalid
-values also log a warning. After a simulation reset the sensor refreshes immediately.
+values also log a warning.
 
 **Relation to the MJCF** ``interval`` **attribute.** MuJoCo >= 3.12 lets an MJCF sensor declare its own
 sampling period (``interval``, in seconds). When a ``ros2_control`` sensor has no ``update_rate``, the largest

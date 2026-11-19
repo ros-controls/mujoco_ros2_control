@@ -975,15 +975,6 @@ TEST(SensorUpdateRateTest, NonDivisibleRateKeepsAverageFrequency)
   EXPECT_EQ(due_cycles(rate, 200).size(), 30u);
 }
 
-TEST(SensorUpdateRateTest, ResyncsWhenTimeGoesBackwards)
-{
-  // A simulation reset rewinds time; the sensor must refresh immediately rather than freeze until the
-  // pre-reset schedule is reached again.
-  mujoco_ros2_control::SensorUpdateRate rate{ 1.0 / 20.0 };
-  due_cycles(rate, 400, 0.0);
-  EXPECT_EQ(due_cycles(rate, 11, 0.0), (std::vector<int>{ 0, 10 }));
-}
-
 TEST(GetSensorUpdatePeriodTest, ParsesRateAndFallsBackToEveryCycle)
 {
   hardware_interface::ComponentInfo sensor;

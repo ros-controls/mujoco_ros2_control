@@ -224,11 +224,6 @@ struct SensorUpdateRate
     }
     // Absorbs floating point drift from accumulated timesteps (e.g. 10 * 0.005 landing just below 0.05).
     constexpr double kEpsilon = 1e-9;
-    // Time went backwards (simulation reset): drop the stale schedule so the sensor doesn't freeze.
-    if (time + kEpsilon < next_update_time - period)
-    {
-      next_update_time = time;
-    }
     if (time + kEpsilon < next_update_time)
     {
       return false;
