@@ -27,6 +27,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <initializer_list>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -84,6 +85,27 @@ bool is_mimic_joint(const std::string& joint_name, const hardware_interface::Har
     }
   }
   return false;
+}
+
+/**
+ * Returns the largest MJCF `interval` period (s) among a ros2_control sensor's underlying MJCF sensors, so the
+ * slowest component (e.g. of an IMU's quat/gyro/accel) sets the refresh rate. Returns 0 when none set an
+ * interval, or when this MuJoCo predates sensor intervals.
+ */
+double get_mjcf_sensor_interval(const mjModel* model, std::initializer_list<int> sensor_ids)
+{
+  double period = 0.0;
+// ponytail: guarded at the first release known to have sensor_interval; lower it if an older one has it.
+#if mjVERSION_HEADER >= 3012000
+  for (const int id : sensor_ids)
+  {
+    period = std::max(period, static_cast<double>(model->sensor_interval[2 * id]));
+  }
+#else
+  (void)model;
+  (void)sensor_ids;
+#endif
+  return period;
 }
 
 }  // namespace
@@ -1076,6 +1098,10 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // IMU Sensor data
   for (auto& data : imu_sensor_data_)
   {
+    if (!data.update_rate.is_update_due(control_state_.time))
+    {
+      continue;
+    }
     data.orientation.data.w() = control_state_.sensordata[data.orientation.mj_sensor_index];
     data.orientation.data.x() = control_state_.sensordata[data.orientation.mj_sensor_index + 1];
     data.orientation.data.y() = control_state_.sensordata[data.orientation.mj_sensor_index + 2];
@@ -1097,6 +1123,10 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // FT Sensor data
   for (auto& data : ft_sensor_data_)
   {
+    if (!data.update_rate.is_update_due(control_state_.time))
+    {
+      continue;
+    }
     data.force.data.x() = -control_state_.sensordata[data.force.mj_sensor_index];
     data.force.data.y() = -control_state_.sensordata[data.force.mj_sensor_index + 1];
     data.force.data.z() = -control_state_.sensordata[data.force.mj_sensor_index + 2];
@@ -1112,6 +1142,10 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // pose sensor data
   for (auto& data : pose_sensor_data_)
   {
+    if (!data.update_rate.is_update_due(control_state_.time))
+    {
+      continue;
+    }
     data.position.data.x() = control_state_.sensordata[data.position.mj_sensor_index];
     data.position.data.y() = control_state_.sensordata[data.position.mj_sensor_index + 1];
     data.position.data.z() = control_state_.sensordata[data.position.mj_sensor_index + 2];
@@ -1128,6 +1162,10 @@ hardware_interface::return_type MujocoSystemInterface::read(const rclcpp::Time& 
   // Magnetometer sensor data
   for (auto& data : magnetometer_sensor_data_)
   {
+    if (!data.update_rate.is_update_due(control_state_.time))
+    {
+      continue;
+    }
     data.magnetic_field.data.x() = control_state_.sensordata[data.magnetic_field.mj_sensor_index];
     data.magnetic_field.data.y() = control_state_.sensordata[data.magnetic_field.mj_sensor_index + 1];
     data.magnetic_field.data.z() = control_state_.sensordata[data.magnetic_field.mj_sensor_index + 2];
@@ -2129,6 +2167,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.force_noise_stddev = simulation_->model()->sensor_noise[force_sensor_id];
       sensor_data.torque_noise_stddev = simulation_->model()->sensor_noise[torque_sensor_id];
       sensor_data.noise.distribution = get_noise_distribution(sensor);
+      sensor_data.update_rate.period = get_sensor_update_period(
+          sensor, get_mjcf_sensor_interval(simulation_->model(), { force_sensor_id, torque_sensor_id }));
 
       log_sensor_components_noise(get_logger(), sensor_data.noise.distribution,
                                   { { sensor_data.force.name, sensor_data.force_noise_stddev },
@@ -2180,6 +2220,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.angular_velocity_noise_stddev = simulation_->model()->sensor_noise[gyro_id];
       sensor_data.linear_acceleration_noise_stddev = simulation_->model()->sensor_noise[accel_id];
       sensor_data.noise.distribution = get_noise_distribution(sensor);
+      sensor_data.update_rate.period = get_sensor_update_period(
+          sensor, get_mjcf_sensor_interval(simulation_->model(), { quat_id, gyro_id, accel_id }));
 
       log_sensor_components_noise(
           get_logger(), sensor_data.noise.distribution,
@@ -2229,6 +2271,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       sensor_data.position_noise_stddev = simulation_->model()->sensor_noise[pos_id];
       sensor_data.orientation_noise_stddev = simulation_->model()->sensor_noise[quat_id];
       sensor_data.noise.distribution = get_noise_distribution(sensor);
+      sensor_data.update_rate.period =
+          get_sensor_update_period(sensor, get_mjcf_sensor_interval(simulation_->model(), { pos_id, quat_id }));
 
       log_sensor_components_noise(get_logger(), sensor_data.noise.distribution,
                                   { { sensor_data.position.name, sensor_data.position_noise_stddev },
@@ -2257,6 +2301,8 @@ void MujocoSystemInterface::register_sensors(const hardware_interface::HardwareI
       // Noise magnitude sourced from the MJCF sensor's own `noise` attribute; see register_sensors() doc.
       sensor_data.magnetic_field_noise_stddev = simulation_->model()->sensor_noise[magnetometer_id];
       sensor_data.noise.distribution = get_noise_distribution(sensor);
+      sensor_data.update_rate.period =
+          get_sensor_update_period(sensor, get_mjcf_sensor_interval(simulation_->model(), { magnetometer_id }));
 
       log_sensor_components_noise(get_logger(), sensor_data.noise.distribution,
                                   { { sensor_data.magnetic_field.name, sensor_data.magnetic_field_noise_stddev } });

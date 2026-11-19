@@ -353,6 +353,57 @@ For an IMU, the configured ``noise`` values are also surfaced as the diagonal of
 always-zero) covariance state interfaces (e.g. ``orientation_covariance.0``), for controllers that consume a
 covariance estimate.
 
+Sensor update rate
+~~~~~~~~~~~~~~~~~~
+
+By default every sensor (FTS, IMU, pose, magnetometer) is refreshed on every ``read()``, i.e. at the
+controller manager rate. Set the ``ros2_control`` ``update_rate`` parameter (Hz) to emulate a slower sensor:
+the state interfaces are then only refreshed once per ``1/update_rate`` seconds of simulation time, and hold
+their last value (noise included) in between.
+
+This exists because real sensors are often limited by their own sampling rate or communication bandwidth
+(e.g. an IMU or force/torque sensor streaming over a slow bus). When the control loop runs faster than such
+a sensor, the controller keeps seeing the same reading for several cycles. Setting ``update_rate`` to the
+real sensor's rate reproduces this in simulation, so controllers are tested against stale data as they would
+be on hardware.
+
+.. code-block:: xml
+
+   <sensor name="imu_sensor">
+     <param name="mujoco_type">imu</param>
+     <!-- Refreshed at 20 Hz: with a 200 Hz controller manager the value changes every 10 cycles -->
+     <param name="update_rate">20</param>
+     ...
+   </sensor>
+
+Rates that don't divide the controller manager rate keep their average frequency (e.g. 30 Hz at 200 Hz
+alternates between 6 and 7 cycle holds). A missing, non-numeric or non-positive ``update_rate`` falls back to
+the MJCF sensor's ``interval`` (see below), or to refreshing on every ``read()`` if that is unset too; invalid
+values also log a warning.
+
+**Relation to the MJCF** ``interval`` **attribute.** MuJoCo >= 3.12 lets an MJCF sensor declare its own
+sampling period (``interval``, in seconds). When a ``ros2_control`` sensor has no ``update_rate``, the largest
+``interval`` among its underlying MJCF sensors (e.g. an IMU's ``_quat``/``_gyro``/``_accel``) is used as its
+refresh period, so the rate can be configured in either place:
+
+.. code-block:: xml
+
+   <!-- MJCF: refreshed every 0.05 s (20 Hz) without any ros2_control parameter -->
+   <magnetometer name="magnetometer" site="imu_site" noise="0.01" interval="0.05"/>
+
+An explicit ``update_rate`` takes precedence over ``interval``. ``update_rate`` is still needed on top of what
+MuJoCo does with ``interval`` alone because:
+
+- MuJoCo only holds a sensor's value between intervals if it also has a history buffer (``nsample`` > 0);
+  ``interval`` on its own is silently ignored and the value changes on every step.
+- MuJoCo never applies ``noise`` itself; this interface adds it on ``read()``. Only the ``update_rate`` gate
+  holds the noisy value too, otherwise fresh noise would be drawn every control cycle.
+
+What ``interval`` adds is skipping the sensor's computation between samples, and a value that is held
+consistently for every consumer of ``mjData::sensordata`` (plugins, the simulate UI), not only for the
+``ros2_control`` state interfaces. If ``nsample`` is set as well, MuJoCo samples on its own schedule, which
+may be out of phase with this interface's, adding up to one period of extra latency.
+
 .. warning::
 
    Cameras and lidar sensors are no longer supported in the base interface, they are now provided as ``mujoco_ros2_control_plugins``.
