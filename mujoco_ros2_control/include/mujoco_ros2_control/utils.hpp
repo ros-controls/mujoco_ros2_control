@@ -86,14 +86,15 @@ inline NoiseDistribution get_noise_distribution(const hardware_interface::Compon
 
 /**
  * @brief Reads the sensor's `update_rate` parameter (Hz) and returns the matching refresh period in seconds.
- * Returns 0 (refresh on every read()) when the parameter is absent; a non-numeric or non-positive value
- * logs a warning and also returns 0.
+ * @param sensor The ros2_control sensor whose `update_rate` parameter is read.
+ * @param default_period Period (s) returned when `update_rate` is absent, or non-numeric/non-positive (which
+ * also logs a warning). Typically the MJCF sensor's `interval`; 0 means refresh on every read().
  */
-inline double get_sensor_update_period(const hardware_interface::ComponentInfo& sensor)
+inline double get_sensor_update_period(const hardware_interface::ComponentInfo& sensor, double default_period = 0.0)
 {
   if (sensor.parameters.count("update_rate") == 0)
   {
-    return 0.0;
+    return default_period;
   }
   const std::string& value = sensor.parameters.at("update_rate");
   double rate = 0.0;
@@ -108,9 +109,9 @@ inline double get_sensor_update_period(const hardware_interface::ComponentInfo& 
   {
     RCLCPP_WARN(rclcpp::get_logger("mujoco_ros2_control"),
                 "Sensor '%s' has an invalid update_rate '%s', it must be a positive number in Hz. "
-                "Updating at the simulation rate instead.",
+                "Falling back to the MJCF sensor interval, or the simulation rate if unset.",
                 sensor.name.c_str(), value.c_str());
-    return 0.0;
+    return default_period;
   }
   return 1.0 / rate;
 }
