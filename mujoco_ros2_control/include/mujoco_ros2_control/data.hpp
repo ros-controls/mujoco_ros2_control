@@ -37,6 +37,8 @@ namespace mujoco_ros2_control
  *  - POSITION for MuJoCo position actuator
  *  - VELOCITY for MuJoCo velocity and integrated-velocity actuators
  *  - CUSTOM  for MuJoCo general actuator or other types
+ *  - PLUGIN  for actuators driven by a MuJoCo actuator plugin. The plugin owns the control loop,
+ *            so the declared ros2_control command interface is written directly to ctrl.
  *
  * \note the MuJoCo types are as per the MuJoCo documentation:
  * https://mujoco.readthedocs.io/en/latest/XMLreference.html#actuator
@@ -49,7 +51,8 @@ enum class ActuatorType
   POSITION,
   VELOCITY,
   PASSIVE,
-  CUSTOM
+  CUSTOM,
+  PLUGIN
 };
 
 /**

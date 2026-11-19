@@ -218,19 +218,45 @@ Lidar* Lidar::Create(const mjModel* m, mjData* d, int instance)
     async = (std::atoi(async_str.c_str()) != 0);
   }
 
+  // Default to empty, which raycasts against every geom group (no filtering). If set, only
+  // geoms belonging to one of the listed groups (e.g. a model's collision group) are
+  // considered, which both avoids spurious hits on visual-only geometry and can meaningfully
+  // speed up raycasting. May list more than one group, space-separated.
+  std::vector<int> geom_groups;
+  std::string geom_group_str = std::string(mj_getPluginConfig(m, instance, "geom_group"));
+  if (!geom_group_str.empty())
+  {
+    ReadVector(geom_groups, geom_group_str.c_str());
+    for (int geom_group : geom_groups)
+    {
+      if (geom_group < 0 || geom_group >= mjNGROUP)
+      {
+        mju_error("Lidar `geom_group` entries must be between 0 and %d", mjNGROUP - 1);
+        return nullptr;
+      }
+    }
+  }
+
   return new Lidar(m, d, instance, resolution.data(), azimuth_range.data(), elevation_range.data(), max_range,
-                   min_range, update_rate, async);
+                   min_range, update_rate, async, geom_groups);
 }
 
 Lidar::Lidar(const mjModel* m, mjData* d, int instance, int resolution[2], mjtNum azimuth_range[2],
-             mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate, bool async)
+             mjtNum elevation_range[2], mjtNum max_range, mjtNum min_range, mjtNum update_rate, bool async,
+             const std::vector<int>& geom_groups)
   : resolution_{ resolution[0], resolution[1] }
   , max_range_(max_range)
   , min_range_(min_range)
   , update_period_(update_rate > 0.0 ? 1.0 / update_rate : 0.0)
   , last_compute_time_(-1.0)
   , async_(async)
+  , filter_geom_groups_(!geom_groups.empty())
 {
+  for (int geom_group : geom_groups)
+  {
+    geomgroup_mask_[geom_group] = 1;
+  }
+
   // Make sure sensor is attached to a site.
   for (int i = 0; i < m->nsensor; ++i)
   {
@@ -330,9 +356,13 @@ void Lidar::Raycast(const mjModel* m, mjData* d, const mjtNum* rotated_vecs, mjt
   mjtNum* site_pos = d->site_xpos + 3 * site_id_;
   mju_zero(output, dimension_);
 
-  mjtByte* geom_group = nullptr;
+  // By default every geom group is a raycast candidate. If specific groups were requested (e.g.
+  // a model's collision group), restrict the raycast to just those groups.
+  mjtByte* geom_group = filter_geom_groups_ ? geomgroup_mask_ : nullptr;
   mjtByte flg_static = -1;
-  int body_exclude = -1;
+  // Exclude the lidar's own body so the sensor doesn't raycast against its own housing geometry,
+  // matching the behavior of MuJoCo's native rangefinder sensor.
+  int body_exclude = m->site_bodyid[site_id_];
 
 #if (mjVERSION_HEADER >= 3005000)
   int* geomid = nullptr;
@@ -496,8 +526,8 @@ void Lidar::RegisterPlugin()
   plugin.capabilityflags |= mjPLUGIN_SENSOR;
 
   // Parameterizable attributes
-  const char* attributes[] = { "resolution",  "azimuth_range", "elevation_range", "max_range", "min_range",
-                               "update_rate", "async" };
+  const char* attributes[] = { "resolution", "azimuth_range", "elevation_range", "max_range",
+                               "min_range",  "update_rate",   "async",           "geom_group" };
   plugin.nattribute = sizeof(attributes) / sizeof(attributes[0]);
   plugin.attributes = attributes;
 
