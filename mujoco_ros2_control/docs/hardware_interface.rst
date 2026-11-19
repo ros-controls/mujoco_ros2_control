@@ -377,9 +377,32 @@ be on hardware.
    </sensor>
 
 Rates that don't divide the controller manager rate keep their average frequency (e.g. 30 Hz at 200 Hz
-alternates between 6 and 7 cycle holds). A missing, non-numeric or non-positive ``update_rate`` refreshes on
-every ``read()``; invalid values also log a warning. After a simulation reset the sensor refreshes
-immediately.
+alternates between 6 and 7 cycle holds). A missing, non-numeric or non-positive ``update_rate`` falls back to
+the MJCF sensor's ``interval`` (see below), or to refreshing on every ``read()`` if that is unset too; invalid
+values also log a warning. After a simulation reset the sensor refreshes immediately.
+
+**Relation to the MJCF** ``interval`` **attribute.** MuJoCo >= 3.12 lets an MJCF sensor declare its own
+sampling period (``interval``, in seconds). When a ``ros2_control`` sensor has no ``update_rate``, the largest
+``interval`` among its underlying MJCF sensors (e.g. an IMU's ``_quat``/``_gyro``/``_accel``) is used as its
+refresh period, so the rate can be configured in either place:
+
+.. code-block:: xml
+
+   <!-- MJCF: refreshed every 0.05 s (20 Hz) without any ros2_control parameter -->
+   <magnetometer name="magnetometer" site="imu_site" noise="0.01" interval="0.05"/>
+
+An explicit ``update_rate`` takes precedence over ``interval``. ``update_rate`` is still needed on top of what
+MuJoCo does with ``interval`` alone because:
+
+- MuJoCo only holds a sensor's value between intervals if it also has a history buffer (``nsample`` > 0);
+  ``interval`` on its own is silently ignored and the value changes on every step.
+- MuJoCo never applies ``noise`` itself; this interface adds it on ``read()``. Only the ``update_rate`` gate
+  holds the noisy value too, otherwise fresh noise would be drawn every control cycle.
+
+What ``interval`` adds is skipping the sensor's computation between samples, and a value that is held
+consistently for every consumer of ``mjData::sensordata`` (plugins, the simulate UI), not only for the
+``ros2_control`` state interfaces. If ``nsample`` is set as well, MuJoCo samples on its own schedule, which
+may be out of phase with this interface's, adding up to one period of extra latency.
 
 .. warning::
 
