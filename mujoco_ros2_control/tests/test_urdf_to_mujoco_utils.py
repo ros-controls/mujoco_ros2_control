@@ -2797,6 +2797,200 @@ class TestUrdfToMjcfUtils(unittest.TestCase):
         self.assertTrue(result["model"]["used_as_visual"])
         self.assertTrue(result["model"]["used_as_collision"])
 
+    def test_extract_mesh_info_same_file_different_scale_stays_distinct(self):
+        # Two unrelated links can reference the exact same source mesh file at two
+        # different scales (e.g. two AprilTags sharing a placeholder tag image). They
+        # must not collapse into - or overwrite - a single catalog entry: each scale is
+        # a genuinely different render target.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="link_a">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.172 0.172 0.172"/>
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.172 0.172 0.172"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="link_b">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.074456 0.074456 0.074456"/>
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.074456 0.074456 0.074456"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>"""
+        result, updated_xml = extract_mesh_info(urdf, None, {})
+
+        # two distinct entries, one per scale - not one overwriting the other
+        self.assertEqual(len(result), 2)
+        assert "tag" in result
+        assert "tag__1" in result
+        scales = {result["tag"]["scale"], result["tag__1"]["scale"]}
+        self.assertEqual(scales, {"0.172 0.172 0.172", "0.074456 0.074456 0.074456"})
+        # each entry is still shared between its own visual and collision
+        self.assertTrue(result["tag"]["used_as_visual"])
+        self.assertTrue(result["tag"]["used_as_collision"])
+        self.assertTrue(result["tag__1"]["used_as_visual"])
+        self.assertTrue(result["tag__1"]["used_as_collision"])
+
+        # the first-seen scale keeps the original filename untouched; the second is
+        # disambiguated. Both must still be paired with their own correct scale in the
+        # rewritten XML - renaming one must not corrupt the other's reference.
+        dom = minidom.parseString(updated_xml)
+        meshes_by_scale = {
+            mesh.getAttribute("scale"): mesh.getAttribute("filename") for mesh in dom.getElementsByTagName("mesh")
+        }
+        self.assertEqual(meshes_by_scale["0.172 0.172 0.172"], "package://test_package/meshes/tag.dae")
+        self.assertNotEqual(meshes_by_scale["0.074456 0.074456 0.074456"], "package://test_package/meshes/tag.dae")
+        assert "tag__1" in meshes_by_scale["0.074456 0.074456 0.074456"]
+
+    def test_extract_mesh_info_same_file_different_color_stays_distinct(self):
+        # Two visuals can reference the exact same source mesh file at the exact same
+        # scale but with two different <material> colors (e.g. a status-light mesh
+        # reused in red and in green). They must not collapse into - or overwrite - a
+        # single catalog entry: each color is a genuinely different render target.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="link_red">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/light.stl"/>
+      </geometry>
+      <material name="red"><color rgba="1.0 0.0 0.0 1.0"/></material>
+    </visual>
+  </link>
+  <link name="link_green">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/light.stl"/>
+      </geometry>
+      <material name="green"><color rgba="0.0 1.0 0.0 1.0"/></material>
+    </visual>
+  </link>
+</robot>"""
+        result, updated_xml = extract_mesh_info(urdf, None, {})
+
+        # two distinct entries, one per color - not one overwriting the other
+        self.assertEqual(len(result), 2)
+        assert "light" in result
+        assert "light__1" in result
+        colors = {result["light"]["color"], result["light__1"]["color"]}
+        self.assertEqual(colors, {(1.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.0, 1.0)})
+
+        # the first-seen color keeps the original filename untouched; the second is
+        # disambiguated, and each stays paired with its own entry's filename.
+        dom = minidom.parseString(updated_xml)
+        mesh_filenames = {mesh.getAttribute("filename") for mesh in dom.getElementsByTagName("mesh")}
+        self.assertIn("package://test_package/meshes/light.stl", mesh_filenames)
+        assert any("light__1" in filename for filename in mesh_filenames)
+
+    def test_extract_mesh_info_collision_shares_colored_visual_mesh(self):
+        # A collision reusing its sibling visual's mesh (the common same-link fallback)
+        # must still share that visual's entry even when the visual has a real color -
+        # collisions never carry color (always white), so this match should ignore it.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/model.stl"/>
+      </geometry>
+      <material name="red"><color rgba="1.0 0.0 0.0 1.0"/></material>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://test_package/meshes/model.stl"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>"""
+        result, _ = extract_mesh_info(urdf, None, {})
+        self.assertEqual(len(result), 1)
+        assert "model" in result
+        self.assertEqual(result["model"]["color"], (1.0, 0.0, 0.0, 1.0))
+        self.assertTrue(result["model"]["used_as_visual"])
+        self.assertTrue(result["model"]["used_as_collision"])
+
+    def test_extract_mesh_info_renames_integer_formatted_scale(self):
+        # The catalog stores scale as parsed floats ("1.0 1.0 1.0"), but URDFs often write
+        # integers ("1 1 1"). The rename must still find the disambiguated <mesh>.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="link_a">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="2 2 2"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="link_b">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="1 1 1"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>"""
+        result, updated_xml = extract_mesh_info(urdf, None, {})
+        self.assertEqual({result["tag"]["scale"], result["tag__1"]["scale"]}, {"2.0 2.0 2.0", "1.0 1.0 1.0"})
+
+        dom = minidom.parseString(updated_xml)
+        meshes_by_scale = {
+            mesh.getAttribute("scale"): mesh.getAttribute("filename") for mesh in dom.getElementsByTagName("mesh")
+        }
+        self.assertEqual(meshes_by_scale["2 2 2"], "package://test_package/meshes/tag.dae")
+        self.assertIn("tag__1", meshes_by_scale["1 1 1"])
+
+    def test_extract_mesh_info_renames_collision_sharing_disambiguated_colored_visual(self):
+        # link_b's colored visual is disambiguated to tag__1 (the other scale claimed "tag").
+        # Its collision shares that entry, so its <mesh> must be renamed to tag__1 as well,
+        # even though the collision (white) does not match the visual's color.
+        urdf = """<?xml version="1.0"?>
+<robot name="test_robot">
+  <link name="link_a">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.5 0.5 0.5"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="link_b">
+    <visual>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.2 0.2 0.2"/>
+      </geometry>
+      <material name="red"><color rgba="1.0 0.0 0.0 1.0"/></material>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://test_package/meshes/tag.dae" scale="0.2 0.2 0.2"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>"""
+        result, updated_xml = extract_mesh_info(urdf, None, {})
+        self.assertEqual(len(result), 2)
+        self.assertTrue(result["tag__1"]["used_as_collision"])
+
+        dom = minidom.parseString(updated_xml)
+        filenames = {
+            (mesh.parentNode.parentNode.tagName, mesh.getAttribute("scale")): mesh.getAttribute("filename")
+            for mesh in dom.getElementsByTagName("mesh")
+        }
+        self.assertEqual(filenames[("visual", "0.5 0.5 0.5")], "package://test_package/meshes/tag.dae")
+        self.assertIn("tag__1", filenames[("visual", "0.2 0.2 0.2")])
+        self.assertEqual(filenames[("collision", "0.2 0.2 0.2")], filenames[("visual", "0.2 0.2 0.2")])
+
     def test_extract_mesh_info_with_decompose_dict(self):
         # decomposition applies to collision meshes, so the decompose pregen lookup is
         # exercised through a <collision> mesh.
