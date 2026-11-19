@@ -868,6 +868,18 @@ void MujocoSimulation::shutdown()
     sim_->exitrequest.store(true);
     sim_->run = false;
 
+    // Unblock any pending step_simulation call so executor threads can exit cleanly.
+    {
+      const std::lock_guard<std::mutex> steps_lock(steps_cv_mutex_);
+      if (pending_steps_ > 0)
+      {
+        pending_steps_ = 0;
+        ++step_generation_;
+        steps_interrupted_ = true;
+      }
+    }
+    steps_cv_.notify_all();
+
     if (physics_thread_.joinable())
     {
       physics_thread_.join();
@@ -1019,26 +1031,33 @@ void MujocoSimulation::set_pause_callback(const std::shared_ptr<mujoco_ros2_cont
     return;
   }
 
-  sim_->run = !request->paused;
-
-  if (!request->paused)
+  uint32_t pending = 0;
   {
-    // Force timing re-sync so the physics loop doesn't try to catch up on
-    // accumulated wall-clock time that elapsed while paused.
-    sim_->speed_changed = true;
-
-    // If step_simulation is currently blocking with pending steps, abort those steps
-    // immediately rather than waiting for the physics loop to detect the transition.
-    // This ensures step_simulation_callback unblocks and frees its executor thread
-    // without any additional latency.
-    const uint32_t pending = pending_steps_.load();
-    if (pending > 0)
+    const std::lock_guard<std::mutex> steps_lock(steps_cv_mutex_);
+    sim_->run = !request->paused;
+    if (!request->paused)
     {
-      RCLCPP_WARN(get_logger(), "Resuming simulation while %u step(s) were pending; aborting.", pending);
-      pending_steps_.store(0);
-      steps_interrupted_.store(true);
-      steps_cv_.notify_all();
+      // Force timing re-sync so the physics loop doesn't try to catch up on
+      // accumulated wall-clock time that elapsed while paused.
+      sim_->speed_changed = true;
+
+      // If step_simulation is currently blocking with pending steps, abort those steps
+      // immediately rather than waiting for the physics loop to detect the transition.
+      // Mutating pending_steps_ under steps_cv_mutex_ prevents lost condition-variable
+      // wakeups and races with physics_loop() decrementing pending_steps_.
+      pending = pending_steps_;
+      if (pending > 0)
+      {
+        pending_steps_ = 0;
+        ++step_generation_;
+        steps_interrupted_ = true;
+      }
     }
+  }
+  if (pending > 0)
+  {
+    RCLCPP_WARN(get_logger(), "Resuming simulation while %u step(s) were pending; aborting.", pending);
+    steps_cv_.notify_all();
   }
 
   response->success = true;
@@ -1066,18 +1085,53 @@ void MujocoSimulation::step_simulation_callback(
     return;
   }
 
-  // Reset the divergence/interrupt flags and queue steps.
-  step_diverged_.store(false);
-  steps_interrupted_.store(false);
-  pending_steps_.fetch_add(request->steps);
-
   // Block until all steps are executed or the timeout expires.
   // Timeout: at least 30 s, or 10 ms per step (whichever is larger).
   const auto timeout =
       std::chrono::milliseconds(std::max(static_cast<uint64_t>(30000), static_cast<uint64_t>(request->steps) * 10));
 
-  std::unique_lock<std::mutex> lock(steps_cv_mutex_);
-  const bool completed = steps_cv_.wait_for(lock, timeout, [this] { return pending_steps_.load() == 0; });
+  bool completed = false;
+  bool interrupted = false;
+  bool diverged = false;
+  {
+    std::unique_lock<std::mutex> lock(steps_cv_mutex_);
+    // Re-check run and shutdown state under steps_cv_mutex_ in case set_pause(false) or
+    // shutdown() raced right before this callback queued steps.
+    if (sim_->exitrequest.load())
+    {
+      lock.unlock();
+      response->success = false;
+      response->message = "Cannot step simulation: simulation is shutting down.";
+      RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
+      return;
+    }
+    if (sim_->run)
+    {
+      lock.unlock();
+      response->success = false;
+      response->message = "Cannot step simulation: simulation is not paused.";
+      RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
+      return;
+    }
+
+    // Reset the divergence/interrupt flags, bump generation, and queue steps.
+    step_diverged_ = false;
+    steps_interrupted_ = false;
+    ++step_generation_;
+    const uint64_t generation = step_generation_;
+    pending_steps_ += request->steps;
+
+    completed = steps_cv_.wait_for(lock, timeout, [this, generation] {
+      return pending_steps_ == 0 || step_generation_ != generation;
+    });
+    if (!completed && step_generation_ == generation)
+    {
+      pending_steps_ = 0;
+      ++step_generation_;
+    }
+    interrupted = steps_interrupted_;
+    diverged = step_diverged_;
+  }
 
   if (!completed)
   {
@@ -1085,13 +1139,13 @@ void MujocoSimulation::step_simulation_callback(
     response->message = "Timeout waiting for " + std::to_string(request->steps) + " simulation step(s).";
     RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
   }
-  else if (steps_interrupted_.load())
+  else if (interrupted)
   {
     response->success = false;
     response->message = "Steps aborted: simulation was resumed while steps were pending.";
     RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
   }
-  else if (step_diverged_.load())
+  else if (diverged)
   {
     response->success = false;
     response->message = "Steps aborted: simulation diverged.";
@@ -1500,12 +1554,20 @@ void MujocoSimulation::physics_loop()
         {
           // If the sim was unpaused while a StepSimulation call was in progress,
           // abort the remaining pending steps so the service call unblocks cleanly.
-          if (pending_steps_.load() > 0)
+          uint32_t pending = 0;
           {
-            RCLCPP_WARN(get_logger(), "Simulation resumed while %u step(s) were still pending; aborting.",
-                        pending_steps_.load());
-            pending_steps_.store(0);
-            steps_interrupted_.store(true);
+            const std::lock_guard<std::mutex> steps_lock(steps_cv_mutex_);
+            if (sim_->run && pending_steps_ > 0)
+            {
+              pending = pending_steps_;
+              pending_steps_ = 0;
+              ++step_generation_;
+              steps_interrupted_ = true;
+            }
+          }
+          if (pending > 0)
+          {
+            RCLCPP_WARN(get_logger(), "Simulation resumed while %u step(s) were still pending; aborting.", pending);
             steps_cv_.notify_all();
           }
 
@@ -1641,8 +1703,9 @@ void MujocoSimulation::physics_loop()
           // Translate keyboard 'S' presses into single pending steps.
           if (keyboard_step_requested_.exchange(false))
           {
-            step_diverged_.store(false);
-            pending_steps_.fetch_add(1);
+            const std::lock_guard<std::mutex> steps_lock(steps_cv_mutex_);
+            step_diverged_ = false;
+            pending_steps_ += 1;
           }
 
           // Merge staged actuator commands even while paused, so a queued step (and the
@@ -1651,31 +1714,62 @@ void MujocoSimulation::physics_loop()
 
           // Execute one pending step per physics loop iteration so the clock publisher
           // (try_publish) has time to flush between steps, matching play mode behavior.
-          if (pending_steps_.load() > 0)
+          bool has_pending_step = false;
+          uint64_t generation = 0;
+          {
+            const std::lock_guard<std::mutex> steps_lock(steps_cv_mutex_);
+            has_pending_step = (pending_steps_ > 0);
+            generation = step_generation_;
+          }
+
+          if (has_pending_step)
           {
             pre_step_callback_(mj_data_);
             mj_step(mj_model_, mj_data_);
             publish_control_state();
             publish_clock();
 
+            bool notify_waiters = false;
+            bool steps_done = false;
             const char* message = Diverged(mj_model_->opt.disableflags, mj_data_);
             if (message)
             {
-              pending_steps_.store(0);
-              step_diverged_.store(true);
+              {
+                const std::lock_guard<std::mutex> steps_lock(steps_cv_mutex_);
+                if (step_generation_ == generation && pending_steps_ > 0)
+                {
+                  pending_steps_ = 0;
+                  step_diverged_ = true;
+                  notify_waiters = true;
+                }
+                steps_done = (pending_steps_ == 0);
+              }
               mju::strcpy_arr(sim_->load_error, message);
-              steps_cv_.notify_all();
             }
             else
             {
               sim_->AddToHistory();
-              pending_steps_.fetch_sub(1);
               step_count_.fetch_add(1);
-              steps_cv_.notify_all();
+              {
+                const std::lock_guard<std::mutex> steps_lock(steps_cv_mutex_);
+                if (step_generation_ == generation && pending_steps_ > 0)
+                {
+                  --pending_steps_;
+                  if (pending_steps_ == 0)
+                  {
+                    notify_waiters = true;
+                  }
+                }
+                steps_done = (pending_steps_ == 0);
+              }
               update_sim_display();
             }
 
-            if (pending_steps_.load() == 0)
+            if (notify_waiters)
+            {
+              steps_cv_.notify_all();
+            }
+            if (steps_done)
             {
               sim_->speed_changed = true;
             }

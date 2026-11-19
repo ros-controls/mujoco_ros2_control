@@ -587,10 +587,15 @@ private:
   rclcpp::CallbackGroup::SharedPtr set_free_joint_state_cb_group_;
   rclcpp::Service<mujoco_ros2_control_msgs::srv::SetFreeJointState>::SharedPtr set_free_joint_state_service_;
 
-  // Pending steps to execute while paused, and synchronization for blocking callers
-  std::atomic<uint32_t> pending_steps_{ 0 };
-  std::atomic<bool> step_diverged_{ false };
-  std::atomic<bool> steps_interrupted_{ false };
+  // Pending steps to execute while paused, and synchronization for blocking callers.
+  // pending_steps_, step_generation_, step_diverged_, and steps_interrupted_ are all guarded
+  // by steps_cv_mutex_ so condition-variable wait/notify transitions cannot lose wakeups or
+  // race between set_pause_callback(), step_simulation_callback(), and physics_loop().
+  // Lock order: sim_mutex_ (if needed) is always taken before steps_cv_mutex_.
+  uint32_t pending_steps_{ 0 };
+  uint64_t step_generation_{ 0 };
+  bool step_diverged_{ false };
+  bool steps_interrupted_{ false };
   std::atomic<bool> keyboard_step_requested_{ false };
   std::atomic<uint64_t> step_count_{ 0 };
   std::mutex steps_cv_mutex_;
