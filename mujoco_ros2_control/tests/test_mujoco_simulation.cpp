@@ -371,6 +371,63 @@ TEST_F(MujocoSimulationTest, PauseStepUnpause)
       << "Time should advance after unpausing";
 }
 
+TEST_F(MujocoSimulationTest, StepSimulationInterruptedByResumeRepeatedly)
+{
+  // Stress-test aborting an in-progress step_simulation call via set_pause(false)
+  // across repeated rapid iterations, followed immediately by a zero-step call.
+  // Regression test for lost condition-variable wakeups and pending_steps_ underflow (#340).
+  ASSERT_TRUE(initialize_sim());
+  sim_->start_physics_thread();
+  ASSERT_TRUE(wait_until([this]() { return sim_->data()->time > 0.0; })) << "Simulation did not start stepping";
+
+  const std::string ns = std::string(node_->get_fully_qualified_name());
+  auto pause_client = create_client<mujoco_ros2_control_msgs::srv::SetPause>(ns + "/set_pause");
+  auto step_client = create_client<mujoco_ros2_control_msgs::srv::StepSimulation>(ns + "/step_simulation");
+  ASSERT_TRUE(pause_client->wait_for_service(std::chrono::seconds(5))) << "set_pause service not found";
+  ASSERT_TRUE(step_client->wait_for_service(std::chrono::seconds(5))) << "step_simulation service not found";
+
+  constexpr int kIterations = 25;
+  for (int i = 0; i < kIterations; ++i)
+  {
+    auto pause_req = std::make_shared<mujoco_ros2_control_msgs::srv::SetPause::Request>();
+    pause_req->paused = true;
+    auto pause_future = pause_client->async_send_request(pause_req);
+    ASSERT_EQ(pause_future.wait_for(std::chrono::seconds(5)), std::future_status::ready) << "iter " << i;
+    ASSERT_TRUE(pause_future.get()->success) << "iter " << i;
+
+    auto step_req = std::make_shared<mujoco_ros2_control_msgs::srv::StepSimulation::Request>();
+    step_req->steps = 50000;
+    auto step_future = step_client->async_send_request(step_req);
+
+    // Vary the delay before resuming to cover both mid-step and pre-wait races.
+    std::this_thread::sleep_for(std::chrono::milliseconds(i % 5));
+
+    auto resume_req = std::make_shared<mujoco_ros2_control_msgs::srv::SetPause::Request>();
+    resume_req->paused = false;
+    auto resume_future = pause_client->async_send_request(resume_req);
+    ASSERT_EQ(resume_future.wait_for(std::chrono::seconds(5)), std::future_status::ready) << "iter " << i;
+    ASSERT_TRUE(resume_future.get()->success) << "iter " << i;
+
+    ASSERT_EQ(step_future.wait_for(std::chrono::seconds(5)), std::future_status::ready)
+        << "step_simulation hung on resume at iter " << i;
+    EXPECT_FALSE(step_future.get()->success) << "iter " << i;
+  }
+
+  // Verify the step_simulation callback group is completely unblocked for subsequent calls.
+  auto pause_req = std::make_shared<mujoco_ros2_control_msgs::srv::SetPause::Request>();
+  pause_req->paused = true;
+  auto pause_future = pause_client->async_send_request(pause_req);
+  ASSERT_EQ(pause_future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  ASSERT_TRUE(pause_future.get()->success);
+
+  auto zero_req = std::make_shared<mujoco_ros2_control_msgs::srv::StepSimulation::Request>();
+  zero_req->steps = 0;
+  auto zero_future = step_client->async_send_request(zero_req);
+  ASSERT_EQ(zero_future.wait_for(std::chrono::seconds(5)), std::future_status::ready)
+      << "step_simulation(steps=0) hung after resume-abort stress test";
+  EXPECT_FALSE(zero_future.get()->success);
+}
+
 TEST_F(MujocoSimulationTest, ResetWorldTest)
 {
   ASSERT_TRUE(initialize_sim());
