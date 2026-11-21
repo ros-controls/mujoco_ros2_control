@@ -267,7 +267,15 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
 
     // Configure the static parameters of the laserscan message
     lidar_config.laser_scan_msg.header.frame_id = lidar_config.frame_name;
-    lidar_config.laser_scan_msg.time_increment = 0.0;
+
+    // Derive scan timing from the plugin's update_rate config (Hz); 0 means unknown
+    const std::string rate_str = get_cfg("update_rate");
+    const double update_rate = rate_str.empty() ? 0.0 : std::atof(rate_str.c_str());
+    const float scan_time = update_rate > 0.0 ? static_cast<float>(1.0 / update_rate) : 0.0f;
+    lidar_config.laser_scan_msg.scan_time = scan_time;
+    lidar_config.laser_scan_msg.time_increment =
+        scan_time / static_cast<float>(lidar_config.resolution[0] * lidar_config.resolution[1]);
+
     lidar_config.laser_scan_msg.angle_min = static_cast<float>(lidar_config.azimuth_range[0]);
     lidar_config.laser_scan_msg.angle_max = static_cast<float>(lidar_config.azimuth_range[1]);
     lidar_config.laser_scan_msg.angle_increment = angle_increment;
@@ -364,7 +372,9 @@ void Mujoco3dLidarPlugin::update_write(const mjModel* /* model */, mjData* data)
     {
       for (int i = 0; i < num_rays; ++i)
       {
-        lidar.laser_scan_msg.ranges[i] = static_cast<float>(sensordata[i]);
+        const float dist = static_cast<float>(sensordata[i]);
+        lidar.laser_scan_msg.ranges[i] =
+            (dist >= lidar.range_min && dist <= lidar.range_max) ? dist : std::numeric_limits<float>::infinity();
       }
 
       lidar.laser_scan_msg.header.stamp = stamp;

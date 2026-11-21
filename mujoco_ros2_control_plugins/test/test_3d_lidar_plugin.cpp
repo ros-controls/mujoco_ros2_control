@@ -221,6 +221,81 @@ TEST_F(Mujoco3dLidarPluginTest, Test2dLidar)
   plugin.cleanup();
 }
 
+TEST_F(Mujoco3dLidarPluginTest, Test2dLidarNoReturnIsInfAndTiming)
+{
+  load_model(R"(<?xml version="1.0"?>
+<mujoco model="lidar_2d_wall_model">
+  <worldbody>
+    <geom type="plane" size="5 5 0.1"/>
+    <geom name="wall" type="box" pos="2 0 0.65" size="0.05 5 0.5"/>
+    <body name="robot" pos="0 0 0.5">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+      <geom type="box" size="0.1 0.1 0.1"/>
+      <site name="lidar_site" pos="0 0 0.15"/>
+    </body>
+  </worldbody>
+  <extension>
+    <plugin plugin="mujoco.plugin.lidar">
+      <instance name="scan_2d">
+        <config key="resolution" value="24 1"/>
+        <config key="azimuth_range" value="-1.57 1.57"/>
+        <config key="elevation_range" value="0.0"/>
+        <config key="max_range" value="10.0"/>
+        <config key="min_range" value="0.05"/>
+        <config key="update_rate" value="100.0"/>
+        <config key="async" value="0"/>
+      </instance>
+    </plugin>
+  </extension>
+  <sensor>
+    <plugin instance="scan_2d" name="scan_2d" objtype="site" objname="lidar_site"/>
+  </sensor>
+</mujoco>
+)");
+
+  mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
+  EXPECT_TRUE(plugin.init(plugin_node_, model_, data_));
+
+  std::atomic<bool> got_scan{ false };
+  sensor_msgs::msg::LaserScan::SharedPtr last_scan;
+  auto scan_sub = node_->create_subscription<sensor_msgs::msg::LaserScan>(
+      "/scan", 1, [&](sensor_msgs::msg::LaserScan::SharedPtr msg) {
+        last_scan = msg;
+        got_scan = true;
+      });
+
+  for (int i = 0; i < 20; ++i)
+  {
+    mj_step(model_, data_);
+    plugin.update_write(model_, data_);
+    if (got_scan)
+      break;
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+
+  ASSERT_TRUE(got_scan) << "No LaserScan received";
+  ASSERT_EQ(last_scan->ranges.size(), 24u);
+
+  // Rays that hit nothing within range must be +inf, never a negative sentinel.
+  for (float r : last_scan->ranges)
+  {
+    EXPECT_TRUE(std::isinf(r) || r >= last_scan->range_min) << "unexpected range " << r;
+  }
+  // The outermost rays run nearly parallel to the wall and miss it.
+  EXPECT_TRUE(std::isinf(last_scan->ranges.front()));
+  EXPECT_TRUE(std::isinf(last_scan->ranges.back()));
+  // The central rays hit the wall at x = 2 m.
+  EXPECT_NEAR(last_scan->ranges[11], 2.0f, 0.05f);
+  EXPECT_NEAR(last_scan->ranges[12], 2.0f, 0.05f);
+
+  // Scan timing is derived from update_rate (100 Hz).
+  EXPECT_NEAR(last_scan->scan_time, 0.01f, 1e-6f);
+  EXPECT_NEAR(last_scan->time_increment, 0.01f / 24.0f, 1e-7f);
+
+  plugin.cleanup();
+}
+
 TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSyncAsync)
 {
   // Just run this twice with the two different execution modes
