@@ -374,7 +374,8 @@ void Mujoco3dLidarPlugin::update_write(const mjModel* /* model */, mjData* data)
       {
         const float dist = static_cast<float>(sensordata[i]);
         lidar.laser_scan_msg.ranges[i] =
-            (dist >= lidar.range_min && dist <= lidar.range_max) ? dist : std::numeric_limits<float>::infinity();
+              dist < lidar.range_min ? -std::numeric_limits<float>::infinity() :
+             (dist <= lidar.range_max ? dist : std::numeric_limits<float>::infinity());
       }
 
       lidar.laser_scan_msg.header.stamp = stamp;
