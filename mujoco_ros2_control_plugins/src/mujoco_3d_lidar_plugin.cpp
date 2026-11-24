@@ -19,9 +19,13 @@
 
 #include "mujoco_3d_lidar_plugin.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <pluginlib/class_list_macros.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
@@ -109,6 +113,61 @@ void read_vector(std::vector<T>& output, const std::string& input)
     {
       output.push_back(static_cast<T>(std::strtod(item.c_str(), nullptr)));
     }
+  }
+}
+
+// Sets the fields of a cloud in order, each at an offset aligned to its size, and returns the point step,
+// a multiple of the largest field size
+uint32_t set_aligned_fields(sensor_msgs::msg::PointCloud2& cloud,
+                            const std::vector<std::pair<std::string, uint8_t>>& fields)
+{
+  auto size_of = [](uint8_t datatype) -> uint32_t {
+    switch (datatype)
+    {
+      case sensor_msgs::msg::PointField::INT8:
+      case sensor_msgs::msg::PointField::UINT8:
+        return 1;
+      case sensor_msgs::msg::PointField::INT16:
+      case sensor_msgs::msg::PointField::UINT16:
+        return 2;
+      case sensor_msgs::msg::PointField::FLOAT64:
+        return 8;
+      default:
+        return 4;
+    }
+  };
+  cloud.fields.clear();
+  uint32_t offset = 0;
+  uint32_t max_size = 1;
+  for (const auto& [name, datatype] : fields)
+  {
+    const uint32_t size = size_of(datatype);
+    offset = (offset + size - 1) / size * size;
+    sensor_msgs::msg::PointField field;
+    field.name = name;
+    field.offset = offset;
+    field.datatype = datatype;
+    field.count = 1;
+    cloud.fields.push_back(field);
+    offset += size;
+    max_size = std::max(max_size, size);
+  }
+  return (offset + max_size - 1) / max_size * max_size;
+}
+
+// Name of a point layout, as set in the point_fields parameter
+const char* point_fields_name(PointLayout layout)
+{
+  switch (layout)
+  {
+    case PointLayout::ROBOSENSE:
+      return "robosense";
+    case PointLayout::VELODYNE:
+      return "velodyne";
+    case PointLayout::OUSTER:
+      return "ouster";
+    default:
+      return "xyz";
   }
 }
 
@@ -239,17 +298,81 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   if (lidar_config.is_3d)
   {
     compute_vectors(lidar_config);
-    sensor_msgs::PointCloud2Modifier modifier(lidar_config.point_cloud_msg);
-    modifier.setPointCloud2Fields(3, "x", 1, sensor_msgs::msg::PointField::FLOAT32, "y", 1,
-                                  sensor_msgs::msg::PointField::FLOAT32, "z", 1, sensor_msgs::msg::PointField::FLOAT32);
+
+    // Point layout, following the ROS drivers of spinning lidars:
+    //  - "xyz" (default): x, y, z (float32)
+    //  - "robosense": x, y, z, intensity (float32), ring (uint16), timestamp (float64, absolute time in seconds),
+    //    as rslidar_sdk and the Hesai driver
+    //  - "velodyne": x, y, z, intensity (float32), ring (uint16), time (float32, seconds from the scan stamp),
+    //    as velodyne_pointcloud
+    //  - "ouster": x, y, z, intensity (float32), t (uint32, nanoseconds from the scan stamp), reflectivity (uint16),
+    //    ring (uint16), ambient (uint16), range (uint32, millimetres), as the Ouster driver; rays without a return
+    //    are (0, 0, 0) with range 0
+    const std::string point_fields_param = param_prefix + lidar_config.name + ".point_fields";
+    if (!node_->has_parameter(point_fields_param))
+    {
+      node_->declare_parameter(point_fields_param, "xyz");
+    }
+    const std::string point_fields = node_->get_parameter(point_fields_param).as_string();
+    if (point_fields == "xyz")
+    {
+      lidar_config.point_layout = PointLayout::XYZ;
+    }
+    else if (point_fields == "robosense")
+    {
+      lidar_config.point_layout = PointLayout::ROBOSENSE;
+    }
+    else if (point_fields == "velodyne")
+    {
+      lidar_config.point_layout = PointLayout::VELODYNE;
+    }
+    else if (point_fields == "ouster")
+    {
+      lidar_config.point_layout = PointLayout::OUSTER;
+    }
+    else
+    {
+      RCLCPP_ERROR(node_->get_logger(),
+                   "Invalid point_fields '%s' for sensor '%s', expected 'xyz', 'robosense', 'velodyne' or 'ouster'",
+                   point_fields.c_str(), sensor_name);
+      return false;
+    }
+
+    using sensor_msgs::msg::PointField;
+    std::vector<std::pair<std::string, uint8_t>> fields = { { "x", PointField::FLOAT32 },
+                                                            { "y", PointField::FLOAT32 },
+                                                            { "z", PointField::FLOAT32 } };
+    if (lidar_config.point_layout == PointLayout::ROBOSENSE)
+    {
+      fields.insert(fields.end(), { { "intensity", PointField::FLOAT32 },
+                                    { "ring", PointField::UINT16 },
+                                    { "timestamp", PointField::FLOAT64 } });
+    }
+    else if (lidar_config.point_layout == PointLayout::VELODYNE)
+    {
+      fields.insert(fields.end(), { { "intensity", PointField::FLOAT32 },
+                                    { "ring", PointField::UINT16 },
+                                    { "time", PointField::FLOAT32 } });
+    }
+    else if (lidar_config.point_layout == PointLayout::OUSTER)
+    {
+      fields.insert(fields.end(), { { "intensity", PointField::FLOAT32 },
+                                    { "t", PointField::UINT32 },
+                                    { "reflectivity", PointField::UINT16 },
+                                    { "ring", PointField::UINT16 },
+                                    { "ambient", PointField::UINT16 },
+                                    { "range", PointField::UINT32 } });
+    }
+    const uint32_t point_step = set_aligned_fields(lidar_config.point_cloud_msg, fields);
 
     // Configure the static parameters of the pointcloud message
     lidar_config.point_cloud_msg.header.frame_id = lidar_config.frame_name;
     lidar_config.point_cloud_msg.width = lidar_config.resolution[0];
     lidar_config.point_cloud_msg.height = lidar_config.resolution[1];
-    lidar_config.point_cloud_msg.point_step = 12;
+    lidar_config.point_cloud_msg.point_step = point_step;
     lidar_config.point_cloud_msg.is_bigendian = is_big_endian();
-    lidar_config.point_cloud_msg.is_dense = false;
+    // Rays without a return are NaN, except in the Ouster layout where they are zeros
+    lidar_config.point_cloud_msg.is_dense = lidar_config.point_layout == PointLayout::OUSTER;
     lidar_config.point_cloud_msg.row_step =
         lidar_config.point_cloud_msg.point_step * lidar_config.point_cloud_msg.width;
     lidar_config.point_cloud_msg.data.resize(lidar_config.point_cloud_msg.row_step *
@@ -295,6 +418,10 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   RCLCPP_INFO(node_->get_logger(), "          range_min: %f", lidar_config.range_min);
   RCLCPP_INFO(node_->get_logger(), "          range_max: %f", lidar_config.range_max);
   RCLCPP_INFO(node_->get_logger(), "              topic: %s", lidar_config.lidar_topic.c_str());
+  if (lidar_config.is_3d)
+  {
+    RCLCPP_INFO(node_->get_logger(), "       point_fields: %s", point_fields_name(lidar_config.point_layout));
+  }
   RCLCPP_INFO(node_->get_logger(), "       asynchronous: %d", lidar_config.async);
 
   lidar_sensors_.push_back(std::move(lidar_config));
@@ -330,6 +457,8 @@ void Mujoco3dLidarPlugin::update_write(const mjModel* /* model */, mjData* data)
       sensor_msgs::PointCloud2Iterator<float> iterY(lidar.point_cloud_msg, "y");
       sensor_msgs::PointCloud2Iterator<float> iterZ(lidar.point_cloud_msg, "z");
 
+      const float no_return =
+          lidar.point_layout == PointLayout::OUSTER ? 0.0f : std::numeric_limits<float>::quiet_NaN();
       for (int i = 0; i < num_rays; ++i)
       {
         float dist = static_cast<float>(sensordata[i]);
@@ -341,15 +470,66 @@ void Mujoco3dLidarPlugin::update_write(const mjModel* /* model */, mjData* data)
         }
         else
         {
-          *iterX = std::numeric_limits<float>::quiet_NaN();
-          *iterY = std::numeric_limits<float>::quiet_NaN();
-          *iterZ = std::numeric_limits<float>::quiet_NaN();
+          *iterX = no_return;
+          *iterY = no_return;
+          *iterZ = no_return;
         }
 
         // Increment the iterators
         ++iterX;
         ++iterY;
         ++iterZ;
+      }
+
+      // Intensity, ring and per point time. The whole scan is cast at once, so every point is taken at the time
+      // of the scan: the absolute timestamp is the stamp, the relative times are zero.
+      const int width = lidar.resolution[0];
+      auto has_return = [&](int i) { return sensordata[i] >= lidar.range_min && sensordata[i] <= lidar.range_max; };
+      if (lidar.point_layout == PointLayout::ROBOSENSE || lidar.point_layout == PointLayout::VELODYNE)
+      {
+        sensor_msgs::PointCloud2Iterator<float> iterIntensity(lidar.point_cloud_msg, "intensity");
+        sensor_msgs::PointCloud2Iterator<uint16_t> iterRing(lidar.point_cloud_msg, "ring");
+        for (int i = 0; i < num_rays; ++i, ++iterIntensity, ++iterRing)
+        {
+          *iterIntensity = has_return(i) ? 1.0f : 0.0f;
+          *iterRing = static_cast<uint16_t>(i / width);
+        }
+        if (lidar.point_layout == PointLayout::ROBOSENSE)
+        {
+          sensor_msgs::PointCloud2Iterator<double> iterTimestamp(lidar.point_cloud_msg, "timestamp");
+          for (int i = 0; i < num_rays; ++i, ++iterTimestamp)
+          {
+            *iterTimestamp = static_cast<double>(compute_time);
+          }
+        }
+        else
+        {
+          sensor_msgs::PointCloud2Iterator<float> iterTime(lidar.point_cloud_msg, "time");
+          for (int i = 0; i < num_rays; ++i, ++iterTime)
+          {
+            *iterTime = 0.0f;
+          }
+        }
+      }
+      else if (lidar.point_layout == PointLayout::OUSTER)
+      {
+        sensor_msgs::PointCloud2Iterator<float> iterIntensity(lidar.point_cloud_msg, "intensity");
+        sensor_msgs::PointCloud2Iterator<uint32_t> iterT(lidar.point_cloud_msg, "t");
+        sensor_msgs::PointCloud2Iterator<uint16_t> iterReflectivity(lidar.point_cloud_msg, "reflectivity");
+        sensor_msgs::PointCloud2Iterator<uint16_t> iterRing(lidar.point_cloud_msg, "ring");
+        sensor_msgs::PointCloud2Iterator<uint16_t> iterAmbient(lidar.point_cloud_msg, "ambient");
+        sensor_msgs::PointCloud2Iterator<uint32_t> iterRange(lidar.point_cloud_msg, "range");
+        for (int i = 0; i < num_rays;
+             ++i, ++iterIntensity, ++iterT, ++iterReflectivity, ++iterRing, ++iterAmbient, ++iterRange)
+        {
+          const bool hit = has_return(i);
+          *iterIntensity = hit ? 1.0f : 0.0f;
+          *iterT = 0;
+          *iterReflectivity = 0;
+          *iterRing = static_cast<uint16_t>(i / width);
+          *iterAmbient = 0;
+          *iterRange = hit ? static_cast<uint32_t>(std::llround(sensordata[i] * 1000.0)) : 0;
+        }
       }
 
       lidar.point_cloud_msg.header.stamp = stamp;

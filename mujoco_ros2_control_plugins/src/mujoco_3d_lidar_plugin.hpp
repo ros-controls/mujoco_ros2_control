@@ -36,6 +36,18 @@ namespace mujoco_ros2_control_plugins
 {
 
 /**
+ * @brief Fields of each point of a 3D sensor: x, y, z only, or x, y, z with intensity, ring and per point time
+ * as published by the RoboSense/Hesai, Velodyne or Ouster drivers.
+ */
+enum class PointLayout
+{
+  XYZ,
+  ROBOSENSE,
+  VELODYNE,
+  OUSTER
+};
+
+/**
  * @brief Data container for lidar sensor information.
  */
 struct Lidar3dConfig
@@ -58,6 +70,9 @@ struct Lidar3dConfig
 
   // For message publishing
   std::string lidar_topic;
+
+  // Fields of each point of 3D sensors
+  PointLayout point_layout{ PointLayout::XYZ };
 
   // Tracking the last update and compute time from the plugin
   mjtNum last_compute_time{ 0.0 };
