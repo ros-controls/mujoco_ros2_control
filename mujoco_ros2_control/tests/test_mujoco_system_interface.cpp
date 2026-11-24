@@ -787,6 +787,100 @@ TEST_F(MujocoSystemInterfaceTest, MagnetometerSensorNoiseSupportsUniformDistribu
   EXPECT_NEAR(stats.stddev, kNoiseStdDev, kNoiseStdDev * 0.2);
 }
 
+TEST_F(MujocoSystemInterfaceTest, SensorUpdateRateHoldsValueBetweenSamples)
+{
+  // Both sensors map to the noisy MJCF magnetometer, so every refresh yields a fresh value. The one without
+  // `update_rate` must change on every read(); the 5 Hz one must hold its value until 0.2 s of sim time pass.
+  auto hardware_info = create_hardware_info();
+  hardware_info.sensors.push_back(make_magnetometer_sensor("magnetometer_every_read", "magnetometer_sensor_noisy"));
+  hardware_info.sensors.push_back(
+      make_magnetometer_sensor("magnetometer_5hz", "magnetometer_sensor_noisy", { { "update_rate", "5" } }));
+
+  ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
+
+  mjModel* model = nullptr;
+  mjData* data = nullptr;
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_model(model);
+    interface_->get_data(data);
+    return model != nullptr && data != nullptr && data->time > 0.0;
+  })) << "Simulation did not start stepping";
+
+  const auto state_interfaces = export_state_interfaces();
+  ASSERT_EQ(state_interfaces.size(), 6u);
+
+  interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+  const double every_read_first = get_value(*state_interfaces[0]);
+  const double rate_limited_first = get_value(*state_interfaces[3]);
+  const double first_sample_time = data->time;
+
+  // Back-to-back reads land well within the 0.2 s period.
+  for (int i = 0; i < 5; ++i)
+  {
+    interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+    EXPECT_EQ(get_value(*state_interfaces[3]), rate_limited_first) << "Value must persist within the period";
+  }
+  EXPECT_NE(get_value(*state_interfaces[0]), every_read_first) << "Sensor without update_rate refreshes each read";
+
+  // get_data() hands back a snapshot, so re-fetch it to observe sim time advancing.
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_data(data);
+    return data->time > first_sample_time + 0.25;
+  }));
+  interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+  EXPECT_NE(get_value(*state_interfaces[3]), rate_limited_first) << "Value must refresh once the period elapsed";
+}
+
+TEST_F(MujocoSystemInterfaceTest, SensorUpdateRateDefaultsToMjcfInterval)
+{
+#if mjVERSION_HEADER < 3012000
+  GTEST_SKIP() << "MJCF sensor interval requires MuJoCo >= 3.12.0";
+#else
+  // `interval` without `nsample` doesn't make MuJoCo hold the value, and MuJoCo never applies `noise`
+  // itself, so a held value here proves the interface gated on the MJCF interval (noise included).
+  const std::string model_path = "/tmp/test_mujoco_system_interface_interval_model.xml";
+  {
+    std::ofstream file(model_path);
+    file << R"(<mujoco><option timestep="0.002" magnetic="0.1 0.2 0.3"/>
+      <worldbody><body name="b" pos="0 0 1"><joint name="hinge" type="hinge" axis="0 1 0"/>
+        <geom type="capsule" size="0.02" fromto="0 0 0 0.3 0 0" mass="1"/><site name="s"/></body></worldbody>
+      <sensor><magnetometer name="magnetometer_interval" site="s" noise="0.05" interval="0.2"/></sensor>
+    </mujoco>)";
+  }
+  auto hardware_info = create_hardware_info();
+  hardware_info.hardware_parameters["mujoco_model"] = model_path;
+  hardware_info.sensors.push_back(make_magnetometer_sensor("magnetometer_interval", "magnetometer_interval"));
+
+  ASSERT_EQ(initialize_interface(hardware_info), hardware_interface::CallbackReturn::SUCCESS);
+  std::filesystem::remove(model_path);
+
+  mjData* data = nullptr;
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_data(data);
+    return data != nullptr && data->time > 0.0;
+  })) << "Simulation did not start stepping";
+
+  const auto state_interfaces = export_state_interfaces();
+  ASSERT_EQ(state_interfaces.size(), 3u);
+
+  interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+  const double first_value = get_value(*state_interfaces[0]);
+  const double first_sample_time = data->time;
+  for (int i = 0; i < 5; ++i)
+  {
+    interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+    EXPECT_EQ(get_value(*state_interfaces[0]), first_value) << "Value must persist within the MJCF interval";
+  }
+
+  ASSERT_TRUE(wait_until([&]() {
+    interface_->get_data(data);
+    return data->time > first_sample_time + 0.25;
+  }));
+  interface_->read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002));
+  EXPECT_NE(get_value(*state_interfaces[0]), first_value) << "Value must refresh once the MJCF interval elapsed";
+#endif
+}
+
 TEST(GetNoiseDistributionTest, DefaultsToGaussianWhenParamAbsent)
 {
   hardware_interface::ComponentInfo sensor;
@@ -844,6 +938,65 @@ TEST(AddSensorNoiseTest, GaussianQuaternionRemainsNormalized)
   Eigen::Quaterniond value(1.0, 0.0, 0.0, 0.0);
   mujoco_ros2_control::add_sensor_noise(value, 0.2, mujoco_ros2_control::NoiseDistribution::kGaussian, rng);
   EXPECT_NEAR(value.norm(), 1.0, 1e-9);
+}
+
+// Steps a 200 Hz loop (accumulating time the way the physics loop does) and returns the cycle indices at
+// which the gate allowed a refresh.
+std::vector<int> due_cycles(mujoco_ros2_control::SensorUpdateRate& rate, int cycles, double start_time = 0.0)
+{
+  std::vector<int> due;
+  double time = start_time;
+  for (int i = 0; i < cycles; ++i, time += 0.005)
+  {
+    if (rate.is_update_due(time))
+    {
+      due.push_back(i);
+    }
+  }
+  return due;
+}
+
+TEST(SensorUpdateRateTest, UnsetRateUpdatesEveryCycle)
+{
+  mujoco_ros2_control::SensorUpdateRate rate;
+  EXPECT_EQ(due_cycles(rate, 25).size(), 25u);
+}
+
+TEST(SensorUpdateRateTest, TwentyHzAtTwoHundredHzUpdatesEveryTenCycles)
+{
+  mujoco_ros2_control::SensorUpdateRate rate{ 1.0 / 20.0 };
+  EXPECT_EQ(due_cycles(rate, 41), (std::vector<int>{ 0, 10, 20, 30, 40 }));
+}
+
+TEST(SensorUpdateRateTest, NonDivisibleRateKeepsAverageFrequency)
+{
+  // 30 Hz does not divide 200 Hz; the gate must not round the period up to 7 cycles (28.6 Hz).
+  mujoco_ros2_control::SensorUpdateRate rate{ 1.0 / 30.0 };
+  EXPECT_EQ(due_cycles(rate, 200).size(), 30u);
+}
+
+TEST(GetSensorUpdatePeriodTest, ParsesRateAndFallsBackToEveryCycle)
+{
+  hardware_interface::ComponentInfo sensor;
+  EXPECT_EQ(mujoco_ros2_control::get_sensor_update_period(sensor), 0.0);
+  sensor.parameters["update_rate"] = "20";
+  EXPECT_DOUBLE_EQ(mujoco_ros2_control::get_sensor_update_period(sensor), 0.05);
+  for (const auto* invalid : { "0", "-5", "fast", "" })
+  {
+    sensor.parameters["update_rate"] = invalid;
+    EXPECT_EQ(mujoco_ros2_control::get_sensor_update_period(sensor), 0.0) << "update_rate=" << invalid;
+  }
+}
+
+TEST(GetSensorUpdatePeriodTest, FallsBackToMjcfIntervalWhenUpdateRateUnsetOrInvalid)
+{
+  hardware_interface::ComponentInfo sensor;
+  EXPECT_DOUBLE_EQ(mujoco_ros2_control::get_sensor_update_period(sensor, 0.2), 0.2);
+  sensor.parameters["update_rate"] = "fast";
+  EXPECT_DOUBLE_EQ(mujoco_ros2_control::get_sensor_update_period(sensor, 0.2), 0.2);
+  // An explicit update_rate takes precedence over the MJCF interval.
+  sensor.parameters["update_rate"] = "20";
+  EXPECT_DOUBLE_EQ(mujoco_ros2_control::get_sensor_update_period(sensor, 0.2), 0.05);
 }
 
 TEST(AddSensorNoiseTest, UniformZeroStdDevIsNoOp)
