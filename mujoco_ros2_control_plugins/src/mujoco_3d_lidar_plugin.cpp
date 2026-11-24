@@ -270,7 +270,7 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
 
     // Derive scan timing from the plugin's update_rate config (Hz); 0 means unknown
     const std::string rate_str = get_cfg("update_rate");
-    const double update_rate = rate_str.empty() ? 0.0 : std::atof(rate_str.c_str());
+    const double update_rate = rate_str.empty() ? 1.0 : std::atof(rate_str.c_str());
     const float scan_time = update_rate > 0.0 ? static_cast<float>(1.0 / update_rate) : 0.0f;
     lidar_config.laser_scan_msg.scan_time = scan_time;
     lidar_config.laser_scan_msg.time_increment =
