@@ -280,11 +280,11 @@ TEST_F(Mujoco3dLidarPluginTest, Test2dLidarNoReturnIsInfAndTiming)
   // Rays that hit nothing within range must be +inf, never a negative sentinel.
   for (float r : last_scan->ranges)
   {
-    EXPECT_TRUE(std::isinf(r) || r >= last_scan->range_min) << "unexpected range " << r;
+    EXPECT_TRUE((std::isinf(r) && r > 0.0F) || r >= last_scan->range_min) << "unexpected range " << r;
   }
   // The outermost rays run nearly parallel to the wall and miss it.
-  EXPECT_TRUE(std::isinf(last_scan->ranges.front()));
-  EXPECT_TRUE(std::isinf(last_scan->ranges.back()));
+  EXPECT_TRUE(std::isinf(last_scan->ranges.front()) && last_scan->ranges.front() > 0.0F);
+  EXPECT_TRUE(std::isinf(last_scan->ranges.back()) && last_scan->ranges.back() > 0.0F);
   // The central rays hit the wall at x = 2 m.
   EXPECT_NEAR(last_scan->ranges[11], 2.0f, 0.05f);
   EXPECT_NEAR(last_scan->ranges[12], 2.0f, 0.05f);
