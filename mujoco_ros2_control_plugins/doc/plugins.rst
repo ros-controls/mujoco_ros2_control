@@ -601,6 +601,23 @@ The available parameters are:
      - ``string``
      - ``/scan`` or ``/points``
      - Topic name to publish messages. Defaults to ``/scan`` for 2D sensors and ``/points`` for 3D sensors.
+   * - ``<sensor_name>.point_fields``
+     - ``string``
+     - ``xyz``
+     - Fields of each point of 3D sensors, to match the driver of a real lidar:
+
+       - ``xyz``: ``x``, ``y``, ``z`` (float32).
+       - ``robosense``: adds ``intensity`` (float32), ``ring`` (uint16) and ``timestamp`` (float64, absolute time in
+         seconds), like the RoboSense and Hesai drivers.
+       - ``velodyne``: adds ``intensity`` (float32), ``ring`` (uint16) and ``time`` (float32, seconds from the message
+         stamp), like the Velodyne driver.
+       - ``ouster``: adds ``intensity`` (float32), ``t`` (uint32, nanoseconds from the message stamp),
+         ``reflectivity`` (uint16), ``ring`` (uint16), ``ambient`` (uint16) and ``range`` (uint32, millimetres), like
+         the Ouster driver. Rays without a return are (0, 0, 0) with ``range`` 0 instead of NaN.
+
+       ``ring`` is the row of the scan (elevation index). ``intensity`` is 1.0 for every return and 0.0 otherwise;
+       ``reflectivity`` and ``ambient`` are 0. The scan is cast at once, so every point is taken at the message stamp.
+       Each field is at an offset aligned to its size; consumers should look fields up by name.
 
 .. code-block:: yaml
 
@@ -614,6 +631,8 @@ The available parameters are:
           3d_lidar:
             frame_name: "3d_lidar_sensor_frame"
             topic: "/lidar_points_3d"
+            # Optional: intensity, ring and per point time fields, like the Velodyne driver
+            point_fields: "velodyne"
 
 3D Lidar Usage
 --------------
