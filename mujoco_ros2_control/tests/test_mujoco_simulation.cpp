@@ -25,6 +25,8 @@
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #include <mujoco/mujoco.h>
 #include <rclcpp/rclcpp.hpp>
@@ -171,6 +173,9 @@ protected:
     {
       spin_thread_.join();
     }
+    // Clean up clients safely now that executor worker threads are joined
+    clients_.clear();
+
     // Then tear down the sim
     if (sim_)
     {
@@ -185,6 +190,16 @@ protected:
     {
       std::filesystem::remove(kTestModelPath);
     }
+  }
+
+  // Create a service client and track its lifetime so that it is not destroyed while
+  // MultiThreadedExecutor is spinning, preventing race conditions and SIGSEGV in rmw_wait.
+  template <typename ServiceT, typename... Args>
+  typename rclcpp::Client<ServiceT>::SharedPtr create_client(Args&&... args)
+  {
+    auto client = node_->create_client<ServiceT>(std::forward<Args>(args)...);
+    clients_.push_back(client);
+    return client;
   }
 
   // initialize the simulation in headless mode with default settings.
@@ -232,6 +247,7 @@ protected:
   std::unique_ptr<rclcpp::executors::MultiThreadedExecutor> executor_;
   std::thread spin_thread_;
   std::unique_ptr<mujoco_ros2_control::MujocoSimulation> sim_;
+  std::vector<rclcpp::ClientBase::SharedPtr> clients_;
 };
 
 TEST_F(MujocoSimulationTest, TestInitialization)
@@ -309,8 +325,8 @@ TEST_F(MujocoSimulationTest, PauseStepUnpause)
 
   // Setup service clients
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto pause_client = node_->create_client<mujoco_ros2_control_msgs::srv::SetPause>(ns + "/set_pause");
-  auto step_client = node_->create_client<mujoco_ros2_control_msgs::srv::StepSimulation>(ns + "/step_simulation");
+  auto pause_client = create_client<mujoco_ros2_control_msgs::srv::SetPause>(ns + "/set_pause");
+  auto step_client = create_client<mujoco_ros2_control_msgs::srv::StepSimulation>(ns + "/step_simulation");
   ASSERT_TRUE(pause_client->wait_for_service(std::chrono::seconds(5))) << "set_pause service not found";
   ASSERT_TRUE(step_client->wait_for_service(std::chrono::seconds(5))) << "step_simulation service not found";
 
@@ -371,8 +387,8 @@ TEST_F(MujocoSimulationTest, ResetWorldTest)
 
   // Setup service clients
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto pause_client = node_->create_client<mujoco_ros2_control_msgs::srv::SetPause>(ns + "/set_pause");
-  auto reset_client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  auto pause_client = create_client<mujoco_ros2_control_msgs::srv::SetPause>(ns + "/set_pause");
+  auto reset_client = create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
   ASSERT_TRUE(pause_client->wait_for_service(std::chrono::seconds(5))) << "set_pause service not found";
   ASSERT_TRUE(reset_client->wait_for_service(std::chrono::seconds(5))) << "reset_world service not found";
 
@@ -459,7 +475,7 @@ TEST_F(MujocoSimulationTest, ResetWorldJointStateOverrides)
   sim_->data()->qvel[0] = 2.0;
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
@@ -481,7 +497,7 @@ TEST_F(MujocoSimulationTest, ResetWorldKeyframeAndOverrides)
   ASSERT_TRUE(initialize_sim());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   mujoco_ros2_control_msgs::msg::FreeJointState free_override;
@@ -527,7 +543,7 @@ TEST_F(MujocoSimulationTest, ResetWorldOverridesResolveFramesAfterReset)
   mj_forward(sim_->model(), sim_->data());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   mujoco_ros2_control_msgs::msg::FreeJointState free_override;
@@ -560,7 +576,7 @@ TEST_F(MujocoSimulationTest, ResetWorldInvalidOverrides)
   sim_->data()->qpos[0] = 0.3;
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
@@ -580,7 +596,7 @@ TEST_F(MujocoSimulationTest, ResetWorldMalformedOverrides)
   ASSERT_TRUE(initialize_sim());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   // Mismatched position length.
@@ -609,7 +625,7 @@ TEST_F(MujocoSimulationTest, ResetWorldFreeJointInJointState)
   ASSERT_TRUE(initialize_sim());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::ResetWorld>(ns + "/reset_world");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   auto req = std::make_shared<mujoco_ros2_control_msgs::srv::ResetWorld::Request>();
@@ -629,7 +645,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateSetsPoseAndVelocity)
   ASSERT_TRUE(initialize_sim());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5))) << "set_free_joint_state service not found";
 
   // Before the service call
@@ -686,7 +702,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateDefaultsToZeroVelocity)
   sim_->data()->qvel[1] = 5.0;
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
@@ -712,7 +728,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownBody)
   ASSERT_TRUE(initialize_sim());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
@@ -733,7 +749,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsNonFreeBody)
   ASSERT_TRUE(initialize_sim());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
@@ -759,7 +775,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBody)
   mj_forward(sim_->model(), sim_->data());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
@@ -804,7 +820,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRelativeToBodyRotatesTwist)
   mj_forward(sim_->model(), sim_->data());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   mujoco_ros2_control_msgs::msg::FreeJointState entry;
@@ -835,7 +851,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownPoseFrame)
   ASSERT_TRUE(initialize_sim());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   const int qpos_adr = 1;
@@ -862,7 +878,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsUnknownTwistFrame)
   ASSERT_TRUE(initialize_sim());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   const int qpos_adr = 1;
@@ -893,7 +909,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateSetsMultipleBodies)
   ASSERT_TRUE(initialize_sim());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   // Resolve addresses per body rather than hardcoding, since "free_object_2" sits after
@@ -972,7 +988,7 @@ TEST_F(MujocoSimulationTest, SetFreeJointStateRejectsBatchAtomically)
   ASSERT_TRUE(initialize_sim());
 
   const std::string ns = std::string(node_->get_fully_qualified_name());
-  auto client = node_->create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
+  auto client = create_client<mujoco_ros2_control_msgs::srv::SetFreeJointState>(ns + "/set_free_joint_state");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
   const int qpos_adr = 1;
