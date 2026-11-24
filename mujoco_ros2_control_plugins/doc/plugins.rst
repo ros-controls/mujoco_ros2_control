@@ -601,6 +601,11 @@ The available parameters are:
      - ``string``
      - ``/scan`` or ``/points``
      - Topic name to publish messages. Defaults to ``/scan`` for 2D sensors and ``/points`` for 3D sensors.
+   * - ``<sensor_name>.qos``
+     - ``string``
+     - ``default``
+     - Publisher QoS. ``default`` is reliable with depth 1; ``sensor_data`` uses ``rclcpp::SensorDataQoS`` (best effort,
+       volatile, depth 5).
 
 .. code-block:: yaml
 
@@ -614,6 +619,8 @@ The available parameters are:
           3d_lidar:
             frame_name: "3d_lidar_sensor_frame"
             topic: "/lidar_points_3d"
+            # Optional: publish best effort, like most sensor drivers
+            qos: "sensor_data"
 
 3D Lidar Usage
 --------------

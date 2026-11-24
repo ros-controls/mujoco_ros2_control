@@ -128,6 +128,45 @@ protected:
     ASSERT_NE(data_, nullptr);
   }
 
+  // Fully qualified name of a parameter of the cloud_3d sensor, as the plugin declares it
+  std::string qos_param_name() const
+  {
+    return "mujoco_plugins." + plugin_node_->get_sub_namespace() + ".cloud_3d.qos";
+  }
+
+  static std::string lidar_3d_model()
+  {
+    return R"(<?xml version="1.0"?>
+<mujoco model="lidar_3d_model">
+  <worldbody>
+    <geom type="plane" size="5 5 0.1"/>
+    <body name="robot" pos="0 0 0.5">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+      <geom type="box" size="0.1 0.1 0.1"/>
+      <site name="lidar_3d_site" pos="0 0 0.15"/>
+    </body>
+  </worldbody>
+  <extension>
+    <plugin plugin="mujoco.plugin.lidar">
+      <instance name="cloud_3d">
+        <config key="resolution" value="8 4"/>
+        <config key="azimuth_range" value="-0.5 0.5"/>
+        <config key="elevation_range" value="-0.3 0.3"/>
+        <config key="max_range" value="10.0"/>
+        <config key="min_range" value="0.05"/>
+        <config key="update_rate" value="100.0"/>
+        <config key="async" value="0"/>
+      </instance>
+    </plugin>
+  </extension>
+  <sensor>
+    <plugin instance="cloud_3d" name="cloud_3d" objtype="site" objname="lidar_3d_site"/>
+  </sensor>
+</mujoco>
+)";
+  }
+
   std::unique_ptr<rclcpp::executors::MultiThreadedExecutor> executor_;
   std::thread spin_thread_;
   rclcpp::Node::SharedPtr node_;
@@ -291,6 +330,58 @@ TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSyncAsync)
 
     plugin.cleanup();
   }
+}
+
+TEST_F(Mujoco3dLidarPluginTest, Test3dLidarDefaultQosIsReliable)
+{
+  load_model(lidar_3d_model());
+
+  mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+
+  const auto publishers = node_->get_publishers_info_by_topic("/points");
+  ASSERT_EQ(publishers.size(), 1u);
+  EXPECT_EQ(publishers[0].qos_profile().reliability(), rclcpp::ReliabilityPolicy::Reliable);
+
+  plugin.cleanup();
+}
+
+TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSensorDataQos)
+{
+  load_model(lidar_3d_model());
+  plugin_node_->declare_parameter(qos_param_name(), std::string("sensor_data"));
+
+  mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+
+  const auto publishers = node_->get_publishers_info_by_topic("/points");
+  ASSERT_EQ(publishers.size(), 1u);
+  EXPECT_EQ(publishers[0].qos_profile().reliability(), rclcpp::ReliabilityPolicy::BestEffort);
+
+  // A best effort subscriber receives the cloud
+  std::atomic<bool> got_cloud{ false };
+  auto cloud_sub = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
+      "/points", rclcpp::SensorDataQoS(), [&](sensor_msgs::msg::PointCloud2::SharedPtr) { got_cloud = true; });
+
+  for (int i = 0; i < 60 && !got_cloud; ++i)
+  {
+    mj_step(model_, data_);
+    plugin.update_write(model_, data_);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  EXPECT_TRUE(got_cloud) << "No PointCloud2 received with a best effort subscriber";
+
+  plugin.cleanup();
+}
+
+TEST_F(Mujoco3dLidarPluginTest, Test3dLidarInvalidQosFails)
+{
+  load_model(lidar_3d_model());
+  plugin_node_->declare_parameter(qos_param_name(), std::string("fast"));
+
+  mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
+  EXPECT_FALSE(plugin.init(plugin_node_, model_, data_));
+  plugin.cleanup();
 }
 
 int main(int argc, char** argv)
