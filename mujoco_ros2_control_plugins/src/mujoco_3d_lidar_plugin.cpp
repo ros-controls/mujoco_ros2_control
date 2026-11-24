@@ -235,22 +235,6 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   }
   lidar_config.lidar_topic = node_->get_parameter(lidar_topic_param).as_string();
 
-  // Publisher QoS: "default" keeps the reliable depth 1 profile, "sensor_data" uses the best effort
-  // SensorDataQoS profile common for sensor drivers.
-  const std::string qos_param = param_prefix + lidar_config.name + ".qos";
-  if (!node_->has_parameter(qos_param))
-  {
-    node_->declare_parameter(qos_param, "default");
-  }
-  const std::string qos_name = node_->get_parameter(qos_param).as_string();
-  if (qos_name != "default" && qos_name != "sensor_data")
-  {
-    RCLCPP_ERROR(node_->get_logger(), "Invalid qos '%s' for sensor '%s', expected 'default' or 'sensor_data'",
-                 qos_name.c_str(), sensor_name);
-    return false;
-  }
-  const rclcpp::QoS qos = qos_name == "sensor_data" ? rclcpp::QoS(rclcpp::SensorDataQoS()) : rclcpp::QoS(1);
-
   // Setup publishers and messages for the sensor type
   if (lidar_config.is_3d)
   {
@@ -271,8 +255,9 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
     lidar_config.point_cloud_msg.data.resize(lidar_config.point_cloud_msg.row_step *
                                              lidar_config.point_cloud_msg.height);
 
+    // Clouds are large, so publish them best effort like real lidar drivers
     lidar_config.pointcloud_pub_raw =
-        node_->create_publisher<sensor_msgs::msg::PointCloud2>(lidar_config.lidar_topic, qos);
+        node_->create_publisher<sensor_msgs::msg::PointCloud2>(lidar_config.lidar_topic, rclcpp::SensorDataQoS());
     lidar_config.pointcloud_pub = std::make_unique<realtime_tools::RealtimePublisher<sensor_msgs::msg::PointCloud2>>(
         lidar_config.pointcloud_pub_raw);
   }
@@ -292,7 +277,7 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
     lidar_config.laser_scan_msg.ranges.resize(lidar_config.resolution[0] * lidar_config.resolution[1]);
     lidar_config.laser_scan_msg.intensities.resize(0);
 
-    lidar_config.scan_pub_raw = node_->create_publisher<sensor_msgs::msg::LaserScan>(lidar_config.lidar_topic, qos);
+    lidar_config.scan_pub_raw = node_->create_publisher<sensor_msgs::msg::LaserScan>(lidar_config.lidar_topic, 1);
     lidar_config.scan_pub =
         std::make_unique<realtime_tools::RealtimePublisher<sensor_msgs::msg::LaserScan>>(lidar_config.scan_pub_raw);
   }
@@ -311,7 +296,6 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
   RCLCPP_INFO(node_->get_logger(), "          range_min: %f", lidar_config.range_min);
   RCLCPP_INFO(node_->get_logger(), "          range_max: %f", lidar_config.range_max);
   RCLCPP_INFO(node_->get_logger(), "              topic: %s", lidar_config.lidar_topic.c_str());
-  RCLCPP_INFO(node_->get_logger(), "                qos: %s", qos_name.c_str());
   RCLCPP_INFO(node_->get_logger(), "       asynchronous: %d", lidar_config.async);
 
   lidar_sensors_.push_back(std::move(lidar_config));

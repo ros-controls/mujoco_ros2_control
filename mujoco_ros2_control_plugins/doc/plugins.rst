@@ -578,6 +578,8 @@ Specifically, the data for 2D (single-row) and 3D (multi-row) will be published 
 `PointCloud2 <https://github.com/ros2/common_interfaces/blob/rolling/sensor_msgs/msg/PointCloud2.msg>`_ messages respectively.
 
 When using the ``Mujoco3dLidarPlugin``, every ``mujoco.plugin.lidar`` sensor will have its data published.
+``PointCloud2`` messages are published with ``rclcpp::SensorDataQoS`` (best effort), like real 3D lidar drivers, so
+subscribers must use a best effort QoS. ``LaserScan`` messages are published reliable with depth 1.
 
 3D Lidar Parameters
 ^^^^^^^^^^^^^^^^^^^
@@ -601,11 +603,6 @@ The available parameters are:
      - ``string``
      - ``/scan`` or ``/points``
      - Topic name to publish messages. Defaults to ``/scan`` for 2D sensors and ``/points`` for 3D sensors.
-   * - ``<sensor_name>.qos``
-     - ``string``
-     - ``default``
-     - Publisher QoS. ``default`` is reliable with depth 1; ``sensor_data`` uses ``rclcpp::SensorDataQoS`` (best effort,
-       volatile, depth 5).
 
 .. code-block:: yaml
 
@@ -619,8 +616,6 @@ The available parameters are:
           3d_lidar:
             frame_name: "3d_lidar_sensor_frame"
             topic: "/lidar_points_3d"
-            # Optional: publish best effort, like most sensor drivers
-            qos: "sensor_data"
 
 3D Lidar Usage
 --------------

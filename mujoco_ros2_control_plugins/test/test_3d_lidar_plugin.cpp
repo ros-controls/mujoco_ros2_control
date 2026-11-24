@@ -128,12 +128,6 @@ protected:
     ASSERT_NE(data_, nullptr);
   }
 
-  // Fully qualified name of a parameter of the cloud_3d sensor, as the plugin declares it
-  std::string qos_param_name() const
-  {
-    return "mujoco_plugins." + plugin_node_->get_sub_namespace() + ".cloud_3d.qos";
-  }
-
   static std::string lidar_3d_model()
   {
     return R"(<?xml version="1.0"?>
@@ -306,7 +300,7 @@ TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSyncAsync)
     std::atomic<bool> got_cloud{ false };
     sensor_msgs::msg::PointCloud2::SharedPtr last_cloud;
     auto cloud_sub = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
-        "/points", 1, [&](sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+        "/points", rclcpp::SensorDataQoS(), [&](sensor_msgs::msg::PointCloud2::SharedPtr msg) {
           last_cloud = msg;
           got_cloud = true;
         });
@@ -332,24 +326,9 @@ TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSyncAsync)
   }
 }
 
-TEST_F(Mujoco3dLidarPluginTest, Test3dLidarDefaultQosIsReliable)
+TEST_F(Mujoco3dLidarPluginTest, Test3dLidarPointCloudIsBestEffort)
 {
   load_model(lidar_3d_model());
-
-  mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
-  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
-
-  const auto publishers = node_->get_publishers_info_by_topic("/points");
-  ASSERT_EQ(publishers.size(), 1u);
-  EXPECT_EQ(publishers[0].qos_profile().reliability(), rclcpp::ReliabilityPolicy::Reliable);
-
-  plugin.cleanup();
-}
-
-TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSensorDataQos)
-{
-  load_model(lidar_3d_model());
-  plugin_node_->declare_parameter(qos_param_name(), std::string("sensor_data"));
 
   mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
@@ -371,16 +350,6 @@ TEST_F(Mujoco3dLidarPluginTest, Test3dLidarSensorDataQos)
   }
   EXPECT_TRUE(got_cloud) << "No PointCloud2 received with a best effort subscriber";
 
-  plugin.cleanup();
-}
-
-TEST_F(Mujoco3dLidarPluginTest, Test3dLidarInvalidQosFails)
-{
-  load_model(lidar_3d_model());
-  plugin_node_->declare_parameter(qos_param_name(), std::string("fast"));
-
-  mujoco_ros2_control_plugins::Mujoco3dLidarPlugin plugin;
-  EXPECT_FALSE(plugin.init(plugin_node_, model_, data_));
   plugin.cleanup();
 }
 
