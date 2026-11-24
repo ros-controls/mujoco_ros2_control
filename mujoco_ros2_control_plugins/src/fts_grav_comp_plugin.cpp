@@ -99,6 +99,14 @@ bool FtsGravCompPlugin::register_fts(const mjModel* model)
     const double cog_mass_param = node_->get_parameter(sensor_param_prefix + "CoG.mass").as_double();
     const std::string frame_id_param = node_->get_parameter(sensor_param_prefix + "frame_id").as_string();
 
+    // zero_service_name is optional, and defaults to "<sensor_name>/zero_ftsensor" if not set.
+    const std::string zero_service_name_param_name = sensor_param_prefix + "zero_service_name";
+    if (!node_->has_parameter(zero_service_name_param_name))
+    {
+      node_->declare_parameter(zero_service_name_param_name, sensor_name + "/zero_ftsensor");
+    }
+    const std::string zero_service_name_param = node_->get_parameter(zero_service_name_param_name).as_string();
+
     // make sure that the force and torque sensors are of the right dimension
     const int sensor_dim_force = model->sensor_dim[sensor_id_force];
     const int sensor_dim_torque = model->sensor_dim[sensor_id_torque];
@@ -135,6 +143,13 @@ bool FtsGravCompPlugin::register_fts(const mjModel* model)
     fts_data.cog_pos[2] = cog_pos_param[2];
     fts_data.fts_site_id = model->sensor_objid[sensor_id_force];
 
+    const std::size_t fts_index = fts_.size();
+    fts_data.zero_service = node_->create_service<std_srvs::srv::Trigger>(
+        zero_service_name_param, [this, fts_index](const std_srvs::srv::Trigger::Request::SharedPtr request,
+                                                   std_srvs::srv::Trigger::Response::SharedPtr response) {
+          this->handle_zero_fts(fts_index, request, response);
+        });
+
     RCLCPP_INFO(logger_, "Registered FTS under fts_grav_comp_plugin with");
     RCLCPP_INFO(logger_, "\tname: '%s'", fts_data.sensor_name.c_str());
     RCLCPP_INFO(logger_, "\tfts_site: '%s'", mj_id2name(model, mjOBJ_SITE, fts_data.fts_site_id));
@@ -142,6 +157,7 @@ bool FtsGravCompPlugin::register_fts(const mjModel* model)
     RCLCPP_INFO(logger_, "\tcog_pos: '%0.3f, %0.3f, %0.3f'", fts_data.cog_pos[0], fts_data.cog_pos[1],
                 fts_data.cog_pos[2]);
     RCLCPP_INFO(logger_, "\tcog_site: '%s'", mj_id2name(model, mjOBJ_SITE, fts_data.cog_site_id));
+    RCLCPP_INFO(logger_, "\tzero_service: '%s'", fts_data.zero_service->get_service_name());
     fts_.push_back(fts_data);
   }
   return true;
@@ -169,6 +185,23 @@ void FtsGravCompPlugin::update_read(const mjModel* model, mjData* data)
 {
   // Only qpos and sensordata are valid here: recompute the site frames for the same step.
   mj_kinematics(model, data);
+
+  // Check to see if any zero requests have been received, and mark them for each individual
+  // sensor if so.
+  if (zero_pending_.load(std::memory_order_acquire))
+  {
+    if (zero_mutex_.try_lock())
+    {
+      while (!pending_zero_indices_.empty())
+      {
+        const std::size_t idx = pending_zero_indices_.front();
+        pending_zero_indices_.pop();
+        fts_[idx].zero_pending = true;
+      }
+      zero_mutex_.unlock();
+      zero_pending_.store(false, std::memory_order_release);
+    }
+  }
 
   // run gravity compensation for each force torque sensor
   for (auto& fts : fts_)
@@ -211,14 +244,48 @@ void FtsGravCompPlugin::update_read(const mjModel* model, mjData* data)
     mju_cross(weight_torque_in_fts_frame, cog_pos_in_fts_frame, weight_in_fts_frame);
     mju_add3(comped_torque_in_fts_frame, raw_torque_in_fts_frame, weight_torque_in_fts_frame);
 
+    // Step 4 - if a zero was requested for this FTS, capture the current
+    // gravity-compensated reading as the new offset so that this cycle reads as zero.
+    if (fts.zero_pending)
+    {
+      mju_copy3(fts.force_offset, comped_force_in_fts_frame);
+      mju_copy3(fts.torque_offset, comped_torque_in_fts_frame);
+      fts.zero_pending = false;
+    }
+
+    // Step 5 - subtract out the tare offset (zero by default) and write the result back.
+    mjtNum tared_force_in_fts_frame[3];
+    mjtNum tared_torque_in_fts_frame[3];
+    mju_sub3(tared_force_in_fts_frame, comped_force_in_fts_frame, fts.force_offset);
+    mju_sub3(tared_torque_in_fts_frame, comped_torque_in_fts_frame, fts.torque_offset);
+
     // copy the data back to the FTS data
-    mju_copy3(sensordata_force, comped_force_in_fts_frame);
-    mju_copy3(sensordata_torque, comped_torque_in_fts_frame);
+    mju_copy3(sensordata_force, tared_force_in_fts_frame);
+    mju_copy3(sensordata_torque, tared_torque_in_fts_frame);
   }
+}
+
+void FtsGravCompPlugin::handle_zero_fts(std::size_t fts_index,
+                                        const std_srvs::srv::Trigger::Request::SharedPtr /*request*/,
+                                        std_srvs::srv::Trigger::Response::SharedPtr response)
+{
+  {
+    std::lock_guard<std::mutex> lock(zero_mutex_);
+    pending_zero_indices_.push(fts_index);
+  }
+  zero_pending_.store(true, std::memory_order_release);
+
+  response->success = true;
+  response->message =
+      "Zero requested for FTS '" + fts_[fts_index].sensor_name + "'. It will be applied on the next control cycle.";
 }
 
 void FtsGravCompPlugin::cleanup()
 {
+  for (auto& fts : fts_)
+  {
+    fts.zero_service.reset();
+  }
   node_.reset();
 }
 

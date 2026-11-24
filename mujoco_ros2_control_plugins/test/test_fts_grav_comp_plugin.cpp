@@ -29,8 +29,11 @@
 
 #include <mujoco/mujoco.h>
 #include <rclcpp/rclcpp.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 #include "fts_grav_comp_plugin.hpp"
+
+using namespace std::chrono_literals;
 
 namespace
 {
@@ -183,6 +186,23 @@ protected:
     setParam("or_fts_sensor.frame_id", std::string("offset_rotated_site"));
     setParam("or_fts_sensor.CoG.pos", std::vector<double>{ 0.0, 0.0, 0.05 });
     setParam("or_fts_sensor.CoG.mass", double{ 10.0 });
+  }
+
+  // Calls a Trigger service (relative to plugin_node_'s sub-namespace) and returns whether the
+  // call succeeded.
+  bool call_trigger(const std::string& service_name)
+  {
+    auto client = node_->create_client<std_srvs::srv::Trigger>("fts_grav_comp_plugin/" + service_name);
+    if (!client->wait_for_service(2s))
+    {
+      return false;
+    }
+    auto future = client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+    if (future.wait_for(2s) != std::future_status::ready)
+    {
+      return false;
+    }
+    return future.get()->success;
   }
 
   std::vector<double> get_ft_data(mujoco_ros2_control_plugins::FtsData fts)
@@ -394,6 +414,80 @@ TEST_F(FtsGravCompPluginTest, UpdateReadCompensatesFromControlStateOnly)
       EXPECT_NEAR(value, 0.0, 1e-9);
     }
   }
+
+  plugin.cleanup();
+}
+
+// verifies that the zero_ftsensor service tares the FTS: the currently-read (here, uncompensated
+// gravity-induced) wrench should read as zero immediately after the service call takes effect.
+TEST_F(FtsGravCompPluginTest, ZeroServiceTaresCurrentReading)
+{
+  set_plugin_params();
+  // Zero out the gravity-comp mass so the raw, uncompensated weight of the end effector shows up
+  // in the reading (same setup as GravityIsNotComped) -- this gives us a known non-zero baseline
+  // to tare away.
+  setParam("fts_sensor.CoG.mass", double{ 0.0 });
+  setParam("or_fts_sensor.CoG.mass", double{ 0.0 });
+
+  mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+
+  // update_read() overwrites data_->sensordata in place with the (tared) compensated reading, so
+  // re-feeding it its own output would double-apply the compensation. In real operation, a fresh
+  // mj_step()/mj_forward() repopulates sensordata with a new raw reading before every
+  // update_read() call; snapshot the raw reading here so each call below can restore it first,
+  // simulating that refresh.
+  std::vector<mjtNum> raw_sensordata(data_->sensordata, data_->sensordata + model_->nsensordata);
+  auto restore_raw_sensordata = [&]() {
+    mju_copy(data_->sensordata, raw_sensordata.data(), static_cast<int>(model_->nsensordata));
+  };
+
+  // Baseline: confirm the reading is non-zero before taring.
+  plugin.update_read(model_, data_);
+  const std::vector<double> before = get_ft_data(plugin.get_fts_data()[0]);
+  EXPECT_GT(std::abs(before[2]), 1.0) << "Expected a non-trivial baseline force to tare away";
+
+  // Tare the first FTS only.
+  ASSERT_TRUE(call_trigger("fts_sensor/zero_ftsensor"));
+
+  // The tare is applied on the real-time thread the next time update_read() runs.
+  restore_raw_sensordata();
+  plugin.update_read(model_, data_);
+
+  const std::vector<double> after_zero_0 = get_ft_data(plugin.get_fts_data()[0]);
+  for (const double value : after_zero_0)
+  {
+    EXPECT_NEAR(value, 0.0, 1e-9);
+  }
+
+  // The second (un-tared) FTS should be unaffected.
+  const std::vector<double> after_zero_1 = get_ft_data(plugin.get_fts_data()[1]);
+  EXPECT_GT(std::abs(after_zero_1[0]), 1.0) << "Second FTS should not have been tared";
+
+  // Repeated reads of the same (unchanged) raw value should keep reading zero.
+  restore_raw_sensordata();
+  plugin.update_read(model_, data_);
+  for (const double value : get_ft_data(plugin.get_fts_data()[0]))
+  {
+    EXPECT_NEAR(value, 0.0, 1e-9);
+  }
+
+  plugin.cleanup();
+}
+
+// verifies that the zero_service_name parameter overrides the default "<sensor_name>/zero_ftsensor"
+// service name, and that the default name is no longer advertised once overridden.
+TEST_F(FtsGravCompPluginTest, ZeroServiceNameIsConfigurable)
+{
+  set_plugin_params();
+  setParam("fts_sensor.zero_service_name", std::string("custom_zero_service"));
+
+  mujoco_ros2_control_plugins::FtsGravCompPlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node_, model_, data_));
+
+  EXPECT_TRUE(call_trigger("custom_zero_service"));
+  EXPECT_FALSE(call_trigger("fts_sensor/zero_ftsensor"))
+      << "Default service name should not be advertised once overridden";
 
   plugin.cleanup();
 }

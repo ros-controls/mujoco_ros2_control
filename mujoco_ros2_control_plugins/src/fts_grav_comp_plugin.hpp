@@ -22,6 +22,13 @@
 
 #include <geometry_msgs/msg/wrench.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <std_srvs/srv/trigger.hpp>
+
+#include <atomic>
+#include <cstddef>
+#include <mutex>
+#include <queue>
+
 #include "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
 
 namespace mujoco_ros2_control_plugins
@@ -47,6 +54,18 @@ struct FtsData
   mjtNum cog_mass;
   // site id of the site used for the mujoco force and torque sensors
   int fts_site_id{ -1 };
+
+  // Tare offset subtracted from the gravity-compensated force/torque every cycle. Set by
+  // update_read() when a zero request for this FTS is drained from pending_zero_indices_.
+  mjtNum force_offset[3]{ 0.0, 0.0, 0.0 };
+  mjtNum torque_offset[3]{ 0.0, 0.0, 0.0 };
+  // Set (under zero_mutex_) when update_read() drains a zero request for this FTS, and
+  // consumed on the very next pass through the gravity-comp loop. Only ever touched from the
+  // real-time update_read() thread, so it needs no synchronization of its own.
+  bool zero_pending{ false };
+
+  // Trigger service that tares this FTS, zeroing it based on the currently read values.
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr zero_service;
 };
 
 /**
@@ -94,10 +113,25 @@ public:
   }
 
 private:
+  /**
+   * @brief Service callback that requests a tare of the given FTS. The actual tare is performed
+   * on the real-time thread inside update_read() so that the offset is captured from a
+   * consistent, freshly gravity-compensated reading.
+   */
+  void handle_zero_fts(std::size_t fts_index, const std_srvs::srv::Trigger::Request::SharedPtr request,
+                        std_srvs::srv::Trigger::Response::SharedPtr response);
+
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_ = rclcpp::get_logger("FtsGravCompPlugin");
 
   std::vector<FtsData> fts_;
+
+  // Non-real-time -> real-time handoff for zero (tare) requests. zero_pending_ is a cheap
+  // fast-path check done every update_read() call; pending_zero_indices_/zero_mutex_ are only
+  // touched when a zero has actually been requested.
+  std::atomic<bool> zero_pending_{ false };
+  std::mutex zero_mutex_;
+  std::queue<std::size_t> pending_zero_indices_;
 };
 
 }  // namespace mujoco_ros2_control_plugins
