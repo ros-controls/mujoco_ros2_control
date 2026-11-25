@@ -42,6 +42,7 @@
       <param name="mujoco_model">$(find mujoco_ros2_control_demos)/demo_resources/scenes/scene_mobile_base.xml</param>
       <param name="headless">$(arg headless)</param>
       <param name="sim_speed_factor">1.0</param>
+      
     </hardware>
     <!-- Actuated purely to demonstrate that swinging a mounted joint doesn't drag the base
          around: BaseVelocityPlugin holds the base's velocity at whatever is commanded on
