@@ -147,7 +147,7 @@ bool FtsGravCompPlugin::register_fts(const mjModel* model)
     fts_data.zero_service = node_->create_service<std_srvs::srv::Trigger>(
         zero_service_name_param, [this, fts_index](const std_srvs::srv::Trigger::Request::SharedPtr request,
                                                    std_srvs::srv::Trigger::Response::SharedPtr response) {
-          this->handle_zero_fts(fts_index, request, response);
+          this->register_zero_fts(fts_index, request, response);
         });
 
     RCLCPP_INFO(logger_, "Registered FTS under fts_grav_comp_plugin with");
@@ -265,9 +265,9 @@ void FtsGravCompPlugin::update_read(const mjModel* model, mjData* data)
   }
 }
 
-void FtsGravCompPlugin::handle_zero_fts(std::size_t fts_index,
-                                        const std_srvs::srv::Trigger::Request::SharedPtr /*request*/,
-                                        std_srvs::srv::Trigger::Response::SharedPtr response)
+void FtsGravCompPlugin::register_zero_fts(std::size_t fts_index,
+                                          const std_srvs::srv::Trigger::Request::SharedPtr /*request*/,
+                                          std_srvs::srv::Trigger::Response::SharedPtr response)
 {
   {
     std::lock_guard<std::mutex> lock(zero_mutex_);

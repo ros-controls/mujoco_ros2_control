@@ -108,27 +108,22 @@ public:
    * @brief getter for fts data used for testing
    */
   std::vector<FtsData> get_fts_data() const
-  {
-    return fts_;
-  }
+  { return fts_; }
 
 private:
   /**
    * @brief Service callback that requests a tare of the given FTS. The actual tare is performed
-   * on the real-time thread inside update_read() so that the offset is captured from a
-   * consistent, freshly gravity-compensated reading.
+   * on the real-time thread inside update_read()
    */
-  void handle_zero_fts(std::size_t fts_index, const std_srvs::srv::Trigger::Request::SharedPtr request,
-                        std_srvs::srv::Trigger::Response::SharedPtr response);
+  void register_zero_fts(std::size_t fts_index, const std_srvs::srv::Trigger::Request::SharedPtr request,
+                         std_srvs::srv::Trigger::Response::SharedPtr response);
 
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_ = rclcpp::get_logger("FtsGravCompPlugin");
 
   std::vector<FtsData> fts_;
 
-  // Non-real-time -> real-time handoff for zero (tare) requests. zero_pending_ is a cheap
-  // fast-path check done every update_read() call; pending_zero_indices_/zero_mutex_ are only
-  // touched when a zero has actually been requested.
+  // thread safety tools for zeroing ft sensor
   std::atomic<bool> zero_pending_{ false };
   std::mutex zero_mutex_;
   std::queue<std::size_t> pending_zero_indices_;
