@@ -502,6 +502,10 @@ This is intended to mock hardware configurations that have a way to perform grav
 The compensation runs in ``update_read()``, so the compensated values are what the ``ros2_control`` force torque sensor state interfaces report.
 One example of this is with the `Universal Robots Set Payload <https://www.universal-robots.com/manuals/EN/HTML/SW5_22/Content/prod-usr-man/software/PolyScope/content/BasicProgNodes/commandtab_set_payload_en.htm>`_ command.
 
+Each registered force torque sensor also exposes a `Trigger <https://github.com/ros2/common_interfaces/blob/rolling/std_srvs/srv/Trigger.srv>`_ service, named by the ``zero_service_name`` parameter (``<sensor_name>/zero_ftsensor`` by default, e.g. ``fts_sensor/zero_ftsensor`` for the example configuration below).
+Calling it tares that sensor: it records the currently-read (already gravity-compensated) wrench and subtracts it from all future readings.
+The tare offset is applied on the next ``update_read()`` call after the service responds.
+
 FtsGravCompPlugin Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -529,6 +533,10 @@ See the example configuration below for more details.
    * - ``CoG.mass``
      - ``double``
      - Mass to use for gravity compensation in kg.
+   * - ``zero_service_name``
+     - ``string``
+     - *(optional)* Name of the ``Trigger`` service used to tare (zero) this sensor.
+       Defaults to ``<sensor_name>/zero_ftsensor``.
 
 
 **Example configuration**
@@ -552,6 +560,8 @@ See the example configuration below for more details.
                  - 0.0 # y in m
                  - 0.0 # z in m
                mass: 10.0 # mass in kg
+             # name of the trigger service that zeroes the ft sensor
+             zero_service_name: /my_sensor/zero_ftsensor
 
 .. _rangefinder_lidar_plugin:
 

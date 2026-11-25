@@ -193,6 +193,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_fts_grav_comp_plugin
     mujoco_ros2_control_plugins_impl
     ${geometry_msgs_TARGETS}
+    ${std_srvs_TARGETS}
   )
   target_link_options(test_fts_grav_comp_plugin PUBLIC
     "LINKER:--push-state,--no-as-needed"
