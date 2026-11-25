@@ -51,6 +51,14 @@ int main(int argc, char ** argv)
       // A simple way to reject non ros args
       continue;
     }
+    // CHANGED FROM UPSTREAM: skip remaps scoped to the MuJoCo node, they still reach it through the global args
+    const std::string arg(argv[i]);
+    if ((arg == "-r" || arg == "--remap") && i + 1 < argc &&
+        std::string(argv[i + 1]).rfind("mujoco_ros2_control_node:", 0) == 0)
+    {
+      ++i;  // also skip the rule
+      continue;
+    }
     node_arguments.push_back(argv[i]);
   }
   cm_node_options.arguments(node_arguments);
