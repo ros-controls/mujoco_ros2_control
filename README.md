@@ -71,7 +71,7 @@ See [mujoco_ros2_control/README.md](./mujoco_ros2_control/README.md) for detaile
 
 Supported ROS 2 distributions
 - The project is developed and tested against multiple ROS 2 distributions.
-  This README includes basic notes for: `Humble`, `Jazzy`, `Kilted`, `Lyrical`, and `Rolling`.
+  This README includes basic notes for: `Humble`, `Jazzy`, `Lyrical`, and `Rolling`.
 
 ### Support matrix
 
@@ -79,7 +79,6 @@ Supported ROS 2 distributions
 | --- | --- |
 | Humble | Supported |
 | Jazzy | Supported |
-| Kilted | Supported |
 | Lyrical | Supported |
 | Rolling | Supported (development) |
 

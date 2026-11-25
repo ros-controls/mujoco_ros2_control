@@ -136,8 +136,6 @@ Support Matrix
      - Supported
    * - Jazzy
      - Supported
-   * - Kilted
-     - Supported
    * - Rolling
      - Supported (development)
 
