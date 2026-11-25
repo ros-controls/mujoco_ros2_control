@@ -255,8 +255,9 @@ bool Mujoco3dLidarPlugin::register_sensor(const mjModel* model, int sensor_idx)
     lidar_config.point_cloud_msg.data.resize(lidar_config.point_cloud_msg.row_step *
                                              lidar_config.point_cloud_msg.height);
 
+    // Clouds are large, so publish them best effort like real lidar drivers
     lidar_config.pointcloud_pub_raw =
-        node_->create_publisher<sensor_msgs::msg::PointCloud2>(lidar_config.lidar_topic, 1);
+        node_->create_publisher<sensor_msgs::msg::PointCloud2>(lidar_config.lidar_topic, rclcpp::SensorDataQoS());
     lidar_config.pointcloud_pub = std::make_unique<realtime_tools::RealtimePublisher<sensor_msgs::msg::PointCloud2>>(
         lidar_config.pointcloud_pub_raw);
   }
