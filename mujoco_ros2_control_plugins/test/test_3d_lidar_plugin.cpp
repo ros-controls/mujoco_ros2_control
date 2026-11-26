@@ -289,9 +289,9 @@ TEST_F(Mujoco3dLidarPluginTest, Test2dLidarNoReturnIsInfAndTiming)
   EXPECT_NEAR(last_scan->ranges[11], 2.0f, 0.05f);
   EXPECT_NEAR(last_scan->ranges[12], 2.0f, 0.05f);
 
-  // Scan timing is derived from update_rate (100 Hz).
+  // Scan timing is derived from update_rate (100 Hz); rays share one timestamp.
   EXPECT_NEAR(last_scan->scan_time, 0.01f, 1e-6f);
-  EXPECT_NEAR(last_scan->time_increment, 0.01f / 24.0f, 1e-7f);
+  EXPECT_FLOAT_EQ(last_scan->time_increment, 0.0f);
 
   plugin.cleanup();
 }
